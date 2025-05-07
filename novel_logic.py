@@ -168,8 +168,7 @@ Based on these core elements, please generate the following:
             base_elements_for_outline = {"genre": genre, "theme": theme, "setting": setting_description}
 
 
-        prompt = f"""/no_think
-        You are a creative assistant specializing in narrative structure.
+        prompt = f"""You are a creative assistant specializing in narrative structure.
         {prompt_core_elements}
 
 Output ONLY the JSON object adhering strictly to the requested keys.
@@ -248,8 +247,7 @@ Example Structure (keys will vary slightly based on mode above):
             self._save_json_state()
             return
 
-        prompt = f"""/no_think
-        You are a world-building assistant tasked with generating foundational elements based on a novel concept. Your output MUST be a single, valid JSON object.
+        prompt = f"""You are a world-building assistant tasked with generating foundational elements based on a novel concept. Your output MUST be a single, valid JSON object.
         Novel Concept:
         Title: {self.plot_outline.get('title', 'Untitled')}
         Genre: {self.plot_outline.get('genre', 'undefined')}
@@ -328,8 +326,7 @@ Example Structure (keys will vary slightly based on mode above):
         if current_loc: kg_facts.append(f"- {protagonist_name} is currently located in: {current_loc}.")
         if current_status: kg_facts.append(f"- {protagonist_name}'s current status: {current_status}.")
         kg_context_section = "**Relevant Facts from Knowledge Graph (up to end of previous chapter):**\n" + "\n".join(kg_facts) + "\n" if kg_facts else ""
-        prompt = f"""/no_think
-        You are a master plotter outlining the key narrative beats for Chapter {chapter_number} of a novel.
+        prompt = f"""You are a master plotter outlining the key narrative beats for Chapter {chapter_number} of a novel.
         **Overall Novel Concept:**
         * Title: {self.plot_outline.get('title', 'Untitled')}
         * Genre: {self.plot_outline.get('genre', 'N/A')}
@@ -409,8 +406,7 @@ Example Structure (keys will vary slightly based on mode above):
         plan_section = ""
         if plan and config.ENABLE_AGENTIC_PLANNING:
             plan_section = f"**Chapter Plan / Key Beats:**\n{plan}\n" if plan != "Agentic planning disabled by configuration." else f"**Note:** {plan}\n"
-        prompt = f"""/no_think
-        You are an expert novelist continuing Chapter {chapter_number} of "{self.plot_outline.get('title', 'Untitled Novel')}".
+        prompt = f"""You are an expert novelist continuing Chapter {chapter_number} of "{self.plot_outline.get('title', 'Untitled Novel')}".
         **Story Bible:** Genre: {self.plot_outline.get('genre', 'N/A')}, Theme: {self.plot_outline.get('theme', 'N/A')}, Protagonist: {self.plot_outline.get('protagonist_name', 'N/A')}, Arc: {self.plot_outline.get('character_arc', 'N/A')}, Setting: {self.plot_outline.get('setting', 'N/A')}, Conflict: {self.plot_outline.get('conflict', 'N/A')}
         **Focus for THIS Chapter:** {plot_point_focus}
         {plan_section}
@@ -464,8 +460,7 @@ Example Structure (keys will vary slightly based on mode above):
         if plan and config.ENABLE_AGENTIC_PLANNING and plan != "Agentic planning disabled by configuration.": plan_focus_section = f"**Original Chapter Plan (Target for Revision):**\n{plan[:plan_limit]}\n"
         else: plot_point_focus, _ = self._get_plot_point_info(chapter_number); plan_focus_section = f"**Original Chapter Focus (Target for Revision):**\n{plot_point_focus}\n"
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""/no_think
-        You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}) to correct issues.
+        prompt = f"""You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}) to correct issues.
         **Critique / Reason(s) for Revision (MUST be addressed):**\n--- FEEDBACK START ---\n{clean_reason}\n--- FEEDBACK END ---\n{plan_focus_section}
         **Context from Previous Relevant Chapters:**\n--- BEGIN CONTEXT ---\n{context_snippet if context_snippet else "No previous context."}\n--- END CONTEXT ---
         **Original Draft Snippet of Chapter {chapter_number} (Reference ONLY - DO NOT simply copy/tweak):**\n--- BEGIN ORIGINAL DRAFT SNIPPET ---\n{original_snippet}\n--- END ORIGINAL DRAFT SNIPPET ---
@@ -564,11 +559,10 @@ Example Structure (keys will vary slightly based on mode above):
         # Same as your last version
         if not chapter_text or len(chapter_text) < 50: return None
         snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
-        prompt = f"""/no_think
-        Summarize Chapter {chapter_number} (1-3 sentences), capturing crucial plot advancements, character decisions, or revelations. Be succinct.
+        prompt = f"""Summarize Chapter {chapter_number} (1-3 sentences), capturing crucial plot advancements, character decisions, or revelations. Be succinct.
         Chapter Text Snippet:\n--- BEGIN TEXT ---\n{snippet}\n--- END TEXT ---\nOutput ONLY summary text.
         """
-        summary_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=200)
+        summary_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=4096)
         cleaned_summary = llm_interface.clean_model_response(summary_raw).strip()
         if cleaned_summary: logger.info(f"Generated summary for ch {chapter_number}: '{cleaned_summary[:100]}...'"); return cleaned_summary
         else: logger.warning(f"Failed to generate valid summary for ch {chapter_number}."); return None
@@ -583,8 +577,7 @@ Example Structure (keys will vary slightly based on mode above):
         previous_loc = self.db_manager.get_most_recent_value(protagonist_name, "located_in", chapter_number - 1)
         if previous_loc: kg_consistency_checks_summary.append(f"- {protagonist_name}'s last KG loc (end ch {chapter_number-1}): {previous_loc}.")
         kg_check_results_text = "**Key KG Facts (from prev chapters):**\n" + "\n".join(kg_consistency_checks_summary) + "\n" if kg_consistency_checks_summary else "**Key KG Facts:** None pre-loaded.\n"
-        prompt = f"""/no_think
-        You are a continuity editor. Analyze Chapter {chapter_number} Draft Snippet.
+        prompt = f"""You are a continuity editor. Analyze Chapter {chapter_number} Draft Snippet.
         Compare against: 1. Plot Outline, Character Profiles, World Building. 2. Key KG Facts. 3. Context from Previous Chapters. 4. Internal consistency in Draft.
         List ONLY specific, objective contradictions, factual inconsistencies, or significant deviations. Prioritize issues contradicting established facts.
         If NO significant inconsistencies, respond ONLY with: None
@@ -596,7 +589,7 @@ Example Structure (keys will vary slightly based on mode above):
         **Chapter {chapter_number} Draft Text Snippet (to analyze):**\n--- BEGIN DRAFT ---\n{draft_snippet}\n--- END DRAFT ---
         **List specific inconsistencies (or "None"):**
         """
-        response_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=700)
+        response_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=8192)
         response_cleaned = llm_interface.clean_model_response(response_raw).strip()
         if not response_cleaned or response_cleaned.lower() == "none": logger.info(f"Consistency check passed for ch {chapter_number}."); return None
         else: logger.warning(f"Consistency issues for ch {chapter_number}:\n{response_cleaned}"); return response_cleaned
@@ -611,14 +604,13 @@ Example Structure (keys will vary slightly based on mode above):
         validation_text = summary if summary and len(summary) > 50 else chapter_draft_text[:1500]
         if not validation_text: return None
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""/no_think
-        You are a story structure analyst. Determine if Chapter {chapter_number} Text (protagonist: {protagonist_name}) addresses the core of its Intended Plot Point.
+        prompt = f"""You are a story structure analyst. Determine if Chapter {chapter_number} Text (protagonist: {protagonist_name}) addresses the core of its Intended Plot Point.
         **Intended Plot Point (Plot Point {plot_point_index + 1} for Chapter {chapter_number}):** "{plot_point_focus}"
         **Chapter {chapter_number} Text (Summary or Snippet to analyze):** "{validation_text}"
         **Evaluation:** Does Chapter Text content/events align with Intended Plot Point?
         **CRITICAL INSTRUCTION:** Respond ONLY with `Yes` (if aligns) OR `No, because...` (if deviates, 1-2 sentence concise explanation).
         Response:"""
-        validation_response_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=150)
+        validation_response_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=8192)
         cleaned_plot_response = llm_interface.clean_model_response(validation_response_raw).strip()
         if cleaned_plot_response.lower() == "yes": logger.info(f"Plot arc validation passed for ch {chapter_number}."); return None
         elif cleaned_plot_response.lower().startswith("no, because"):
@@ -636,8 +628,7 @@ Example Structure (keys will vary slightly based on mode above):
             dynamic_instructions = """3. **Dynamic Adaptation:** For existing characters, propose modifications to `traits` or `description` using `"modification_proposal"` field if warranted. Example: `"modification_proposal": "MODIFY traits: ADD 'Determined'"`.
 4. **Crucially:** Only include characters updated, newly introduced, or with a modification proposal in output JSON."""
         else: dynamic_instructions = "3. **Crucially:** Only include characters updated or newly introduced in output JSON."
-        prompt = f"""/no_think
-        You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles. Output MUST be a single, valid JSON object.
+        prompt = f"""You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles. Output MUST be a single, valid JSON object.
         **Chapter Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}...\n--- END TEXT ---\n
         **Current Character Profiles (reference):**\n```json\n{json.dumps(self.character_profiles, indent=2, ensure_ascii=False, default=str)}\n```
         **Instructions:** 1. Identify characters updated/introduced. 2. Note new traits, relationship changes, status, description. Add `development_in_chapter_{chapter_number}` key summarizing role/change.
@@ -720,8 +711,7 @@ Example Structure (keys will vary slightly based on mode above):
             dynamic_instructions = """6. **Dynamic Adaptation:** Propose modifications to existing items using `"modification_proposal"`. Example: `"modification_proposal": "MODIFY atmosphere: 'Now heavy.'"`. For items like history events, modify their "description" key: `"modification_proposal": "MODIFY description: 'New detail.'"`.
 7. **CRITICAL: Output ONLY JSON of new/updated elements.**"""
         else: dynamic_instructions = "6. **CRITICAL: Output ONLY JSON of new/updated elements."
-        prompt = f"""/no_think
-        You are a world-building analyst. Examine Chapter {chapter_number} snippet for new info or significant changes to existing world elements. Output MUST be a single, valid JSON object.
+        prompt = f"""You are a world-building analyst. Examine Chapter {chapter_number} snippet for new info or significant changes to existing world elements. Output MUST be a single, valid JSON object.
         **Chapter Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}...\n--- END TEXT ---\n
         **Current World Building Notes (reference):**\n```json\n{json.dumps(self.world_building, indent=2, ensure_ascii=False, default=str)}\n```
         **Instructions:** 1. Identify new/changed locations (ensure dicts). 2. Note new/changed society, factions (ensure dicts). 3. Extract new/changed systems, tech, magic (ensure dicts). 4. Capture new/changed lore, history (ensure items are dicts with "description" or "text"). 5. Focus on THIS chapter. Add `elaboration_in_chapter_{chapter_number}`.
@@ -797,8 +787,7 @@ Example Structure (keys will vary slightly based on mode above):
         if len(text_snippet) < len(chapter_text): logger.warning(f"KG extraction using truncated text ({len(text_snippet)} chars) for ch {chapter_number}.")
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         common_predicates = ["is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", "interacted_with", "travelled_to", "discovered", "acquired", "lost", "used_item", "attacked", "helped", "damaged", "repaired", "contains", "part_of", "caused_by", "leads_to", "observed", "heard", "said", "thought_about", "decided_to"]
-        prompt = f"""/no_think
-        You are a KG Engineer. Extract factual (Subject, Predicate, Object) triples from Chapter {chapter_number} Text Snippet (protagonist: '{protagonist_name}').
+        prompt = f"""You are a KG Engineer. Extract factual (Subject, Predicate, Object) triples from Chapter {chapter_number} Text Snippet (protagonist: '{protagonist_name}').
         **Chapter {chapter_number} Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}\n--- END TEXT ---\n
         **Instructions:** 1. Identify key entities (normalize names). 2. Use suggested predicates or concise alternatives. 3. Extract facts as `["Subject", "predicate", "Object"]` (all non-empty strings). 4. Focus ONLY on info from THIS text. 5. Prioritize state changes & key events. 6. **CRITICAL OUTPUT:** ONLY a single, valid JSON list of lists. `[]` if no facts. 7. **NO extra text/markdown.** Start `[` end `]`.
         **Suggested Predicates:** {', '.join(common_predicates)}
