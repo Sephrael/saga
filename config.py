@@ -34,8 +34,27 @@ OPENAI_API_KEY: str = "nope"
 
 # Name of the embedding model used via Ollama
 EMBEDDING_MODEL: str = "nomic-embed-text:latest"
-# Name of the main large language model for text generation
-MAIN_GENERATION_MODEL: str = "Qwen3-14B"
+
+# --- Model Tiering ---
+# Largest model for most critical/creative tasks
+LARGE_MODEL: str = "Qwen3-32B" # For drafting, revision, detailed planning
+# Medium model for analysis, structured generation, less critical tasks
+MEDIUM_MODEL: str = "Qwen3-8B" # For KG extraction, initial setup, consistency, JSON updates
+# Smallest model for very simple, fast tasks
+SUMMARIZATION_MODEL: str = "Qwen3-4B" # For chapter summaries
+
+# Define main model for backward compatibility or general use (points to large)
+MAIN_GENERATION_MODEL: str = LARGE_MODEL 
+
+# Specific model assignments for clarity (can point to tiered models)
+JSON_CORRECTION_MODEL: str = MEDIUM_MODEL
+CONSISTENCY_CHECK_MODEL: str = MEDIUM_MODEL
+KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # For combined char/world JSON updates & KG extraction
+INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # For plot outline and world-building generation
+PLANNING_MODEL: str = LARGE_MODEL # Detailed scene planning benefits from larger model
+DRAFTING_MODEL: str = LARGE_MODEL
+REVISION_MODEL: str = LARGE_MODEL
+
 
 # --- Output and File Paths ---
 # Directory to store all output files (database, JSON state, chapter texts)
@@ -51,23 +70,27 @@ WORLD_BUILDER_FILE: str = os.path.join(OUTPUT_DIR, "world_building.json")
 
 # Ensure the main output directory exists upon script load
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, "chapters"), exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, "chapter_logs"), exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, "debug_outputs"), exist_ok=True)
+
 
 # --- Generation Parameters ---
 # Maximum number of characters to include in the context prompt for the LLM
-MAX_CONTEXT_LENGTH: int = 64000
-# Default maximum number of tokens the LLM should generate in a response
-MAX_GENERATION_TOKENS: int = 32000
+MAX_CONTEXT_LENGTH: int = 64000 # Be mindful of model context window limits
+# Default maximum number of tokens the LLM should generate in a response (can be overridden)
+MAX_GENERATION_TOKENS: int = 4096 # General fallback; specific tasks might need more or less
 # Maximum number of characters from a chapter to use for knowledge update prompts (character/world analysis)
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 8000
 # Number of most relevant past chapters to retrieve for semantic context generation
 CONTEXT_CHAPTER_COUNT: int = 5
 # Number of chapters to attempt writing in a single execution run
-CHAPTERS_PER_RUN: int = 3
+CHAPTERS_PER_RUN: int = 1 # Reduced for testing efficiency
 
 
 # --- Agentic Planning ---
 ENABLE_AGENTIC_PLANNING: bool = True # Flag to enable the new planning step
-MAX_PLANNING_TOKENS: int = 32000 # Max tokens for the planning LLM call (might need more for detailed scenes)
+MAX_PLANNING_TOKENS: int = 8192 # Max tokens for the planning LLM call (might need more for detailed scenes)
 # Limits for context snippets in planning prompts
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 100
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 150
@@ -87,14 +110,14 @@ PLOT_ARC_VALIDATION_TRIGGER: bool = True
 # Similarity threshold for revision check (revisions less similar than this are accepted)
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.98 # Revisions scoring >= this are rejected as too similar
 # Max tokens for specific LLM calls during evaluation/update
-MAX_SUMMARY_TOKENS: int = 1000
-MAX_CONSISTENCY_TOKENS: int = 4000
-MAX_PLOT_VALIDATION_TOKENS: int = 1000
-MAX_KG_TRIPLE_TOKENS: int = 8000 # For KG extraction from chapter text
-MAX_PREPOP_KG_TOKENS: int = 16000 # For pre-populating KG from plot/world JSON
+MAX_SUMMARY_TOKENS: int = 512
+MAX_CONSISTENCY_TOKENS: int = 2048
+MAX_PLOT_VALIDATION_TOKENS: int = 512
+MAX_KG_TRIPLE_TOKENS: int = 4096 # For KG extraction from chapter text
+MAX_PREPOP_KG_TOKENS: int = 8192 # For pre-populating KG from plot/world JSON
 
 # --- Draft Evaluation ---
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 1500 # Minimum character length for a generated draft to be considered valid
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 1000 # Minimum character length for a generated draft
 
 # --- Dynamic State Adaptation ---
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to profiles/world
@@ -121,7 +144,7 @@ LOG_FILE: Optional[str] = os.path.join(OUTPUT_DIR, "saga_run.log")
 # --- Plot Outline Generation Settings ---
 # If True, genre, theme, setting, protagonist, conflict are randomized from lists below.
 # If False, uses CONFIGURED_GENRE, CONFIGURED_THEME, CONFIGURED_SETTING, and LLM generates protagonist/conflict based on them.
-UNHINGED_PLOT_MODE: bool = True # Set to True for randomized paradoxical combinations
+UNHINGED_PLOT_MODE: bool = False # Set to True for randomized paradoxical combinations
 
 # Used if UNHINGED_PLOT_MODE is False
 CONFIGURED_GENRE: str = "hard science fiction"

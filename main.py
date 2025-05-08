@@ -136,30 +136,19 @@ def run_novel_generation():
 
     # --- Pre-populate Knowledge Graph ---
     if not agent.plot_outline.get("is_default", True) and not agent.world_building.get("is_default", True):
-        # Check if KG seems empty or only has data from written chapters
-        # A simple check: query for any data at chapter_added = KG_PREPOPULATION_CHAPTER_NUM
-        # This check could be more sophisticated if needed.
-        existing_prepopulated_kg = agent.db_manager.query_kg(chapter_limit=config.KG_PREPOPULATION_CHAPTER_NUM, include_provisional=True) # Check if any exists at chapter 0
-        # A more specific check would be to query if there are any triples with chapter_added = config.KG_PREPOPULATION_CHAPTER_NUM
-        # For now, if any KG data exists for chapter 0, we assume it's been pre-populated.
-        # This logic might need refinement if pre-population could be partial or re-run.
-        
-        # A simpler approach: only pre-populate if chapter_count is 0 (i.e., brand new novel)
-        # and KG for chapter 0 is empty.
         is_kg_prepopulated = False
-        if agent.chapter_count == 0: # Only for truly new novels
+        if agent.chapter_count == 0: 
             kg_at_zero = agent.db_manager.query_kg(
                 subject=None, predicate=None, obj=None, 
                 chapter_limit=config.KG_PREPOPULATION_CHAPTER_NUM, 
-                include_provisional=True # include_provisional doesn't matter much here as non-provisional is expected
+                include_provisional=True 
             )
-            # Refine check: ensure we are querying specifically for chapter_added = 0
             kg_at_zero_specific = [triple for triple in kg_at_zero if triple.get('chapter_added') == config.KG_PREPOPULATION_CHAPTER_NUM]
             if kg_at_zero_specific:
                 is_kg_prepopulated = True
                 logger.info(f"Found {len(kg_at_zero_specific)} existing KG triples at chapter {config.KG_PREPOPULATION_CHAPTER_NUM}. Assuming KG already pre-populated.")
         
-        if not is_kg_prepopulated and agent.chapter_count == 0: # Only try if first run and no pre-pop data found
+        if not is_kg_prepopulated and agent.chapter_count == 0: 
             print("\n--- Pre-populating Knowledge Graph from Plot and World Data ---")
             logger.info("Attempting to pre-populate Knowledge Graph.")
             try:
@@ -171,8 +160,6 @@ def run_novel_generation():
                 print(f"\nWarning: Error pre-populating Knowledge Graph: {e}. KG might be incomplete.")
         elif agent.chapter_count > 0:
             logger.info("Skipping KG pre-population: Novel already has chapters.")
-        # else: # (is_kg_prepopulated and agent.chapter_count == 0)
-            # logger.info("Skipping KG pre-population: KG appears to be already pre-populated for a new novel.")
 
 
     print("\n--- Starting Novel Writing Process ---")

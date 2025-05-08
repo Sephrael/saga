@@ -62,114 +62,82 @@ def get_embedding(text: str) -> Optional[np.ndarray]:
     except Exception as e: logger.error(f"Unexpected error during embedding: {e}", exc_info=True)
     return None
 
-def call_llm(prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
-    # Same as your last version
+def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
+    if not model_name: logger.error("call_llm: model_name is required."); return ""
     if not prompt or not isinstance(prompt, str): logger.error("call_llm empty/invalid prompt."); return ""
+    
     effective_max_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
-    payload = {"model": config.MAIN_GENERATION_MODEL, "messages": [{"role": "user", "content": prompt}],
-               "stream": False, "temperature": temperature, "top_p": 0.95, "top_k": 20, "min_p": 0, "max_tokens": effective_max_tokens}
+    
+    payload = {
+        "model": model_name, 
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False, 
+        "temperature": temperature, 
+        "top_p": 0.95, # Retaining top_p, adjust if needed per model
+        "max_tokens": effective_max_tokens
+    }
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
-    # logger.debug(f"Calling LLM '{config.MAIN_GENERATION_MODEL}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
+    
+    logger.debug(f"Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
     try:
-        response = requests.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=600); response.raise_for_status()
+        response = requests.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=600)
+        response.raise_for_status()
         response_data = response.json()
+        
         if response_data.get("choices") and len(response_data["choices"]) > 0:
             message = response_data["choices"][0].get("message")
             if message and message.get("content"):
                 raw_text = message["content"]
                 if 'usage' in response_data:
                     usage = response_data['usage']
-                    logger.info(f"LLM Usage - Prompt: {usage.get('prompt_tokens', 'N/A')} tk, Comp: {usage.get('completion_tokens', 'N/A')} tk, Total: {usage.get('total_tokens', 'N/A')} tk")
-                else: logger.warning("LLM response missing 'usage'.")
+                    logger.info(f"LLM ('{model_name}') Usage - Prompt: {usage.get('prompt_tokens', 'N/A')} tk, Comp: {usage.get('completion_tokens', 'N/A')} tk, Total: {usage.get('total_tokens', 'N/A')} tk")
+                else: 
+                    logger.warning(f"LLM ('{model_name}') response missing 'usage'.")
                 return raw_text
-            else: logger.error(f"Invalid LLM response - missing message content: {response_data}")
-        else: logger.error(f"Invalid LLM response - missing choices: {response_data}")
-    except requests.exceptions.Timeout: logger.error(f"LLM API request timed out.")
+            else: 
+                logger.error(f"Invalid LLM ('{model_name}') response - missing message content: {response_data}")
+        else: 
+            logger.error(f"Invalid LLM ('{model_name}') response - missing choices: {response_data}")
+            
+    except requests.exceptions.Timeout: 
+        logger.error(f"LLM ('{model_name}') API request timed out.")
     except requests.exceptions.RequestException as e:
-        logger.error(f"LLM API request error: {e}", exc_info=True)
-        if e.response is not None: logger.error(f"LLM API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
-    except Exception as e: logger.error(f"Unexpected error during LLM call: {e}", exc_info=True)
+        logger.error(f"LLM ('{model_name}') API request error: {e}", exc_info=True)
+        if e.response is not None: 
+            logger.error(f"LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
+    except Exception as e: 
+        logger.error(f"Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
     return ""
 
 def clean_model_response(text: str) -> str:
-    if not isinstance(text, str): 
-        logger.warning(f"clean_model_response non-string input: {type(text)}."); return ""
-    
-    original_text_len = len(text)
-    cleaned_text = text
-
-    # 1. Remove specific leading empty <think></think> artifact (if LLM commonly produces this)
-    # This is a very specific pattern for an empty think block at the start.
+    # Same as your last version
+    if not isinstance(text, str): logger.warning(f"clean_model_response non-string input: {type(text)}."); return ""
+    original_text_len = len(text); cleaned_text = text
     leading_no_think_artifact_regex = r'^\s*<\s*think\s*>\s*<\s*/think\s*>\s*'
     text_after_leading_removal = re.sub(leading_no_think_artifact_regex, '', cleaned_text, count=1, flags=re.IGNORECASE)
-    if len(text_after_leading_removal) < len(cleaned_text):
-        logger.debug("Removed specific leading empty <think></think> artifact.")
-        cleaned_text = text_after_leading_removal
-
-    # 2. Remove general <think>...</think> or <thought>...</thought> or <thinking>...</thinking> blocks
-    # The \1 backreference ensures the closing tag matches the opening one (e.g. <think> closes with </think>)
-    think_block_pattern = re.compile(
-        r'<\s*(think|thought|thinking)\s*>.*?<\s*/\s*\1\s*>',
-        flags=re.DOTALL | re.IGNORECASE
-    )
-    text_after_general_think_removal = think_block_pattern.sub('', cleaned_text)
-    if len(text_after_general_think_removal) < len(cleaned_text):
-        if not (len(text_after_leading_removal) < original_text_len and cleaned_text == text_after_leading_removal): # Avoid double logging if leading also removed
-             logger.debug("General think block regex removed content.")
-        cleaned_text = text_after_general_think_removal
-    
-    # 3. Remove common LLM preamble phrases (case-insensitive, multiline, at start of string or line)
-    # Added ^\s* to ensure they are at the beginning of a line or the string.
-    # Made it non-greedy (.*?) and specific about what follows (e.g., newline or end of string)
-    # to avoid over-stripping if these phrases appear mid-sentence.
-    preamble_patterns = [
-        r'^\s*(Okay, here.*?|Here\'s the chapter|Response:|Summary:|List inconsistencies below:|Revised chapter:|Analysis:|JSON Output:)\s*(\n|$)',
-    ]
-    for pattern in preamble_patterns:
-        cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
-
-
-    # 4. Remove markdown code blocks (JSON, Python, text, or unspecified)
-    # This is important if the LLM wraps its actual text output in markdown by mistake.
+    if len(text_after_leading_removal) < len(cleaned_text): logger.debug("Removed specific leading /no_think artifact."); cleaned_text = text_after_leading_removal
+    think_block_regex = r'<\s*(?:think|thought|thinking)\s*>.*?<\s*/\s*(?:think|thought|thinking)\s*>'
+    text_after_general_think_removal = re.sub(think_block_regex, '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
+    if len(text_after_general_think_removal) < len(cleaned_text): logger.debug("General think block regex removed content."); cleaned_text = text_after_general_think_removal
+    elif not (len(text_after_leading_removal) < len(text)):
+        start_tag_pattern = r'^\s*<\s*(?:think|thought|thinking)\s*>'
+        start_match = re.search(start_tag_pattern, cleaned_text, re.IGNORECASE)
+        if start_match:
+            logger.warning(f"Think block regexes failed, but text starts with tag: {cleaned_text[:100]}...")
+            end_tag_pattern = r'<\s*/\s*(?:think|thought|thinking)\s*>'
+            end_match = re.search(end_tag_pattern, cleaned_text[start_match.end():], re.IGNORECASE)
+            if end_match: cleaned_text = cleaned_text[start_match.end() + end_match.end():].strip(); logger.info("Applied fallback think block removal.")
+            else: logger.warning("Fallback removal: Found start tag but no end tag. Stripping start tag only."); cleaned_text = re.sub(start_tag_pattern, '', cleaned_text, count=1, flags=re.IGNORECASE).strip()
+    cleaned_text = re.sub(r'^\s*(Okay, here.*?|Here\'s the chapter|Response:|Summary:|List inconsistencies below:|Revised chapter:|Analysis:|JSON Output:)\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
     cleaned_text = re.sub(r'```(?:json|python|text|)\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
-
-    # 5. Remove "Chapter X" style headers if they appear at the start of a line
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-]?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
-
-    # 6. Remove "BEGIN/END CHAPTER/TEXT" style markers
     cleaned_text = re.sub(r'^\s*---?\s*(BEGIN|END) (CHAPTER|TEXT|DRAFT|CONTEXT|SNIPPET).*?\s*---?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
-
-    # 7. Remove "Output ONLY the..." style instructions if they bleed into the response
-    # Made this more specific to the end of the string or before a newline to avoid accidental mid-text removal.
-    cleaned_text = re.sub(r'\s*Output ONLY the.*?text.*(\n|$)', '', cleaned_text, flags=re.IGNORECASE | re.DOTALL)
-    
-    # 8. Remove trailing "/no_think" (if used as an end marker by the LLM)
+    cleaned_text = re.sub(r'\s*Output ONLY the.*?text.*$','', cleaned_text, flags=re.IGNORECASE | re.DOTALL)
     cleaned_text = re.sub(r'\s*/no_think\s*$', '', cleaned_text, flags=re.IGNORECASE)
-
-    # 9. Normalize newlines and clean individual lines
-    # First, replace all occurrences of 2 or more newlines with exactly two newlines (\n\n).
-    # This standardizes paragraph breaks to one empty line.
-    cleaned_text_normalized_newlines = re.sub(r'\n{2,}', '\n\n', cleaned_text)
-
-    # Split into lines. A double newline (\n\n) will result in an empty string for the blank line.
-    lines = cleaned_text_normalized_newlines.splitlines()
-    
-    processed_lines = []
-    for line in lines:
-        stripped_line = line.strip() # Remove leading/trailing whitespace from this line
-        if stripped_line: # It's a content line
-            # Reduce multiple spaces/tabs within the line to a single space
-            processed_lines.append(re.sub(r'[ \t]+', ' ', stripped_line))
-        else: # It was an empty line (originally from \n\n or became empty after stripping)
-            processed_lines.append('') # Preserve it as an empty string to maintain paragraph separation
-
-    # Join lines back with single newlines. This will correctly form \n\n for paragraph breaks.
-    final_text = '\n'.join(processed_lines).strip() # Final strip to remove leading/trailing newlines from the whole text block.
-
-    if len(final_text) < original_text_len * 0.95 and original_text_len > 0 : # Avoid division by zero if original_text_len is 0
-        reduction_percentage = ((original_text_len - len(final_text)) / original_text_len) * 100
-        logger.debug(f"Cleaning reduced text length from {original_text_len} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
-    
+    lines = cleaned_text.splitlines()
+    cleaned_lines = [re.sub(r'[ \t]+', ' ', line.strip()) for line in lines if line.strip()]
+    final_text = re.sub(r'\n{2,}', '\n\n', '\n'.join(cleaned_lines)).strip()
+    if len(final_text) < original_text_len * 0.95: logger.debug(f"Cleaning reduced text length from {original_text_len} to {len(final_text)}.")
     return final_text
 
 def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = dict) -> Optional[str]:
@@ -188,14 +156,13 @@ def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = d
         potential_json = text[start_index : end_index + 1].strip()
         if potential_json.startswith(start_char) and potential_json.endswith(end_char):
             logger.debug(f"Potential JSON {expect_type.__name__} found by brace/bracket matching."); return potential_json
-    cleaned_full = clean_model_response(text) # Call the updated clean_model_response
+    cleaned_full = clean_model_response(text) 
     if cleaned_full.startswith(start_char) and cleaned_full.endswith(end_char):
         logger.debug(f"Entire cleaned response appears to be JSON {expect_type.__name__}."); return cleaned_full
     logger.warning(f"Failed to extract likely JSON {expect_type.__name__} block: '{text[:100]}...'")
     return None
 
 def parse_llm_json_response(raw_response: str, context_for_log: str, expect_type: Union[Type[dict], Type[list]] = dict) -> Optional[Union[Dict[str, Any], List[Any]]]:
-    # Same as your last refactored version (with list truncation heuristic)
     if not raw_response: logger.warning(f"LLM empty response for {context_for_log}. Cannot parse JSON."); return None
     json_block_str = extract_json_block(raw_response, expect_type)
     parsed_json = None
@@ -215,16 +182,25 @@ def parse_llm_json_response(raw_response: str, context_for_log: str, expect_type
                 except json.JSONDecodeError: logger.warning(f"Heuristic ']' append failed for {context_for_log}. LLM correction...")
     else:
         logger.error(f"Could not extract JSON {expect_type.__name__} block from initial response for {context_for_log}. Raw: '{raw_response[:200]}...'")
-        json_block_str = clean_model_response(raw_response) # Call the updated clean_model_response
+        json_block_str = clean_model_response(raw_response) 
     if not json_block_str: logger.error(f"No content for LLM correction for {context_for_log}."); return None
-    logger.info(f"Attempting LLM JSON correction for {context_for_log}...")
+    
+    logger.info(f"Attempting LLM JSON correction for {context_for_log} using model {config.JSON_CORRECTION_MODEL}...")
     correction_prompt = f"""The following text block was extracted, but it contains JSON syntax errors or is not the expected type. Correct syntax errors (e.g., missing commas, incorrect quoting, trailing commas, unbalanced braces/brackets) and ensure it's a valid JSON {expect_type.__name__}. Output ONLY the corrected, valid JSON. No explanation/commentary.
     Invalid/Problematic JSON Block:\n```json\n{json_block_str}\n```
     Corrected JSON {expect_type.__name__} Output Only:\n/no_think\n"""
-    corrected_raw = call_llm(correction_prompt, temperature=0.2, max_tokens=config.MAX_GENERATION_TOKENS)
+    
+    corrected_raw = call_llm(
+        model_name=config.JSON_CORRECTION_MODEL, 
+        prompt=correction_prompt, 
+        temperature=0.2, 
+        max_tokens=config.MAX_GENERATION_TOKENS # Use general max tokens, or a specific one for corrections
+    )
+    
     if not corrected_raw: logger.error(f"LLM correction attempt empty response for {context_for_log}."); return None
-    corrected_cleaned = clean_model_response(corrected_raw) # Call the updated clean_model_response
+    corrected_cleaned = clean_model_response(corrected_raw)
     corrected_block_str_retry = extract_json_block(corrected_cleaned, expect_type) or corrected_cleaned
+    
     if corrected_block_str_retry:
         try:
             parsed_corrected_json = json.loads(corrected_block_str_retry)
