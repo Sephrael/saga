@@ -90,7 +90,7 @@ class DatabaseManager:
                         raw_text TEXT,
                         summary TEXT,
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        is_provisional BOOLEAN DEFAULT FALSE -- ****** NEW COLUMN ******
+                        is_provisional BOOLEAN DEFAULT FALSE 
                     )
                 """
                 )
@@ -113,10 +113,10 @@ class DatabaseManager:
                         subject TEXT NOT NULL,
                         predicate TEXT NOT NULL,
                         object TEXT NOT NULL,
-                        chapter_added INTEGER NOT NULL,
+                        chapter_added INTEGER NOT NULL, -- Can be 0 for pre-populated data
                         confidence REAL DEFAULT 1.0, 
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        is_provisional BOOLEAN DEFAULT FALSE -- ****** NEW COLUMN ******
+                        is_provisional BOOLEAN DEFAULT FALSE 
                     )
                 """
                 )
@@ -146,15 +146,17 @@ class DatabaseManager:
                 logger.debug("Verified/Created indices.")
                 conn.commit()
                 
-                try:
-                    cursor.execute("SELECT is_provisional FROM chapters LIMIT 1;")
-                except sqlite3.OperationalError:
+                # Add columns if they don't exist (idempotent ALTER TABLE)
+                table_columns = {}
+                for table_name in ["chapters", "knowledge_graph"]:
+                    cursor.execute(f"PRAGMA table_info({table_name});")
+                    table_columns[table_name] = [row['name'] for row in cursor.fetchall()]
+
+                if "is_provisional" not in table_columns["chapters"]:
                     logger.info("Altering chapters table to add is_provisional column.")
                     cursor.execute("ALTER TABLE chapters ADD COLUMN is_provisional BOOLEAN DEFAULT FALSE;")
                 
-                try:
-                    cursor.execute("SELECT is_provisional FROM knowledge_graph LIMIT 1;")
-                except sqlite3.OperationalError:
+                if "is_provisional" not in table_columns["knowledge_graph"]:
                     logger.info("Altering knowledge_graph table to add is_provisional column.")
                     cursor.execute("ALTER TABLE knowledge_graph ADD COLUMN is_provisional BOOLEAN DEFAULT FALSE;")
                 
@@ -194,7 +196,8 @@ class DatabaseManager:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT MAX(chapter_number) FROM chapters")
+                # Ensure we only count chapters > 0, as 0 might be used for pre-population data.
+                cursor.execute("SELECT MAX(chapter_number) FROM chapters WHERE chapter_number > 0")
                 result = cursor.fetchone()
                 count = result[0] if result and result[0] is not None else 0
                 logger.info(f"Loaded chapter count from database: {count}")
@@ -212,8 +215,12 @@ class DatabaseManager:
         raw_text: str,
         summary: Optional[str],
         embedding: Optional[np.ndarray],
-        is_provisional: bool = False # ****** NEW ARGUMENT ******
+        is_provisional: bool = False 
     ):
+        if chapter_number <= 0:
+            logger.error(f"Cannot save chapter data for chapter_number <= 0: {chapter_number}. This is reserved or invalid.")
+            return
+
         logger.info(
             f"Attempting to save data for chapter {chapter_number} to database (Provisional: {is_provisional})."
         )
@@ -253,13 +260,13 @@ class DatabaseManager:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary, is_provisional) VALUES (?, ?, ?, ?, ?)", # Add is_provisional
+                    "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary, is_provisional) VALUES (?, ?, ?, ?, ?)", 
                     (
                         chapter_number,
                         text,
                         raw_text,
                         summary if summary is not None else "",
-                        is_provisional, # ****** Pass value ******
+                        is_provisional, 
                     ),
                 )
                 logger.debug(
@@ -303,6 +310,7 @@ class DatabaseManager:
 
     def get_embedding_from_db(self, chapter_number: int) -> Optional[np.ndarray]:
         """Retrieves and deserializes a single chapter's embedding."""
+        if chapter_number <= 0: return None # Embeddings are for written chapters
         logger.debug(
             f"Retrieving embedding for chapter {chapter_number} from database."
         )
@@ -353,7 +361,7 @@ class DatabaseManager:
                 cursor.execute(
                     """SELECT chapter_number, embedding_blob, dtype, shape
                        FROM embeddings
-                       WHERE chapter_number < ?
+                       WHERE chapter_number < ? AND chapter_number > 0 -- Exclude non-chapter embeddings if any
                        ORDER BY chapter_number DESC""",  # Most recent first helps if caller truncates
                     (current_chapter_number,),
                 )
@@ -384,27 +392,28 @@ class DatabaseManager:
         return past_embeddings
 
     def get_chapter_data_from_db(self, chapter_number: int) -> Optional[Dict[str, Any]]:
-        """Retrieves the final text and summary for a given chapter number."""
-        logger.debug(f"Retrieving text/summary data for chapter {chapter_number}.")
+        """Retrieves the final text, summary, and provisional status for a given chapter number."""
+        if chapter_number <= 0: return None # Chapter data is for written chapters
+        logger.debug(f"Retrieving text/summary/provisional data for chapter {chapter_number}.")
         data = None
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT text, summary FROM chapters WHERE chapter_number = ?",
+                    "SELECT text, summary, is_provisional FROM chapters WHERE chapter_number = ?", # Fetch is_provisional
                     (chapter_number,),
                 )
                 result = cursor.fetchone()
             if result:
                 data = dict(result)  # Convert sqlite3.Row to dict
-                logger.debug(f"Found text/summary data for chapter {chapter_number}.")
+                logger.debug(f"Found data for chapter {chapter_number} (Provisional: {data.get('is_provisional')}).")
             else:
                 logger.debug(
                     f"No text/summary data found for chapter {chapter_number}."
                 )
         except sqlite3.Error as e:
             logger.error(
-                f"Database error retrieving text/summary for chapter {chapter_number}: {e}",
+                f"Database error retrieving data for chapter {chapter_number}: {e}",
                 exc_info=True,
             )
         except Exception as e:
@@ -421,52 +430,54 @@ class DatabaseManager:
         subject: str,
         predicate: str,
         obj: str,
-        chapter_added: int,
+        chapter_added: int, # Can be config.KG_PREPOPULATION_CHAPTER_NUM
         confidence: float = 1.0,
-        is_provisional: bool = False # ****** NEW ARGUMENT ******
+        is_provisional: bool = False 
     ):
         """
         Adds a single (subject, predicate, object) triple to the knowledge graph.
-        Avoids adding exact duplicates for the same chapter.
+        Avoids adding exact duplicates for the same chapter_added value.
         """
         subj_clean = subject.strip()
         pred_clean = predicate.strip()
         obj_clean = obj.strip()
 
-        if not all([subj_clean, pred_clean, obj_clean]) or chapter_added <= 0:
+        if not all([subj_clean, pred_clean, obj_clean]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM: # Allow 0
             logger.warning(
                 f"Attempted to add invalid or empty triple: S='{subj_clean}', P='{pred_clean}', O='{obj_clean}', Chap={chapter_added}"
             )
             return
 
         logger.debug(
-            f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from chapter {chapter_added} (Provisional: {is_provisional})"
+            f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from chapter_added={chapter_added} (Provisional: {is_provisional})"
         )
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 # Check for existing now includes provisional status, or you might decide an S,P,O,chapter match is enough
+                # For now, an exact S,P,O,chapter_added match is considered a duplicate.
+                # If a new entry comes with a different provisional status or confidence, it might be an update case.
+                # Simple approach: if it exists, log and skip. More complex: update if new info is better.
                 cursor.execute(
                     """SELECT id FROM knowledge_graph
-                       WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?""", # Consider if provisional status makes it "different"
+                       WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?""", 
                     (subj_clean, pred_clean, obj_clean, chapter_added),
                 )
                 exists = cursor.fetchone()
 
                 if exists:
                     logger.debug(
-                        f"Triple ({subj_clean}, {pred_clean}, {obj_clean}) already exists for chapter {chapter_added}. Skipping insert."
-                        # Potentially update provisional status or confidence if new info is better? For now, skip.
+                        f"Triple ({subj_clean}, {pred_clean}, {obj_clean}) already exists for chapter_added {chapter_added}. Skipping insert."
                     )
                 else:
                     cursor.execute(
                         """INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence, is_provisional)
-                           VALUES (?, ?, ?, ?, ?, ?)""", # Add is_provisional
-                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional), # ****** Pass value ******
+                           VALUES (?, ?, ?, ?, ?, ?)""", 
+                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional), 
                     )
                     conn.commit()
                     logger.debug(
-                        f"Successfully added triple for chapter {chapter_added}."
+                        f"Successfully added triple for chapter_added {chapter_added}."
                     )
                     
         except sqlite3.Error as e:
@@ -482,11 +493,11 @@ class DatabaseManager:
         subject: Optional[str] = None,
         predicate: Optional[str] = None,
         obj: Optional[str] = None,
-        chapter_limit: Optional[int] = None,
-        include_provisional: bool = True # ****** NEW ARGUMENT to control fetching provisional data ******
+        chapter_limit: Optional[int] = None, # Max chapter_added to include (inclusive)
+        include_provisional: bool = True 
     ) -> List[Dict[str, Any]]:
         query_parts = [
-            "SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1" # Add is_provisional
+            "SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1" 
         ]
         params: List[Any] = []
 
@@ -499,15 +510,18 @@ class DatabaseManager:
         if obj is not None:
             query_parts.append("AND object = ?")
             params.append(obj.strip())
+        
+        # chapter_limit means "up to and including this chapter_added value"
+        # Can be config.KG_PREPOPULATION_CHAPTER_NUM to get only pre-populated data,
+        # or a written chapter number to get all data up to that chapter.
         if (
             chapter_limit is not None
             and isinstance(chapter_limit, int)
-            and chapter_limit >= 0
+            and chapter_limit >= config.KG_PREPOPULATION_CHAPTER_NUM # Allow 0
         ):
             query_parts.append("AND chapter_added <= ?")
             params.append(chapter_limit)
         
-        # ****** Filter out provisional data if not requested ******
         if not include_provisional:
             query_parts.append("AND is_provisional = FALSE")
 
@@ -531,10 +545,10 @@ class DatabaseManager:
 
     def get_most_recent_value(
         self, subject: str, predicate: str, chapter_limit: Optional[int] = None, include_provisional: bool = False
-    ) -> Optional[str]: # Add include_provisional
+    ) -> Optional[str]: 
         """
         Helper function to get the most recent object value for a given
-        subject and predicate from the KG, up to a specific chapter.
+        subject and predicate from the KG, up to a specific chapter_added value.
         """
         if not subject.strip() or not predicate.strip():
             logger.warning(
@@ -543,19 +557,19 @@ class DatabaseManager:
             return None
 
         logger.debug(
-            f"Getting most recent KG value for ({subject}, {predicate}, ?) up to chapter {chapter_limit} (Include Provisional: {include_provisional})"
+            f"Getting most recent KG value for ({subject}, {predicate}, ?) up to chapter_added {chapter_limit} (Include Provisional: {include_provisional})"
         )
         results = self.query_kg(
-            subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional # Pass flag
+            subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional 
         )
         if results:
             most_recent_value = results[0]["object"]
             logger.debug(
-                f"Found most recent value: '{most_recent_value}' from chapter {results[0]['chapter_added']}"
+                f"Found most recent value: '{most_recent_value}' from chapter_added {results[0]['chapter_added']}"
             )
             return str(most_recent_value)  # Ensure string
         else:
             logger.debug(
-                f"No value found for ({subject}, {predicate}, ?) up to chapter {chapter_limit}"
+                f"No value found for ({subject}, {predicate}, ?) up to chapter_added {chapter_limit}"
             )
             return None
