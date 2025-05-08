@@ -1,6 +1,6 @@
-# Saga Novel Generation System
+# SAGA: Semantic And Graph-enhanced Authoring
 
-Saga is an autonomous, agentic system designed for generating cohesive and coherent narrative fiction, chapter by chapter. It leverages Large Language Models (LLMs), semantic embeddings, a knowledge graph, and an iterative refinement process to produce novel-length stories.
+SAGA is an autonomous, agentic system designed for generating cohesive and coherent narrative fiction, chapter by chapter. It leverages Large Language Models (LLMs), semantic embeddings, a knowledge graph, and an iterative refinement process to produce novel-length stories.
 
 ## Key Features
 
@@ -37,7 +37,7 @@ Saga is an autonomous, agentic system designed for generating cohesive and coher
 
 ## Architecture Overview
 
-Saga is composed of several key modules:
+SAGA is composed of several key modules:
 
 *   `main.py`: The main execution script that initializes the system and drives the novel generation loop.
 *   `novel_logic.py`: Contains the `NovelWriterAgent`, the core component responsible for all story logic, state management, and interaction with other modules.
@@ -129,7 +129,7 @@ All generated files and data are stored in the directory specified by `config.OU
 
 ## Advanced Concepts
 
-*   **Knowledge Graph (KG)**: Saga builds a KG of (Subject, Predicate, Object) triples extracted from chapters. This KG serves as a structured memory, helping maintain factual consistency. Queries to the KG can retrieve specific information (e.g., a character's last known location).
+*   **Knowledge Graph (KG)**: SAGA builds a KG of (Subject, Predicate, Object) triples extracted from chapters. This KG serves as a structured memory, helping maintain factual consistency. Queries to the KG can retrieve specific information (e.g., a character's last known location).
 *   **Provisional Data Handling**: When a chapter draft fails evaluation but the system proceeds (e.g., after a failed revision attempt), the resulting chapter data and any knowledge extracted from it (KG triples, character/world updates) are marked as "provisional." This allows the system to:
     *   Distinguish between high-confidence and potentially lower-confidence information.
     *   Prioritize reliable (non-provisional) KG facts during consistency checks and planning.
@@ -139,7 +139,7 @@ All generated files and data are stored in the directory specified by `config.OU
 
 ## Configuration Options
 
-The `config.py` file provides extensive options to customize Saga's behavior:
+The `config.py` file provides extensive options to customize SAGA's behavior:
 
 *   **API and Models**: Specify your LLM and embedding model endpoints and names.
 *   **Output Paths**: Define where generated files are stored.
@@ -152,7 +152,7 @@ The `config.py` file provides extensive options to customize Saga's behavior:
     *   The lists `UNHINGED_GENRES`, `UNHINGED_THEMES`, etc., can be expanded for more variety in unhinged mode.
 *   **Logging**: Set log level and output file.
 
-Review `config.py` thoroughly to tailor Saga to your needs.
+Review `config.py` thoroughly to tailor SAGA to your needs.
 
 ## Potential Future Enhancements
 
