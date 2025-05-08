@@ -75,7 +75,8 @@ class DatabaseManager:
                         text TEXT,
                         raw_text TEXT,
                         summary TEXT,
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        is_provisional BOOLEAN DEFAULT FALSE -- ****** NEW COLUMN ******
                     )
                 """
                 )
@@ -99,8 +100,9 @@ class DatabaseManager:
                         predicate TEXT NOT NULL,
                         object TEXT NOT NULL,
                         chapter_added INTEGER NOT NULL,
-                        confidence REAL DEFAULT 1.0,
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                        confidence REAL DEFAULT 1.0, 
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        is_provisional BOOLEAN DEFAULT FALSE -- ****** NEW COLUMN ******
                     )
                 """
                 )
@@ -129,6 +131,21 @@ class DatabaseManager:
                 )
                 logger.debug("Verified/Created indices.")
                 conn.commit()
+                
+                try:
+                    cursor.execute("SELECT is_provisional FROM chapters LIMIT 1;")
+                except sqlite3.OperationalError:
+                    logger.info("Altering chapters table to add is_provisional column.")
+                    cursor.execute("ALTER TABLE chapters ADD COLUMN is_provisional BOOLEAN DEFAULT FALSE;")
+                
+                try:
+                    cursor.execute("SELECT is_provisional FROM knowledge_graph LIMIT 1;")
+                except sqlite3.OperationalError:
+                    logger.info("Altering knowledge_graph table to add is_provisional column.")
+                    cursor.execute("ALTER TABLE knowledge_graph ADD COLUMN is_provisional BOOLEAN DEFAULT FALSE;")
+                
+                conn.commit() # Commit schema changes including potential ALTER TABLE
+
             logger.info("Database schema initialization/verification complete.")
         except sqlite3.Error as e:
             logger.error(f"Database schema initialization error: {e}", exc_info=True)
@@ -181,11 +198,12 @@ class DatabaseManager:
         raw_text: str,
         summary: Optional[str],
         embedding: Optional[np.ndarray],
+        is_provisional: bool = False # ****** NEW ARGUMENT ******
     ):
-        """Saves or updates chapter text, raw log, summary, and embedding."""
         logger.info(
-            f"Attempting to save data for chapter {chapter_number} to database."
+            f"Attempting to save data for chapter {chapter_number} to database (Provisional: {is_provisional})."
         )
+        
         embedding_blob, dtype_str, shape_str = None, "", ""
         if (
             embedding is not None
@@ -221,12 +239,13 @@ class DatabaseManager:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary) VALUES (?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary, is_provisional) VALUES (?, ?, ?, ?, ?)", # Add is_provisional
                     (
                         chapter_number,
                         text,
                         raw_text,
                         summary if summary is not None else "",
+                        is_provisional, # ****** Pass value ******
                     ),
                 )
                 logger.debug(
@@ -390,6 +409,7 @@ class DatabaseManager:
         obj: str,
         chapter_added: int,
         confidence: float = 1.0,
+        is_provisional: bool = False # ****** NEW ARGUMENT ******
     ):
         """
         Adds a single (subject, predicate, object) triple to the knowledge graph.
@@ -406,14 +426,15 @@ class DatabaseManager:
             return
 
         logger.debug(
-            f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from chapter {chapter_added}"
+            f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from chapter {chapter_added} (Provisional: {is_provisional})"
         )
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                # Check for existing now includes provisional status, or you might decide an S,P,O,chapter match is enough
                 cursor.execute(
                     """SELECT id FROM knowledge_graph
-                       WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?""",
+                       WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?""", # Consider if provisional status makes it "different"
                     (subj_clean, pred_clean, obj_clean, chapter_added),
                 )
                 exists = cursor.fetchone()
@@ -421,17 +442,19 @@ class DatabaseManager:
                 if exists:
                     logger.debug(
                         f"Triple ({subj_clean}, {pred_clean}, {obj_clean}) already exists for chapter {chapter_added}. Skipping insert."
+                        # Potentially update provisional status or confidence if new info is better? For now, skip.
                     )
                 else:
                     cursor.execute(
-                        """INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence),
+                        """INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence, is_provisional)
+                           VALUES (?, ?, ?, ?, ?, ?)""", # Add is_provisional
+                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional), # ****** Pass value ******
                     )
                     conn.commit()
                     logger.debug(
                         f"Successfully added triple for chapter {chapter_added}."
                     )
+                    
         except sqlite3.Error as e:
             logger.error(
                 f"Database error adding KG triple ({subj_clean}, {pred_clean}, {obj_clean}): {e}",
@@ -446,16 +469,12 @@ class DatabaseManager:
         predicate: Optional[str] = None,
         obj: Optional[str] = None,
         chapter_limit: Optional[int] = None,
+        include_provisional: bool = True # ****** NEW ARGUMENT to control fetching provisional data ******
     ) -> List[Dict[str, Any]]:
-        """
-        Queries the knowledge graph based on provided components (S, P, O).
-        Allows filtering up to a specific chapter number.
-        Returns results as a list of dictionaries.
-        """
         query_parts = [
-            "SELECT id, subject, predicate, object, chapter_added, confidence, timestamp FROM knowledge_graph WHERE 1=1"
+            "SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1" # Add is_provisional
         ]
-        params: List[Any] = []  # Explicitly list of Any
+        params: List[Any] = []
 
         if subject is not None:
             query_parts.append("AND subject = ?")
@@ -473,8 +492,12 @@ class DatabaseManager:
         ):
             query_parts.append("AND chapter_added <= ?")
             params.append(chapter_limit)
+        
+        # ****** Filter out provisional data if not requested ******
+        if not include_provisional:
+            query_parts.append("AND is_provisional = FALSE")
 
-        query_parts.append("ORDER BY chapter_added DESC, timestamp DESC")
+        query_parts.append("ORDER BY chapter_added DESC, confidence DESC, timestamp DESC") # Prioritize confidence
         final_query = " ".join(query_parts)
 
         logger.debug(f"Executing KG query: {final_query} with params: {params}")
@@ -493,8 +516,8 @@ class DatabaseManager:
         return results
 
     def get_most_recent_value(
-        self, subject: str, predicate: str, chapter_limit: Optional[int] = None
-    ) -> Optional[str]:
+        self, subject: str, predicate: str, chapter_limit: Optional[int] = None, include_provisional: bool = False
+    ) -> Optional[str]: # Add include_provisional
         """
         Helper function to get the most recent object value for a given
         subject and predicate from the KG, up to a specific chapter.
@@ -506,10 +529,10 @@ class DatabaseManager:
             return None
 
         logger.debug(
-            f"Getting most recent KG value for ({subject}, {predicate}, ?) up to chapter {chapter_limit}"
+            f"Getting most recent KG value for ({subject}, {predicate}, ?) up to chapter {chapter_limit} (Include Provisional: {include_provisional})"
         )
         results = self.query_kg(
-            subject=subject, predicate=predicate, chapter_limit=chapter_limit
+            subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional # Pass flag
         )
         if results:
             most_recent_value = results[0]["object"]
