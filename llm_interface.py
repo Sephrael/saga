@@ -110,34 +110,66 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
     return ""
 
 def clean_model_response(text: str) -> str:
-    # Same as your last version
-    if not isinstance(text, str): logger.warning(f"clean_model_response non-string input: {type(text)}."); return ""
-    original_text_len = len(text); cleaned_text = text
+    if not isinstance(text, str): 
+        logger.warning(f"clean_model_response non-string input: {type(text)}."); return ""
+    
+    original_text_len = len(text)
+    cleaned_text = text
+
+    # 1. Remove specific leading empty <think></think> artifact (if LLM commonly produces this)
+    # This is a very specific pattern for an empty think block at the start.
     leading_no_think_artifact_regex = r'^\s*<\s*think\s*>\s*<\s*/think\s*>\s*'
     text_after_leading_removal = re.sub(leading_no_think_artifact_regex, '', cleaned_text, count=1, flags=re.IGNORECASE)
-    if len(text_after_leading_removal) < len(cleaned_text): logger.debug("Removed specific leading /no_think artifact."); cleaned_text = text_after_leading_removal
-    think_block_regex = r'<\s*(?:think|thought|thinking)\s*>.*?<\s*/\s*(?:think|thought|thinking)\s*>'
-    text_after_general_think_removal = re.sub(think_block_regex, '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
-    if len(text_after_general_think_removal) < len(cleaned_text): logger.debug("General think block regex removed content."); cleaned_text = text_after_general_think_removal
-    elif not (len(text_after_leading_removal) < len(text)):
-        start_tag_pattern = r'^\s*<\s*(?:think|thought|thinking)\s*>'
-        start_match = re.search(start_tag_pattern, cleaned_text, re.IGNORECASE)
-        if start_match:
-            logger.warning(f"Think block regexes failed, but text starts with tag: {cleaned_text[:100]}...")
-            end_tag_pattern = r'<\s*/\s*(?:think|thought|thinking)\s*>'
-            end_match = re.search(end_tag_pattern, cleaned_text[start_match.end():], re.IGNORECASE)
-            if end_match: cleaned_text = cleaned_text[start_match.end() + end_match.end():].strip(); logger.info("Applied fallback think block removal.")
-            else: logger.warning("Fallback removal: Found start tag but no end tag. Stripping start tag only."); cleaned_text = re.sub(start_tag_pattern, '', cleaned_text, count=1, flags=re.IGNORECASE).strip()
-    cleaned_text = re.sub(r'^\s*(Okay, here.*?|Here\'s the chapter|Response:|Summary:|List inconsistencies below:|Revised chapter:|Analysis:|JSON Output:)\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
+    if len(text_after_leading_removal) < len(cleaned_text):
+        logger.debug("Removed specific leading empty <think></think> artifact.")
+        cleaned_text = text_after_leading_removal
+
+    # 2. Remove general <think>...</think> or <thought>...</thought> or <thinking>...</thinking> blocks
+    # The \1 backreference ensures the closing tag matches the opening one (e.g. <think> closes with </think>)
+    think_block_pattern = re.compile(
+        r'<\s*(think|thought|thinking)\s*>.*?<\s*/\s*\1\s*>',
+        flags=re.DOTALL | re.IGNORECASE
+    )
+    text_after_general_think_removal = think_block_pattern.sub('', cleaned_text)
+    if len(text_after_general_think_removal) < len(cleaned_text):
+        if not (len(text_after_leading_removal) < original_text_len and cleaned_text == text_after_leading_removal): # Avoid double logging if leading also removed
+             logger.debug("General think block regex removed content.")
+        cleaned_text = text_after_general_think_removal
+    
+    # 3. Remove markdown code blocks (JSON, Python, text, or unspecified)
+    # This is important if the LLM wraps its actual text output in markdown by mistake.
     cleaned_text = re.sub(r'```(?:json|python|text|)\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
+
+    # 4. Remove "Chapter X" style headers if they appear at the start of a line
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-]?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
+
+    # 5. Remove "BEGIN/END CHAPTER/TEXT" style markers
     cleaned_text = re.sub(r'^\s*---?\s*(BEGIN|END) (CHAPTER|TEXT|DRAFT|CONTEXT|SNIPPET).*?\s*---?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
-    cleaned_text = re.sub(r'\s*Output ONLY the.*?text.*$','', cleaned_text, flags=re.IGNORECASE | re.DOTALL)
-    cleaned_text = re.sub(r'\s*/no_think\s*$', '', cleaned_text, flags=re.IGNORECASE)
-    lines = cleaned_text.splitlines()
-    cleaned_lines = [re.sub(r'[ \t]+', ' ', line.strip()) for line in lines if line.strip()]
-    final_text = re.sub(r'\n{2,}', '\n\n', '\n'.join(cleaned_lines)).strip()
-    if len(final_text) < original_text_len * 0.95: logger.debug(f"Cleaning reduced text length from {original_text_len} to {len(final_text)}.")
+
+    # 6. Normalize newlines and clean individual lines
+    # First, replace all occurrences of 2 or more newlines with exactly two newlines (\n\n).
+    # This standardizes paragraph breaks to one empty line.
+    cleaned_text_normalized_newlines = re.sub(r'\n{2,}', '\n\n', cleaned_text)
+
+    # Split into lines. A double newline (\n\n) will result in an empty string for the blank line.
+    lines = cleaned_text_normalized_newlines.splitlines()
+    
+    processed_lines = []
+    for line in lines:
+        stripped_line = line.strip() # Remove leading/trailing whitespace from this line
+        if stripped_line: # It's a content line
+            # Reduce multiple spaces/tabs within the line to a single space
+            processed_lines.append(re.sub(r'[ \t]+', ' ', stripped_line))
+        else: # It was an empty line (originally from \n\n or became empty after stripping)
+            processed_lines.append('') # Preserve it as an empty string to maintain paragraph separation
+
+    # Join lines back with single newlines. This will correctly form \n\n for paragraph breaks.
+    final_text = '\n'.join(processed_lines).strip() # Final strip to remove leading/trailing newlines from the whole text block.
+
+    if len(final_text) < original_text_len * 0.95 and original_text_len > 0 : # Avoid division by zero if original_text_len is 0
+        reduction_percentage = ((original_text_len - len(final_text)) / original_text_len) * 100
+        logger.debug(f"Cleaning reduced text length from {original_text_len} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
+    
     return final_text
 
 def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = dict) -> Optional[str]:
