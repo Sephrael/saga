@@ -154,11 +154,18 @@ The `config.py` file provides extensive options to customize SAGA's behavior:
 
 Review `config.py` thoroughly to tailor SAGA to your needs.
 
-## Potential Future Enhancements
+## License
 
-*   More sophisticated KG reasoning and query capabilities.
-*   User interface for interaction and reviewing generated content.
-*   Support for multiple concurrent novel projects.
-*   Finer-grained control over character voice and narrative style.
-*   Automated evaluation of story quality beyond technical coherence/consistency.
-*   Integration with other storytelling tools or platforms.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Copyright 2025 Dennis Lewis
