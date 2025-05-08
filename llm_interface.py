@@ -67,7 +67,7 @@ def call_llm(prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = 
     if not prompt or not isinstance(prompt, str): logger.error("call_llm empty/invalid prompt."); return ""
     effective_max_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
     payload = {"model": config.MAIN_GENERATION_MODEL, "messages": [{"role": "user", "content": prompt}],
-               "stream": False, "temperature": temperature, "top_p": 0.95, "max_tokens": effective_max_tokens}
+               "stream": False, "temperature": temperature, "top_p": 0.95, "top_k": 20, "min_p": 0, "max_tokens": effective_max_tokens}
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
     # logger.debug(f"Calling LLM '{config.MAIN_GENERATION_MODEL}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
     try:

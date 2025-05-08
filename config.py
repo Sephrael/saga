@@ -67,7 +67,7 @@ CHAPTERS_PER_RUN: int = 3
 
 # --- Agentic Planning ---
 ENABLE_AGENTIC_PLANNING: bool = True # Flag to enable the new planning step
-MAX_PLANNING_TOKENS: int = 16000 # Max tokens for the planning LLM call (might need more for detailed scenes)
+MAX_PLANNING_TOKENS: int = 32000 # Max tokens for the planning LLM call (might need more for detailed scenes)
 # Limits for context snippets in planning prompts
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 100
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 150
@@ -87,11 +87,11 @@ PLOT_ARC_VALIDATION_TRIGGER: bool = True
 # Similarity threshold for revision check (revisions less similar than this are accepted)
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.98 # Revisions scoring >= this are rejected as too similar
 # Max tokens for specific LLM calls during evaluation/update
-MAX_SUMMARY_TOKENS: int = 512
-MAX_CONSISTENCY_TOKENS: int = 2048
-MAX_PLOT_VALIDATION_TOKENS: int = 512
-MAX_KG_TRIPLE_TOKENS: int = 4096 # For KG extraction from chapter text
-MAX_PREPOP_KG_TOKENS: int = 8192 # For pre-populating KG from plot/world JSON
+MAX_SUMMARY_TOKENS: int = 1000
+MAX_CONSISTENCY_TOKENS: int = 4000
+MAX_PLOT_VALIDATION_TOKENS: int = 1000
+MAX_KG_TRIPLE_TOKENS: int = 8000 # For KG extraction from chapter text
+MAX_PREPOP_KG_TOKENS: int = 16000 # For pre-populating KG from plot/world JSON
 
 # --- Draft Evaluation ---
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 1500 # Minimum character length for a generated draft to be considered valid

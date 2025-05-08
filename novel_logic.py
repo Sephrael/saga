@@ -189,7 +189,9 @@ Based on these core elements, please generate the following:
 """
             base_elements_for_outline = {"genre": genre, "theme": theme, "setting": setting_description}
 
-        prompt = f"""You are a creative assistant specializing in narrative structure.
+        prompt = f"""/no_think
+        
+        You are a creative assistant specializing in narrative structure.
         {prompt_core_elements}
 
 Output ONLY the JSON object adhering strictly to the requested keys.
@@ -352,7 +354,10 @@ Example Structure (keys will vary slightly based on mode above):
         
         kg_context_section = "**Relevant Reliable Facts from Knowledge Graph (up to end of previous chapter/pre-novel):**\n" + "\n".join(kg_facts) + "\n" if kg_facts else ""
 
-        prompt = f"""You are a master plotter outlining **8-15 detailed scenes** for Chapter {chapter_number} of a novel.
+        # --- MODIFICATION START: Enhanced prompt for scene details ---
+        prompt = f"""/no_think
+        
+        You are a master plotter outlining **8-15 detailed scenes** for Chapter {chapter_number} of a novel.
         **Overall Novel Concept:**
         * Title: {self.plot_outline.get('title', 'Untitled')}
         * Genre: {self.plot_outline.get('genre', 'N/A')}
@@ -373,47 +378,47 @@ Example Structure (keys will vary slightly based on mode above):
         2. Logically follow **Recent Context** & **Reliable KG Facts**.
         3. Involve relevant characters/world elements from the provided states.
         4. Contribute to the **Protagonist Arc Goal** or overall plot.
-        5. Be distinct and move the narrative forward.
+        5. Be distinct and move the narrative forward. Ensure each scene has enough substance to be developed into significant prose.
 
         **Output Format:**
         Output ONLY a single, valid JSON list of scene objects. Each scene object MUST have the following keys:
         - `scene_number`: (integer) The sequential number of the scene in this chapter.
-        - `summary`: (string) Concise overview of what happens in this scene (1-2 sentences).
+        - `summary`: (string) A detailed overview of events, character actions, and key developments in this scene. Aim for enough substance to guide several paragraphs of prose (e.g., 2-4 descriptive sentences).
         - `characters_involved`: (list of strings) Names of characters significantly present or active.
-        - `key_dialogue_points`: (list of strings) Key lines of dialogue or critical communication intentions (1-3 brief points).
-        - `setting_details`: (string) Specific location, atmosphere, and relevant environmental details for this scene.
-        - `contribution`: (string) How this scene contributes to the chapter's focus, main plot, subplots, or character development.
+        - `key_dialogue_points`: (list of strings) Crucial lines of dialogue, or core intentions/topics of conversation that must be conveyed. These should hint at the subtext and emotional core of exchanges (1-3 detailed points, each potentially expandable).
+        - `setting_details`: (string) Specific location, atmosphere, and sensory details. Describe how the setting influences the scene, characters' moods, or actions. Make it vivid.
+        - `contribution`: (string) Explain precisely how this scene advances the chapter's focus, the main plot, character arcs (e.g., showing internal conflict, decisions, growth), or introduces/resolves conflicts/mysteries. Be specific about the narrative movement or insight gained.
 
         **Example JSON Scene Object (part of the list):**
         ```json
         {{
           "scene_number": 1,
-          "summary": "The protagonist discovers a cryptic message hidden in an old family heirloom.",
-          "characters_involved": ["{protagonist_name}", "Ghostly Ancestor (voice only)"],
-          "key_dialogue_points": ["{protagonist_name}: 'What is this symbol?'", "Ancestor (faintly): 'The path... begins...'"],
-          "setting_details": "Dusty attic of the protagonist's ancestral home, late afternoon, shafts of light illuminating floating dust motes.",
-          "contribution": "Inciting incident for the chapter's mystery, introduces a supernatural element and a clue."
+          "summary": "The protagonist, {protagonist_name}, nervously enters the dilapidated 'Whispering Archive', seeking a forbidden tome. The air is thick with dust and the scent of decaying paper. A sudden floorboard creak makes them jump, revealing they are not alone.",
+          "characters_involved": ["{protagonist_name}", "Shadowy Archivist (unseen initially)"],
+          "key_dialogue_points": [
+            "{protagonist_name} (to self, whispering): 'It has to be here... the Oracle's Cipher.'",
+            "Shadowy Archivist (voice from darkness): 'Many seek what is lost. Few are prepared for what they find.'"
+          ],
+          "setting_details": "The 'Whispering Archive': ancient, cobweb-laden shelves tower into gloom, moonlight struggles through a single grimy window. Piles of scrolls and books create a maze. The silence is oppressive, broken only by rustles and drips.",
+          "contribution": "Establishes the chapter's immediate goal (finding the Cipher). Introduces a new, mysterious character and a tense atmosphere. Highlights protagonist's determination mixed with fear. Advances plot point related to uncovering hidden knowledge."
         }}
         ```
         Ensure the entire output is a valid JSON list `[...]` containing these scene objects.
-        /no_think
         [
-        """ # Added /no_think and opening bracket to guide LLM for JSON list output
+        """
+        # --- MODIFICATION END: Enhanced prompt ---
         logger.info(f"Calling LLM to generate detailed scene plan for chapter {chapter_number}...")
         plan_raw = llm_interface.call_llm(prompt, temperature=0.65, max_tokens=config.MAX_PLANNING_TOKENS)
         
-        # Expecting a list of SceneDetail objects
         parsed_plan: Optional[List[SceneDetail]] = llm_interface.parse_llm_json_response(
             plan_raw, f"detailed scene plan for chapter {chapter_number}", expect_type=list
         )
 
-        if parsed_plan and isinstance(parsed_plan, list) and len(parsed_plan) >= 1: # Allow fewer than 8 if LLM struggles, but aim for more
-            # Validate structure of each scene dict
+        if parsed_plan and isinstance(parsed_plan, list) and len(parsed_plan) >= 1: 
             valid_scenes = []
             required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
             for i, scene_item in enumerate(parsed_plan):
                 if isinstance(scene_item, dict) and required_scene_keys.issubset(scene_item.keys()):
-                    # Basic type checks (can be more thorough)
                     if not all(isinstance(scene_item[k], str) for k in ["summary", "setting_details", "contribution"]):
                         logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has invalid string types. Skipping scene.")
                         continue
@@ -424,11 +429,23 @@ Example Structure (keys will vary slightly based on mode above):
                 else:
                     logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has missing keys. Parsed scene: {scene_item}. Skipping scene.")
             
-            if valid_scenes and len(valid_scenes) >= 1: # Check if any valid scenes remain
+            if valid_scenes and len(valid_scenes) >= 1: 
                 logger.info(f"Successfully generated and validated detailed scene plan for chapter {chapter_number} with {len(valid_scenes)} scenes.")
-                # Log a snippet of the plan
                 plan_summary_log = "\n".join([f"  Scene {s.get('scene_number', 'N/A')}: {s.get('summary', 'N/A')[:100]}..." for s in valid_scenes[:3]])
                 logger.debug(f"Plan snippet:\n{plan_summary_log}")
+
+                # --- MODIFICATION START: Save the plan to file ---
+                try:
+                    plans_dir = os.path.join(config.OUTPUT_DIR, "chapter_plans")
+                    os.makedirs(plans_dir, exist_ok=True)
+                    plan_file_path = os.path.join(plans_dir, f"chapter_{chapter_number}_plan.json")
+                    with open(plan_file_path, 'w', encoding='utf-8') as f_plan:
+                        json.dump(valid_scenes, f_plan, indent=2, ensure_ascii=False)
+                    logger.info(f"Saved chapter {chapter_number} plan to: {plan_file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save chapter {chapter_number} plan to file: {e}", exc_info=True)
+                # --- MODIFICATION END: Save the plan to file ---
+
                 return valid_scenes
             else:
                 logger.error(f"Failed to generate a valid detailed scene plan for chapter {chapter_number}. All parsed scenes were invalid. Raw response: '{plan_raw[:500]}...'")
@@ -652,7 +669,9 @@ Example Structure (keys will vary slightly based on mode above):
             plan_focus_section = f"**Original Chapter Focus (Target for Revision):**\n{plot_point_focus}\n"
             
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}) to correct issues.
+        prompt = f"""/no_think
+        
+        You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}) to correct issues.
         **Critique / Reason(s) for Revision (MUST be addressed):**\n--- FEEDBACK START ---\n{clean_reason}\n--- FEEDBACK END ---\n
         {plan_focus_section}
         **Context from Previous Relevant Chapters (Note any provisional summaries):**\n--- BEGIN CONTEXT ---\n{context_snippet if context_snippet else "No previous context."}\n--- END CONTEXT ---
@@ -823,7 +842,9 @@ Example Structure (keys will vary slightly based on mode above):
         if not chapter_text or len(chapter_text) < 50:
             return None
         snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
-        prompt = f"""Summarize Chapter {chapter_number} (1-3 sentences), capturing crucial plot advancements, character decisions, or revelations. Be succinct.
+        prompt = f"""/no_think
+        
+        Summarize Chapter {chapter_number} (1-3 sentences), capturing crucial plot advancements, character decisions, or revelations. Be succinct.
         Chapter Text Snippet:\n--- BEGIN TEXT ---\n{snippet}\n--- END TEXT ---\nOutput ONLY summary text.
         """
         summary_raw = llm_interface.call_llm(prompt, temperature=0.6, max_tokens=config.MAX_SUMMARY_TOKENS)
@@ -860,7 +881,9 @@ Example Structure (keys will vary slightly based on mode above):
         char_profiles_for_prompt = self._get_filtered_profiles_for_prompt(kg_chapter_limit) # Use same limit
         world_building_for_prompt = self._get_filtered_world_for_prompt(kg_chapter_limit) # Use same limit
 
-        prompt = f"""You are a continuity editor. Analyze Chapter {chapter_number} Draft Snippet.
+        prompt = f"""/no_think
+        
+        You are a continuity editor. Analyze Chapter {chapter_number} Draft Snippet.
         Compare against: 
         1. Plot Outline.
         2. Character Profiles (consider this as established canon, noting any provisional flags).
@@ -903,7 +926,9 @@ Example Structure (keys will vary slightly based on mode above):
         if not validation_text: return None
             
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""You are a story structure analyst. Determine if Chapter {chapter_number} Text (protagonist: {protagonist_name}) addresses the core of its Intended Plot Point.
+        prompt = f"""/no_think
+        
+        You are a story structure analyst. Determine if Chapter {chapter_number} Text (protagonist: {protagonist_name}) addresses the core of its Intended Plot Point.
         **Intended Plot Point (Plot Point {plot_point_index + 1} for Chapter {chapter_number}):** "{plot_point_focus}"
         **Chapter {chapter_number} Text (Summary or Snippet to analyze):** "{validation_text}"
         **Evaluation:** Does Chapter Text content/events align with Intended Plot Point?
@@ -937,7 +962,9 @@ Example Structure (keys will vary slightly based on mode above):
             
         current_profiles_for_prompt = self._get_filtered_profiles_for_prompt(chapter_number -1) # Up to previous chapter
 
-        prompt = f"""You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles. Output MUST be a single, valid JSON object.
+        prompt = f"""/no_think
+        
+        You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles. Output MUST be a single, valid JSON object.
         **Chapter Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}...\n--- END TEXT ---\n
         **Current Character Profiles (reference - note if any data is provisional from past chapters):**\n```json\n{json.dumps(current_profiles_for_prompt, indent=2, ensure_ascii=False, default=str)}\n```
         **Instructions:** 1. Identify characters updated/introduced. 2. Note new traits, relationship changes, status, description. Add `development_in_chapter_{chapter_number}` key summarizing role/change.
@@ -1072,7 +1099,9 @@ Example Structure (keys will vary slightly based on mode above):
 
         current_world_for_prompt = self._get_filtered_world_for_prompt(chapter_number -1) # Up to previous chapter
 
-        prompt = f"""You are a world-building analyst. Examine Chapter {chapter_number} snippet for new info or significant changes to existing world elements. Output MUST be a single, valid JSON object.
+        prompt = f"""/no_think
+        
+        You are a world-building analyst. Examine Chapter {chapter_number} snippet for new info or significant changes to existing world elements. Output MUST be a single, valid JSON object.
         **Chapter Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}...\n--- END TEXT ---\n
         **Current World Building Notes (reference - note if any data is provisional from past chapters):**\n```json\n{json.dumps(current_world_for_prompt, indent=2, ensure_ascii=False, default=str)}\n```
         **Instructions:** 1. Identify new/changed locations (ensure dicts). 2. Note new/changed society, factions (ensure dicts). 3. Extract new/changed systems, tech, magic (ensure dicts). 4. Capture new/changed lore, history (ensure items are dicts with "description" or "text"). 5. Focus on THIS chapter. Add `elaboration_in_chapter_{chapter_number}`.
@@ -1211,7 +1240,9 @@ Example Structure (keys will vary slightly based on mode above):
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         common_predicates = ["is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", "interacted_with", "travelled_to", "discovered", "acquired", "lost", "used_item", "attacked", "helped", "damaged", "repaired", "contains", "part_of", "caused_by", "leads_to", "observed", "heard", "said", "thought_about", "decided_to", "has_goal", "has_feature", "related_to", "member_of", "leader_of", "enemy_of", "ally_of", "works_for", "has_ability"]
         
-        prompt = f"""You are a Knowledge Graph Engineer. Extract factual (Subject, Predicate, Object) triples from the Chapter {chapter_number} Text Snippet provided. The protagonist is '{protagonist_name}'.
+        prompt = f"""/no_think
+        
+        You are a Knowledge Graph Engineer. Extract factual (Subject, Predicate, Object) triples from the Chapter {chapter_number} Text Snippet provided. The protagonist is '{protagonist_name}'.
         **Chapter {chapter_number} Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}\n--- END TEXT ---\n
         **Instructions:**
         1. Identify key entities (characters, locations, items, concepts, factions, events). Normalize names (e.g., "The Dark Lord" and "Dark Lord" should be the same entity).
@@ -1302,7 +1333,9 @@ Example Structure (keys will vary slightly based on mode above):
             "governed_by", "known_for", "contains_feature", "primary_setting_is", "key_system_is"
         ]
 
-        prompt = f"""You are a Knowledge Graph Engineer. Your task is to extract foundational (Subject, Predicate, Object) triples from the provided JSON data, which contains the plot outline and world-building details for a novel.
+        prompt = f"""/no_think
+        
+        You are a Knowledge Graph Engineer. Your task is to extract foundational (Subject, Predicate, Object) triples from the provided JSON data, which contains the plot outline and world-building details for a novel.
         The novel's protagonist is named '{protagonist_name}' and the title is '{novel_title}'.
 
         **Input JSON Data (Plot Outline & World Building):**
