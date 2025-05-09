@@ -26,12 +26,14 @@ import numpy as np
 import logging
 import random # For unhinged mode
 from typing import Dict, List, Optional, Tuple, Any, TypedDict, Union
+import asyncio # For potential asynchronous operations
+import functools # For LRU cache
 
 # Import components from other modules
 import config
 import utils
 import llm_interface
-from database_manager import DatabaseManager
+from database_manager import DatabaseManager # Assuming async methods will be added here or a separate async DB manager
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -59,10 +61,12 @@ class NovelWriterAgent:
     chapter by chapter, interacting with LLMs, a database, and a knowledge graph.
     """
 
-    def __init__(self):
+    def __init__(self, use_async_db: bool = False): # Added use_async_db flag
         """Initializes the agent, loads state, and sets up components."""
         logger.info("Initializing NovelWriterAgent...")
+        # Potentially use an async version of DatabaseManager if full async is adopted
         self.db_manager = DatabaseManager(config.DATABASE_FILE)
+        self.use_async_db = use_async_db # Store for deciding which DB methods to call
         self.plot_outline: Dict[str, Any] = {}
         self.character_profiles: Dict[str, Any] = {}
         self.world_building: Dict[str, Any] = {}
@@ -187,7 +191,7 @@ Output ONLY the JSON object. No intro/markdown/meta-commentary.
 Example (keys vary by mode): {{ "title": "string", ... }}
 """
         logger.info("Calling LLM for plot outline generation...")
-        raw_outline_str = llm_interface.call_llm(
+        raw_outline_str = llm_interface.call_llm( # Consider async_call_llm if main flow is async
             model_name=config.INITIAL_SETUP_MODEL,
             prompt=prompt, 
             temperature=0.7
@@ -230,7 +234,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         self._save_json_state()
         return self.plot_outline
 
-    def generate_world_building(self):
+    def generate_world_building(self): # Could be async def generate_world_building(self):
         if self.world_building and not self.world_building.get("is_default", False):
             logger.info("Skipping initial world-building: Data seems populated.")
             return
@@ -263,7 +267,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         Example Structure: {{ "locations": {{ "Loc1": {{ "description": "..." }} }}, ... }}
         """
         logger.info("Generating initial world-building data via LLM...")
-        raw_world_data_str = llm_interface.call_llm(
+        raw_world_data_str = llm_interface.call_llm( # Or await llm_interface.async_call_llm
             model_name=config.INITIAL_SETUP_MODEL,
             prompt=prompt, 
             temperature=0.6
@@ -288,7 +292,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             }
         self._save_json_state()
 
-    def _plan_chapter(self, chapter_number: int) -> Optional[Union[str, List[SceneDetail]]]:
+    async def _plan_chapter(self, chapter_number: int) -> Optional[Union[str, List[SceneDetail]]]: # Made async
         if not config.ENABLE_AGENTIC_PLANNING:
             return "Agentic planning disabled by configuration."
         logger.info(f"Planning Chapter {chapter_number} with detailed scenes...")
@@ -299,7 +303,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
 
         context_summary = ""
         if chapter_number > 1:
-            prev_chap_data = self.db_manager.get_chapter_data_from_db(chapter_number - 1)
+            # If db_manager becomes async, this needs await
+            prev_chap_data = await self.db_manager.async_get_chapter_data_from_db(chapter_number - 1) if self.use_async_db \
+                             else self.db_manager.get_chapter_data_from_db(chapter_number - 1)
             if prev_chap_data:
                 prev_summary = prev_chap_data.get('summary')
                 prev_is_provisional = prev_chap_data.get('is_provisional', False)
@@ -313,8 +319,12 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         kg_facts = []
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         kg_chapter_limit = chapter_number - 1 
-        current_loc = self.db_manager.get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
-        current_status = self.db_manager.get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
+        # If db_manager becomes async, these need await
+        current_loc = await self.db_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False) if self.use_async_db \
+                      else self.db_manager.get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
+        current_status = await self.db_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False) if self.use_async_db \
+                       else self.db_manager.get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
+
         if current_loc: kg_facts.append(f"- {protagonist_name} is currently located in (reliable KG): {current_loc}.")
         if current_status: kg_facts.append(f"- {protagonist_name}'s current status (reliable KG): {current_status}.")
         kg_context_section = "**Relevant Reliable KG Facts (up to prev chapter/pre-novel):**\n" + "\n".join(kg_facts) + "\n" if kg_facts else ""
@@ -339,7 +349,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         [
         """
         logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number}...")
-        plan_raw = llm_interface.call_llm(
+        plan_raw = await llm_interface.async_call_llm( # Changed to async
             model_name=config.PLANNING_MODEL,
             prompt=prompt, 
             temperature=0.65, 
@@ -372,7 +382,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             self._save_debug_output(chapter_number, "detailed_plan_parse_fail", plan_raw)
             return None
 
-    def write_chapter(self, chapter_number: int) -> Optional[str]:
+    async def write_chapter(self, chapter_number: int) -> Optional[str]: # Made async
         logger.info(f"=== Starting Chapter {chapter_number} Generation ===")
         if not self.plot_outline or not self.plot_outline.get("plot_points") or not self.plot_outline.get("protagonist_name"):
             logger.error(f"Cannot write Ch {chapter_number}: Plot outline/points/protagonist missing.")
@@ -381,7 +391,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             logger.error(f"Cannot write Ch {chapter_number}: Chapter number must be positive.")
             return None
 
-        chapter_plan_obj: Optional[Union[str, List[SceneDetail]]] = self._plan_chapter(chapter_number)
+        chapter_plan_obj: Optional[Union[str, List[SceneDetail]]] = await self._plan_chapter(chapter_number) # Await async plan
         
         if config.ENABLE_AGENTIC_PLANNING:
             if chapter_plan_obj is None:
@@ -391,10 +401,10 @@ Example (keys vary by mode): {{ "title": "string", ... }}
                 logger.error(f"Ch {chapter_number} generation halted: invalid plan type {type(chapter_plan_obj)}.")
                 return None
 
-        context_for_draft = self._get_context(chapter_number)
+        context_for_draft = await self._get_context(chapter_number) # Await async context
         plot_point_focus, _ = self._get_plot_point_info(chapter_number)
 
-        initial_draft_text, initial_raw_text = self._generate_draft(
+        initial_draft_text, initial_raw_text = await self._generate_draft( # Await async draft
             chapter_number, plot_point_focus, context_for_draft, chapter_plan_obj
         )
 
@@ -403,20 +413,20 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             self._save_debug_output(chapter_number, "initial_raw_fail_after_clean", initial_raw_text or "")
             return None
 
-        evaluation = self._evaluate_draft(initial_draft_text, chapter_number, context_for_draft)
+        evaluation = await self._evaluate_draft(initial_draft_text, chapter_number, context_for_draft) # Await async eval
         current_text, final_raw_output_log = initial_draft_text, f"--- INITIAL DRAFT RAW ---\n{initial_raw_text}\n\n"
         proceeded_with_flaws = False 
 
         if evaluation["needs_revision"]:
             revision_reason_str = "\n- ".join(evaluation["reasons"])
             logger.warning(f"Ch {chapter_number} flagged for revision. Reason(s):\n- {revision_reason_str}")
-            revised_text_tuple = self._revise_chapter(
+            revised_text_tuple = await self._revise_chapter( # Await async revision
                 current_text, chapter_number, revision_reason_str, context_for_draft, chapter_plan_obj
             )
             if revised_text_tuple:
                 revised_text, raw_revision_output = revised_text_tuple
                 logger.info(f"Revision successful for ch {chapter_number}. Evaluating revised draft...")
-                revised_evaluation = self._evaluate_draft(revised_text, chapter_number, context_for_draft)
+                revised_evaluation = await self._evaluate_draft(revised_text, chapter_number, context_for_draft) # Await async eval
                 if revised_evaluation["needs_revision"]:
                     logger.error(f"Revised draft for ch {chapter_number} STILL failed. Reasons:\n- " + "\n- ".join(revised_evaluation["reasons"]))
                     proceeded_with_flaws = True 
@@ -429,11 +439,13 @@ Example (keys vary by mode): {{ "title": "string", ... }}
                 final_raw_output_log += f"--- REVISION FAILED (Reason: {revision_reason_str}) ---\n\n"
         else: logger.info(f"Initial draft for ch {chapter_number} passed evaluation.")
 
-        if not self._finalize_chapter_core(chapter_number, current_text, final_raw_output_log, proceeded_with_flaws):
+        # Core finalization and knowledge updates can be parallelized if they are async
+        # For illustration, making them awaitable, true parallelism needs asyncio.gather
+        if not await self._finalize_chapter_core(chapter_number, current_text, final_raw_output_log, proceeded_with_flaws):
              logger.error(f"=== Finished Ch {chapter_number} With Errors During Core Finalization ===")
              return None
 
-        self._update_knowledge_bases(chapter_number, current_text, proceeded_with_flaws)
+        await self._update_knowledge_bases(chapter_number, current_text, proceeded_with_flaws)
         
         self.chapter_count = max(self.chapter_count, chapter_number)
         self._save_json_state() 
@@ -453,7 +465,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             logger.warning(f"Could not find plot point for chapter {chapter_number}.")
             return None, -1
 
-    def _generate_draft(self, chapter_number: int, plot_point_focus: Optional[str], context: str, chapter_plan: Optional[Union[str, List[SceneDetail]]]) -> Tuple[Optional[str], Optional[str]]:
+    async def _generate_draft(self, chapter_number: int, plot_point_focus: Optional[str], context: str, chapter_plan: Optional[Union[str, List[SceneDetail]]]) -> Tuple[Optional[str], Optional[str]]: # Made async
         if not plot_point_focus:
             plot_point_focus = "Continue narrative logically, focusing on character development and plot progression."
         
@@ -487,7 +499,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         **Instructions:** Write compelling chapter (target {config.MIN_ACCEPTABLE_DRAFT_LENGTH}+ chars). Follow detailed scene plan if provided, otherwise Plot Point Focus. Maintain consistency. Smooth flow. Vivid prose for genre '{self.plot_outline.get('genre', 'story')}'. **Output ONLY chapter text.** No "Chapter X" headers or meta-commentary.
         --- BEGIN CHAPTER {chapter_number} TEXT ---
         """
-        raw_text = llm_interface.call_llm(
+        raw_text = await llm_interface.async_call_llm( # Changed to async
             model_name=config.DRAFTING_MODEL,
             prompt=prompt, 
             temperature=0.65
@@ -500,30 +512,51 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         logger.info(f"Generated initial draft for ch {chapter_number} (Len: {len(cleaned_text)}).")
         return cleaned_text, raw_text
 
-    def _evaluate_draft(self, draft_text: str, chapter_number: int, previous_chapters_context: str) -> EvaluationResult:
+    async def _evaluate_draft(self, draft_text: str, chapter_number: int, previous_chapters_context: str) -> EvaluationResult: # Made async
         logger.info(f"Evaluating chapter {chapter_number} draft...")
         reasons: List[str] = []
         needs_revision = False
         coherence_score, consistency_issues, plot_deviation_reason = None, None, None
 
+        # Embedding and DB calls might become async
+        current_embedding_task = llm_interface.async_get_embedding(draft_text) # Start async
+        
         if chapter_number > 1:
-            current_embedding = llm_interface.get_embedding(draft_text)
-            prev_embedding = self.db_manager.get_embedding_from_db(chapter_number - 1)
+            # prev_embedding = self.db_manager.get_embedding_from_db(chapter_number - 1) # Original sync
+            prev_embedding = await self.db_manager.async_get_embedding_from_db(chapter_number - 1) if self.use_async_db \
+                             else self.db_manager.get_embedding_from_db(chapter_number - 1)
+            current_embedding = await current_embedding_task # Await result
+
             if current_embedding is not None and prev_embedding is not None:
                 coherence_score = utils.numpy_cosine_similarity(current_embedding, prev_embedding)
                 logger.info(f"Coherence with prev ch ({chapter_number-1}): {coherence_score:.4f}")
                 if coherence_score < config.REVISION_COHERENCE_THRESHOLD:
                     needs_revision = True; reasons.append(f"Low coherence (Score: {coherence_score:.4f}).")
             else: logger.warning(f"Could not perform coherence check for ch {chapter_number}.")
-        else: logger.info("Skipping coherence check for Chapter 1.")
+        else: 
+            logger.info("Skipping coherence check for Chapter 1.")
+            await current_embedding_task # Still ensure it completes if not used above
+
+        consistency_task = asyncio.Future() # Placeholder for actual async call if needed
+        plot_arc_task = asyncio.Future()
 
         if config.REVISION_CONSISTENCY_TRIGGER:
-            consistency_issues = self._check_consistency(draft_text, chapter_number, previous_chapters_context)
+            # consistency_issues = self._check_consistency(draft_text, chapter_number, previous_chapters_context) # Original
+            consistency_task = self._check_consistency(draft_text, chapter_number, previous_chapters_context) # _check_consistency now async
+        
+        if config.PLOT_ARC_VALIDATION_TRIGGER:
+            # plot_deviation_reason = self._validate_plot_arc(draft_text, chapter_number) # Original
+            plot_arc_task = self._validate_plot_arc(draft_text, chapter_number) # _validate_plot_arc now async
+
+        # Await results if tasks were started
+        if config.REVISION_CONSISTENCY_TRIGGER:
+            consistency_issues = await consistency_task
             if consistency_issues: needs_revision = True; reasons.append(f"Consistency issues:\n{consistency_issues}")
         
         if config.PLOT_ARC_VALIDATION_TRIGGER:
-            plot_deviation_reason = self._validate_plot_arc(draft_text, chapter_number)
+            plot_deviation_reason = await plot_arc_task
             if plot_deviation_reason: needs_revision = True; reasons.append(f"Plot Arc Deviation: {plot_deviation_reason}")
+
 
         if len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
             needs_revision = True; reasons.append(f"Draft too short ({len(draft_text)} chars).")
@@ -531,7 +564,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         logger.info(f"Evaluation for Ch {chapter_number}. Needs revision: {needs_revision}.")
         return {"needs_revision": needs_revision, "reasons": reasons, "coherence_score": coherence_score, "consistency_issues": consistency_issues, "plot_deviation_reason": plot_deviation_reason}
 
-    def _revise_chapter(self, original_text: str, chapter_number: int, reason: str, context_from_previous: str, chapter_plan: Optional[Union[str, List[SceneDetail]]]) -> Optional[Tuple[str, str]]:
+    async def _revise_chapter(self, original_text: str, chapter_number: int, reason: str, context_from_previous: str, chapter_plan: Optional[Union[str, List[SceneDetail]]]) -> Optional[Tuple[str, str]]: # Made async
         if not original_text or not reason: logger.error(f"Revision for ch {chapter_number} missing text/reason."); return None
         clean_reason = llm_interface.clean_model_response(reason).strip()
         if not clean_reason: logger.error(f"Revision reason for ch {chapter_number} empty."); return None
@@ -571,7 +604,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         **Instructions:** 1. **PRIORITY:** Fix critique issues. 2. **Rewrite ENTIRE chapter**, aligning with Original Plan/Focus. 3. Ensure flow with Context. 4. Preserve tone/style. 5. Aim for {config.MIN_ACCEPTABLE_DRAFT_LENGTH}+ chars. 6. **Output ONLY rewritten chapter text.**
         --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
         """
-        revised_raw = llm_interface.call_llm(
+        revised_raw = await llm_interface.async_call_llm( # Changed to async
             model_name=config.REVISION_MODEL,
             prompt=prompt, 
             temperature=0.6
@@ -581,9 +614,13 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         revised_cleaned = llm_interface.clean_model_response(revised_raw)
         if not revised_cleaned or len(revised_cleaned) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
             logger.error(f"Revision for ch {chapter_number} too short ({len(revised_cleaned or '')} chars)."); self._save_debug_output(chapter_number, "revision_raw_fail_short", revised_raw); return None
-            
-        original_embedding = llm_interface.get_embedding(original_text)
-        revised_embedding = llm_interface.get_embedding(revised_cleaned)
+        
+        # Embeddings can be fetched concurrently
+        original_embedding_task = llm_interface.async_get_embedding(original_text)
+        revised_embedding_task = llm_interface.async_get_embedding(revised_cleaned)
+        
+        original_embedding, revised_embedding = await asyncio.gather(original_embedding_task, revised_embedding_task)
+
         if original_embedding is not None and revised_embedding is not None:
             similarity_score = utils.numpy_cosine_similarity(original_embedding, revised_embedding)
             logger.info(f"Revision similarity: {similarity_score:.4f}")
@@ -594,39 +631,61 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         else:
             logger.warning(f"Could not get embeddings for revision similarity check of ch {chapter_number}. Accepting."); return revised_cleaned, revised_raw
 
-    def _finalize_chapter_core(self, chapter_number: int, final_text: str, raw_log: str, from_flawed_draft: bool) -> bool:
+    async def _finalize_chapter_core(self, chapter_number: int, final_text: str, raw_log: str, from_flawed_draft: bool) -> bool: # Made async
         logger.info(f"Finalizing chapter {chapter_number} (From flawed draft: {from_flawed_draft})...")
         if not final_text: logger.error(f"Cannot finalize ch {chapter_number}: Final text missing."); return False
 
-        summary = self._summarize_chapter(final_text, chapter_number)
-        final_embedding = llm_interface.get_embedding(final_text)
+        # These can run concurrently if _summarize_chapter's LLM call is async
+        summary_task = self._summarize_chapter(final_text, chapter_number) # _summarize_chapter now async
+        embedding_task = llm_interface.async_get_embedding(final_text)
+        
+        summary, final_embedding = await asyncio.gather(summary_task, embedding_task)
+
         if final_embedding is None: logger.error(f"CRITICAL: Failed embedding final Ch {chapter_number}.")
 
         try:
-            self.db_manager.save_chapter_data(chapter_number, final_text, raw_log, summary, final_embedding, from_flawed_draft)
+            if self.use_async_db:
+                await self.db_manager.async_save_chapter_data(chapter_number, final_text, raw_log, summary, final_embedding, from_flawed_draft)
+            else:
+                self.db_manager.save_chapter_data(chapter_number, final_text, raw_log, summary, final_embedding, from_flawed_draft)
         except Exception as e: logger.error(f"DB save failed for ch {chapter_number}: {e}", exc_info=True); return False
 
+        # File I/O is blocking, consider aiofiles for full async or run in executor
         try:
-            with open(os.path.join(config.OUTPUT_DIR, "chapters", f"chapter_{chapter_number}.txt"), 'w', encoding='utf-8') as f: f.write(final_text)
-            with open(os.path.join(config.OUTPUT_DIR, "chapter_logs", f"chapter_{chapter_number}_raw_log.txt"), 'w', encoding='utf-8') as f: f.write(raw_log)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._save_chapter_files_sync, chapter_number, final_text, raw_log)
             logger.info(f"Saved chapter text & raw log for ch {chapter_number}.")
         except IOError as e: logger.error(f"Failed writing chapter text/log for ch {chapter_number}: {e}", exc_info=True)
         
         logger.info(f"Core finalization complete for ch {chapter_number}.")
         return True
 
-    def _update_knowledge_bases(self, chapter_number: int, final_text: str, from_flawed_draft: bool):
+    def _save_chapter_files_sync(self, chapter_number: int, final_text: str, raw_log: str):
+        """Synchronous helper for file saving, to be run in an executor."""
+        with open(os.path.join(config.OUTPUT_DIR, "chapters", f"chapter_{chapter_number}.txt"), 'w', encoding='utf-8') as f: f.write(final_text)
+        with open(os.path.join(config.OUTPUT_DIR, "chapter_logs", f"chapter_{chapter_number}_raw_log.txt"), 'w', encoding='utf-8') as f: f.write(raw_log)
+
+    async def _update_knowledge_bases(self, chapter_number: int, final_text: str, from_flawed_draft: bool): # Made async
         if not final_text: logger.warning(f"Skipping knowledge base update for ch {chapter_number}: Final text missing."); return
         logger.info(f"Updating knowledge bases for ch {chapter_number} (From flawed draft: {from_flawed_draft})...")
+        
+        # These two operations could potentially run in parallel if their internal LLM/DB calls are async
+        # For now, sequential await. For parallelism:
+        # tasks = [
+        #     self._update_character_and_world_json_from_chapter(final_text, chapter_number, from_flawed_draft),
+        #     self._extract_and_update_kg(final_text, chapter_number, from_flawed_draft)
+        # ]
+        # await asyncio.gather(*tasks)
+        
         try:
-            self._update_character_and_world_json_from_chapter(final_text, chapter_number, from_flawed_draft)
+            await self._update_character_and_world_json_from_chapter(final_text, chapter_number, from_flawed_draft)
             logger.info(f"JSON knowledge bases (char/world) updated for ch {chapter_number}.")
             
-            self._extract_and_update_kg(final_text, chapter_number, from_flawed_draft)
+            await self._extract_and_update_kg(final_text, chapter_number, from_flawed_draft)
             logger.info(f"Knowledge Graph updated for ch {chapter_number}.")
         except Exception as e: logger.error(f"Error during knowledge base update for ch {chapter_number}: {e}", exc_info=True)
 
-    def _get_context(self, current_chapter_number: int) -> str:
+    async def _get_context(self, current_chapter_number: int) -> str: # Made async
         if current_chapter_number <= 1: return ""
         logger.debug(f"Retrieving context for Chapter {current_chapter_number}...")
         plot_point_focus, plot_point_index = self._get_plot_point_info(current_chapter_number)
@@ -635,11 +694,12 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         if plot_point_focus: logger.info(f"Context query for ch {current_chapter_number} from Plot Point {plot_point_index + 1}: '{context_query_text[:100]}...'")
         else: logger.warning(f"No plot point for ch {current_chapter_number}. Generic context query.")
             
-        query_embedding = llm_interface.get_embedding(context_query_text)
+        query_embedding = await llm_interface.async_get_embedding(context_query_text) # Changed to async
         
         if query_embedding is None:
             logger.warning("Failed embedding context query. Falling back to prev ch summary/text.")
-            prev_chap_db_data = self.db_manager.get_chapter_data_from_db(current_chapter_number - 1)
+            prev_chap_db_data = await self.db_manager.async_get_chapter_data_from_db(current_chapter_number - 1) if self.use_async_db \
+                                else self.db_manager.get_chapter_data_from_db(current_chapter_number - 1)
             if prev_chap_db_data:
                 is_prov = prev_chap_db_data.get('is_provisional', False)
                 fallback_content = prev_chap_db_data.get('summary') or prev_chap_db_data.get('text', '')
@@ -649,7 +709,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
                     return (prefix + fallback_content)[:config.MAX_CONTEXT_LENGTH]
             logger.warning("Fallback context retrieval failed."); return ""
             
-        past_embeddings = self.db_manager.get_all_past_embeddings(current_chapter_number)
+        # past_embeddings = self.db_manager.get_all_past_embeddings(current_chapter_number) # Original
+        past_embeddings = await self.db_manager.async_get_all_past_embeddings(current_chapter_number) if self.use_async_db \
+                          else self.db_manager.get_all_past_embeddings(current_chapter_number)
         if not past_embeddings: return ""
         
         similarities = sorted([(chap_num, utils.numpy_cosine_similarity(query_embedding, emb)) for chap_num, emb in past_embeddings if emb is not None], key=lambda item: item[1], reverse=True)
@@ -664,9 +726,20 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         context_parts, total_chars, chapters_to_fetch = [], 0, sorted(list(set(top_n_indices)))
         logger.debug(f"Fetching context data for chapters: {chapters_to_fetch}")
         
+        # Fetching chapter data could be parallelized with asyncio.gather if db_manager is async
+        chap_data_tasks = []
+        if self.use_async_db:
+            for chap_num in chapters_to_fetch:
+                chap_data_tasks.append(self.db_manager.async_get_chapter_data_from_db(chap_num))
+            all_chap_data_rows = await asyncio.gather(*chap_data_tasks)
+            chap_data_map = {chap_num: data for chap_num, data in zip(chapters_to_fetch, all_chap_data_rows)}
+        else: # Synchronous path
+            chap_data_map = {chap_num: self.db_manager.get_chapter_data_from_db(chap_num) for chap_num in chapters_to_fetch}
+
+
         for chap_num in chapters_to_fetch:
             if total_chars >= config.MAX_CONTEXT_LENGTH: break
-            chap_data_row = self.db_manager.get_chapter_data_from_db(chap_num) 
+            chap_data_row = chap_data_map.get(chap_num)
             if chap_data_row:
                 content = (chap_data_row.get('summary') or chap_data_row.get('text', '')).strip()
                 is_prov = chap_data_row.get('is_provisional', False)
@@ -687,25 +760,36 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         logger.info(f"Constructed final semantic context: {len(final_context)} chars from chapters {chapters_to_fetch}.")
         return final_context
 
-    def _summarize_chapter(self, chapter_text: Optional[str], chapter_number: int) -> Optional[str]:
-        if not chapter_text or len(chapter_text) < 50: return None
-        snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE] # Snippet size for summary can be smaller
+    @functools.lru_cache(maxsize=config.SUMMARY_CACHE_SIZE) # Cache LLM call for summaries
+    async def _summarize_chapter_llm_call(self, chapter_text_snippet: str, chapter_number: int) -> str:
         prompt = f"""/no_think
         
         Summarize Chapter {chapter_number} (1-3 sentences), crucial plot advancements, character decisions, or revelations. Be succinct.
-        Chapter Text Snippet:\n--- BEGIN TEXT ---\n{snippet}\n--- END TEXT ---\nOutput ONLY summary text.
+        Chapter Text Snippet:\n--- BEGIN TEXT ---\n{chapter_text_snippet}\n--- END TEXT ---\nOutput ONLY summary text.
         """
-        summary_raw = llm_interface.call_llm(
+        summary_raw = await llm_interface.async_call_llm(
             model_name=config.SUMMARIZATION_MODEL,
-            prompt=prompt, 
-            temperature=0.6, 
+            prompt=prompt,
+            temperature=0.6,
             max_tokens=config.MAX_SUMMARY_TOKENS
         )
-        cleaned_summary = llm_interface.clean_model_response(summary_raw).strip()
-        if cleaned_summary: logger.info(f"Generated summary for ch {chapter_number}: '{cleaned_summary[:100]}...'"); return cleaned_summary
-        else: logger.warning(f"Failed to generate valid summary for ch {chapter_number}."); return None
+        return llm_interface.clean_model_response(summary_raw).strip()
 
-    def _check_consistency(self, chapter_draft_text: Optional[str], chapter_number: int, previous_chapters_context: str) -> Optional[str]:
+    async def _summarize_chapter(self, chapter_text: Optional[str], chapter_number: int) -> Optional[str]: # Made async
+        if not chapter_text or len(chapter_text) < 50: return None
+        snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE] # Snippet size for summary
+        
+        # Use the cached LLM call
+        cleaned_summary = await self._summarize_chapter_llm_call(snippet, chapter_number)
+
+        if cleaned_summary: 
+            logger.info(f"Generated summary for ch {chapter_number}: '{cleaned_summary[:100]}...'")
+            return cleaned_summary
+        else: 
+            logger.warning(f"Failed to generate valid summary for ch {chapter_number}.")
+            return None
+
+    async def _check_consistency(self, chapter_draft_text: Optional[str], chapter_number: int, previous_chapters_context: str) -> Optional[str]: # Made async
         if not chapter_draft_text: return None
         
         draft_snippet = chapter_draft_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
@@ -716,9 +800,15 @@ Example (keys vary by mode): {{ "title": "string", ... }}
 
         if protagonist_name:
             logger.debug(f"Gathering reliable KG facts up to chapter_added={kg_chapter_limit} for Ch {chapter_number} consistency...")
-            loc = self.db_manager.get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
+            # loc = self.db_manager.get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False) # Original
+            # status = self.db_manager.get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False) # Original
+            loc_task = self.db_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False) if self.use_async_db \
+                       else asyncio.to_thread(self.db_manager.get_most_recent_value, protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
+            status_task = self.db_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False) if self.use_async_db \
+                          else asyncio.to_thread(self.db_manager.get_most_recent_value, protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
+            loc, status = await asyncio.gather(loc_task, status_task)
+
             if loc: kg_facts_for_consistency_prompt.append(f"- {protagonist_name} last reliably at: {loc}.")
-            status = self.db_manager.get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
             if status: kg_facts_for_consistency_prompt.append(f"- {protagonist_name}'s last reliable status: {status}.")
             
         kg_check_results_text = "**Key Reliable KG Facts (from pre-novel & prev chapters):**\n" + "\n".join(kg_facts_for_consistency_prompt) + "\n" if kg_facts_for_consistency_prompt else "**Key Reliable KG Facts:** None available.\n"
@@ -738,10 +828,10 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         **Chapter {chapter_number} Draft (to analyze):**\n--- DRAFT ---\n{draft_snippet}\n--- END DRAFT ---
         **Inconsistencies (or "None"):**
         """
-        response_raw = llm_interface.call_llm(
+        response_raw = await llm_interface.async_call_llm( # Changed to async
             model_name=config.CONSISTENCY_CHECK_MODEL,
             prompt=prompt, 
-            temperature=0.5, # Lower temp for factual analysis
+            temperature=0.5, 
             max_tokens=config.MAX_CONSISTENCY_TOKENS
         ) 
         response_cleaned = llm_interface.clean_model_response(response_raw).strip()
@@ -749,13 +839,13 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         if not response_cleaned or response_cleaned.lower() == "none": logger.info(f"Consistency check passed for ch {chapter_number}."); return None
         else: logger.warning(f"Consistency issues for ch {chapter_number}:\n{response_cleaned}"); return response_cleaned
 
-    def _validate_plot_arc(self, chapter_draft_text: Optional[str], chapter_number: int) -> Optional[str]:
+    async def _validate_plot_arc(self, chapter_draft_text: Optional[str], chapter_number: int) -> Optional[str]: # Made async
         if not chapter_draft_text: return None
         plot_point_focus, plot_point_index = self._get_plot_point_info(chapter_number)
         if plot_point_focus is None: logger.warning(f"Plot arc validation skipped for ch {chapter_number}: No plot point focus."); return None 
         
         logger.info(f"Validating plot arc for ch {chapter_number} against Plot Point {plot_point_index + 1}: '{plot_point_focus[:100]}...'")
-        summary = self._summarize_chapter(chapter_draft_text, chapter_number) # Uses SUMMARIZATION_MODEL
+        summary = await self._summarize_chapter(chapter_draft_text, chapter_number) # _summarize_chapter now async
         validation_text = summary if summary and len(summary) > 50 else chapter_draft_text[:1500]
         if not validation_text: return None
             
@@ -768,8 +858,8 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         **Evaluation:** Does Chapter Text align with Intended Plot Point?
         **CRITICAL:** Respond ONLY `Yes` (aligns) OR `No, because...` (deviates, 1-2 sentence explanation).
         Response:"""
-        validation_response_raw = llm_interface.call_llm(
-            model_name=config.INITIAL_SETUP_MODEL, # Can use a medium model for this
+        validation_response_raw = await llm_interface.async_call_llm( # Changed to async
+            model_name=config.INITIAL_SETUP_MODEL,
             prompt=prompt, 
             temperature=0.5, 
             max_tokens=config.MAX_PLOT_VALIDATION_TOKENS
@@ -783,25 +873,22 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         else:
             logger.warning(f"Plot arc validation for ch {chapter_number} ambiguous: '{cleaned_plot_response}'. Assuming alignment."); return None 
 
-    def _update_character_and_world_json_from_chapter(self, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool):
-        if not chapter_text or len(chapter_text) < 100: # Basic heuristic
+    async def _update_character_and_world_json_from_chapter(self, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool): # Made async
+        if not chapter_text or len(chapter_text) < 100:
             logger.info(f"Skipping JSON knowledge update for ch {chapter_number}: Text too short or None.")
             return
 
-        # Heuristic: Check for mentions of known characters or locations
         known_char_names = list(self.character_profiles.keys())
         known_loc_names = list(self.world_building.get("locations", {}).keys())
         
         mentioned_entities = []
+        text_lower = chapter_text.lower()
         for name in known_char_names:
-            if name.lower() in chapter_text.lower(): # Simple case-insensitive check
-                mentioned_entities.append(name)
+            if name.lower() in text_lower: mentioned_entities.append(name)
         for name in known_loc_names:
-            if name.lower() in chapter_text.lower():
-                 mentioned_entities.append(name)
+            if name.lower() in text_lower: mentioned_entities.append(name)
         
-        if not mentioned_entities and chapter_number > 1 : # Allow updates for Ch1 even if no prior known entities
-             # A more sophisticated check could be for NEW entities, but this is simpler for now.
+        if not mentioned_entities and chapter_number > 1 :
              logger.info(f"Skipping JSON knowledge update for ch {chapter_number}: No known characters or locations mentioned significantly (heuristic).")
              return
 
@@ -858,10 +945,10 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         }}
         ```
         """
-        raw_analysis = llm_interface.call_llm(
+        raw_analysis = await llm_interface.async_call_llm( # Changed to async
             model_name=config.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt, 
-            temperature=0.5 # More factual
+            temperature=0.5
         )
         combined_updates = llm_interface.parse_llm_json_response(raw_analysis, f"combined char/world update for ch {chapter_number}")
 
@@ -883,7 +970,6 @@ Example (keys vary by mode): {{ "title": "string", ... }}
 
 
     def _merge_character_updates(self, updates: Dict[str, Any], chapter_number: int, from_flawed_draft: bool):
-        # This is the merging logic previously in _update_character_profiles
         if not updates: logger.info(f"No character profile updates to merge for ch {chapter_number}."); return
         
         logger.info(f"Merging character profile JSON updates for ch {chapter_number} for characters: {list(updates.keys())}")
@@ -942,7 +1028,6 @@ Example (keys vary by mode): {{ "title": "string", ... }}
 
 
     def _merge_world_building_updates(self, updates: Dict[str, Any], chapter_number: int, from_flawed_draft: bool):
-        # This is the merging logic previously in _update_world_building
         if not updates: logger.info(f"No world-building updates to merge for ch {chapter_number}."); return
 
         logger.info(f"Merging world-building JSON updates for ch {chapter_number} for categories: {list(updates.keys())}")
@@ -1055,32 +1140,64 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             current_item_dict[f"updated_in_chapter_{chapter_num}"] = True
         return current_item_dict
 
-    def _extract_and_update_kg(self, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool):
-        if not chapter_text: logger.warning(f"Skipping KG extraction for ch {chapter_number}: Text None."); return
-            
-        logger.info(f"Extracting KG triples for ch {chapter_number} (Flawed draft: {from_flawed_draft})...")
-        text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE * 2] # Slightly larger snippet for KG
-        if len(text_snippet) < len(chapter_text): logger.warning(f"KG extraction using truncated text ({len(text_snippet)} chars) for ch {chapter_number}.")
-            
+    def _heuristic_entity_spotter(self, text_snippet: str) -> List[str]:
+        """Basic heuristic to spot potential entities."""
+        entities = set()
+        # Add known characters
+        entities.update(self.character_profiles.keys())
+        
+        # Simple regex for capitalized words or short phrases (potential proper nouns)
+        # This is very basic and might produce noise or miss complex entities.
+        for match in re.finditer(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b', text_snippet):
+            entities.add(match.group(1))
+        
+        # Filter out very short "entities" that are likely just capitalized words at sentence start
+        return sorted([e for e in list(entities) if len(e) > 3 or e in self.character_profiles])
+
+
+    @functools.lru_cache(maxsize=config.KG_TRIPLE_EXTRACTION_CACHE_SIZE)
+    async def _extract_kg_triples_llm_call(self, text_snippet_for_kg: str, chapter_number: int, candidate_entities_json: str) -> str:
+        """Cached LLM call for KG triple extraction."""
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         common_predicates = ["is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", "interacted_with", "travelled_to", "discovered", "acquired", "lost", "used_item", "attacked", "helped", "damaged", "repaired", "contains", "part_of", "caused_by", "leads_to", "observed", "heard", "said", "thought_about", "decided_to", "has_goal", "has_feature", "related_to", "member_of", "leader_of", "enemy_of", "ally_of", "works_for", "has_ability"]
         
+        candidate_entities_prompt_section = ""
+        if candidate_entities_json and candidate_entities_json != "[]":
+            candidate_entities_prompt_section = f"**Heuristically Identified Candidate Entities (Consider these for S/O):**\n```json\n{candidate_entities_json}\n```\n"
+
         prompt = f"""/no_think
         
         KG Engineer: Extract (Subject, Predicate, Object) triples from Ch {chapter_number} Text Snippet (protagonist: '{protagonist_name}').
-        **Ch {chapter_number} Text Snippet:**\n--- TEXT ---\n{text_snippet}\n--- END TEXT ---\n
-        **Instructions:** 1. Identify key entities (normalize names). 2. Use suggested predicates or concise alternatives. 3. Extract `["Subject", "predicate", "Object"]` (all non-empty strings). 4. Focus ONLY on info from THIS text. 5. Prioritize state changes & key events. 6. **CRITICAL OUTPUT:** ONLY JSON list of lists. `[]` if no facts. 7. **NO extra text/markdown.** Start `[` end `]`.
+        **Ch {chapter_number} Text Snippet:**\n--- TEXT ---\n{text_snippet_for_kg}\n--- END TEXT ---\n
+        {candidate_entities_prompt_section}
+        **Instructions:** 1. Identify key entities (normalize names). Prioritize candidate entities if provided and relevant. 2. Use suggested predicates or concise alternatives. 3. Extract `["Subject", "predicate", "Object"]` (all non-empty strings). 4. Focus ONLY on info from THIS text. 5. Prioritize state changes & key events. 6. **CRITICAL OUTPUT:** ONLY JSON list of lists. `[]` if no facts. 7. **NO extra text/markdown.** Start `[` end `]`.
         **Suggested Predicates:** {', '.join(common_predicates)}
         **Example:** `[["{protagonist_name}", "travelled_to", "Eclipse Spire"], ...]`
         JSON Output Only:
         [
         """
-        raw_triples_json = llm_interface.call_llm(
+        return await llm_interface.async_call_llm(
             model_name=config.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt, 
-            temperature=0.4, # Lower temp for factual extraction
+            temperature=0.4,
             max_tokens=config.MAX_KG_TRIPLE_TOKENS
-        ) 
+        )
+
+    async def _extract_and_update_kg(self, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool): # Made async
+        if not chapter_text: logger.warning(f"Skipping KG extraction for ch {chapter_number}: Text None."); return
+            
+        logger.info(f"Extracting KG triples for ch {chapter_number} (Flawed draft: {from_flawed_draft})...")
+        text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE * 2] 
+        if len(text_snippet) < len(chapter_text): logger.warning(f"KG extraction using truncated text ({len(text_snippet)} chars) for ch {chapter_number}.")
+
+        # Heuristic: Pre-identify candidate entities
+        candidate_entities = self._heuristic_entity_spotter(text_snippet)
+        logger.debug(f"Candidate entities for KG in Ch {chapter_number}: {candidate_entities[:10]}")
+        candidate_entities_json_for_prompt = json.dumps(candidate_entities)
+
+        # Use cached LLM call for extraction
+        raw_triples_json = await self._extract_kg_triples_llm_call(text_snippet, chapter_number, candidate_entities_json_for_prompt)
+            
         parsed_triples = llm_interface.parse_llm_json_response(raw_triples_json, f"KG triple extraction for chapter {chapter_number}", expect_type=list)
         
         if parsed_triples is None:
@@ -1088,47 +1205,56 @@ Example (keys vary by mode): {{ "title": "string", ... }}
              self._save_debug_output(chapter_number, "kg_extraction_raw_fail_final", raw_triples_json or "EMPTY"); return
              
         added_count, skipped_count = 0, 0
-        for triple in parsed_triples:
-            if isinstance(triple, list) and len(triple) == 3:
-                subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
-                if subj and pred and obj: self.db_manager.add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft); added_count += 1
-                else: logger.warning(f"Skipping invalid triple (empty) in ch {chapter_number}: {triple}"); skipped_count += 1
-            else: logger.warning(f"Skipping invalid triple format in KG for ch {chapter_number}: {triple}"); skipped_count += 1
+        # DB interaction could be batched or made async per triple
+        if self.use_async_db:
+            # Example of batching for async, though add_kg_triple itself might handle internal logic
+            # For simplicity, calling async_add_kg_triple individually here.
+            # True batching would mean collecting triples and passing them all at once to an async_batch_add_kg_triples method.
+            kg_add_tasks = []
+            for triple in parsed_triples:
+                if isinstance(triple, list) and len(triple) == 3:
+                    subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
+                    if subj and pred and obj:
+                        kg_add_tasks.append(self.db_manager.async_add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft))
+                        added_count += 1
+                    else:
+                        logger.warning(f"Skipping invalid triple (empty) in ch {chapter_number}: {triple}"); skipped_count += 1
+                else:
+                    logger.warning(f"Skipping invalid triple format in KG for ch {chapter_number}: {triple}"); skipped_count += 1
+            await asyncio.gather(*kg_add_tasks) # Execute all DB adds concurrently
+        else: # Synchronous path
+            for triple in parsed_triples:
+                if isinstance(triple, list) and len(triple) == 3:
+                    subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
+                    if subj and pred and obj: self.db_manager.add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft); added_count += 1
+                    else: logger.warning(f"Skipping invalid triple (empty) in ch {chapter_number}: {triple}"); skipped_count += 1
+                else: logger.warning(f"Skipping invalid triple format in KG for ch {chapter_number}: {triple}"); skipped_count += 1
+        
         logger.info(f"Added {added_count} KG triples from ch {chapter_number}. Skipped {skipped_count}. (Source Provisional: {from_flawed_draft})")
 
-    def _prepopulate_knowledge_graph(self):
+    async def _prepopulate_knowledge_graph(self): # Made async
         logger.info("Starting KG pre-population...")
         if not self.plot_outline or self.plot_outline.get("is_default", True): logger.warning("Skipping KG pre-pop: Plot outline missing/default."); return
         if not self.world_building or self.world_building.get("is_default", True): logger.warning("Skipping KG pre-pop: World building missing/default."); return
 
-        # Pruned Plot Outline for prompt
         pruned_plot = {
-            "title": self.plot_outline.get("title"),
-            "protagonist_name": self.plot_outline.get("protagonist_name"),
-            "genre": self.plot_outline.get("genre"),
-            "theme": self.plot_outline.get("theme"),
-            "setting_description": self.plot_outline.get("setting"), # Use the specific setting description
-            "conflict_summary": self.plot_outline.get("conflict"),
-            "character_arc": self.plot_outline.get("character_arc"),
-            "key_plot_points_summary": self.plot_outline.get("plot_points", [])[:2] # Maybe first 2 plot points
+            "title": self.plot_outline.get("title"), "protagonist_name": self.plot_outline.get("protagonist_name"),
+            "genre": self.plot_outline.get("genre"), "theme": self.plot_outline.get("theme"),
+            "setting_description": self.plot_outline.get("setting"), "conflict_summary": self.plot_outline.get("conflict"),
+            "character_arc": self.plot_outline.get("character_arc"), "key_plot_points_summary": self.plot_outline.get("plot_points", [])[:2]
         }
-        
-        # Pruned World Building for prompt
         pruned_world = {}
         for category, items in self.world_building.items():
             if category == "is_default": continue
             if isinstance(items, dict):
                 pruned_world[category] = {}
-                for item_name, item_details in list(items.items())[:5]: # Limit items per category
+                for item_name, item_details in list(items.items())[:5]:
                     if isinstance(item_details, dict) and "description" in item_details:
-                        pruned_world[category][item_name] = {"description": str(item_details["description"])[:200] + "..."} # Truncate desc
-                    elif isinstance(item_details, dict) and "text" in item_details: # For lore
+                        pruned_world[category][item_name] = {"description": str(item_details["description"])[:200] + "..."}
+                    elif isinstance(item_details, dict) and "text" in item_details:
                          pruned_world[category][item_name] = {"text": str(item_details["text"])[:200] + "..."}
         
-        combined_pruned_data = {
-            "plot_summary": pruned_plot,
-            "world_highlights": pruned_world
-        }
+        combined_pruned_data = {"plot_summary": pruned_plot, "world_highlights": pruned_world}
         try: combined_data_json = json.dumps(combined_pruned_data, indent=2, ensure_ascii=False, default=str)
         except TypeError as e: logger.error(f"Error serializing pruned data for KG pre-pop: {e}"); return
             
@@ -1150,8 +1276,8 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         [
         """
         logger.info("Calling LLM for KG pre-population triple extraction...")
-        raw_triples_json = llm_interface.call_llm(
-            model_name=config.KNOWLEDGE_UPDATE_MODEL, # Medium model should be fine
+        raw_triples_json = await llm_interface.async_call_llm( # Changed to async
+            model_name=config.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt, 
             temperature=0.4, 
             max_tokens=config.MAX_PREPOP_KG_TOKENS
@@ -1163,12 +1289,26 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             self._save_debug_output(config.KG_PREPOPULATION_CHAPTER_NUM, "kg_prepop_raw_fail_final", raw_triples_json or "EMPTY"); return
 
         added_count, skipped_count = 0, 0
-        for triple in parsed_triples:
-            if isinstance(triple, list) and len(triple) == 3:
-                subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
-                if subj and pred and obj: self.db_manager.add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False); added_count += 1
-                else: logger.warning(f"Skipping invalid pre-pop triple (empty): {triple}"); skipped_count += 1
-            else: logger.warning(f"Skipping invalid pre-pop triple format: {triple}"); skipped_count += 1
+        # DB interaction could be batched or made async per triple
+        if self.use_async_db:
+            kg_add_tasks = []
+            for triple in parsed_triples:
+                if isinstance(triple, list) and len(triple) == 3:
+                    subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
+                    if subj and pred and obj: 
+                        kg_add_tasks.append(self.db_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False))
+                        added_count += 1
+                    else: logger.warning(f"Skipping invalid pre-pop triple (empty): {triple}"); skipped_count += 1
+                else: logger.warning(f"Skipping invalid pre-pop triple format: {triple}"); skipped_count += 1
+            await asyncio.gather(*kg_add_tasks)
+        else: # Synchronous path
+            for triple in parsed_triples:
+                if isinstance(triple, list) and len(triple) == 3:
+                    subj, pred, obj = [str(t).strip() if t is not None else "" for t in triple]
+                    if subj and pred and obj: self.db_manager.add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False); added_count += 1
+                    else: logger.warning(f"Skipping invalid pre-pop triple (empty): {triple}"); skipped_count += 1
+                else: logger.warning(f"Skipping invalid pre-pop triple format: {triple}"); skipped_count += 1
+
         logger.info(f"KG pre-pop: Added {added_count} foundational triples. Skipped {skipped_count}.")
         if added_count == 0 and parsed_triples: logger.warning("KG pre-pop 0 valid triples despite LLM data.")
 

@@ -3,6 +3,7 @@
 Handles all direct interactions with Large Language Models (LLMs)
 and embedding models. Includes functions for API calls, response cleaning,
 JSON extraction with retry logic, and embedding generation with caching.
+Also includes asynchronous versions of API call functions.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,13 +28,14 @@ import logging
 import functools
 from typing import Optional, Dict, Any, List, Union, Type 
 
+import httpx # For asynchronous HTTP requests
+
 import config
 
 logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=config.EMBEDDING_CACHE_SIZE)
 def get_embedding(text: str) -> Optional[np.ndarray]:
-    # Same as your last version
     if not text or not isinstance(text, str) or len(text.strip()) == 0: logger.warning("get_embedding empty/invalid text."); return None
     payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
     # cache_info = get_embedding.cache_info(); logger.debug(f"Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
@@ -62,6 +64,53 @@ def get_embedding(text: str) -> Optional[np.ndarray]:
     except Exception as e: logger.error(f"Unexpected error during embedding: {e}", exc_info=True)
     return None
 
+# Asynchronous version of get_embedding
+@functools.lru_cache(maxsize=config.EMBEDDING_CACHE_SIZE) # Note: LRU cache on async func needs care with event loops if used across different ones. For simple cases, it's fine.
+async def async_get_embedding(text: str) -> Optional[np.ndarray]:
+    if not text or not isinstance(text, str) or len(text.strip()) == 0:
+        logger.warning("async_get_embedding empty/invalid text.")
+        return None
+    payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
+    # cache_info = async_get_embedding.cache_info() # Access cache info if needed
+    # logger.debug(f"Async Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
+    
+    async with httpx.AsyncClient(timeout=300) as client:
+        try:
+            response = await client.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            embedding_key = "embedding"
+            if embedding_key in data and isinstance(data[embedding_key], list):
+                try:
+                    embedding = np.array(data[embedding_key], dtype=config.EMBEDDING_DTYPE)
+                    if embedding.ndim > 1: embedding = embedding.flatten()
+                    if embedding.shape == (config.EXPECTED_EMBEDDING_DIM,): return embedding
+                    else: logger.error(f"Async Primary embedding dim mismatch: Expected ({config.EXPECTED_EMBEDDING_DIM},), Got {embedding.shape}")
+                except (TypeError, ValueError) as e: logger.error(f"Async Failed to convert primary embedding: {e}.")
+            
+            logger.warning(f"Async Primary key '{embedding_key}' failed. Fallback search...")
+            for key, value in data.items():
+                if isinstance(value, list) and len(value) > 0 and all(isinstance(item, (float, int)) for item in value):
+                    try:
+                        embedding = np.array(value, dtype=config.EMBEDDING_DTYPE)
+                        if embedding.ndim > 1: embedding = embedding.flatten()
+                        if embedding.shape == (config.EXPECTED_EMBEDDING_DIM,):
+                            logger.info(f"Async Fallback embedding success (key: '{key}').")
+                            return embedding
+                        else: logger.error(f"Async Fallback dim mismatch: Key '{key}', Expected ({config.EXPECTED_EMBEDDING_DIM},), Got {embedding.shape}")
+                    except (TypeError, ValueError) as e: logger.error(f"Async Failed convert fallback embedding for key '{key}': {e}")
+            
+            logger.error("Async Embedding extraction failed.")
+            return None
+        except httpx.TimeoutException:
+            logger.error(f"Async Embedding request timed out: '{text[:80]}...'")
+        except httpx.RequestError as e:
+            logger.error(f"Async Embedding request failed: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Async Unexpected error during embedding: {e}", exc_info=True)
+        return None
+
+
 def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
     if not model_name: logger.error("call_llm: model_name is required."); return ""
     if not prompt or not isinstance(prompt, str): logger.error("call_llm empty/invalid prompt."); return ""
@@ -73,7 +122,7 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
         "messages": [{"role": "user", "content": prompt}],
         "stream": False, 
         "temperature": temperature, 
-        "top_p": 0.95, # Retaining top_p, adjust if needed per model
+        "top_p": 0.95,
         "max_tokens": effective_max_tokens
     }
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
@@ -109,6 +158,61 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
         logger.error(f"Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
     return ""
 
+# Asynchronous version of call_llm
+async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
+    if not model_name:
+        logger.error("async_call_llm: model_name is required.")
+        return ""
+    if not prompt or not isinstance(prompt, str):
+        logger.error("async_call_llm empty/invalid prompt.")
+        return ""
+
+    effective_max_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
+
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "temperature": temperature,
+        "top_p": 0.95,
+        "max_tokens": effective_max_tokens
+    }
+    headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
+
+    logger.debug(f"Async Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
+    
+    async with httpx.AsyncClient(timeout=600) as client:
+        try:
+            response = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response_data.get("choices") and len(response_data["choices"]) > 0:
+                message = response_data["choices"][0].get("message")
+                if message and message.get("content"):
+                    raw_text = message["content"]
+                    if 'usage' in response_data:
+                        usage = response_data['usage']
+                        logger.info(f"Async LLM ('{model_name}') Usage - Prompt: {usage.get('prompt_tokens', 'N/A')} tk, Comp: {usage.get('completion_tokens', 'N/A')} tk, Total: {usage.get('total_tokens', 'N/A')} tk")
+                    else:
+                        logger.warning(f"Async LLM ('{model_name}') response missing 'usage'.")
+                    return raw_text
+                else:
+                    logger.error(f"Async Invalid LLM ('{model_name}') response - missing message content: {response_data}")
+            else:
+                logger.error(f"Async Invalid LLM ('{model_name}') response - missing choices: {response_data}")
+
+        except httpx.TimeoutException:
+            logger.error(f"Async LLM ('{model_name}') API request timed out.")
+        except httpx.RequestError as e:
+            logger.error(f"Async LLM ('{model_name}') API request error: {e}", exc_info=True)
+            if e.response is not None:
+                logger.error(f"Async LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
+        except Exception as e:
+            logger.error(f"Async Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
+    return ""
+
+
 def clean_model_response(text: str) -> str:
     if not isinstance(text, str): 
         logger.warning(f"clean_model_response non-string input: {type(text)}."); return ""
@@ -116,66 +220,44 @@ def clean_model_response(text: str) -> str:
     original_text_len = len(text)
     cleaned_text = text
 
-    # 1. Remove specific leading empty <think></think> artifact (if LLM commonly produces this)
-    # This is a very specific pattern for an empty think block at the start.
     leading_no_think_artifact_regex = r'^\s*<\s*think\s*>\s*<\s*/think\s*>\s*'
     text_after_leading_removal = re.sub(leading_no_think_artifact_regex, '', cleaned_text, count=1, flags=re.IGNORECASE)
     if len(text_after_leading_removal) < len(cleaned_text):
         logger.debug("Removed specific leading empty <think></think> artifact.")
         cleaned_text = text_after_leading_removal
 
-    # 2. Remove general <think>...</think> or <thought>...</thought> or <thinking>...</thinking> blocks
-    # The \1 backreference ensures the closing tag matches the opening one (e.g. <think> closes with </think>)
     think_block_pattern = re.compile(
         r'<\s*(think|thought|thinking)\s*>.*?<\s*/\s*\1\s*>',
         flags=re.DOTALL | re.IGNORECASE
     )
     text_after_general_think_removal = think_block_pattern.sub('', cleaned_text)
     if len(text_after_general_think_removal) < len(cleaned_text):
-        if not (len(text_after_leading_removal) < original_text_len and cleaned_text == text_after_leading_removal): # Avoid double logging if leading also removed
+        if not (len(text_after_leading_removal) < original_text_len and cleaned_text == text_after_leading_removal):
              logger.debug("General think block regex removed content.")
         cleaned_text = text_after_general_think_removal
     
-    # 3. Remove markdown code blocks (JSON, Python, text, or unspecified)
-    # This is important if the LLM wraps its actual text output in markdown by mistake.
     cleaned_text = re.sub(r'```(?:json|python|text|)\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
-
-    # 4. Remove "Chapter X" style headers if they appear at the start of a line
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-]?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
-
-    # 5. Remove "BEGIN/END CHAPTER/TEXT" style markers
     cleaned_text = re.sub(r'^\s*---?\s*(BEGIN|END) (CHAPTER|TEXT|DRAFT|CONTEXT|SNIPPET).*?\s*---?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE)
-
-    # 6. Normalize newlines and clean individual lines
-    # First, replace all occurrences of 2 or more newlines with exactly two newlines (\n\n).
-    # This standardizes paragraph breaks to one empty line.
     cleaned_text_normalized_newlines = re.sub(r'\n{2,}', '\n\n', cleaned_text)
-
-    # Split into lines. A double newline (\n\n) will result in an empty string for the blank line.
     lines = cleaned_text_normalized_newlines.splitlines()
-    
     processed_lines = []
     for line in lines:
-        stripped_line = line.strip() # Remove leading/trailing whitespace from this line
-        if stripped_line: # It's a content line
-            # Reduce multiple spaces/tabs within the line to a single space
+        stripped_line = line.strip()
+        if stripped_line:
             processed_lines.append(re.sub(r'[ \t]+', ' ', stripped_line))
-        else: # It was an empty line (originally from \n\n or became empty after stripping)
-            processed_lines.append('') # Preserve it as an empty string to maintain paragraph separation
+        else: 
+            processed_lines.append('')
+    final_text = '\n'.join(processed_lines).strip()
 
-    # Join lines back with single newlines. This will correctly form \n\n for paragraph breaks.
-    final_text = '\n'.join(processed_lines).strip() # Final strip to remove leading/trailing newlines from the whole text block.
-
-    if len(final_text) < original_text_len * 0.95 and original_text_len > 0 : # Avoid division by zero if original_text_len is 0
+    if len(final_text) < original_text_len * 0.95 and original_text_len > 0 :
         reduction_percentage = ((original_text_len - len(final_text)) / original_text_len) * 100
         logger.debug(f"Cleaning reduced text length from {original_text_len} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
     
     return final_text
 
 def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = dict) -> Optional[str]:
-    # Same as your last version
     if not isinstance(text, str): logger.warning("extract_json_block non-string input."); return None
-    # logger.debug(f"Attempting to extract JSON block (expecting {expect_type})...")
     start_char, end_char = ('{', '}') if expect_type == dict else ('[', ']')
     markdown_pattern = rf'```(?:json)?\s*(\{start_char}.*?\{end_char})\s*```'
     match_markdown = re.search(markdown_pattern, text, re.DOTALL | re.IGNORECASE)
@@ -206,7 +288,7 @@ def parse_llm_json_response(raw_response: str, context_for_log: str, expect_type
             else: logger.warning(f"Parsed JSON for {context_for_log} is {type(parsed_json)}, expected {expect_type.__name__}. Retrying.")
         except json.JSONDecodeError as e:
             logger.warning(f"Initial JSON parsing failed for {context_for_log}: {e}. Extracted: '{json_block_str[:100]}...'")
-            if expect_type == list and e.pos >= len(json_block_str) - 10: # Heuristic for list truncation
+            if expect_type == list and e.pos >= len(json_block_str) - 10: 
                 logger.info(f"Attempting heuristic fix for truncated list in {context_for_log}: appending ']'")
                 try:
                     parsed_json = json.loads(json_block_str + "]")
@@ -222,11 +304,15 @@ def parse_llm_json_response(raw_response: str, context_for_log: str, expect_type
     Invalid/Problematic JSON Block:\n```json\n{json_block_str}\n```
     Corrected JSON {expect_type.__name__} Output Only:\n/no_think\n"""
     
-    corrected_raw = call_llm(
+    # For parse_llm_json_response, it's typically called from within other methods.
+    # If those parent methods become async, this call_llm would need to be async_call_llm.
+    # For now, keeping it synchronous as its direct callers are mostly synchronous or becoming async.
+    # A full async conversion would make this an async function too.
+    corrected_raw = call_llm( # If this function is called from an async context, this should be `await async_call_llm`
         model_name=config.JSON_CORRECTION_MODEL, 
         prompt=correction_prompt, 
         temperature=0.2, 
-        max_tokens=config.MAX_GENERATION_TOKENS # Use general max tokens, or a specific one for corrections
+        max_tokens=config.MAX_GENERATION_TOKENS
     )
     
     if not corrected_raw: logger.error(f"LLM correction attempt empty response for {context_for_log}."); return None

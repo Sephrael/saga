@@ -3,6 +3,7 @@
 Manages all interactions with the SQLite database for the Saga project.
 Handles connection, schema initialization, and CRUD operations for
 chapter text, summaries, embeddings, and the knowledge graph.
+Includes asynchronous versions of database operations using aiosqlite.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +26,7 @@ import numpy as np
 import logging
 import os
 from typing import Optional, Dict, List, Tuple, Any
+import aiosqlite # For asynchronous SQLite operations
 
 # Import configuration for DB path and embedding dtype
 import config
@@ -51,33 +53,43 @@ class DatabaseManager:
                 logger.info(f"Created directory for database: {db_dir}")
             except OSError as e:
                 logger.error(f"Failed to create directory {db_dir}: {e}", exc_info=True)
-                raise  # Re-raise as this could be critical
+                raise 
 
-        self._init_db()
+        self._init_db() # Synchronous initialization is fine
 
     def _get_connection(self) -> sqlite3.Connection:
         """
-        Establishes and returns a database connection.
-        Sets row_factory to sqlite3.Row for dictionary-like row access.
-        Includes a timeout and enables foreign keys.
+        Establishes and returns a synchronous database connection.
         """
         try:
             conn = sqlite3.connect(self.db_path, timeout=10.0)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON;")
-            logger.debug(f"Database connection established to {self.db_path}")
+            logger.debug(f"Synchronous database connection established to {self.db_path}")
             return conn
         except sqlite3.Error as e:
             logger.error(
-                f"Database connection error to {self.db_path}: {e}", exc_info=True
+                f"Synchronous database connection error to {self.db_path}: {e}", exc_info=True
             )
             raise
 
-    def _init_db(self):
+    async def _get_async_connection(self) -> aiosqlite.Connection:
         """
-        Initializes the SQLite database schema, including the knowledge_graph table.
-        Creates tables and indices if they don't already exist.
+        Establishes and returns an asynchronous database connection.
         """
+        try:
+            conn = await aiosqlite.connect(self.db_path, timeout=10.0)
+            conn.row_factory = aiosqlite.Row # Use aiosqlite.Row
+            await conn.execute("PRAGMA foreign_keys = ON;")
+            logger.debug(f"Asynchronous database connection established to {self.db_path}")
+            return conn
+        except sqlite3.Error as e: # aiosqlite uses sqlite3.Error for many things
+            logger.error(
+                f"Asynchronous database connection error to {self.db_path}: {e}", exc_info=True
+            )
+            raise
+
+    def _init_db(self): # Stays synchronous for initial setup
         logger.info(f"Initializing/Verifying database schema at {self.db_path}...")
         try:
             with self._get_connection() as conn:
@@ -113,7 +125,7 @@ class DatabaseManager:
                         subject TEXT NOT NULL,
                         predicate TEXT NOT NULL,
                         object TEXT NOT NULL,
-                        chapter_added INTEGER NOT NULL, -- Can be 0 for pre-populated data
+                        chapter_added INTEGER NOT NULL, 
                         confidence REAL DEFAULT 1.0, 
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                         is_provisional BOOLEAN DEFAULT FALSE 
@@ -124,7 +136,6 @@ class DatabaseManager:
                     "Verified/Created tables: 'chapters', 'embeddings', 'knowledge_graph'."
                 )
 
-                # Indices
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_embeddings_chapter ON embeddings (chapter_number);"
                 )
@@ -146,7 +157,6 @@ class DatabaseManager:
                 logger.debug("Verified/Created indices.")
                 conn.commit()
                 
-                # Add columns if they don't exist (idempotent ALTER TABLE)
                 table_columns = {}
                 for table_name in ["chapters", "knowledge_graph"]:
                     cursor.execute(f"PRAGMA table_info({table_name});")
@@ -160,7 +170,7 @@ class DatabaseManager:
                     logger.info("Altering knowledge_graph table to add is_provisional column.")
                     cursor.execute("ALTER TABLE knowledge_graph ADD COLUMN is_provisional BOOLEAN DEFAULT FALSE;")
                 
-                conn.commit() # Commit schema changes including potential ALTER TABLE
+                conn.commit()
 
             logger.info("Database schema initialization/verification complete.")
         except sqlite3.Error as e:
@@ -170,20 +180,12 @@ class DatabaseManager:
     def _deserialize_embedding(
         self, blob: bytes, dtype_str: str, shape_str: str
     ) -> Optional[np.ndarray]:
-        """Helper to deserialize an embedding from database components."""
         try:
             shape = tuple(json.loads(shape_str))
-            dtype = np.dtype(
-                dtype_str
-            )  # Use config.EMBEDDING_DTYPE if dtype_str is problematic
+            dtype = np.dtype(dtype_str)
             embedding = np.frombuffer(blob, dtype=dtype).reshape(shape)
             return embedding
-        except (
-            json.JSONDecodeError,
-            TypeError,
-            ValueError,
-            AttributeError,
-        ) as e:  # Added AttributeError for np.dtype
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as e:
             logger.error(
                 f"Error deserializing embedding (shape: {shape_str}, dtype: {dtype_str}): {e}",
                 exc_info=True,
@@ -191,12 +193,10 @@ class DatabaseManager:
             return None
 
     def load_chapter_count(self) -> int:
-        """Loads the current highest chapter number recorded in the database."""
         logger.debug("Loading highest chapter count from database...")
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                # Ensure we only count chapters > 0, as 0 might be used for pre-population data.
                 cursor.execute("SELECT MAX(chapter_number) FROM chapters WHERE chapter_number > 0")
                 result = cursor.fetchone()
                 count = result[0] if result and result[0] is not None else 0
@@ -207,369 +207,348 @@ class DatabaseManager:
                 f"Failed to load chapter count from DB: {e}. Assuming 0.", exc_info=True
             )
             return 0
+    
+    async def async_load_chapter_count(self) -> int:
+        logger.debug("Async loading highest chapter count from database...")
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute("SELECT MAX(chapter_number) FROM chapters WHERE chapter_number > 0") as cursor:
+                    result = await cursor.fetchone()
+            count = result[0] if result and result[0] is not None else 0
+            logger.info(f"Async loaded chapter count from database: {count}")
+            return count
+        except sqlite3.Error as e:
+            logger.error(
+                f"Async failed to load chapter count from DB: {e}. Assuming 0.", exc_info=True
+            )
+            return 0
+
 
     def save_chapter_data(
-        self,
-        chapter_number: int,
-        text: str,
-        raw_text: str,
-        summary: Optional[str],
-        embedding: Optional[np.ndarray],
+        self, chapter_number: int, text: str, raw_text: str,
+        summary: Optional[str], embedding: Optional[np.ndarray],
         is_provisional: bool = False 
     ):
         if chapter_number <= 0:
-            logger.error(f"Cannot save chapter data for chapter_number <= 0: {chapter_number}. This is reserved or invalid.")
+            logger.error(f"Cannot save chapter data for chapter_number <= 0: {chapter_number}.")
             return
-
-        logger.info(
-            f"Attempting to save data for chapter {chapter_number} to database (Provisional: {is_provisional})."
-        )
-        
-        embedding_blob, dtype_str, shape_str = None, "", ""
-        if (
-            embedding is not None
-            and isinstance(embedding, np.ndarray)
-            and embedding.size > 0
-        ):
-            try:
-                # Ensure correct dtype before serialization
-                embedding_to_save = embedding.astype(config.EMBEDDING_DTYPE)
-                if embedding_to_save.ndim == 0:
-                    embedding_to_save = embedding_to_save.reshape(
-                        1
-                    )  # Handle 0-dim arrays
-
-                embedding_blob = embedding_to_save.tobytes()
-                dtype_str = str(embedding_to_save.dtype)
-                shape_str = json.dumps(embedding_to_save.shape)
-                logger.debug(
-                    f"Serialized embedding for chapter {chapter_number} (Shape: {shape_str}, Dtype: {dtype_str})"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error serializing embedding for chapter {chapter_number}: {e}",
-                    exc_info=True,
-                )
-                embedding_blob = None  # Ensure it's None if serialization fails
-        else:
-            logger.warning(
-                f"Chapter {chapter_number} has no valid embedding provided or embedding is empty. Embedding will not be saved."
-            )
+        logger.info(f"Attempting to save data for chapter {chapter_number} to database (Provisional: {is_provisional}).")
+        embedding_blob, dtype_str, shape_str = self._prepare_embedding_for_save(embedding, chapter_number)
 
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary, is_provisional) VALUES (?, ?, ?, ?, ?)", 
-                    (
-                        chapter_number,
-                        text,
-                        raw_text,
-                        summary if summary is not None else "",
-                        is_provisional, 
-                    ),
+                    (chapter_number, text, raw_text, summary if summary is not None else "", is_provisional)
                 )
-                logger.debug(
-                    f"Saved/Replaced text/summary data for chapter {chapter_number}."
-                )
-
-                if (
-                    embedding_blob and dtype_str and shape_str
-                ):  # Ensure all parts are valid
+                if embedding_blob and dtype_str and shape_str:
                     cursor.execute(
                         "INSERT OR REPLACE INTO embeddings (chapter_number, embedding_blob, dtype, shape) VALUES (?, ?, ?, ?)",
-                        (chapter_number, embedding_blob, dtype_str, shape_str),
-                    )
-                    logger.debug(
-                        f"Saved/Replaced embedding data for chapter {chapter_number}."
+                        (chapter_number, embedding_blob, dtype_str, shape_str)
                     )
                 else:
-                    # If new embedding is invalid/missing, remove any old one for this chapter
-                    cursor.execute(
-                        "DELETE FROM embeddings WHERE chapter_number = ?",
-                        (chapter_number,),
-                    )
-                    logger.debug(
-                        f"Removed any existing embedding entry for chapter {chapter_number} due to invalid new embedding."
-                    )
+                    cursor.execute("DELETE FROM embeddings WHERE chapter_number = ?", (chapter_number,))
                 conn.commit()
-            logger.info(
-                f"Successfully saved chapter text/embedding data for chapter {chapter_number}."
-            )
+            logger.info(f"Successfully saved chapter text/embedding data for chapter {chapter_number}.")
         except sqlite3.Error as e:
-            logger.error(
-                f"Database error saving chapter data for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
-            # Consider re-raising or specific handling if this is critical
-        except Exception as e:  # Catch other unexpected errors
-            logger.error(
-                f"Unexpected error saving chapter data for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
+            logger.error(f"Database error saving chapter data for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Unexpected error saving chapter data for chapter {chapter_number}: {e}", exc_info=True)
+
+    async def async_save_chapter_data(
+        self, chapter_number: int, text: str, raw_text: str,
+        summary: Optional[str], embedding: Optional[np.ndarray],
+        is_provisional: bool = False
+    ):
+        if chapter_number <= 0:
+            logger.error(f"Async cannot save chapter data for chapter_number <= 0: {chapter_number}.")
+            return
+        logger.info(f"Async attempting to save data for chapter {chapter_number} (Provisional: {is_provisional}).")
+        embedding_blob, dtype_str, shape_str = self._prepare_embedding_for_save(embedding, chapter_number)
+
+        try:
+            async with self._get_async_connection() as conn:
+                await conn.execute(
+                    "INSERT OR REPLACE INTO chapters (chapter_number, text, raw_text, summary, is_provisional) VALUES (?, ?, ?, ?, ?)",
+                    (chapter_number, text, raw_text, summary if summary is not None else "", is_provisional)
+                )
+                if embedding_blob and dtype_str and shape_str:
+                    await conn.execute(
+                        "INSERT OR REPLACE INTO embeddings (chapter_number, embedding_blob, dtype, shape) VALUES (?, ?, ?, ?)",
+                        (chapter_number, embedding_blob, dtype_str, shape_str)
+                    )
+                else:
+                    await conn.execute("DELETE FROM embeddings WHERE chapter_number = ?", (chapter_number,))
+                await conn.commit()
+            logger.info(f"Async successfully saved chapter text/embedding data for chapter {chapter_number}.")
+        except sqlite3.Error as e:
+            logger.error(f"Async database error saving chapter data for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Async unexpected error saving chapter data for chapter {chapter_number}: {e}", exc_info=True)
+
+    def _prepare_embedding_for_save(self, embedding: Optional[np.ndarray], chapter_number: int) -> Tuple[Optional[bytes], str, str]:
+        embedding_blob, dtype_str, shape_str = None, "", ""
+        if embedding is not None and isinstance(embedding, np.ndarray) and embedding.size > 0:
+            try:
+                embedding_to_save = embedding.astype(config.EMBEDDING_DTYPE)
+                if embedding_to_save.ndim == 0: embedding_to_save = embedding_to_save.reshape(1)
+                embedding_blob = embedding_to_save.tobytes()
+                dtype_str = str(embedding_to_save.dtype)
+                shape_str = json.dumps(embedding_to_save.shape)
+                logger.debug(f"Serialized embedding for chapter {chapter_number} (Shape: {shape_str}, Dtype: {dtype_str})")
+            except Exception as e:
+                logger.error(f"Error serializing embedding for chapter {chapter_number}: {e}", exc_info=True)
+                embedding_blob = None 
+        else:
+            logger.warning(f"Chapter {chapter_number} has no valid embedding provided. Embedding will not be saved.")
+        return embedding_blob, dtype_str, shape_str
 
     def get_embedding_from_db(self, chapter_number: int) -> Optional[np.ndarray]:
-        """Retrieves and deserializes a single chapter's embedding."""
-        if chapter_number <= 0: return None # Embeddings are for written chapters
-        logger.debug(
-            f"Retrieving embedding for chapter {chapter_number} from database."
-        )
+        if chapter_number <= 0: return None
+        logger.debug(f"Retrieving embedding for chapter {chapter_number} from database.")
         embedding = None
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT embedding_blob, dtype, shape FROM embeddings WHERE chapter_number = ?",
-                    (chapter_number,),
-                )
+                cursor.execute("SELECT embedding_blob, dtype, shape FROM embeddings WHERE chapter_number = ?", (chapter_number,))
                 result = cursor.fetchone()
             if result and result["embedding_blob"]:
-                embedding = self._deserialize_embedding(
-                    result["embedding_blob"], result["dtype"], result["shape"]
-                )
-                if embedding is not None:
-                    logger.debug(
-                        f"Successfully retrieved and deserialized embedding for chapter {chapter_number}."
-                    )
-            else:
-                logger.debug(
-                    f"No embedding found in database for chapter {chapter_number}."
-                )
-        except sqlite3.Error as e:
-            logger.error(
-                f"Database error retrieving embedding for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error retrieving embedding for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
+                embedding = self._deserialize_embedding(result["embedding_blob"], result["dtype"], result["shape"])
+                if embedding is not None: logger.debug(f"Successfully retrieved embedding for chapter {chapter_number}.")
+            else: logger.debug(f"No embedding found for chapter {chapter_number}.")
+        except sqlite3.Error as e: logger.error(f"DB error retrieving embedding for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Unexpected error retrieving embedding for chapter {chapter_number}: {e}", exc_info=True)
         return embedding
 
-    def get_all_past_embeddings(
-        self, current_chapter_number: int
-    ) -> List[Tuple[int, np.ndarray]]:
-        """Retrieves all embeddings for chapters before the specified chapter number."""
-        logger.debug(
-            f"Retrieving all past embeddings before chapter {current_chapter_number}."
-        )
+    async def async_get_embedding_from_db(self, chapter_number: int) -> Optional[np.ndarray]:
+        if chapter_number <= 0: return None
+        logger.debug(f"Async retrieving embedding for chapter {chapter_number}.")
+        embedding = None
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute("SELECT embedding_blob, dtype, shape FROM embeddings WHERE chapter_number = ?", (chapter_number,)) as cursor:
+                    result = await cursor.fetchone()
+            if result and result["embedding_blob"]: # result is already a dict-like row
+                embedding = self._deserialize_embedding(result["embedding_blob"], result["dtype"], result["shape"])
+                if embedding is not None: logger.debug(f"Async successfully retrieved embedding for chapter {chapter_number}.")
+            else: logger.debug(f"Async no embedding found for chapter {chapter_number}.")
+        except sqlite3.Error as e: logger.error(f"Async DB error retrieving embedding for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Async unexpected error retrieving embedding for chapter {chapter_number}: {e}", exc_info=True)
+        return embedding
+
+
+    def get_all_past_embeddings(self, current_chapter_number: int) -> List[Tuple[int, np.ndarray]]:
+        logger.debug(f"Retrieving all past embeddings before chapter {current_chapter_number}.")
         past_embeddings: List[Tuple[int, np.ndarray]] = []
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    """SELECT chapter_number, embedding_blob, dtype, shape
-                       FROM embeddings
-                       WHERE chapter_number < ? AND chapter_number > 0 -- Exclude non-chapter embeddings if any
-                       ORDER BY chapter_number DESC""",  # Most recent first helps if caller truncates
-                    (current_chapter_number,),
+                    "SELECT chapter_number, embedding_blob, dtype, shape FROM embeddings WHERE chapter_number < ? AND chapter_number > 0 ORDER BY chapter_number DESC",
+                    (current_chapter_number,)
                 )
                 results = cursor.fetchall()
-            logger.debug(f"Found {len(results)} past embedding entries in database.")
             for row in results:
-                embedding = self._deserialize_embedding(
-                    row["embedding_blob"], row["dtype"], row["shape"]
-                )
-                if embedding is not None:
-                    past_embeddings.append((row["chapter_number"], embedding))
-                else:
-                    logger.warning(
-                        f"Failed to load/deserialize embedding for past chapter {row['chapter_number']}. Skipping."
-                    )
-        except sqlite3.Error as e:
-            logger.error(
-                f"Database error retrieving past embeddings: {e}", exc_info=True
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error retrieving past embeddings: {e}", exc_info=True
-            )
-
-        logger.info(
-            f"Successfully retrieved and deserialized {len(past_embeddings)} past embeddings."
-        )
+                embedding = self._deserialize_embedding(row["embedding_blob"], row["dtype"], row["shape"])
+                if embedding is not None: past_embeddings.append((row["chapter_number"], embedding))
+                else: logger.warning(f"Failed to load embedding for past chapter {row['chapter_number']}.")
+        except sqlite3.Error as e: logger.error(f"DB error retrieving past embeddings: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Unexpected error retrieving past embeddings: {e}", exc_info=True)
+        logger.info(f"Retrieved {len(past_embeddings)} past embeddings.")
         return past_embeddings
 
+    async def async_get_all_past_embeddings(self, current_chapter_number: int) -> List[Tuple[int, np.ndarray]]:
+        logger.debug(f"Async retrieving all past embeddings before chapter {current_chapter_number}.")
+        past_embeddings: List[Tuple[int, np.ndarray]] = []
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute(
+                    "SELECT chapter_number, embedding_blob, dtype, shape FROM embeddings WHERE chapter_number < ? AND chapter_number > 0 ORDER BY chapter_number DESC",
+                    (current_chapter_number,)
+                ) as cursor:
+                    results = await cursor.fetchall()
+            for row in results: # row is already dict-like
+                embedding = self._deserialize_embedding(row["embedding_blob"], row["dtype"], row["shape"])
+                if embedding is not None: past_embeddings.append((row["chapter_number"], embedding))
+                else: logger.warning(f"Async failed to load embedding for past chapter {row['chapter_number']}.")
+        except sqlite3.Error as e: logger.error(f"Async DB error retrieving past embeddings: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Async unexpected error retrieving past embeddings: {e}", exc_info=True)
+        logger.info(f"Async retrieved {len(past_embeddings)} past embeddings.")
+        return past_embeddings
+
+
     def get_chapter_data_from_db(self, chapter_number: int) -> Optional[Dict[str, Any]]:
-        """Retrieves the final text, summary, and provisional status for a given chapter number."""
-        if chapter_number <= 0: return None # Chapter data is for written chapters
+        if chapter_number <= 0: return None
         logger.debug(f"Retrieving text/summary/provisional data for chapter {chapter_number}.")
         data = None
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT text, summary, is_provisional FROM chapters WHERE chapter_number = ?", # Fetch is_provisional
-                    (chapter_number,),
-                )
+                cursor.execute("SELECT text, summary, is_provisional FROM chapters WHERE chapter_number = ?", (chapter_number,))
                 result = cursor.fetchone()
-            if result:
-                data = dict(result)  # Convert sqlite3.Row to dict
-                logger.debug(f"Found data for chapter {chapter_number} (Provisional: {data.get('is_provisional')}).")
-            else:
-                logger.debug(
-                    f"No text/summary data found for chapter {chapter_number}."
-                )
-        except sqlite3.Error as e:
-            logger.error(
-                f"Database error retrieving data for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error retrieving chapter data for chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
+            if result: data = dict(result); logger.debug(f"Found data for chapter {chapter_number} (Provisional: {data.get('is_provisional')}).")
+            else: logger.debug(f"No text/summary data found for chapter {chapter_number}.")
+        except sqlite3.Error as e: logger.error(f"DB error retrieving data for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Unexpected error retrieving chapter data for chapter {chapter_number}: {e}", exc_info=True)
         return data
 
-    # --- Knowledge Graph Methods ---
+    async def async_get_chapter_data_from_db(self, chapter_number: int) -> Optional[Dict[str, Any]]:
+        if chapter_number <= 0: return None
+        logger.debug(f"Async retrieving text/summary/provisional data for chapter {chapter_number}.")
+        data = None
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute("SELECT text, summary, is_provisional FROM chapters WHERE chapter_number = ?", (chapter_number,)) as cursor:
+                    result = await cursor.fetchone()
+            if result: data = dict(result); logger.debug(f"Async found data for chapter {chapter_number} (Provisional: {data.get('is_provisional')}).")
+            else: logger.debug(f"Async no text/summary data found for chapter {chapter_number}.")
+        except sqlite3.Error as e: logger.error(f"Async DB error retrieving data for chapter {chapter_number}: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Async unexpected error retrieving chapter data for chapter {chapter_number}: {e}", exc_info=True)
+        return data
+
 
     def add_kg_triple(
-        self,
-        subject: str,
-        predicate: str,
-        obj: str,
-        chapter_added: int, # Can be config.KG_PREPOPULATION_CHAPTER_NUM
-        confidence: float = 1.0,
-        is_provisional: bool = False 
+        self, subject: str, predicate: str, obj: str, chapter_added: int,
+        confidence: float = 1.0, is_provisional: bool = False 
     ):
-        """
-        Adds a single (subject, predicate, object) triple to the knowledge graph.
-        Avoids adding exact duplicates for the same chapter_added value.
-        """
-        subj_clean = subject.strip()
-        pred_clean = predicate.strip()
-        obj_clean = obj.strip()
-
-        if not all([subj_clean, pred_clean, obj_clean]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM: # Allow 0
-            logger.warning(
-                f"Attempted to add invalid or empty triple: S='{subj_clean}', P='{pred_clean}', O='{obj_clean}', Chap={chapter_added}"
-            )
+        subj_clean, pred_clean, obj_clean = subject.strip(), predicate.strip(), obj.strip()
+        if not all([subj_clean, pred_clean, obj_clean]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM:
+            logger.warning(f"Invalid KG triple: S='{subj_clean}', P='{pred_clean}', O='{obj_clean}', Chap={chapter_added}")
             return
-
-        logger.debug(
-            f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from chapter_added={chapter_added} (Provisional: {is_provisional})"
-        )
+        logger.debug(f"Adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from Ch {chapter_added} (Prov: {is_provisional})")
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                # Check for existing now includes provisional status, or you might decide an S,P,O,chapter match is enough
-                # For now, an exact S,P,O,chapter_added match is considered a duplicate.
-                # If a new entry comes with a different provisional status or confidence, it might be an update case.
-                # Simple approach: if it exists, log and skip. More complex: update if new info is better.
                 cursor.execute(
-                    """SELECT id FROM knowledge_graph
-                       WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?""", 
-                    (subj_clean, pred_clean, obj_clean, chapter_added),
+                    "SELECT id FROM knowledge_graph WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?", 
+                    (subj_clean, pred_clean, obj_clean, chapter_added)
                 )
-                exists = cursor.fetchone()
-
-                if exists:
-                    logger.debug(
-                        f"Triple ({subj_clean}, {pred_clean}, {obj_clean}) already exists for chapter_added {chapter_added}. Skipping insert."
-                    )
+                if cursor.fetchone():
+                    logger.debug(f"Triple ({subj_clean}, {pred_clean}, {obj_clean}) Ch {chapter_added} exists. Skipping.")
                 else:
                     cursor.execute(
-                        """INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence, is_provisional)
-                           VALUES (?, ?, ?, ?, ?, ?)""", 
-                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional), 
+                        "INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence, is_provisional) VALUES (?, ?, ?, ?, ?, ?)", 
+                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional)
                     )
                     conn.commit()
-                    logger.debug(
-                        f"Successfully added triple for chapter_added {chapter_added}."
+                    logger.debug(f"Added triple for Ch {chapter_added}.")
+        except sqlite3.Error as e: logger.error(f"DB error adding KG triple: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Unexpected error adding KG triple: {e}", exc_info=True)
+
+    async def async_add_kg_triple(
+        self, subject: str, predicate: str, obj: str, chapter_added: int,
+        confidence: float = 1.0, is_provisional: bool = False
+    ):
+        subj_clean, pred_clean, obj_clean = subject.strip(), predicate.strip(), obj.strip()
+        if not all([subj_clean, pred_clean, obj_clean]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM:
+            logger.warning(f"Async invalid KG triple: S='{subj_clean}', P='{pred_clean}', O='{obj_clean}', Chap={chapter_added}")
+            return
+        logger.debug(f"Async adding KG triple: ({subj_clean}, {pred_clean}, {obj_clean}) from Ch {chapter_added} (Prov: {is_provisional})")
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute(
+                    "SELECT id FROM knowledge_graph WHERE subject = ? AND predicate = ? AND object = ? AND chapter_added = ?",
+                    (subj_clean, pred_clean, obj_clean, chapter_added)
+                ) as cursor:
+                    exists = await cursor.fetchone()
+                
+                if exists:
+                    logger.debug(f"Async triple ({subj_clean}, {pred_clean}, {obj_clean}) Ch {chapter_added} exists. Skipping.")
+                else:
+                    await conn.execute(
+                        "INSERT INTO knowledge_graph (subject, predicate, object, chapter_added, confidence, is_provisional) VALUES (?, ?, ?, ?, ?, ?)",
+                        (subj_clean, pred_clean, obj_clean, chapter_added, confidence, is_provisional)
                     )
-                    
-        except sqlite3.Error as e:
-            logger.error(
-                f"Database error adding KG triple ({subj_clean}, {pred_clean}, {obj_clean}): {e}",
-                exc_info=True,
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error adding KG triple: {e}", exc_info=True)
+                    await conn.commit()
+                    logger.debug(f"Async added triple for Ch {chapter_added}.")
+        except sqlite3.Error as e: logger.error(f"Async DB error adding KG triple: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Async unexpected error adding KG triple: {e}", exc_info=True)
+
 
     def query_kg(
-        self,
-        subject: Optional[str] = None,
-        predicate: Optional[str] = None,
-        obj: Optional[str] = None,
-        chapter_limit: Optional[int] = None, # Max chapter_added to include (inclusive)
+        self, subject: Optional[str] = None, predicate: Optional[str] = None,
+        obj: Optional[str] = None, chapter_limit: Optional[int] = None,
         include_provisional: bool = True 
     ) -> List[Dict[str, Any]]:
-        query_parts = [
-            "SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1" 
-        ]
+        query_parts = ["SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1"]
         params: List[Any] = []
-
-        if subject is not None:
-            query_parts.append("AND subject = ?")
-            params.append(subject.strip())
-        if predicate is not None:
-            query_parts.append("AND predicate = ?")
-            params.append(predicate.strip())
-        if obj is not None:
-            query_parts.append("AND object = ?")
-            params.append(obj.strip())
-        
-        # chapter_limit means "up to and including this chapter_added value"
-        # Can be config.KG_PREPOPULATION_CHAPTER_NUM to get only pre-populated data,
-        # or a written chapter number to get all data up to that chapter.
-        if (
-            chapter_limit is not None
-            and isinstance(chapter_limit, int)
-            and chapter_limit >= config.KG_PREPOPULATION_CHAPTER_NUM # Allow 0
-        ):
-            query_parts.append("AND chapter_added <= ?")
-            params.append(chapter_limit)
-        
-        if not include_provisional:
-            query_parts.append("AND is_provisional = FALSE")
-
-        query_parts.append("ORDER BY chapter_added DESC, confidence DESC, timestamp DESC") # Prioritize confidence
+        if subject is not None: query_parts.append("AND subject = ?"); params.append(subject.strip())
+        if predicate is not None: query_parts.append("AND predicate = ?"); params.append(predicate.strip())
+        if obj is not None: query_parts.append("AND object = ?"); params.append(obj.strip())
+        if chapter_limit is not None and isinstance(chapter_limit, int) and chapter_limit >= config.KG_PREPOPULATION_CHAPTER_NUM:
+            query_parts.append("AND chapter_added <= ?"); params.append(chapter_limit)
+        if not include_provisional: query_parts.append("AND is_provisional = FALSE")
+        query_parts.append("ORDER BY chapter_added DESC, confidence DESC, timestamp DESC")
         final_query = " ".join(query_parts)
-
         logger.debug(f"Executing KG query: {final_query} with params: {params}")
         results: List[Dict[str, Any]] = []
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(final_query, params)
-                rows = cursor.fetchall()
-                results = [dict(row) for row in rows]  # Convert sqlite3.Row to dict
+                results = [dict(row) for row in cursor.fetchall()]
             logger.debug(f"KG query returned {len(results)} results.")
-        except sqlite3.Error as e:
-            logger.error(f"Database error querying KG: {e}", exc_info=True)
-        except Exception as e:
-            logger.error(f"Unexpected error querying KG: {e}", exc_info=True)
+        except sqlite3.Error as e: logger.error(f"DB error querying KG: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Unexpected error querying KG: {e}", exc_info=True)
         return results
+
+    async def async_query_kg(
+        self, subject: Optional[str] = None, predicate: Optional[str] = None,
+        obj: Optional[str] = None, chapter_limit: Optional[int] = None,
+        include_provisional: bool = True
+    ) -> List[Dict[str, Any]]:
+        query_parts = ["SELECT id, subject, predicate, object, chapter_added, confidence, timestamp, is_provisional FROM knowledge_graph WHERE 1=1"]
+        params: List[Any] = []
+        if subject is not None: query_parts.append("AND subject = ?"); params.append(subject.strip())
+        if predicate is not None: query_parts.append("AND predicate = ?"); params.append(predicate.strip())
+        if obj is not None: query_parts.append("AND object = ?"); params.append(obj.strip())
+        if chapter_limit is not None and isinstance(chapter_limit, int) and chapter_limit >= config.KG_PREPOPULATION_CHAPTER_NUM:
+            query_parts.append("AND chapter_added <= ?"); params.append(chapter_limit)
+        if not include_provisional: query_parts.append("AND is_provisional = FALSE")
+        query_parts.append("ORDER BY chapter_added DESC, confidence DESC, timestamp DESC")
+        final_query = " ".join(query_parts)
+        logger.debug(f"Async executing KG query: {final_query} with params: {params}")
+        results_list: List[Dict[str, Any]] = []
+        try:
+            async with self._get_async_connection() as conn:
+                async with conn.execute(final_query, params) as cursor:
+                    rows = await cursor.fetchall()
+                    results_list = [dict(row) for row in rows] # Convert rows to dicts
+            logger.debug(f"Async KG query returned {len(results_list)} results.")
+        except sqlite3.Error as e: logger.error(f"Async DB error querying KG: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Async unexpected error querying KG: {e}", exc_info=True)
+        return results_list
+
 
     def get_most_recent_value(
         self, subject: str, predicate: str, chapter_limit: Optional[int] = None, include_provisional: bool = False
     ) -> Optional[str]: 
-        """
-        Helper function to get the most recent object value for a given
-        subject and predicate from the KG, up to a specific chapter_added value.
-        """
         if not subject.strip() or not predicate.strip():
-            logger.warning(
-                f"Attempted get_most_recent_value with empty subject or predicate: S='{subject}', P='{predicate}'"
-            )
+            logger.warning(f"get_most_recent_value empty S/P: S='{subject}', P='{predicate}'")
             return None
-
-        logger.debug(
-            f"Getting most recent KG value for ({subject}, {predicate}, ?) up to chapter_added {chapter_limit} (Include Provisional: {include_provisional})"
-        )
-        results = self.query_kg(
-            subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional 
-        )
+        logger.debug(f"Getting most recent KG value for ({subject}, {predicate}, ?) up to Ch {chapter_limit} (Prov: {include_provisional})")
+        results = self.query_kg(subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional)
         if results:
             most_recent_value = results[0]["object"]
-            logger.debug(
-                f"Found most recent value: '{most_recent_value}' from chapter_added {results[0]['chapter_added']}"
-            )
-            return str(most_recent_value)  # Ensure string
+            logger.debug(f"Found most recent value: '{most_recent_value}' from Ch {results[0]['chapter_added']}")
+            return str(most_recent_value)
         else:
-            logger.debug(
-                f"No value found for ({subject}, {predicate}, ?) up to chapter_added {chapter_limit}"
-            )
+            logger.debug(f"No value found for ({subject}, {predicate}, ?) up to Ch {chapter_limit}")
+            return None
+
+    async def async_get_most_recent_value(
+        self, subject: str, predicate: str, chapter_limit: Optional[int] = None, include_provisional: bool = False
+    ) -> Optional[str]:
+        if not subject.strip() or not predicate.strip():
+            logger.warning(f"Async get_most_recent_value empty S/P: S='{subject}', P='{predicate}'")
+            return None
+        logger.debug(f"Async getting most recent KG value for ({subject}, {predicate}, ?) up to Ch {chapter_limit} (Prov: {include_provisional})")
+        results = await self.async_query_kg(subject=subject, predicate=predicate, chapter_limit=chapter_limit, include_provisional=include_provisional)
+        if results:
+            most_recent_value = results[0]["object"]
+            logger.debug(f"Async found most recent value: '{most_recent_value}' from Ch {results[0]['chapter_added']}")
+            return str(most_recent_value)
+        else:
+            logger.debug(f"Async no value found for ({subject}, {predicate}, ?) up to Ch {chapter_limit}")
             return None

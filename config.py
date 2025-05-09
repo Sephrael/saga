@@ -25,50 +25,31 @@ import logging # Import logging to use its constants like INFO
 from typing import Optional, Type, List
 
 # --- API and Model Configuration ---
-# URL for the Ollama server providing embeddings
 OLLAMA_EMBED_URL: str = "http://192.168.64.1:11434"
-# Base URL for the OpenAI-compatible API endpoint
 OPENAI_API_BASE: str = "http://192.168.64.1:8080/v1"
-# API Key for the OpenAI-compatible endpoint (replace if necessary)
 OPENAI_API_KEY: str = "nope"
-
-# Name of the embedding model used via Ollama
 EMBEDDING_MODEL: str = "nomic-embed-text:latest"
 
-# --- Model Tiering ---
-# Largest model for most critical/creative tasks
-LARGE_MODEL: str = "Qwen3-30B-A3B" # For drafting, revision, detailed planning
-# Medium model for analysis, structured generation, less critical tasks
-MEDIUM_MODEL: str = "Qwen3-30B-A3B" # For KG extraction, initial setup, consistency, JSON updates
-# Smallest model for very simple, fast tasks
-SUMMARIZATION_MODEL: str = "Qwen3-30B-A3B" # For chapter summaries
-
-# Define main model for backward compatibility or general use (points to large)
+LARGE_MODEL: str = "Qwen3-30B-A3B" 
+MEDIUM_MODEL: str = "Qwen3-30B-A3B" 
+SUMMARIZATION_MODEL: str = "Qwen3-30B-A3B" 
 MAIN_GENERATION_MODEL: str = LARGE_MODEL 
-
-# Specific model assignments for clarity (can point to tiered models)
 JSON_CORRECTION_MODEL: str = MEDIUM_MODEL
 CONSISTENCY_CHECK_MODEL: str = MEDIUM_MODEL
-KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # For combined char/world JSON updates & KG extraction
-INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # For plot outline and world-building generation
-PLANNING_MODEL: str = LARGE_MODEL # Detailed scene planning benefits from larger model
+KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
+INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
+PLANNING_MODEL: str = LARGE_MODEL 
 DRAFTING_MODEL: str = LARGE_MODEL
 REVISION_MODEL: str = LARGE_MODEL
 
 
 # --- Output and File Paths ---
-# Directory to store all output files (database, JSON state, chapter texts)
 OUTPUT_DIR: str = "novel_output"
-# Path to the SQLite database file
 DATABASE_FILE: str = os.path.join(OUTPUT_DIR, "novel_data.db")
-# Path to the JSON file storing the plot outline
 PLOT_OUTLINE_FILE: str = os.path.join(OUTPUT_DIR, "plot_outline.json")
-# Path to the JSON file storing character profiles
 CHARACTER_PROFILES_FILE: str = os.path.join(OUTPUT_DIR, "character_profiles.json")
-# Path to the JSON file storing world-building information
 WORLD_BUILDER_FILE: str = os.path.join(OUTPUT_DIR, "world_building.json")
 
-# Ensure the main output directory exists upon script load
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, "chapters"), exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, "chapter_logs"), exist_ok=True)
@@ -76,22 +57,21 @@ os.makedirs(os.path.join(OUTPUT_DIR, "debug_outputs"), exist_ok=True)
 
 
 # --- Generation Parameters ---
-# Maximum number of characters to include in the context prompt for the LLM
-MAX_CONTEXT_LENGTH: int = 64000 # Be mindful of model context window limits
-# Default maximum number of tokens the LLM should generate in a response (can be overridden)
-MAX_GENERATION_TOKENS: int = 30000 # General fallback; specific tasks might need more or less
-# Maximum number of characters from a chapter to use for knowledge update prompts (character/world analysis)
+MAX_CONTEXT_LENGTH: int = 64000 
+MAX_GENERATION_TOKENS: int = 30000 
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 8000
-# Number of most relevant past chapters to retrieve for semantic context generation
 CONTEXT_CHAPTER_COUNT: int = 5
-# Number of chapters to attempt writing in a single execution run
-CHAPTERS_PER_RUN: int = 3 # Reduced for testing efficiency
+CHAPTERS_PER_RUN: int = 3 
+
+
+# --- Caching ---
+SUMMARY_CACHE_SIZE: int = 32 # Max summaries to cache (LRU based on chapter text snippet)
+KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # Max KG triple LLM calls to cache
 
 
 # --- Agentic Planning ---
-ENABLE_AGENTIC_PLANNING: bool = True # Flag to enable the new planning step
-MAX_PLANNING_TOKENS: int = 16000 # Max tokens for the planning LLM call (might need more for detailed scenes)
-# Limits for context snippets in planning prompts
+ENABLE_AGENTIC_PLANNING: bool = True 
+MAX_PLANNING_TOKENS: int = 16000 
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 100
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 150
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -101,66 +81,34 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-# Cosine similarity threshold below which chapter coherence triggers revision
 REVISION_COHERENCE_THRESHOLD: float = 0.65
-# Flag to enable triggering revisions based on consistency check failures
 REVISION_CONSISTENCY_TRIGGER: bool = True
-# Flag to enable triggering revisions based on plot arc validation failures
 PLOT_ARC_VALIDATION_TRIGGER: bool = True
-# Similarity threshold for revision check (revisions less similar than this are accepted)
-REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 # Revisions scoring >= this are rejected as too similar
-# Max tokens for specific LLM calls during evaluation/update
+REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 
 MAX_SUMMARY_TOKENS: int = 1500
 MAX_CONSISTENCY_TOKENS: int = 4000
 MAX_PLOT_VALIDATION_TOKENS: int = 1500
-MAX_KG_TRIPLE_TOKENS: int = 8000 # For KG extraction from chapter text
-MAX_PREPOP_KG_TOKENS: int = 16000 # For pre-populating KG from plot/world JSON
+MAX_KG_TRIPLE_TOKENS: int = 8000 
+MAX_PREPOP_KG_TOKENS: int = 16000 
 
-# --- Draft Evaluation ---
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 4000 # Minimum character length for a generated draft
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 4000 
+ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
+KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 
-# --- Dynamic State Adaptation ---
-ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to profiles/world
-
-# --- Knowledge Graph ---
-KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number for foundational KG data
-
-# --- Embedding Configuration ---
-# Expected dimension of the embeddings generated by EMBEDDING_MODEL
 EXPECTED_EMBEDDING_DIM: int = 768
-# NumPy data type to use for storing and processing embeddings
-EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32) # Explicitly np.dtype object
-# Maximum number of embedding results to cache in memory (using LRU cache)
+EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32) 
 EMBEDDING_CACHE_SIZE: int = 128
 
-# --- Logging ---
-# Logging level for the application (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 LOG_LEVEL: str = "INFO"
-# Format string for log messages
 LOG_FORMAT: str = '%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s'
-# Path for optional log file (set to None to disable file logging)
 LOG_FILE: Optional[str] = os.path.join(OUTPUT_DIR, "saga_run.log")
 
-# --- Plot Outline Generation Settings ---
-# If True, genre, theme, setting, protagonist, conflict are randomized from lists below.
-# If False, uses CONFIGURED_GENRE, CONFIGURED_THEME, CONFIGURED_SETTING, and LLM generates protagonist/conflict based on them.
-UNHINGED_PLOT_MODE: bool = True # Set to True for randomized paradoxical combinations
-
-# Used if UNHINGED_PLOT_MODE is False
+UNHINGED_PLOT_MODE: bool = True 
 CONFIGURED_GENRE: str = "hard science fiction"
 CONFIGURED_THEME: str = "the nature of consciousness and isolation"
 CONFIGURED_SETTING_DESCRIPTION: str = "A derelict deep-space research vessel adrift in the Kuiper Belt, with remnants of a long-dead human crew and a decaying technological infrastructure."
-# Protagonist description and name will be generated by LLM based on the above in normal mode.
-# If UNHINGED_PLOT_MODE is True, the LLM will still generate a specific protagonist_description based on the random archetype.
-
-# Default protagonist name if plot outline is generated and LLM fails to provide one (both modes)
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
-# Default title if plot outline is generated and LLM fails to provide one (both modes)
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
-
-# --- Lists for Unhinged Plot Mode Randomization ---
-
-# (Expand these lists for more variety)
 
 UNHINGED_GENRES: List[str] = [
     "hard science fiction", "soft science fiction", "space opera", "military science fiction", "cyberpunk",
@@ -231,7 +179,6 @@ UNHINGED_GENRES: List[str] = [
     "gentle fiction", "quiet fiction", "slow fiction", "character study", "life transition fiction", "small town fiction", "steampunk", "cyberpunk noir",
     "magical realism", "mythological retelling", "space opera", "gothic romance", "urban fantasy", "post-apocalyptic western", "slice-of-life in a magical world"
  ]
-
 UNHINGED_THEMES: List[str] = [
     "the nature of consciousness and isolation", "the burden of prophecy", "identity in a digital age", "the ethics of artificial intelligence", "the consequences of unchecked ambition", "love against societal norms", "the search for meaning in chaos", "redemption and forgiveness", "humanity's impact on nature", "the illusion of free will", "the power of memory", "sacrifice for the greater good", "the corrupting influence of power", "the duality of human nature",
     "coming of age and self-discovery", "confronting mortality", "the price of revenge", "found family and belonging", "loss of innocence", "the struggle against fate", "the contrast between appearance and reality", "cycles of violence", "intergenerational trauma", "the complexity of moral choices", "the cost of progress", "alienation in modern society", "the fragility of civilization", "the tension between tradition and change",
@@ -248,7 +195,6 @@ UNHINGED_THEMES: List[str] = [
     "the search for reconciliation", "the nature of healing", "the impact of institutional racism", "the complexity of cultural identity", "the consequences of environmental destruction", "the nature of justice", "the effects of social media", "the pursuit of authenticity in a virtual world", "the impact of wealth disparity", "the tension between science and spirituality", "the nature of mortality", "the burden of immortality", "the consequences of isolation",
     "the search for sustainable existence", "the nature of human connection", "the impact of mental illness", "the complexity of sexuality", "the consequences of misinformation", "the nature of patriotism", "the effects of urbanization", "the pursuit of legacy", "the impact of historical revisionism", "the tension between logic and intuition", "the nature of beauty", "the burden of genius", "the consequences of overpopulation"
 ]
-
 UNHINGED_SETTINGS_ARCHETYPES: List[str] = [
     "a derelict deep-space research vessel", "a magically-warded floating city above a poisoned wasteland",
     "a neon-drenched cyberpunk megalopolis where memories are currency", "an alternate Victorian London powered by volatile aether-tech",
@@ -287,7 +233,6 @@ UNHINGED_SETTINGS_ARCHETYPES: List[str] = [
     "a jungle where plant and animal life has merged into hybrid conscious entities", "a sanctuary dimension where extinct species are preserved by interdimensional conservationists",
     "a massive neural network physically manifested as an explorable landscape", "a city where buildings are grown rather than constructed, adapting to residents' needs"
 ]
-
 UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = [
     "a newly self-aware AI", "a disgraced royal knight seeking redemption", "a cynical detective in a world of illusions",
     "an eccentric inventor with a dangerous creation", "a cursed scholar haunted by a cosmic entity",
@@ -332,7 +277,6 @@ UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = [
     "a conspiracy theorist who discovers one of their wildest theories is actually true", "an architect designing impossible structures that defy physical laws",
     "a reformed cultist using insider knowledge to rescue others from indoctrination", "a debt collector for a supernatural loan shark encountering desperate clients"
 ]
-
 UNHINGED_CONFLICT_TYPES: List[str] = [
     "internal struggle with emerging sentience vs. programmed duty", "an ancient prophecy foretelling doom vs. the desire for free will",
     "a personal vendetta against a powerful corporation in a corrupt city", "a race against time to stop a technological marvel from causing catastrophe",
