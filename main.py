@@ -25,8 +25,9 @@ import sys
 import os 
 import random 
 import asyncio
+from typing import Dict, Any # Added for generation_params typing
 
-from novel_logic import NovelWriterAgent # JsonStateData removed as it's internal to novel_logic
+from novel_logic import NovelWriterAgent
 import config 
 
 # --- Configuration for Execution Mode ---
@@ -70,14 +71,34 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
 
     # --- Plot Outline Setup ---
     logger.info("Checking for existing plot outline...")
-    # Check if plot outline is default or missing essential elements
-    is_default_outline = agent.plot_outline.get("is_default", True) or \
-                         not agent.plot_outline.get("title") or \
-                         agent.plot_outline.get("title") == config.DEFAULT_PLOT_OUTLINE_TITLE or \
-                         not agent.plot_outline.get("protagonist_name") or \
-                         len(agent.plot_outline.get("plot_points", [])) < 5
+    plot_outline_data = agent.plot_outline 
 
-    if is_default_outline:
+    should_regenerate_plot = False
+    if not plot_outline_data: 
+        should_regenerate_plot = True
+        logger.info("Plot outline data is empty or was not loaded. Will generate new.")
+    elif plot_outline_data.get("is_default") is False: 
+        should_regenerate_plot = False
+        logger.info("Plot outline file explicitly marked 'is_default: false'. Attempting to use as is.")
+    elif plot_outline_data.get("is_default") is True: 
+        should_regenerate_plot = True
+        logger.info("Plot outline file was previously marked as default by the system. Will regenerate.")
+    else: 
+        title_is_default_or_missing = (not plot_outline_data.get("title") or
+                                       plot_outline_data.get("title") == config.DEFAULT_PLOT_OUTLINE_TITLE)
+        protagonist_is_missing = not plot_outline_data.get("protagonist_name")
+        
+        plot_points_list = plot_outline_data.get("plot_points", [])
+        plot_points_insufficient = not isinstance(plot_points_list, list) or len(plot_points_list) < 5
+
+        if (title_is_default_or_missing and protagonist_is_missing) or plot_points_insufficient:
+            should_regenerate_plot = True
+            logger.info("Plot outline content (from file without 'is_default' flag) appears default or insufficient. Will generate new.")
+        else:
+            should_regenerate_plot = False
+            logger.info("Using existing plot outline from file (no 'is_default' flag, content appears non-default).")
+
+    if should_regenerate_plot:
         print("\n--- Generating New Plot Outline ---")
         logger.info("No valid plot outline found or outline appears default. Generating a new one.")
         
@@ -113,23 +134,45 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
         except Exception as e:
             logger.critical(f"Critical error during plot outline generation: {e}", exc_info=True)
             print(f"\nFATAL: Error generating plot outline: {e}. Cannot continue.", file=sys.stderr)
-            return False # Indicate setup failure
+            return False 
     else:
         print("\n--- Using Existing Plot Outline ---")
         print(f"Loaded outline for: '{agent.plot_outline.get('title', 'N/A')}' (Protagonist: {agent.plot_outline.get('protagonist_name', 'N/A')})")
         logger.info(f"Using existing plot outline: '{agent.plot_outline.get('title', 'N/A')}'")
 
+
     # --- World-Building Setup ---
     logger.info("Checking for existing world-building data...")
-    # Check if world-building is default or minimal
-    is_default_world = agent.world_building.get("is_default", True) or \
-                       (len(agent.world_building.keys() - {"is_default"}) <= 1 and # e.g. only 'locations' or 'society'
-                        ("Default Location" in agent.world_building.get("locations", {}) or \
-                         "General" in agent.world_building.get("society", {})) # Simplified check
-                       )
+    world_building_data = agent.world_building
 
+    should_regenerate_world = False
+    if not world_building_data:
+        should_regenerate_world = True
+        logger.info("World-building data is empty or was not loaded. Will generate new.")
+    elif world_building_data.get("is_default") is False:
+        should_regenerate_world = False
+        logger.info("World-building file explicitly marked 'is_default: false'. Attempting to use as is.")
+    elif world_building_data.get("is_default") is True:
+        should_regenerate_world = True
+        logger.info("World-building file was previously marked as default by the system. Will regenerate.")
+    else: 
+        locations = world_building_data.get("locations", {})
+        society = world_building_data.get("society", {})
+        
+        has_only_default_location = (len(locations) == 1 and "Default Location" in locations) or not locations
+        has_only_default_society = (len(society) == 1 and ("General" in society or "General Norms" in society) ) or not society
+        
+        other_meaningful_keys = set(world_building_data.keys()) - {"locations", "society", "is_default"}
+        other_keys_are_empty_or_absent = all(not world_building_data.get(k) for k in other_meaningful_keys)
 
-    if is_default_world:
+        if has_only_default_location and has_only_default_society and other_keys_are_empty_or_absent:
+            should_regenerate_world = True
+            logger.info("World-building content (from file without 'is_default' flag) appears default or minimal. Will generate new.")
+        else:
+            should_regenerate_world = False
+            logger.info("Using existing world-building data from file (no 'is_default' flag, content appears non-default).")
+
+    if should_regenerate_world:
         print("\n--- Generating Initial World-Building Data ---")
         logger.info("World-building data appears default or minimal. Generating initial data based on plot outline.")
         try:
@@ -139,35 +182,26 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
         except Exception as e:
             logger.error(f"Error generating world building: {e}", exc_info=True)
             print(f"\nWarning: Error generating world building: {e}. Proceeding with potentially default or incomplete data.")
-            # Not returning False here, as system might still function with basic world data.
+            pass 
     else:
         print("\n--- Using Existing World-Building Data ---")
         logger.info("Using existing world-building data.")
     
-    return True # Indicate successful setup (or proceeding despite minor warnings)
+    return True 
 
 
 async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
     """Pre-populates the Knowledge Graph if it's a new novel."""
     logger = logging.getLogger(__name__)
     
-    # KG pre-population only makes sense if plot and world are non-default.
-    # The is_default flag is now handled more dynamically during save by the agent.
-    # Check for substantial content instead.
-    plot_is_substantial = agent.plot_outline.get("title") != config.DEFAULT_PLOT_OUTLINE_TITLE
-    world_is_substantial = len(agent.world_building.keys() - {"is_default"}) > 1 or \
-                           not ("Default Location" in agent.world_building.get("locations", {}))
-
-
-    if not plot_is_substantial or not world_is_substantial:
-        logger.info("Skipping KG pre-population: Plot outline or world-building appears default or lacks substantial content.")
+    if agent.plot_outline.get("is_default", False) or agent.world_building.get("is_default", False):
+        logger.info("Skipping KG pre-population: Plot outline or world-building is currently in a default state by the agent.")
         return
 
     if agent.chapter_count > 0:
         logger.info(f"Skipping KG pre-population: Novel already has {agent.chapter_count} chapters.")
         return
 
-    # Check if KG already has facts for chapter 0 (pre-population chapter)
     existing_prepop_facts = await agent.db_manager.async_query_kg(
         chapter_limit=config.KG_PREPOPULATION_CHAPTER_NUM, 
         include_provisional=True 
@@ -181,7 +215,7 @@ async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
     print("\n--- Pre-populating Knowledge Graph from Plot and World Data ---")
     logger.info("Attempting to pre-populate Knowledge Graph as it's a new novel with no chapter 0 facts.")
     try:
-        await agent._prepopulate_knowledge_graph() # Accessing protected member for this specific setup task
+        await agent._prepopulate_knowledge_graph() 
         print("Knowledge Graph pre-population step complete.")
         logger.info("Knowledge Graph pre-population successful.")
     except Exception as e:
@@ -235,28 +269,20 @@ async def run_novel_generation_async():
             if chapter_text:
                 chapters_successfully_written += 1
                 print(f"Chapter {i}: Successfully generated and saved (Length: {len(chapter_text)} chars).")
-                # Display a snippet of the generated chapter
                 snippet_lines = chapter_text.splitlines()
                 snippet = ' '.join(line.strip() for line in snippet_lines if line.strip())[:250]
                 print(f"Chapter {i} Snippet: {snippet}...")
                 logger.info(f"--- Successfully completed Chapter {i} ---")
             else:
-                # write_chapter should log its own errors. This is a fallback.
                 print(f"Chapter {i}: Failed to generate or save. Check logs for details.")
                 logger.error(f"Chapter {i} generation failed or returned no text. See previous log messages for reasons.")
-                # Decide if we should break the loop on failure. For now, try next chapter.
         except Exception as e:
             logger.critical(f"Critical error during chapter {i} writing process: {e}", exc_info=True)
             print(f"\n!!! CRITICAL ERROR during chapter {i} writing: {e} !!! Halting generation for this run.", file=sys.stderr)
-            break # Halt this run if a chapter writing process has an unhandled exception
+            break 
 
     print(f"\n--- Novel writing process finished for this run ---")
-    # agent.chapter_count should be updated within write_chapter and saved to JSON state there.
-    # For final verification, we could reload it from DB or rely on the in-memory agent state.
-    # The agent's in-memory chapter_count is updated when a chapter is successfully written.
     final_chapter_count_in_agent = agent.chapter_count
-    
-    # Optionally, reload from DB for absolute certainty for the final message
     final_chapter_count_from_db = await agent.db_manager.async_load_chapter_count()
 
     print(f"Successfully wrote {chapters_successfully_written} chapter(s) in this run.")
@@ -267,21 +293,18 @@ async def run_novel_generation_async():
 
 
 if __name__ == "__main__":
-    setup_logging() # Setup logging first
+    setup_logging() 
     if RUN_WITH_ASYNCIO_RUN:
         try:
             asyncio.run(run_novel_generation_async())
         except KeyboardInterrupt:
             logging.getLogger(__name__).warning("Novel generation process interrupted by user (KeyboardInterrupt).")
             print("\nProcess interrupted by user. Exiting.")
-        except Exception as main_err: # Catch any other unexpected errors from the async run
+        except Exception as main_err: 
             logging.getLogger(__name__).critical(f"Unhandled exception in main async execution: {main_err}", exc_info=True)
             print(f"\nFATAL UNHANDLED EXCEPTION: {main_err}. Check logs.", file=sys.stderr)
             sys.exit(1)
     else:
-        # This case is for when main.py might be imported and run_novel_generation_async()
-        # is called by an existing asyncio event loop.
-        # For direct execution, RUN_WITH_ASYNCIO_RUN = True is expected.
         logger = logging.getLogger(__name__)
         logger.warning("RUN_WITH_ASYNCIO_RUN is False. "
                        "This script expects 'run_novel_generation_async()' to be called from an existing event loop if not run directly.")

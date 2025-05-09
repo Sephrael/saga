@@ -110,43 +110,11 @@ class NovelWriterAgent:
 
         data_to_save = json.loads(json.dumps(data_dict)) # Deep copy for manipulation
 
-        # Logic to conditionally remove "is_default" flag
-        is_default_flag_value = data_to_save.get("is_default", False)
-        is_content_truly_default = False
-        if file_path == config.PLOT_OUTLINE_FILE:
-            is_content_truly_default = (
-                data_to_save.get("title") == config.DEFAULT_PLOT_OUTLINE_TITLE and
-                len(data_to_save.get("plot_points", [])) <= 5 and # Allows for default 5 plot points
-                data_to_save.get("protagonist_name") == config.DEFAULT_PROTAGONIST_NAME
-            )
-        elif file_path == config.CHARACTER_PROFILES_FILE:
-            is_content_truly_default = (
-                not data_to_save or (
-                    len(data_to_save) == 1 and config.DEFAULT_PROTAGONIST_NAME in data_to_save and
-                    data_to_save[config.DEFAULT_PROTAGONIST_NAME].get("description", "").startswith("Default:")
-                )
-            )
-        elif file_path == config.WORLD_BUILDER_FILE:
-            locations = data_to_save.get("locations", {})
-            is_content_truly_default = (
-                len(locations) <= 1 and # Allow 0 or 1 default location
-                ("Default Location" in locations if locations else True) and
-                len(data_to_save.keys()) <= 3 # "locations", "society", "is_default" or similar
-            )
-
-        if is_default_flag_value and not is_content_truly_default:
-            if "is_default" in data_to_save:
-                del data_to_save["is_default"]
-                logger.debug(f"'is_default' flag removed from {dict_name} as content is no longer default.")
-        elif not is_default_flag_value and "is_default" in data_to_save:
-             del data_to_save["is_default"] # Remove if false, it's implied
-             logger.debug(f"'is_default: false' flag removed from {dict_name}.")
-        elif is_default_flag_value and is_content_truly_default:
-            logger.debug(f"'is_default: true' retained for {dict_name} as content appears default.")
-        
-        # Always remove is_default if it's False, it's implied. Only save if True and actually default.
-        if "is_default" in data_to_save and not data_to_save["is_default"]:
-            del data_to_save["is_default"]
+        # Only save the 'is_default' key if it's explicitly True in the agent's current state.
+        # If it's False or not present in data_to_save, it means the content is considered non-default.
+        if not data_to_save.get("is_default"): # This handles if key is missing or False
+            data_to_save.pop("is_default", None)
+        # Now, data_to_save will only have "is_default": true if it was True in data_dict.
 
         try:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -253,15 +221,18 @@ Example of expected JSON structure (keys might vary slightly based on mode):
         )
         parsed_outline = await llm_interface.async_parse_llm_json_response(raw_outline_str, "plot outline generation")
 
-        is_valid = False
+        is_valid = False # Assume not valid initially
+        final_outline_data: Optional[JsonStateData] = None
+
         if parsed_outline and isinstance(parsed_outline, dict):
             plot_points = parsed_outline.get("plot_points")
-            # Check all required keys are present and non-empty strings (or list for plot_points)
+            # ... (validation logic for parsed_outline remains the same) ...
             if (all(key in parsed_outline and isinstance(parsed_outline[key], str) and parsed_outline[key].strip()
                     for key in required_keys if key != "plot_points") and
                 isinstance(plot_points, list) and len(plot_points) == 5 and
                 all(isinstance(p, str) and p.strip() for p in plot_points)):
                 is_valid = True
+                final_outline_data = parsed_outline # Use the LLM generated outline
             else:
                 missing_or_invalid = [
                     key for key in required_keys 
@@ -273,10 +244,10 @@ Example of expected JSON structure (keys might vary slightly based on mode):
                 ]
                 logger.warning(f"Generated plot outline failed validation. Missing/invalid keys: {missing_or_invalid}. Parsed: {parsed_outline}")
 
-        if is_valid and isinstance(parsed_outline, dict): # Type guard for mypy
-            self.plot_outline = parsed_outline
+        if is_valid and final_outline_data:
+            self.plot_outline = final_outline_data
             self.plot_outline.update(base_elements_for_outline)
-            # 'is_default' will be handled by _save_all_json_state based on content
+            self.plot_outline.pop("is_default", None) # Explicitly not default if successfully generated
             logger.info(f"Successfully generated plot outline: '{self.plot_outline.get('title', 'N/A')}'")
         else:
             logger.error("Failed to generate a valid plot outline after LLM call and parsing. Applying default.")
@@ -286,14 +257,15 @@ Example of expected JSON structure (keys might vary slightly based on mode):
                 "protagonist_description": f"Default protagonist: {default_protagonist_name}, a character facing challenges.",
                 "plot_points": [f"Default Plot Point {i+1}: An event occurs." for i in range(5)],
                 "character_arc": f"Default character arc: {default_protagonist_name} learns something important.",
-                "setting": base_elements_for_outline.get("setting", "A generic place."),
+                "setting": base_elements_for_outline.get("setting", "A generic place."), # Use setting from kwargs if available
                 "conflict": "Default conflict: The protagonist must overcome a significant obstacle.",
-                "is_default": True # Explicitly mark as default
+                "is_default": True # Explicitly mark as default because we generated it as such
             }
-            self.plot_outline.update(base_elements_for_outline) # Ensure genre/theme are still set
+            # Ensure base elements like genre/theme are still part of the default plot if provided
+            self.plot_outline.update({k:v for k,v in base_elements_for_outline.items() if k in ["genre", "theme"]})
         
-        self.plot_outline.setdefault('protagonist_name', default_protagonist_name) # Ensure protagonist name is always set
-        await self._save_all_json_state()
+        self.plot_outline.setdefault('protagonist_name', default_protagonist_name)
+        await self._save_all_json_state() # Save immediately after generation
         return self.plot_outline
 
     async def generate_world_building(self) -> JsonStateData:
@@ -364,27 +336,30 @@ Example Structure:
         )
         parsed_world_data = await llm_interface.async_parse_llm_json_response(raw_world_data_str, "initial world-building")
 
-        is_valid = False
+        is_valid = False # Assume not valid
+        final_world_data: Optional[JsonStateData] = None
+
         if parsed_world_data and isinstance(parsed_world_data, dict):
-            # Check for presence of at least one main category with some content
             expected_categories = ["locations", "society", "systems", "lore", "history"]
             if any(cat in parsed_world_data and isinstance(parsed_world_data[cat], dict) and parsed_world_data[cat] 
                    for cat in expected_categories):
-                self.world_building = parsed_world_data
-                # 'is_default' will be handled by _save_all_json_state
-                logger.info("Successfully generated initial world-building data.")
                 is_valid = True
+                final_world_data = parsed_world_data
             else:
                 logger.warning(f"Generated world-building lacks expected structure or content. Parsed: {parsed_world_data}")
         
-        if not is_valid:
+        if is_valid and final_world_data:
+            self.world_building = final_world_data
+            self.world_building.pop("is_default", None) # Explicitly not default
+            logger.info("Successfully generated initial world-building data.")
+        else:
             logger.error("Failed to generate valid world-building data. Applying default.")
             self.world_building = {
                 "locations": {"Default Location": {"description": "A starting point."}},
                 "society": {"General": {"description": "Basic societal norms."}},
-                "is_default": True
+                "is_default": True # Explicitly mark as default
             }
-        await self._save_all_json_state()
+        await self._save_all_json_state() # Save immediately
         return self.world_building
 
     async def _plan_chapter(self, chapter_number: int) -> Optional[List[SceneDetail]]:
