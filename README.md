@@ -2,38 +2,72 @@
 
 SAGA is an autonomous, agentic system designed for generating cohesive and coherent narrative fiction, chapter by chapter. It leverages Large Language Models (LLMs), semantic embeddings, a knowledge graph, and an iterative refinement process to produce novel-length stories.
 
-## Key Features
+***This project is currently in early development***
+## Core Narrative Generation
+*   **Autonomous Chapter-by-Chapter Writing:** Generates novel-length stories sequentially, maintaining context and flow.
+*   **Flexible Plot Outline Generation:**
+    *   **Standard Mode:** Creates a plot based on user-configured genre, theme, and setting descriptions.
+    *   **Unhinged Mode:** Generates highly creative and often paradoxical story seeds by randomizing genre, theme, setting archetypes, protagonist archetypes, and conflict types from extensive predefined lists.
+*   **Initial World-Building:** Automatically generates foundational world-building details (locations, society, systems, lore, history) based on the plot outline.
+*   **Protagonist-Focused:** Centers the narrative around a defined protagonist, tracking their arc and development.
 
-*   **Agentic Novel Writing**: A central `NovelWriterAgent` orchestrates the entire story generation process.
-*   **Chapter-by-Chapter Generation**: Builds the novel incrementally, maintaining context and consistency across chapters.
-*   **Plot & World Generation**:
-    *   Generates plot outlines, character archetypes, and world settings using LLMs.
-    *   Supports "Standard Mode" (user-defined core elements) and "Unhinged Mode" (randomly combined genre, theme, setting, etc., from extensive pre-defined lists for creative and often paradoxical stories).
-*   **LLM-Powered Core**:
-    *   Utilizes LLMs (configurable, e.g., via OpenAI-compatible API) for text generation, summarization, analysis, and JSON data extraction.
-    *   Uses embedding models (configurable, e.g., via Ollama) for semantic understanding.
-*   **Advanced Context Management**:
-    *   Retrieves semantically relevant past chapter summaries/text using embeddings.
-    *   Incorporates facts from a Knowledge Graph.
-    *   Uses structured JSON data for character profiles and world-building as context.
-    *   Provides chapter-specific plans/beats to the LLM for focused generation.
-*   **Iterative Refinement Loop**:
-    *   **Drafting**: Generates an initial chapter draft.
-    *   **Evaluation**:
-        *   **Coherence Check**: Measures semantic similarity with the previous chapter using embeddings.
-        *   **Consistency Check**: LLM-based validation against plot outline, character profiles, world-building data, and reliable (non-provisional) Knowledge Graph facts.
-        *   **Plot Arc Validation**: LLM-based check to ensure the chapter aligns with its designated plot point.
-        *   **Length Check**: Ensures draft meets minimum length requirements.
-    *   **Revision**: If evaluation flags issues, the chapter is re-written by the LLM with specific feedback. Revisions are checked for meaningful change (not too similar to the original).
-*   **Persistent State & Knowledge Management**:
-    *   **SQLite Database**: Stores chapter text, raw LLM logs, summaries, embeddings, and Knowledge Graph triples.
-    *   **JSON Files**: Manages plot outline, character profiles, and world-building data.
-    *   **Knowledge Graph (KG)**: Extracts and stores factual triples (Subject, Predicate, Object) from chapters. Used for consistency checks and contextual reasoning.
-    *   **Provisional Data Handling**: Marks data (chapter text, KG triples, JSON profile/world updates) as "provisional" if generated from a draft that failed evaluation but was proceeded with. This allows the system to be aware of potentially lower-quality information and use it cautiously (e.g., relying on non-provisional KG facts for critical checks).
-*   **Dynamic State Adaptation**: LLMs can propose modifications to existing character profiles and world-building elements based on events in the current chapter, allowing the story world to evolve.
-*   **Agentic Chapter Planning**: Before drafting, an LLM can generate a high-level plan (3-5 key scenes/beats) for the current chapter based on the overall plot, recent context, and KG facts.
-*   **Comprehensive Logging**: Detailed logging for monitoring and debugging.
-*   **Configuration**: Highly configurable through `config.py`.
+## Agentic Capabilities & Advanced Planning
+*   **Detailed Scene-Based Chapter Planning:** Before drafting, SAGA plans each chapter by generating 8-15 detailed scene descriptions. Each scene outline includes:
+    *   `scene_number`: Sequential identifier.
+    *   `summary`: Overview of events in the scene.
+    *   `characters_involved`: Key characters present.
+    *   `key_dialogue_points`: Important dialogue snippets or communication intentions.
+    *   `setting_details`: Specific location, atmosphere, and environmental elements.
+    *   `contribution`: How the scene advances the plot, subplots, or character arcs.
+*   **Plan-Driven Drafting:** The LLM uses the detailed scene-by-scene plan as a strong guide for writing the chapter text, ensuring structural integrity.
+*   **Dynamic State Adaptation:** The system can allow the LLM to propose modifications to character profiles and world-building elements based on events within a chapter, enabling organic evolution of the story world. (Configurable via `ENABLE_DYNAMIC_STATE_ADAPTATION`)
+
+## Knowledge Management & Consistency
+*   **Persistent Knowledge Graph (KG):** Utilizes an SQLite-based knowledge graph to store and query factual triples (Subject-Predicate-Object) about characters, locations, events, and relationships.
+    *   **KG Pre-population:** Extracts foundational knowledge from the initial plot outline and world-building data to populate the KG *before* Chapter 1 generation, establishing a baseline canon. (Triples added with `chapter_added = 0`)
+    *   **KG Updates from Chapters:** Extracts new facts from each generated chapter to continuously expand and update the KG.
+*   **Provisional Data Handling:**
+    *   Marks data in the database (chapters, KG triples) and JSON state files (character/world updates) as `is_provisional` if it's derived from an unrevised or flawed draft.
+    *   Allows the system to be aware of data quality, preferring non-provisional facts for critical tasks like planning and consistency checks.
+*   **JSON-Based State Management:** Maintains detailed character profiles and world-building information in structured JSON files, updated after each chapter.
+*   **Semantic Context Retrieval:** Gathers relevant context from past chapters using embeddings and plot point similarity to inform current chapter generation.
+*   **Consistency Checking:** Employs an LLM to analyze chapter drafts against the plot outline, character profiles, world-building data, reliable KG facts, and previous chapter context to identify contradictions or deviations.
+
+## Evaluation & Iterative Refinement
+*   **Multi-faceted Draft Evaluation:** Each generated chapter draft undergoes rigorous checks:
+    *   **Coherence Score:** Cosine similarity of embeddings with the previous chapter.
+    *   **Consistency Issues:** LLM-driven analysis for factual and narrative contradictions.
+    *   **Plot Arc Validation:** LLM-driven check to ensure the chapter addresses its intended plot point from the outline.
+    *   **Minimum Length:** Ensures drafts meet a minimum character count.
+*   **Automated Revision Loop:** If a draft fails evaluation, SAGA triggers an LLM-driven revision process, providing specific feedback to address the identified issues.
+*   **Revision Similarity Acceptance:** Prevents superficial revisions by rejecting revised drafts that are too similar to the original.
+
+## LLM Interaction & Customization
+*   **Flexible LLM Integration:**
+    *   Supports Ollama for local embedding models (e.g., `nomic-embed-text`).
+    *   Supports OpenAI-compatible API endpoints for generation models.
+    *   Configurable model names for both embeddings and generation.
+*   **Robust LLM Response Handling:**
+    *   Advanced cleaning of LLM outputs (removing "think" tags, boilerplate, markdown).
+    *   Intelligent JSON parsing from LLM responses, including an LLM-based correction mechanism for syntax errors.
+*   **Embedding Generation & Caching:** Generates text embeddings with an LRU cache for efficiency.
+*   **Granular Token Control:** Configurable maximum token limits for various LLM tasks (generation, planning, summarization, analysis).
+
+## Data Persistence & Output
+*   **SQLite Database:** Stores all core narrative data:
+    *   Chapter text, raw LLM logs, summaries, provisional status.
+    *   Chapter embeddings.
+    *   Knowledge Graph triples.
+*   **Structured File Output:**
+    *   Saves plot outline, character profiles, and world-building data as human-readable JSON files.
+    *   Outputs each chapter as a separate `.txt` file.
+    *   Saves raw LLM generation logs for each chapter for debugging and analysis.
+    *   Organized output directory structure.
+
+## Configuration & Logging
+*   **Comprehensive Configuration:** Most parameters are tunable via `config.py` (API keys, model names, file paths, generation limits, thresholds, feature toggles).
+*   **Detailed Logging:** Extensive logging throughout the generation process with configurable levels (DEBUG, INFO, etc.) and optional output to a log file.
+*   **Controlled Runs:** Ability to specify the number of chapters to generate per execution run.
 
 ## Architecture Overview
 

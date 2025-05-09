@@ -178,7 +178,9 @@ Based on these, generate:
 """
             base_elements_for_outline = {"genre": genre, "theme": theme, "setting": setting_description}
 
-        prompt = f"""You are a creative assistant for narrative structure.
+        prompt = f"""/no_think
+        
+        You are a creative assistant for narrative structure.
         {prompt_core_elements}
 Output ONLY the JSON object. No intro/markdown/meta-commentary.
 `plot_points` must be a JSON list of 5 strings.
@@ -473,7 +475,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         char_profiles_json = json.dumps(self._get_filtered_profiles_for_prompt(chapter_number -1), indent=2, ensure_ascii=False, default=str)
         world_building_json = json.dumps(self._get_filtered_world_for_prompt(chapter_number -1), indent=2, ensure_ascii=False, default=str)
 
-        prompt = f"""You are an expert novelist writing Chapter {chapter_number} of "{self.plot_outline.get('title', 'Untitled Novel')}".
+        prompt = f"""/no_think
+        
+        You are an expert novelist writing Chapter {chapter_number} of "{self.plot_outline.get('title', 'Untitled Novel')}".
         **Story Bible:** Genre: {self.plot_outline.get('genre', 'N/A')}, Theme: {self.plot_outline.get('theme', 'N/A')}, Protagonist: {self.plot_outline.get('protagonist_name', 'N/A')}, Arc: {self.plot_outline.get('character_arc', 'N/A')}
         **Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}
         {plan_section_for_prompt}
@@ -557,7 +561,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             plan_focus_section = f"**Original Chapter Focus (Target):**\n{plot_point_focus}\n"
             
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}).
+        prompt = f"""/no_think
+        
+        You are a skilled revising author rewriting Chapter {chapter_number} (protagonist: {protagonist_name}).
         **Critique/Reason(s) for Revision (MUST address):**\n--- FEEDBACK START ---\n{clean_reason}\n--- FEEDBACK END ---\n
         {plan_focus_section}
         **Context from Previous Chapters:**\n--- BEGIN CONTEXT ---\n{context_snippet if context_snippet else "No previous context."}\n--- END CONTEXT ---
@@ -1059,7 +1065,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         common_predicates = ["is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", "interacted_with", "travelled_to", "discovered", "acquired", "lost", "used_item", "attacked", "helped", "damaged", "repaired", "contains", "part_of", "caused_by", "leads_to", "observed", "heard", "said", "thought_about", "decided_to", "has_goal", "has_feature", "related_to", "member_of", "leader_of", "enemy_of", "ally_of", "works_for", "has_ability"]
         
-        prompt = f"""KG Engineer: Extract (Subject, Predicate, Object) triples from Ch {chapter_number} Text Snippet (protagonist: '{protagonist_name}').
+        prompt = f"""/no_think
+        
+        KG Engineer: Extract (Subject, Predicate, Object) triples from Ch {chapter_number} Text Snippet (protagonist: '{protagonist_name}').
         **Ch {chapter_number} Text Snippet:**\n--- TEXT ---\n{text_snippet}\n--- END TEXT ---\n
         **Instructions:** 1. Identify key entities (normalize names). 2. Use suggested predicates or concise alternatives. 3. Extract `["Subject", "predicate", "Object"]` (all non-empty strings). 4. Focus ONLY on info from THIS text. 5. Prioritize state changes & key events. 6. **CRITICAL OUTPUT:** ONLY JSON list of lists. `[]` if no facts. 7. **NO extra text/markdown.** Start `[` end `]`.
         **Suggested Predicates:** {', '.join(common_predicates)}
@@ -1128,7 +1136,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         novel_title = self.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE)
         common_predicates = ["is_a", "has_title", "has_protagonist", "has_genre", "has_theme", "has_setting_description", "has_conflict_summary", "has_character_arc", "has_description", "has_trait", "related_to", "located_in", "has_goal", "part_of", "member_of", "governed_by", "known_for", "primary_setting_is"]
 
-        prompt = f"""KG Engineer: Extract foundational (Subject, Predicate, Object) triples from summarized Plot & World data for novel '{novel_title}' (protagonist: '{protagonist_name}').
+        prompt = f"""/no_think
+        
+        KG Engineer: Extract foundational (Subject, Predicate, Object) triples from summarized Plot & World data for novel '{novel_title}' (protagonist: '{protagonist_name}').
         **Input JSON Data (Summarized Plot & World Highlights):**
         ```json
         {combined_data_json}

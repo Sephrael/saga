@@ -39,9 +39,9 @@ EMBEDDING_MODEL: str = "nomic-embed-text:latest"
 # Largest model for most critical/creative tasks
 LARGE_MODEL: str = "Qwen3-30B-A3B" # For drafting, revision, detailed planning
 # Medium model for analysis, structured generation, less critical tasks
-MEDIUM_MODEL: str = "Qwen3-8B" # For KG extraction, initial setup, consistency, JSON updates
+MEDIUM_MODEL: str = "Qwen3-30B-A3B" # For KG extraction, initial setup, consistency, JSON updates
 # Smallest model for very simple, fast tasks
-SUMMARIZATION_MODEL: str = "Qwen3-4B" # For chapter summaries
+SUMMARIZATION_MODEL: str = "Qwen3-30B-A3B" # For chapter summaries
 
 # Define main model for backward compatibility or general use (points to large)
 MAIN_GENERATION_MODEL: str = LARGE_MODEL 
@@ -79,13 +79,13 @@ os.makedirs(os.path.join(OUTPUT_DIR, "debug_outputs"), exist_ok=True)
 # Maximum number of characters to include in the context prompt for the LLM
 MAX_CONTEXT_LENGTH: int = 64000 # Be mindful of model context window limits
 # Default maximum number of tokens the LLM should generate in a response (can be overridden)
-MAX_GENERATION_TOKENS: int = 10000 # General fallback; specific tasks might need more or less
+MAX_GENERATION_TOKENS: int = 30000 # General fallback; specific tasks might need more or less
 # Maximum number of characters from a chapter to use for knowledge update prompts (character/world analysis)
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 8000
 # Number of most relevant past chapters to retrieve for semantic context generation
 CONTEXT_CHAPTER_COUNT: int = 5
 # Number of chapters to attempt writing in a single execution run
-CHAPTERS_PER_RUN: int = 1 # Reduced for testing efficiency
+CHAPTERS_PER_RUN: int = 3 # Reduced for testing efficiency
 
 
 # --- Agentic Planning ---
