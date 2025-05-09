@@ -243,7 +243,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
             self._save_json_state()
             return
 
-        prompt = f"""You are a world-building assistant. Generate foundational elements based on this novel concept. Output MUST be a single, valid JSON object.
+        prompt = f"""/no_think
+        
+        You are a world-building assistant. Generate foundational elements based on this novel concept. Output MUST be a single, valid JSON object.
         Novel Concept:
         Title: {self.plot_outline.get('title', 'Untitled')}
         Genre: {self.plot_outline.get('genre', 'undefined')}
@@ -315,7 +317,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         if current_status: kg_facts.append(f"- {protagonist_name}'s current status (reliable KG): {current_status}.")
         kg_context_section = "**Relevant Reliable KG Facts (up to prev chapter/pre-novel):**\n" + "\n".join(kg_facts) + "\n" if kg_facts else ""
 
-        prompt = f"""You are a master plotter outlining **8-15 detailed scenes** for Chapter {chapter_number}.
+        prompt = f"""/no_think
+        
+        You are a master plotter outlining **8-15 detailed scenes** for Chapter {chapter_number}.
         **Novel Concept:** Title: {self.plot_outline.get('title', 'Untitled')}, Genre: {self.plot_outline.get('genre', 'N/A')}, Theme: {self.plot_outline.get('theme', 'N/A')}, Protagonist: {protagonist_name}, Arc: {self.plot_outline.get('character_arc', 'N/A')}
         **Mandatory Focus for THIS Chapter (Plot Point {plot_point_index + 1}):** {plot_point_focus}
         **Recent Context:** {context_summary if context_summary else "This is the first chapter or no prior summary."}
@@ -329,7 +333,7 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         ```json
         {{ "scene_number": 1, "summary": "Protagonist finds cryptic message.", "characters_involved": ["{protagonist_name}"], "key_dialogue_points": ["'What is this?'"], "setting_details": "Dusty attic.", "contribution": "Inciting incident for chapter."}}
         ```
-        Output JSON list `[...]` only. /no_think
+        Output JSON list `[...]` only.
         [
         """
         logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number}...")
@@ -680,7 +684,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
     def _summarize_chapter(self, chapter_text: Optional[str], chapter_number: int) -> Optional[str]:
         if not chapter_text or len(chapter_text) < 50: return None
         snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE] # Snippet size for summary can be smaller
-        prompt = f"""Summarize Chapter {chapter_number} (1-3 sentences), crucial plot advancements, character decisions, or revelations. Be succinct.
+        prompt = f"""/no_think
+        
+        Summarize Chapter {chapter_number} (1-3 sentences), crucial plot advancements, character decisions, or revelations. Be succinct.
         Chapter Text Snippet:\n--- BEGIN TEXT ---\n{snippet}\n--- END TEXT ---\nOutput ONLY summary text.
         """
         summary_raw = llm_interface.call_llm(
@@ -714,7 +720,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         char_profiles_for_prompt = self._get_filtered_profiles_for_prompt(kg_chapter_limit)
         world_building_for_prompt = self._get_filtered_world_for_prompt(kg_chapter_limit)
 
-        prompt = f"""Continuity Editor: Analyze Chapter {chapter_number} Draft Snippet.
+        prompt = f"""/no_think
+        
+        Continuity Editor: Analyze Chapter {chapter_number} Draft Snippet.
         Compare against: Plot Outline, Character Profiles (canon, note provisional), World Building (canon, note provisional), {kg_check_results_text} (crucial established facts), Previous Context (flow), Draft's internal consistency.
         List ONLY specific, objective contradictions/deviations. Prioritize facts from Plot, Profiles, World, KG. If NO issues, respond ONLY: None
         **Plot Outline:** ```json\n{json.dumps(self.plot_outline, indent=2, ensure_ascii=False, default=str)}\n```
@@ -746,7 +754,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         if not validation_text: return None
             
         protagonist_name = self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        prompt = f"""Story Analyst: Does Chapter {chapter_number} Text (protagonist: {protagonist_name}) address its Intended Plot Point?
+        prompt = f"""/no_think
+        
+        Story Analyst: Does Chapter {chapter_number} Text (protagonist: {protagonist_name}) address its Intended Plot Point?
         **Intended Plot Point ({plot_point_index + 1} for Ch {chapter_number}):** "{plot_point_focus}"
         **Chapter {chapter_number} Text (Summary/Snippet):** "{validation_text}"
         **Evaluation:** Does Chapter Text align with Intended Plot Point?
@@ -805,7 +815,9 @@ Example (keys vary by mode): {{ "title": "string", ... }}
         current_profiles_for_prompt = self._get_filtered_profiles_for_prompt(chapter_number -1)
         current_world_for_prompt = self._get_filtered_world_for_prompt(chapter_number -1)
 
-        prompt = f"""You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles AND world-building details.
+        prompt = f"""/no_think
+        
+        You are a literary analyst. Analyze Chapter {chapter_number} snippet (protagonist: {protagonist_name}) for updates to character profiles AND world-building details.
         Output MUST be a single, valid JSON object with two top-level keys: "character_updates" and "world_building_updates".
 
         **Chapter Text Snippet:**\n--- BEGIN TEXT ---\n{text_snippet}...\n--- END TEXT ---\n
