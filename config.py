@@ -20,58 +20,69 @@ Copyright 2025 Dennis Lewis
 """
 
 import os
-import numpy as np
-import logging # Import logging to use its constants like INFO
-from typing import Optional, Type, List
+import logging
+from typing import Optional, List
+import numpy as np # Added for np.dtype usage
 
 # --- API and Model Configuration ---
-OLLAMA_EMBED_URL: str = "http://192.168.64.1:11434"
-OPENAI_API_BASE: str = "http://192.168.64.1:8080/v1"
-OPENAI_API_KEY: str = "nope"
-EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+OLLAMA_EMBED_URL: str = os.getenv("OLLAMA_EMBED_URL", "http://192.168.64.1:11434")
+OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "http://192.168.64.1:8080/v1")
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
+EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
-LARGE_MODEL: str = "Qwen3-30B-A3B" 
-MEDIUM_MODEL: str = "Qwen3-30B-A3B" 
-SUMMARIZATION_MODEL: str = "Qwen3-30B-A3B" 
-MAIN_GENERATION_MODEL: str = LARGE_MODEL 
+# Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
+
+LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
+MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
+SUMMARIZATION_MODEL: str = os.getenv("SUMMARIZATION_MODEL", MEDIUM_MODEL_DEFAULT)
+
+MAIN_GENERATION_MODEL: str = LARGE_MODEL
 JSON_CORRECTION_MODEL: str = MEDIUM_MODEL
 CONSISTENCY_CHECK_MODEL: str = MEDIUM_MODEL
 KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
 INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
-PLANNING_MODEL: str = LARGE_MODEL 
+PLANNING_MODEL: str = LARGE_MODEL
 DRAFTING_MODEL: str = LARGE_MODEL
 REVISION_MODEL: str = LARGE_MODEL
 
 
 # --- Output and File Paths ---
-OUTPUT_DIR: str = "novel_output"
-DATABASE_FILE: str = os.path.join(OUTPUT_DIR, "novel_data.db")
-PLOT_OUTLINE_FILE: str = os.path.join(OUTPUT_DIR, "plot_outline.json")
-CHARACTER_PROFILES_FILE: str = os.path.join(OUTPUT_DIR, "character_profiles.json")
-WORLD_BUILDER_FILE: str = os.path.join(OUTPUT_DIR, "world_building.json")
+BASE_OUTPUT_DIR: str = "novel_output"
+DATABASE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "novel_data.db")
+PLOT_OUTLINE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "plot_outline.json")
+CHARACTER_PROFILES_FILE: str = os.path.join(BASE_OUTPUT_DIR, "character_profiles.json")
+WORLD_BUILDER_FILE: str = os.path.join(BASE_OUTPUT_DIR, "world_building.json")
+CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
+CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
+DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(os.path.join(OUTPUT_DIR, "chapters"), exist_ok=True)
-os.makedirs(os.path.join(OUTPUT_DIR, "chapter_logs"), exist_ok=True)
-os.makedirs(os.path.join(OUTPUT_DIR, "debug_outputs"), exist_ok=True)
+# Ensure output directories exist
+os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+os.makedirs(CHAPTERS_DIR, exist_ok=True)
+os.makedirs(CHAPTER_LOGS_DIR, exist_ok=True)
+os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 64000 
-MAX_GENERATION_TOKENS: int = 30000 
-KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 8000
-CONTEXT_CHAPTER_COUNT: int = 5
-CHAPTERS_PER_RUN: int = 3 
+MAX_CONTEXT_LENGTH: int = 40960
+MAX_GENERATION_TOKENS: int = 32768
+KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Used for text snippets for KG updates, summaries
+CONTEXT_CHAPTER_COUNT: int = 5 # Max number of similar past chapters for context
+CHAPTERS_PER_RUN: int = 3 # Number of chapters to generate in a single execution
 
 
 # --- Caching ---
-SUMMARY_CACHE_SIZE: int = 32 # Max summaries to cache (LRU based on chapter text snippet)
-KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # Max KG triple LLM calls to cache
+# LRU cache sizes for LLM/Embedding calls
+EMBEDDING_CACHE_SIZE: int = 128
+SUMMARY_CACHE_SIZE: int = 32
+KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
 
 
 # --- Agentic Planning ---
-ENABLE_AGENTIC_PLANNING: bool = True 
-MAX_PLANNING_TOKENS: int = 16000 
+ENABLE_AGENTIC_PLANNING: bool = True
+MAX_PLANNING_TOKENS: int = 32768
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 100
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 150
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -81,35 +92,47 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-REVISION_COHERENCE_THRESHOLD: float = 0.65
-REVISION_CONSISTENCY_TRIGGER: bool = True
-PLOT_ARC_VALIDATION_TRIGGER: bool = True
-REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 
-MAX_SUMMARY_TOKENS: int = 1500
-MAX_CONSISTENCY_TOKENS: int = 4000
-MAX_PLOT_VALIDATION_TOKENS: int = 1500
-MAX_KG_TRIPLE_TOKENS: int = 8000 
-MAX_PREPOP_KG_TOKENS: int = 16000 
+REVISION_COHERENCE_THRESHOLD: float = 0.65 # Cosine similarity threshold with previous chapter
+REVISION_CONSISTENCY_TRIGGER: bool = True # Whether to run LLM-based consistency check
+PLOT_ARC_VALIDATION_TRIGGER: bool = True # Whether to run LLM-based plot arc validation
+REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 # If revised draft is this similar to original, reject revision
+MAX_SUMMARY_TOKENS: int = 32768
+MAX_CONSISTENCY_TOKENS: int = 32768
+MAX_PLOT_VALIDATION_TOKENS: int = 32768
+MAX_KG_TRIPLE_TOKENS: int = 32768
+MAX_PREPOP_KG_TOKENS: int = 32768 # For initial KG population from plot/world
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 4000 
-ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
-KG_PREPOPULATION_CHAPTER_NUM: int = 0 
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 4096 # Minimum character length for a chapter draft
+ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to JSON state
+KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number assigned to pre-populated KG facts
 
+
+# --- Embedding Configuration ---
 EXPECTED_EMBEDDING_DIM: int = 768
-EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32) 
-EMBEDDING_CACHE_SIZE: int = 128
+EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32)
 
-LOG_LEVEL: str = "INFO"
+
+# --- Logging ---
+LOG_LEVEL_STR: str = os.getenv("LOG_LEVEL", "INFO").upper()
+# Ensure LOG_LEVEL is a valid logging level integer
+LOG_LEVEL: int = getattr(logging, LOG_LEVEL_STR, logging.INFO)
 LOG_FORMAT: str = '%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s'
-LOG_FILE: Optional[str] = os.path.join(OUTPUT_DIR, "saga_run.log")
+LOG_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
+LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
-UNHINGED_PLOT_MODE: bool = True 
-CONFIGURED_GENRE: str = "hard science fiction"
+
+# --- Novel Configuration ---
+UNHINGED_PLOT_MODE: bool = False # If true, uses random genre/theme/etc.
+CONFIGURED_GENRE: str = "techno thriller"
 CONFIGURED_THEME: str = "the nature of consciousness and isolation"
-CONFIGURED_SETTING_DESCRIPTION: str = "A derelict deep-space research vessel adrift in the Kuiper Belt, with remnants of a long-dead human crew and a decaying technological infrastructure."
+CONFIGURED_SETTING_DESCRIPTION: str = (
+    "A derelict deep-space research vessel adrift in the Kuiper Belt, "
+    "with remnants of a long-dead human crew and a decaying technological infrastructure."
+)
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 
+# --- Unhinged Mode Data (Consider moving to separate JSON files if they grow larger) ---
 UNHINGED_GENRES: List[str] = [
     "hard science fiction", "soft science fiction", "space opera", "military science fiction", "cyberpunk",
     "post-cyberpunk", "biopunk", "nanopunk", "solarpunk", "dieselpunk", "atompunk", "cassette futurism",
