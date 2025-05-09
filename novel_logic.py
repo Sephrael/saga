@@ -1780,12 +1780,12 @@ JSON Output Only:
     async def _prepopulate_knowledge_graph(self):
         """Pre-populates the Knowledge Graph from the initial plot outline and world-building data."""
         logger.info("Starting Knowledge Graph pre-population from plot and world data...")
-        if not self.plot_outline or self.plot_outline.get("is_default", True):
-            logger.warning("Skipping KG pre-population: Plot outline is missing or default.")
-            return
-        if not self.world_building or self.world_building.get("is_default", True):
-            logger.warning("Skipping KG pre-population: World building data is missing or default.")
-            return
+        # if not self.plot_outline or self.plot_outline.get("is_default", True):
+            # logger.warning("Skipping KG pre-population: Plot outline is missing or default.")
+            # return
+        # if not self.world_building or self.world_building.get("is_default", True):
+            # logger.warning("Skipping KG pre-population: World building data is missing or default.")
+            # return
 
         # Create a pruned/summarized version of plot and world for the prompt
         pruned_plot = {
