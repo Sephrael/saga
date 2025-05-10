@@ -27,8 +27,9 @@ import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 
 import config
+import llm_interface # <--- ADD THIS LINE
 from database_manager import DatabaseManager
-from type import JsonStateData, EvaluationResult, SceneDetail
+from types import JsonStateData, EvaluationResult, SceneDetail
 
 # Import a BUNCH of functions from the new modules
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
