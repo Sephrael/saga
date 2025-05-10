@@ -27,7 +27,7 @@ import random
 import asyncio
 from typing import Dict, Any # Added for generation_params typing
 
-from novel_logic import NovelWriterAgent
+from novel_agent import NovelWriterAgent # MODIFIED: Import from novel_agent.py
 import config 
 
 # --- Configuration for Execution Mode ---
@@ -123,7 +123,7 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
             })
 
         try:
-            outline = await agent.generate_plot_outline(
+            outline = await agent.generate_plot_outline( # This method still exists on agent
                 default_protagonist_name=config.DEFAULT_PROTAGONIST_NAME,
                 unhinged_mode=config.UNHINGED_PLOT_MODE,
                 **generation_params
@@ -176,7 +176,7 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
         print("\n--- Generating Initial World-Building Data ---")
         logger.info("World-building data appears default or minimal. Generating initial data based on plot outline.")
         try:
-            await agent.generate_world_building()
+            await agent.generate_world_building() # This method still exists on agent
             print("Generated/Refreshed initial world-building data.")
             logger.info("Initial world-building data generation complete.")
         except Exception as e:
@@ -215,7 +215,7 @@ async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
     print("\n--- Pre-populating Knowledge Graph from Plot and World Data ---")
     logger.info("Attempting to pre-populate Knowledge Graph as it's a new novel with no chapter 0 facts.")
     try:
-        await agent._prepopulate_knowledge_graph() 
+        await agent._prepopulate_knowledge_graph() # This method still exists on agent
         print("Knowledge Graph pre-population step complete.")
         logger.info("Knowledge Graph pre-population successful.")
     except Exception as e:
@@ -265,7 +265,7 @@ async def run_novel_generation_async():
         print(f"\n--- Attempting Chapter {i} ---")
         logger.info(f"--- Starting Generation for Chapter {i} ---")
         try:
-            chapter_text = await agent.write_chapter(i)
+            chapter_text = await agent.write_chapter(i) # This method still exists on agent
             if chapter_text:
                 chapters_successfully_written += 1
                 print(f"Chapter {i}: Successfully generated and saved (Length: {len(chapter_text)} chars).")

@@ -31,8 +31,8 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
+LARGE_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -102,7 +102,7 @@ MAX_PLOT_VALIDATION_TOKENS: int = 32768
 MAX_KG_TRIPLE_TOKENS: int = 32768
 MAX_PREPOP_KG_TOKENS: int = 32768 # For initial KG population from plot/world
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 16384 # Minimum character length for a chapter draft
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 10240 # Minimum character length for a chapter draft
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to JSON state
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number assigned to pre-populated KG facts
 
@@ -123,12 +123,9 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 # --- Novel Configuration ---
 UNHINGED_PLOT_MODE: bool = False # If true, uses random genre/theme/etc.
-CONFIGURED_GENRE: str = "survival horror"
-CONFIGURED_THEME: str = "the nature of consciousness and isolation"
-CONFIGURED_SETTING_DESCRIPTION: str = (
-    "A derelict deep-space research vessel adrift in the Kuiper Belt, "
-    "with remnants of a long-dead human crew and a decaying technological infrastructure."
-)
+CONFIGURED_GENRE: str = "body horror"
+CONFIGURED_THEME: str = "the nature of dreams"
+CONFIGURED_SETTING_DESCRIPTION: str = "a colony on the edge of a black hole where time dilation creates generational disparities"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 
