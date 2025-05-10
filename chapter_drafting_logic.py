@@ -8,7 +8,7 @@ from typing import Tuple, Optional, List
 
 import config
 import llm_interface
-from types import SceneDetail # Assuming this is in types.py
+from type import SceneDetail # Assuming this is in type.py
 from prompt_data_getters import get_filtered_character_profiles_for_prompt, get_filtered_world_data_for_prompt
 
 logger = logging.getLogger(__name__)

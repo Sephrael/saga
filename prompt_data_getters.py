@@ -9,7 +9,7 @@ import re
 from typing import Dict, List, Optional
 
 import config
-from types import JsonStateData # Assuming this is in types.py
+from type import JsonStateData # Assuming this is in type.py
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
         if current_chapter_num_for_filtering is not None and current_chapter_num_for_filtering > 0 \
         else config.KG_PREPOPULATION_CHAPTER_NUM
 
-    def get_provisional_note_for_category(category_dict: Dict[str, Any], chapter_limit: int) -> str:
+    def get_provisional_note_for_category(category_dict: Dict[str, any], chapter_limit: int) -> str:
         if any(key.startswith("source_quality_chapter_") and 
                int(key.split('_')[-1]) <= chapter_limit and
                category_dict.get(key) == "provisional_from_unrevised_draft"

@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 import config
 import llm_interface
-from types import JsonStateData # Assuming novel_agent.py defines this or it's in types.py
+from type import JsonStateData # Assuming novel_agent.py defines this or it's in type.py
 
 logger = logging.getLogger(__name__)
 

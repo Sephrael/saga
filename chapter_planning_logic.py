@@ -9,7 +9,7 @@ from typing import List, Optional
 
 import config
 import llm_interface
-from types import SceneDetail # Assuming this is in types.py
+from type import SceneDetail # Assuming this is in type.py
 # Import prompt data getters
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,

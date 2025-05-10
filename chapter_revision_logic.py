@@ -10,7 +10,7 @@ from typing import Tuple, Optional, List
 import config
 import llm_interface
 import utils # For numpy_cosine_similarity
-from types import SceneDetail # Assuming this is in types.py
+from type import SceneDetail # Assuming this is in type.py
 
 logger = logging.getLogger(__name__)
 

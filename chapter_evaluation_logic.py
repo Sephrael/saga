@@ -11,7 +11,7 @@ from typing import Optional
 import config
 import llm_interface
 import utils # For numpy_cosine_similarity
-from types import EvaluationResult # Assuming this is in types.py
+from type import EvaluationResult # Assuming this is in type.py
 # Import knowledge management logic for summarization, used in plot arc validation
 from knowledge_management_logic import summarize_chapter_text_logic
 # Import prompt data getters

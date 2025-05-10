@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import config
 from database_manager import DatabaseManager
-from types import JsonStateData, EvaluationResult, SceneDetail
+from type import JsonStateData, EvaluationResult, SceneDetail
 
 # Import a BUNCH of functions from the new modules
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic

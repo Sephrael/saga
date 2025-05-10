@@ -1,4 +1,4 @@
-# types.py
+# type.py
 """
 Common type hints used across the Saga Novel Generation system.
 """
