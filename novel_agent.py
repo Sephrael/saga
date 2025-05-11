@@ -27,8 +27,9 @@ import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 
 import config
-import llm_interface # <--- ADD THIS LINE
+import llm_interface
 from database_manager import DatabaseManager
+from state_manager import state_manager
 from type import JsonStateData, EvaluationResult, SceneDetail
 
 # Import a BUNCH of functions from the new modules
@@ -88,9 +89,33 @@ class NovelWriterAgent:
         self.chapter_count = self.db_manager.load_chapter_count() # Sync DB call
         logger.info(f"Loaded chapter count from database: {self.chapter_count}")
 
-        self.plot_outline = self._load_json_file(config.PLOT_OUTLINE_FILE, "plot_outline")
-        self.character_profiles = self._load_json_file(config.CHARACTER_PROFILES_FILE, "character_profiles")
-        self.world_building = self._load_json_file(config.WORLD_BUILDER_FILE, "world_building")
+        # Try to load from ORM first, fall back to JSON files if needed
+        self.plot_outline = state_manager.get_plot_outline()
+        if not self.plot_outline:
+            logger.info("Plot outline not found in ORM database. Trying JSON file.")
+            self.plot_outline = self._load_json_file(config.PLOT_OUTLINE_FILE, "plot_outline")
+            if self.plot_outline:
+                # If we loaded from JSON, save to ORM for future use
+                state_manager.save_plot_outline(self.plot_outline)
+                logger.info("Saved plot outline from JSON to ORM database.")
+
+        self.character_profiles = state_manager.get_character_profiles()
+        if not self.character_profiles:
+            logger.info("Character profiles not found in ORM database. Trying JSON file.")
+            self.character_profiles = self._load_json_file(config.CHARACTER_PROFILES_FILE, "character_profiles")
+            if self.character_profiles:
+                # If we loaded from JSON, save to ORM for future use
+                state_manager.save_character_profiles(self.character_profiles)
+                logger.info("Saved character profiles from JSON to ORM database.")
+
+        self.world_building = state_manager.get_world_building()
+        if not self.world_building:
+            logger.info("World building not found in ORM database. Trying JSON file.")
+            self.world_building = self._load_json_file(config.WORLD_BUILDER_FILE, "world_building")
+            if self.world_building:
+                # If we loaded from JSON, save to ORM for future use
+                state_manager.save_world_building(self.world_building)
+                logger.info("Saved world building from JSON to ORM database.")
         
         logger.info("Finished loading initial state.")
 
@@ -116,20 +141,39 @@ class NovelWriterAgent:
             return False
 
     async def _save_all_json_state(self):
-        """Asynchronously saves all JSON state files (plot, characters, world)."""
-        logger.debug("Saving agent JSON state (plot, characters, world)...")
+        """Asynchronously saves all state data (plot, characters, world) to both ORM and JSON files."""
+        logger.debug("Saving agent state (plot, characters, world)...")
         loop = asyncio.get_event_loop()
         
-        tasks = [
+        # Save to ORM database
+        orm_tasks = [
+            loop.run_in_executor(None, state_manager.save_plot_outline, self.plot_outline),
+            loop.run_in_executor(None, state_manager.save_character_profiles, self.character_profiles),
+            loop.run_in_executor(None, state_manager.save_world_building, self.world_building)
+        ]
+        
+        # Also save to JSON files for backward compatibility
+        json_tasks = [
             loop.run_in_executor(None, self._save_single_json_state_sync, config.PLOT_OUTLINE_FILE, self.plot_outline, "plot_outline"),
             loop.run_in_executor(None, self._save_single_json_state_sync, config.CHARACTER_PROFILES_FILE, self.character_profiles, "character_profiles"),
             loop.run_in_executor(None, self._save_single_json_state_sync, config.WORLD_BUILDER_FILE, self.world_building, "world_building"),
         ]
-        results = await asyncio.gather(*tasks)
-        saved_count = sum(1 for r in results if r) 
+        
+        # Run all tasks concurrently
+        all_tasks = orm_tasks + json_tasks
+        results = await asyncio.gather(*all_tasks)
+        
+        # Count successful saves (first half of results are ORM, second half are JSON)
+        orm_saved_count = sum(1 for r in results[:3] if r)
+        json_saved_count = sum(1 for r in results[3:] if r)
 
-        if saved_count > 0:
-            logger.info(f"JSON state saved for {saved_count} file(s).")
+        if orm_saved_count > 0:
+            logger.info(f"State saved to ORM database for {orm_saved_count} object(s).")
+        else:
+            logger.warning("No state objects were saved to ORM database.")
+            
+        if json_saved_count > 0:
+            logger.info(f"State saved to JSON files for {json_saved_count} file(s).")
         else:
             logger.info("No JSON state files were updated/saved.")
 
