@@ -67,7 +67,7 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
     """Creates a concise JSON string of key world states for prompts.
     'agent' is an instance of NovelWriterAgent.
     """
-    snippet_data: Dict[str, Any] = {}
+    snippet_data: Dict[str, any] = {}
     
     effective_filter_chapter = (current_chapter_num_for_filtering - 1) \
         if current_chapter_num_for_filtering is not None and current_chapter_num_for_filtering > 0 \
