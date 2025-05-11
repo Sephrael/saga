@@ -56,8 +56,8 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
-LARGE_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -160,9 +160,9 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 # --- Novel Configuration ---
 UNHINGED_PLOT_MODE: bool = False # If true, uses random genre/theme/etc.
-CONFIGURED_GENRE: str = "body horror"
-CONFIGURED_THEME: str = "the nature of dreams"
-CONFIGURED_SETTING_DESCRIPTION: str = "a colony on the edge of a black hole where time dilation creates generational disparities"
+CONFIGURED_GENRE: str = "dystopian horror"
+CONFIGURED_THEME: str = "the cost of power"
+CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 
