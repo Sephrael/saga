@@ -56,8 +56,8 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
+LARGE_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -103,7 +103,7 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 40960
+MAX_CONTEXT_LENGTH: int = 64000
 MAX_GENERATION_TOKENS: int = 32768
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Used for text snippets for KG updates, summaries
 CONTEXT_CHAPTER_COUNT: int = 5 # Max number of similar past chapters for context

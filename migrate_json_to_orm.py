@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to migrate data from JSON files to the ORM database.
-This script uses the migrate_from_json method in the StateManager class
+This script uses the migrate_from_json method in the state_manager class
 to migrate the data from JSON files to the ORM database.
 
 Usage:

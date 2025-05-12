@@ -4,7 +4,7 @@ Handles the evaluation of chapter drafts for consistency, plot arc alignment, et
 for the SAGA system.
 """
 import logging
-from state_manager import StateManager
+import json
 import asyncio
 from typing import Optional
 
@@ -15,7 +15,7 @@ from type import EvaluationResult # Assuming this is in type.py
 # Import knowledge management logic for summarization, used in plot arc validation
 from knowledge_management_logic import summarize_chapter_text_logic
 # Import prompt data getters
-from saga.state_manager import StateManager
+from state_manager import state_manager
 
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,8 @@ async def check_draft_consistency_logic(agent, chapter_draft_text: Optional[str]
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     kg_chapter_limit = chapter_number - 1 
 
-    kg_loc_task = agent.db_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
-    kg_status_task = agent.db_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
+    kg_loc_task = state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
+    kg_status_task = state_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
     
     kg_location, kg_status = await asyncio.gather(kg_loc_task, kg_status_task)
     
@@ -46,8 +46,8 @@ async def check_draft_consistency_logic(agent, chapter_draft_text: Optional[str]
         
     kg_check_results_text = "**Key Reliable KG Facts (from pre-novel & previous chapters):**\n" + "\n".join(kg_facts_for_prompt) + "\n" if kg_facts_for_prompt else "**Key Reliable KG Facts:** None available or protagonist not tracked.\n"
 
-    char_profiles_for_prompt = StateManager.serialize(state_manager.get_filtered_character_profiles_for_prompt(agent, kg_chapter_limit))
-    world_building_for_prompt = StateManager.serialize(state_manager.get_filtered_world_data_for_prompt(agent, kg_chapter_limit))
+    char_profiles_for_prompt = state_manager.get_filtered_character_profiles_for_prompt(agent, kg_chapter_limit)
+    world_building_for_prompt = state_manager.get_filtered_world_data_for_prompt(agent, kg_chapter_limit)
 
     prompt = f"""/no_think
 You are a Continuity Editor. Your task is to analyze the provided Draft Snippet for Chapter {chapter_number} for inconsistencies.
@@ -64,15 +64,15 @@ Prioritize clear contradictions with facts from the Plot Outline, Character Prof
 
 **Plot Outline Summary:**
 ```json
-{StateManager.serialize(agent.plot_outline)}
+{json.dumps(agent.plot_outline, indent=2, ensure_ascii=False, default=str, sort_keys=True)}
 ```
 **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**
 ```json
-{StateManager.serialize(char_profiles_for_prompt)}
+{json.dumps(char_profiles_for_prompt, indent=2, ensure_ascii=False, default=str, sort_keys=True)}
 ```
 **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**
 ```json
-{StateManager.serialize(world_building_for_prompt)}
+{json.dumps(world_building_for_prompt, indent=2, ensure_ascii=False, default=str, sort_keys=True)}
 ```
 {kg_check_results_text}
 **Previous Context (Snippet from prior chapters):**
@@ -191,7 +191,7 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
     current_embedding_task = llm_interface.async_get_embedding(draft_text)
     
     if chapter_number > 1:
-        prev_embedding = await agent.db_manager.async_get_embedding_from_db(chapter_number - 1)
+        prev_embedding = await state_manager.async_get_embedding_from_db(chapter_number - 1)
         current_embedding = await current_embedding_task 
 
         if current_embedding is not None and prev_embedding is not None:

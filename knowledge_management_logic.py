@@ -537,7 +537,7 @@ async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str],
             
             if subj and pred and obj:
                 kg_add_tasks.append(
-                    agent.db_manager.async_add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft)
+                    state_manager.async_add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft)
                 )
                 added_count += 1
             else:
@@ -652,7 +652,7 @@ JSON Output Only:
             obj  = str(triple_any[2]).strip() if triple_any[2] is not None else ""
             if subj and pred and obj: 
                 kg_add_tasks.append(
-                    agent.db_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False) 
+                    state_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False) 
                 )
                 added_count += 1
             else:

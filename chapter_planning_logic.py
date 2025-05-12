@@ -1,7 +1,4 @@
 # chapter_planning_logic.py
-"""
-Handles detailed chapter scene planning for the SAGA system.
-"""
 import logging
 import json
 import asyncio
@@ -9,22 +6,18 @@ from typing import List, Optional
 
 import config
 import llm_interface
-from type import SceneDetail # Assuming this is in type.py
-# Import prompt data getters
+from type import SceneDetail
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
     get_world_state_snippet_for_prompt
 )
-
+from state_manager import state_manager # Import the global instance
 
 logger = logging.getLogger(__name__)
 
 async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List[SceneDetail]]:
-    """Asynchronously plans a chapter with detailed scenes if agentic planning is enabled.
-    'agent' is an instance of NovelWriterAgent.
-    """
     if not config.ENABLE_AGENTIC_PLANNING:
-        logger.info(f"Agentic planning disabled by configuration. Skipping detailed planning for Chapter {chapter_number}.")
+        logger.info(f"Agentic planning disabled. Skipping detailed planning for Chapter {chapter_number}.")
         return None 
 
     logger.info(f"Planning Chapter {chapter_number} with detailed scenes...")
@@ -35,7 +28,8 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
 
     context_summary = ""
     if chapter_number > 1:
-        prev_chap_data = await agent.db_manager.async_get_chapter_data_from_db(chapter_number - 1)
+        # Use state_manager for DB access
+        prev_chap_data = await state_manager.async_get_chapter_data_from_db(chapter_number - 1)
         if prev_chap_data:
             prev_summary = prev_chap_data.get('summary')
             prev_is_provisional = prev_chap_data.get('is_provisional', False)
@@ -43,7 +37,7 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
             if prev_summary: 
                 context_summary += f"{summary_prefix}({chapter_number - 1}):\n{prev_summary[:1000].strip()}...\n"
             else: 
-                prev_text = prev_chap_data.get('text', '')
+                prev_text = prev_chap_data.get('text', '') # raw_text might be better if 'text' is cleaned
                 text_prefix = "[Provisional Text Snippet from Prev Ch] " if prev_is_provisional and prev_text else "[Text Snippet from Prev Ch] "
                 if prev_text: 
                     context_summary += f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
@@ -52,8 +46,9 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
     kg_chapter_limit = chapter_number - 1 
     
     kg_tasks = {
-        "location": agent.db_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False),
-        "status": agent.db_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
+        # Use state_manager for DB access
+        "location": state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False),
+        "status": state_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
     }
     
     kg_results = await asyncio.gather(*kg_tasks.values())
@@ -65,6 +60,7 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
     
     kg_context_section = "**Relevant Reliable KG Facts (up to prev chapter/pre-novel):**\n" + "\n".join(kg_facts_for_prompt) + "\n" if kg_facts_for_prompt else ""
 
+    # These getters use agent's in-memory state, which is fine
     character_state_snippet = get_character_state_snippet_for_prompt(agent, chapter_number)
     world_state_snippet = get_world_state_snippet_for_prompt(agent, chapter_number)
 
@@ -134,6 +130,7 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
 
     if parsed_plan and isinstance(parsed_plan, list) and len(parsed_plan) >= 1:
         valid_scenes: List[SceneDetail] = []
+        # ... (rest of the validation logic for parsed_plan remains the same) ...
         required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
         for i, scene_item_any in enumerate(parsed_plan):
             if not isinstance(scene_item_any, dict):
@@ -168,7 +165,7 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
             return valid_scenes
         else:
             logger.error(f"All parsed scenes were invalid for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
-            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_scenes", plan_raw)
+            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_scenes", plan_raw) # _save_debug_output is fine
             return None
     else:
         logger.error(f"Failed to generate/parse a valid JSON list for scene plan for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")

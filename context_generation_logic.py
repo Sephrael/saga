@@ -36,7 +36,7 @@ async def generate_chapter_context_logic(agent, current_chapter_number: int) -> 
         total_chars = 0
         for i in range(max(1, current_chapter_number - config.CONTEXT_CHAPTER_COUNT), current_chapter_number):
             if total_chars >= config.MAX_CONTEXT_LENGTH: break
-            chap_data = await agent.db_manager.async_get_chapter_data_from_db(i)
+            chap_data = await state_manager.async_get_chapter_data_from_db(i)
             if chap_data:
                 content = (chap_data.get('summary') or chap_data.get('text', '')).strip()
                 is_prov = chap_data.get('is_provisional', False)
@@ -57,7 +57,7 @@ async def generate_chapter_context_logic(agent, current_chapter_number: int) -> 
         logger.info(f"Constructed fallback context: {len(final_context)} chars.")
         return final_context
         
-    past_embeddings = await agent.db_manager.async_get_all_past_embeddings(current_chapter_number)
+    past_embeddings = await state_manager.async_get_all_past_embeddings(current_chapter_number)
     if not past_embeddings:
         logger.info("No past embeddings found for semantic context search.")
         return "" 
@@ -87,7 +87,7 @@ async def generate_chapter_context_logic(agent, current_chapter_number: int) -> 
     total_chars = 0
     
     chap_data_tasks = {
-        chap_num: agent.db_manager.async_get_chapter_data_from_db(chap_num) 
+        chap_num: state_manager.async_get_chapter_data_from_db(chap_num) 
         for chap_num in chapters_to_fetch
     }
     chap_data_results_list = await asyncio.gather(*chap_data_tasks.values())

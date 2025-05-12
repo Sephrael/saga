@@ -3,13 +3,13 @@
 Handles the generation of the initial chapter draft for the SAGA system.
 """
 import logging
-from state_manager import StateManager
+import json
 from typing import Tuple, Optional, List
 
 import config
 import llm_interface
 from type import SceneDetail # Assuming this is in type.py
-from state_manager import StateManager
+from state_manager import state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     if config.ENABLE_AGENTIC_PLANNING:
         if chapter_plan and isinstance(chapter_plan, list): 
             try:
-                plan_json_str = StateManager.serialize(chapter_plan)
+                plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
                 plan_section_for_prompt = f"**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**\n```json\n{plan_json_str}\n```\n"
                 logger.info(f"Using detailed scene plan for Ch {chapter_number} draft generation.")
             except TypeError as e:
@@ -37,8 +37,8 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     else: 
         plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
         
-    char_profiles_json = StateManager.serialize(state_manager.get_filtered_character_profiles_for_prompt(agent, chapter_number - 1))
-    world_building_json = StateManager.serialize(state_manager.get_filtered_world_data_for_prompt(agent, chapter_number - 1))
+    char_profiles_json = json.dumps(state_manager.get_filtered_character_profiles_for_prompt(agent, chapter_number - 1), indent=2, ensure_ascii=False, default=str)
+    world_building_json = json.dumps(state_manager.get_filtered_world_data_for_prompt(agent, chapter_number - 1), indent=2, ensure_ascii=False, default=str)
 
     prompt = f"""/no_think
 You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}".
