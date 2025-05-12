@@ -507,7 +507,7 @@ async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str],
     if len(text_snippet_for_kg) < len(chapter_text):
         logger.warning(f"KG extraction for ch {chapter_number} will use truncated text ({len(text_snippet_for_kg)} chars out of {len(chapter_text)}).")
 
-    candidate_entities = heuristic_entity_spotter_for_kg(agent, text_snippet_for_kg)
+    candidate_entities = await heuristic_entity_spotter_for_kg(agent, text_snippet_for_kg)
     logger.debug(f"Candidate entities identified for KG extraction in Ch {chapter_number}: {candidate_entities[:10]}")
     candidate_entities_json_for_prompt = json.dumps(candidate_entities) 
 
@@ -680,8 +680,8 @@ async def update_all_knowledge_bases_logic(agent, chapter_number: int, final_tex
         return
     logger.info(f"Updating knowledge bases for ch {chapter_number} (Source from flawed draft: {from_flawed_draft})...")
     
-    update_json_task = update_json_profiles_from_chapter_logic(agent, final_text, chapter_number, from_flawed_draft)
-    update_kg_task = extract_and_store_kg_triples_logic(agent, final_text, chapter_number, from_flawed_draft)
+    update_json_task = await update_json_profiles_from_chapter_logic(agent, final_text, chapter_number, from_flawed_draft)
+    update_kg_task = await extract_and_store_kg_triples_logic(agent, final_text, chapter_number, from_flawed_draft)
     
     try:
         await asyncio.gather(update_json_task, update_kg_task)

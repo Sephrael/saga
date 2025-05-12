@@ -208,12 +208,12 @@ async def get_filtered_world_data_for_prompt(agent, up_to_chapter_inclusive: Opt
     return world_data
 
 
-def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]:
+async def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]:
     """Basic heuristic to spot potential entities (proper nouns) in text, including known characters.
     'agent' is an instance of NovelWriterAgent.
     """
     from state_manager import state_manager
-    entities = set(state_manager.get_character_profiles().keys()) 
+    entities = set((await state_manager.get_character_profiles()).keys()) 
     
     for match in re.finditer(r'\b([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){0,2})\b', text_snippet):
         entities.add(match.group(1).strip())
