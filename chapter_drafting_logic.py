@@ -10,6 +10,10 @@ import config
 import llm_interface
 from type import SceneDetail # Assuming this is in type.py
 from state_manager import state_manager
+from prompt_data_getters import (
+    get_filtered_character_profiles_for_prompt,
+    get_filtered_world_data_for_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +41,10 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     else: 
         plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
         
-    char_profiles_json = json.dumps(state_manager.get_filtered_character_profiles_for_prompt(agent, chapter_number - 1), indent=2, ensure_ascii=False, default=str)
-    world_building_json = json.dumps(state_manager.get_filtered_world_data_for_prompt(agent, chapter_number - 1), indent=2, ensure_ascii=False, default=str)
+    char_profiles_data = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
+    char_profiles_json = json.dumps(char_profiles_data, indent=2, ensure_ascii=False, default=str)
+    world_building_data = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
+    world_building_json = json.dumps(world_building_data, indent=2, ensure_ascii=False, default=str)
 
     prompt = f"""/no_think
 You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}".

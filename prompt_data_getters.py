@@ -121,32 +121,32 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
                  
     return json.dumps(snippet_data, indent=2, ensure_ascii=False, default=str) if snippet_data else "No significant world-building data available or applicable."
 
-    def get_filtered_character_profiles_for_prompt(agent, up_to_chapter_inclusive: Optional[int] = None) -> JsonStateData:
-        """Retrieves character profiles from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
-        'agent' is an instance of NovelWriterAgent.
-        """
-        from state_manager import state_manager
-        profiles = state_manager.get_character_profiles()
-        
-        if up_to_chapter_inclusive is None: 
-            return profiles
-
-        for char_name, profile_data in profiles.items():
-            if not isinstance(profile_data, dict): continue 
-
-            provisional_notes_for_char: List[str] = []
-            for i in range(1, up_to_chapter_inclusive + 1): 
-                prov_key = f"source_quality_chapter_{i}"
-                if profile_data.get(prov_key) == "provisional_from_unrevised_draft":
-                    provisional_notes_for_char.append(f"Information for this character updated in Chapter {i} was marked as provisional (derived from an unrevised draft).")
-        
-            if provisional_notes_for_char:
-                if "prompt_notes" not in profile_data: profile_data["prompt_notes"] = []
-                for note in provisional_notes_for_char:
-                    if note not in profile_data["prompt_notes"]:
-                        profile_data["prompt_notes"].append(note)
-        return profiles
+async def get_filtered_character_profiles_for_prompt(agent, up_to_chapter_inclusive: Optional[int] = None) -> JsonStateData:
+    """Retrieves character profiles from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
+    'agent' is an instance of NovelWriterAgent.
+    """
+    from state_manager import state_manager
+    profiles = await state_manager.get_character_profiles()
     
+    if up_to_chapter_inclusive is None: 
+        return profiles
+
+    for char_name, profile_data in profiles.items():
+        if not isinstance(profile_data, dict): continue 
+
+        provisional_notes_for_char: List[str] = []
+        for i in range(1, up_to_chapter_inclusive + 1): 
+            prov_key = f"source_quality_chapter_{i}"
+            if profile_data.get(prov_key) == "provisional_from_unrevised_draft":
+                provisional_notes_for_char.append(f"Information for this character updated in Chapter {i} was marked as provisional (derived from an unrevised draft).")
+    
+        if provisional_notes_for_char:
+            if "prompt_notes" not in profile_data: profile_data["prompt_notes"] = []
+            for note in provisional_notes_for_char:
+                if note not in profile_data["prompt_notes"]:
+                    profile_data["prompt_notes"].append(note)
+    return profiles
+
     if up_to_chapter_inclusive is None: 
         return profiles_copy
 
@@ -166,54 +166,54 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
                     profile_data["prompt_notes"].append(note)
     return profiles_copy
 
-    def get_filtered_world_data_for_prompt(agent, up_to_chapter_inclusive: Optional[int] = None) -> JsonStateData:
-        """Retrieves world building data from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
-        'agent' is an instance of NovelWriterAgent.
-        """
-        from state_manager import state_manager
-        world_data = state_manager.get_world_building()
-        
-        if up_to_chapter_inclusive is None:
-            return world_data
-
-        for category_name, category_items in world_data.items():
-            if not isinstance(category_items, dict): continue
-
-            category_provisional_notes: List[str] = []
-            for i in range(1, up_to_chapter_inclusive + 1):
-                cat_prov_key = f"source_quality_chapter_{i}" 
-                if category_items.get(cat_prov_key) == "provisional_from_unrevised_draft":
-                    category_provisional_notes.append(f"The category '{category_name}' had information updated in Chapter {i} marked as provisional.")
-            
-            if category_provisional_notes:
-                if "prompt_notes" not in category_items: category_items["prompt_notes"] = []
-                for note in category_provisional_notes:
-                    if note not in category_items["prompt_notes"]:
-                        category_items["prompt_notes"].append(note)
-
-            for item_name, item_data in category_items.items():
-                if not isinstance(item_data, dict): continue 
-                
-                item_provisional_notes: List[str] = []
-                for i in range(1, up_to_chapter_inclusive + 1):
-                    item_prov_key = f"source_quality_chapter_{i}"
-                    if item_data.get(item_prov_key) == "provisional_from_unrevised_draft":
-                        item_provisional_notes.append(f"The world item '{item_name}' (category: '{category_name}') had information updated in Chapter {i} marked as provisional.")
-                
-                if item_provisional_notes:
-                    if "prompt_notes" not in item_data: item_data["prompt_notes"] = []
-                    for note in item_provisional_notes:
-                        if note not in item_data["prompt_notes"]:
-                            item_data["prompt_notes"].append(note)
+async def get_filtered_world_data_for_prompt(agent, up_to_chapter_inclusive: Optional[int] = None) -> JsonStateData:
+    """Retrieves world building data from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
+    'agent' is an instance of NovelWriterAgent.
+    """
+    from state_manager import state_manager
+    world_data = await state_manager.get_world_building()
+    
+    if up_to_chapter_inclusive is None:
         return world_data
 
+    for category_name, category_items in world_data.items():
+        if not isinstance(category_items, dict): continue
 
-    def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]:
-        """Basic heuristic to spot potential entities (proper nouns) in text, including known characters.
-        'agent' is an instance of NovelWriterAgent.
-        """
-        from state_manager import state_manager
-        entities = set(state_manager.get_character_profiles().keys()) 
+        category_provisional_notes: List[str] = []
+        for i in range(1, up_to_chapter_inclusive + 1):
+            cat_prov_key = f"source_quality_chapter_{i}" 
+            if category_items.get(cat_prov_key) == "provisional_from_unrevised_draft":
+                category_provisional_notes.append(f"The category '{category_name}' had information updated in Chapter {i} marked as provisional.")
+        
+        if category_provisional_notes:
+            if "prompt_notes" not in category_items: category_items["prompt_notes"] = []
+            for note in category_provisional_notes:
+                if note not in category_items["prompt_notes"]:
+                    category_items["prompt_notes"].append(note)
+
+        for item_name, item_data in category_items.items():
+            if not isinstance(item_data, dict): continue 
+            
+            item_provisional_notes: List[str] = []
+            for i in range(1, up_to_chapter_inclusive + 1):
+                item_prov_key = f"source_quality_chapter_{i}"
+                if item_data.get(item_prov_key) == "provisional_from_unrevised_draft":
+                    item_provisional_notes.append(f"The world item '{item_name}' (category: '{category_name}') had information updated in Chapter {i} marked as provisional.")
+            
+            if item_provisional_notes:
+                if "prompt_notes" not in item_data: item_data["prompt_notes"] = []
+                for note in item_provisional_notes:
+                    if note not in item_data["prompt_notes"]:
+                        item_data["prompt_notes"].append(note)
+    return world_data
+
+
+def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]:
+    """Basic heuristic to spot potential entities (proper nouns) in text, including known characters.
+    'agent' is an instance of NovelWriterAgent.
+    """
+    from state_manager import state_manager
+    entities = set(state_manager.get_character_profiles().keys()) 
     
     for match in re.finditer(r'\b([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){0,2})\b', text_snippet):
         entities.add(match.group(1).strip())

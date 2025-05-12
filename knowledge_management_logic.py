@@ -19,6 +19,7 @@ from prompt_data_getters import (
     get_filtered_world_data_for_prompt,
     heuristic_entity_spotter_for_kg
 )
+from state_manager import state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -344,8 +345,8 @@ async def update_json_profiles_from_chapter_logic(agent, chapter_text: Optional[
         dynamic_instr_char = "Only include characters whose information is directly updated or those newly introduced in THIS chapter."
         dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events."
         
-    current_profiles_for_prompt = get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
-    current_world_for_prompt = get_filtered_world_data_for_prompt(agent, chapter_number - 1)
+    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
+    current_world_for_prompt = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
 
     prompt = f"""/no_think
 You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for character profiles AND world-building details.

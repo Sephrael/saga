@@ -107,7 +107,7 @@ MAX_CONTEXT_LENGTH: int = 64000
 MAX_GENERATION_TOKENS: int = 32768
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Used for text snippets for KG updates, summaries
 CONTEXT_CHAPTER_COUNT: int = 5 # Max number of similar past chapters for context
-CHAPTERS_PER_RUN: int = 1 # Number of chapters to generate in a single execution
+CHAPTERS_PER_RUN: int = 3 # Number of chapters to generate in a single execution
 
 
 # --- Caching ---
@@ -139,7 +139,7 @@ MAX_PLOT_VALIDATION_TOKENS: int = 32768
 MAX_KG_TRIPLE_TOKENS: int = 32768
 MAX_PREPOP_KG_TOKENS: int = 32768 # For initial KG population from plot/world
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 10240 # Minimum character length for a chapter draft
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 # Minimum character length for a chapter draft
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to JSON state
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number assigned to pre-populated KG facts
 

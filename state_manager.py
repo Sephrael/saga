@@ -1,7 +1,7 @@
 # state_manager.py
 from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, Float, Index, LargeBinary
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base, selectinload
 from sqlalchemy.future import select
 import logging
 import json
@@ -224,7 +224,7 @@ class state_managerSingleton:
 
         async with self.AsyncSessionLocal() as session:
             async with session.begin():
-                stmt = select(Chapter).where(Chapter.chapter_number == chapter_number).options(relationship(Chapter.embedding))
+                stmt = select(Chapter).where(Chapter.chapter_number == chapter_number).options(selectinload(Chapter.embedding))
                 result = await session.execute(stmt)
                 chapter_obj = result.scalar_one_or_none()
 
