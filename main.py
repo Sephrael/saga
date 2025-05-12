@@ -1,5 +1,6 @@
       
 # main.py
+from logging.handlers import RotatingFileHandler
 import logging
 import sys
 import os 
@@ -24,7 +25,7 @@ def setup_logging():
             log_dir = os.path.dirname(config.LOG_FILE)
             if log_dir: os.makedirs(log_dir, exist_ok=True)
             
-            file_handler = logging.FileHandler(config.LOG_FILE, mode='a', encoding='utf-8')
+            file_handler = RotatingFileHandler(config.LOG_FILE, maxBytes=10**6, backupCount=5, mode='a', encoding='utf-8')
             file_handler.setLevel(config.LOG_LEVEL)
             formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
             file_handler.setFormatter(formatter)
@@ -210,7 +211,7 @@ if __name__ == "__main__":
         try:
             asyncio.run(run_novel_generation_async())
         except KeyboardInterrupt:
-            logging.getLogger(__name__).warning("Process interrupted by user.")
+            logging.getLogger(__name__).info("Shutting down gracefully...")
         except Exception as main_err: 
             logging.getLogger(__name__).critical(f"Unhandled main exception: {main_err}", exc_info=True)
     else:

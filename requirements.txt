@@ -1,4 +1,6 @@
-openai
-ollama
-numpy
-python-dotenv
+python-dotenv==1.0.0
+python-logging-rotate==0.5
+openai==1.5.10
+ollama==0.1.8
+numpy==1.26.4
+async_lru==2.0.4
