@@ -9,6 +9,7 @@ from typing import List
 import config
 import llm_interface
 import utils # For numpy_cosine_similarity
+from state_manager import state_manager
 
 logger = logging.getLogger(__name__)
 
