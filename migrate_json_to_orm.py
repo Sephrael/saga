@@ -52,8 +52,8 @@ def main():
     
     # Run the migration
     try:
-        state_manager.migrate_from_json()
-        logger.info("Migration completed successfully.")
+        state_manager.migrate_from_json(include_knowledge_graph=True)
+        logger.info("Migration completed successfully. Including knowledge graph data.")
     except Exception as e:
         logger.error(f"Error during migration: {e}", exc_info=True)
         return
@@ -66,6 +66,18 @@ def main():
     
     if plot_outline:
         logger.info(f"Plot outline migrated successfully. Contains {len(plot_outline)} keys.")
+    else:
+        logger.warning("Plot outline not found in ORM database after migration.")
+    
+    if character_profiles:
+        logger.info(f"Character profiles migrated successfully. Contains {len(character_profiles)} characters.")
+    else:
+        logger.warning("Character profiles not found in ORM database after migration.")
+    
+    if world_building:
+        logger.info(f"World building migrated successfully. Contains {len(world_building)} elements.")
+    else:
+        logger.warning("World building not found in ORM database after migration.")
     else:
         logger.warning("Plot outline not found in ORM database after migration.")
     

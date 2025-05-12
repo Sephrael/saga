@@ -89,33 +89,18 @@ class NovelWriterAgent:
         self.chapter_count = self.db_manager.load_chapter_count() # Sync DB call
         logger.info(f"Loaded chapter count from database: {self.chapter_count}")
 
-        # Try to load from ORM first, fall back to JSON files if needed
+        # ORM is now the primary source; JSON fallback is deprecated
         self.plot_outline = state_manager.get_plot_outline()
         if not self.plot_outline:
-            logger.info("Plot outline not found in ORM database. Trying JSON file.")
-            self.plot_outline = self._load_json_file(config.PLOT_OUTLINE_FILE, "plot_outline")
-            if self.plot_outline:
-                # If we loaded from JSON, save to ORM for future use
-                state_manager.save_plot_outline(self.plot_outline)
-                logger.info("Saved plot outline from JSON to ORM database.")
+            logger.warning("Plot outline not found in ORM database. This is expected during initial setup.")
 
         self.character_profiles = state_manager.get_character_profiles()
         if not self.character_profiles:
-            logger.info("Character profiles not found in ORM database. Trying JSON file.")
-            self.character_profiles = self._load_json_file(config.CHARACTER_PROFILES_FILE, "character_profiles")
-            if self.character_profiles:
-                # If we loaded from JSON, save to ORM for future use
-                state_manager.save_character_profiles(self.character_profiles)
-                logger.info("Saved character profiles from JSON to ORM database.")
+            logger.warning("Character profiles not found in ORM database. This is expected during initial setup.")
 
         self.world_building = state_manager.get_world_building()
         if not self.world_building:
-            logger.info("World building not found in ORM database. Trying JSON file.")
-            self.world_building = self._load_json_file(config.WORLD_BUILDER_FILE, "world_building")
-            if self.world_building:
-                # If we loaded from JSON, save to ORM for future use
-                state_manager.save_world_building(self.world_building)
-                logger.info("Saved world building from JSON to ORM database.")
+            logger.warning("World building not found in ORM database. This is expected during initial setup.")
         
         logger.info("Finished loading initial state.")
 
@@ -152,12 +137,12 @@ class NovelWriterAgent:
             loop.run_in_executor(None, state_manager.save_world_building, self.world_building)
         ]
         
-        # Also save to JSON files for backward compatibility
-        json_tasks = [
-            loop.run_in_executor(None, self._save_single_json_state_sync, config.PLOT_OUTLINE_FILE, self.plot_outline, "plot_outline"),
-            loop.run_in_executor(None, self._save_single_json_state_sync, config.CHARACTER_PROFILES_FILE, self.character_profiles, "character_profiles"),
-            loop.run_in_executor(None, self._save_single_json_state_sync, config.WORLD_BUILDER_FILE, self.world_building, "world_building"),
-        ]
+        # JSON file persistence is deprecated in favor of ORM
+        # json_tasks = [
+        #     loop.run_in_executor(None, self._save_single_json_state_sync, config.PLOT_OUTLINE_FILE, self.plot_outline, "plot_outline"),
+        #     loop.run_in_executor(None, self._save_single_json_state_sync, config.CHARACTER_PROFILES_FILE, self.character_profiles, "character_profiles"),
+        #     loop.run_in_executor(None, self._save_single_json_state_sync, config.WORLD_BUILDER_FILE, self.world_building, "world_building"),
+        # ]
         
         # Run all tasks concurrently
         all_tasks = orm_tasks + json_tasks
