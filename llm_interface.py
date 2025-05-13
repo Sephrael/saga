@@ -20,25 +20,25 @@ limitations under the License.
 Copyright 2025 Dennis Lewis
 """
 
-import requests
+# Standard library imports
+import functools
+import logging
 import json
 import re
+import requests
+
+# Third-party imports
 import numpy as np
-import logging
-import functools
-from typing import Optional, Dict, Any, List, Union, Type
+import httpx  # For asynchronous HTTP requests
+from async_lru import alru_cache  # Import async-aware LRU cache
 
-import httpx # For asynchronous HTTP requests
-from async_lru import alru_cache # Import async-aware LRU cache
+# Type hints
+from typing import List, Optional, Dict, Any, Union, Type, JsonType
 
+# Local imports
 import config
 
 logger = logging.getLogger(__name__)
-
-# Type alias for common JSON structures
-JsonType = Union[Dict[str, Any], List[Any]]
-
-
 def _validate_embedding(embedding_list: List[Union[float, int]], expected_dim: int, dtype: np.dtype) -> Optional[np.ndarray]:
     """Helper to validate and convert a list to a 1D numpy embedding."""
     try:
@@ -62,7 +62,6 @@ def get_embedding(text: str) -> Optional[np.ndarray]:
     payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
     # cache_info = get_embedding.cache_info()
     # logger.debug(f"Sync Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
-
     try:
         response = requests.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload, timeout=300)
         response.raise_for_status()
@@ -192,8 +191,9 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
         logger.error(f"LLM ('{model_name}') API request timed out.")
     except requests.exceptions.RequestException as e:
         logger.error(f"LLM ('{model_name}') API request error: {e}", exc_info=True)
-        if e.response is not None:
-            logger.error(f"LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
+        response = getattr(e, 'response', None)
+        if response is not None:
+            logger.error(f"LLM ('{model_name}') API Response Status: {response.status_code}, Body: {response.text[:500]}...")
     except json.JSONDecodeError as e:
         logger.error(f"Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
     except Exception as e:
@@ -232,13 +232,13 @@ async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6,
             logger.error(f"Async LLM ('{model_name}') API request timed out.")
         except httpx.RequestError as e:
             logger.error(f"Async LLM ('{model_name}') API request error: {e}", exc_info=True)
-            if e.response is not None:
+            if hasattr(e, "response") and e.response is not None:
                 logger.error(f"Async LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
         except json.JSONDecodeError as e:
              logger.error(f"Async: Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
         except Exception as e:
             logger.error(f"Async Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
-    return ""
+        return ""
 
 
 def clean_model_response(text: str) -> str:

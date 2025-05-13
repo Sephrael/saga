@@ -57,20 +57,23 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
 LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-14B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
+SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
+NARRATOR_MODEL_DEFAULT: str = "Qwen3-30B-A3B-Base"
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
-SUMMARIZATION_MODEL: str = os.getenv("SUMMARIZATION_MODEL", MEDIUM_MODEL_DEFAULT)
+SUMMARIZATION_MODEL: str = os.getenv("SMALL_MODEL", SMALL_MODEL_DEFAULT)
+NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT)
 
-MAIN_GENERATION_MODEL: str = LARGE_MODEL
-JSON_CORRECTION_MODEL: str = MEDIUM_MODEL
-CONSISTENCY_CHECK_MODEL: str = MEDIUM_MODEL
+MAIN_GENERATION_MODEL: str = NARRATOR_MODEL
+JSON_CORRECTION_MODEL: str = SMALL_MODEL
+CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL
 KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
 INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
 PLANNING_MODEL: str = LARGE_MODEL
-DRAFTING_MODEL: str = LARGE_MODEL
-REVISION_MODEL: str = LARGE_MODEL
+DRAFTING_MODEL: str = NARRATOR_MODEL
+REVISION_MODEL: str = NARRATOR_MODEL
 
 
 # --- Output and File Paths ---
@@ -103,7 +106,7 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 64000
+MAX_CONTEXT_LENGTH: int = 65536
 MAX_GENERATION_TOKENS: int = 32768
 KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Used for text snippets for KG updates, summaries
 CONTEXT_CHAPTER_COUNT: int = 5 # Max number of similar past chapters for context
@@ -159,7 +162,7 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 
 # --- Novel Configuration ---
-UNHINGED_PLOT_MODE: bool = False # If true, uses random genre/theme/etc.
+UNHINGED_PLOT_MODE: bool = True # If true, uses random genre/theme/etc.
 CONFIGURED_GENRE: str = "dystopian horror"
 CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
