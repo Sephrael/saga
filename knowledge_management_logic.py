@@ -13,15 +13,15 @@ from async_lru import alru_cache # For caching LLM calls
 
 import config
 import llm_interface
-from .type import KnowledgeGraph, Entity, Relationship, Event, Location, Character, Faction
+from type import KnowledgeGraph, Entity, Relationship, Event, Location, Character, Faction
 
 # Import thematic consistency check function
 from thematic_consistency_checker import check_thematic_consistency_logic
 # Import prompt data getters
 from prompt_data_getters import (
-    get_filtered_character_profiles_for_prompt,
     get_filtered_world_data_for_prompt,
-    heuristic_entity_spotter_for_kg
+    heuristic_entity_spotter_for_kg,
+    get_filtered_character_profiles_for_prompt # Added for use in _build_character_update_prompt
 )
 from state_manager import state_manager
 
@@ -256,7 +256,7 @@ def merge_character_profile_updates_logic(
 # --- World Item Merging Logic ---
 
 def robust_merge_world_item_data_logic(
-    target_dict: Dict[str, Any], # The existing data for the world item
+    target_dict: Dict[str, Any], # The existing data for the world item (or a new dict if item is new)
     update_dict: Dict[str, Any], # The new data from LLM for this item
     item_name_for_log: str,      # For logging purposes, e.g., "locations.CapitalCity"
     chapter_num: int,
@@ -264,20 +264,15 @@ def robust_merge_world_item_data_logic(
 ) -> Dict[str, Any]:
     """
     Recursively merges update_dict into target_dict for world items.
-    Modifies target_dict in place but also returns it.
+    If target_dict is not a dict, it's initialized as one.
+    Returns the merged dictionary (which might be target_dict modified, or a new dict).
     """
-    current_item_data = target_dict # Modifying in place
+    if not isinstance(target_dict, dict):
+        logger.warning(f"World item '{item_name_for_log}' target_dict was not a dict. Initializing as a new dict. Old value: '{str(target_dict)[:100]}'")
+        current_item_data = {} # Create a new dict if target_dict was not a dict
+    else:
+        current_item_data = target_dict # Modify in place
     
-    # Ensure current_item_data is a dict; if not, initialize it.
-    if not isinstance(current_item_data, dict):
-        logger.warning(f"World item '{item_name_for_log}' was not a dict. Initializing as dict. Old value: '{current_item_data}'")
-        # Decide how to handle non-dict existing data. For simplicity, we'll overwrite with a new dict structure.
-        # Or, one could try to preserve it, e.g., current_item_data = {'_original_value': current_item_data}
-        current_item_data.clear() # Clears the original target_dict if it wasn't a dict
-        if not isinstance(target_dict, dict): # if target_dict was not a dict, make it one.
-             target_dict.update(current_item_data)
-
-
     item_was_modified_this_call = False
     provisional_marker_key = f"source_quality_chapter_{chapter_num}"
 
@@ -296,7 +291,7 @@ def robust_merge_world_item_data_logic(
     for key, value_from_update in update_dict.items():
         # Skip already processed keys or internal tracking keys that shouldn't be merged as plain data
         if key in [provisional_marker_key, "modification_proposal"] or \
-           key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")): # source_quality_chapter should be handled by top level
+           key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")): 
             if key.startswith("elaboration_in_chapter_") and isinstance(value_from_update, str) and value_from_update.strip():
                  current_item_data[key] = value_from_update # Keep elaborations
                  item_was_modified_this_call = True
@@ -305,14 +300,15 @@ def robust_merge_world_item_data_logic(
         current_value_in_target = current_item_data.get(key)
 
         if isinstance(value_from_update, dict):
-            if not isinstance(current_value_in_target, dict):
-                current_item_data[key] = {} # Initialize if not a dict
-                item_was_modified_this_call = True
-            # Recursive call for nested dictionaries
+            # Pass current_value_in_target which might be None or not a dict, robust_merge will handle it
             merged_sub_dict = robust_merge_world_item_data_logic(
-                current_item_data[key], value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source=False # Nested elements are part of this update, not new sources
+                current_value_in_target if isinstance(current_value_in_target, dict) else {}, # Ensure a dict is passed if creating new
+                value_from_update, 
+                f"{item_name_for_log}.{key}", 
+                chapter_num, 
+                from_flawed_draft_source=False 
             )
-            if merged_sub_dict != current_item_data[key]: # Check if the sub-dict actually changed
+            if merged_sub_dict != current_value_in_target: 
                 item_was_modified_this_call = True
             current_item_data[key] = merged_sub_dict
         elif isinstance(value_from_update, list):
@@ -331,7 +327,6 @@ def robust_merge_world_item_data_logic(
             item_was_modified_this_call = True
     
     if item_was_modified_this_call and not current_item_data.get(f"added_in_chapter_{chapter_num}"):
-        # Mark as updated in this chapter if any modification occurred and it wasn't a new addition in this same chapter
         current_item_data[f"updated_in_chapter_{chapter_num}"] = True
             
     return current_item_data
@@ -356,14 +351,13 @@ def merge_world_item_updates_logic(
             logger.debug(f"Skipping empty or invalid update for world category '{category_key}' in ch {chapter_number}.")
             continue
         
-        # Ensure category exists in agent's world_building
         if category_key not in agent.world_building:
             agent.world_building[category_key] = {}
         elif not isinstance(agent.world_building[category_key], dict): 
             logger.warning(f"Overwriting non-dictionary world category '{category_key}' with new dictionary structure for ch {chapter_number}.")
             agent.world_building[category_key] = {}
         
-        target_category_dict = agent.world_building[category_key] # This is a reference to agent's state
+        target_category_dict = agent.world_building[category_key]
         
         for item_name, item_update_details in category_updates_dict.items():
             if not isinstance(item_update_details, dict):
@@ -371,32 +365,26 @@ def merge_world_item_updates_logic(
                 continue
             
             item_log_name = f"{category_key}.{item_name}"
-            
             existing_item_data = target_category_dict.get(item_name)
             
-            if existing_item_data is None: # New item
-                logger.info(f"Adding new world item '{item_log_name}' from ch {chapter_number} analysis.")
-                new_item_data = {} # Start with an empty dict for the new item
-                robust_merge_world_item_data_logic(new_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
-                new_item_data[f"added_in_chapter_{chapter_number}"] = True 
-                target_category_dict[item_name] = new_item_data
-                items_affected_count +=1
-            elif isinstance(existing_item_data, dict): # Existing item, ensure it's a dict
-                logger.debug(f"Updating existing world item '{item_log_name}' from ch {chapter_number} analysis.")
-                # robust_merge_world_item_data_logic modifies existing_item_data in place
-                robust_merge_world_item_data_logic(existing_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
-                if existing_item_data.get(f"updated_in_chapter_{chapter_number}") or \
-                   (from_flawed_draft and existing_item_data.get(f"source_quality_chapter_{chapter_number}")): # If it was marked as updated or got a new provisional marker
-                    items_affected_count +=1
-            else: # Existing item is not a dict, treat as new/overwrite
-                logger.warning(f"Existing world item '{item_log_name}' is not a dictionary. Overwriting with new data from ch {chapter_number}. Old value: '{existing_item_data}'")
-                new_item_data = {}
-                robust_merge_world_item_data_logic(new_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
-                new_item_data[f"added_in_chapter_{chapter_number}"] = True 
-                target_category_dict[item_name] = new_item_data
+            # robust_merge_world_item_data_logic handles if existing_item_data is None or not a dict
+            # by returning a new merged dictionary. This new/modified dict must be assigned back.
+            merged_item_data = robust_merge_world_item_data_logic(
+                existing_item_data if existing_item_data is not None else {}, # Pass empty dict if new
+                item_update_details, 
+                item_log_name, 
+                chapter_number, 
+                from_flawed_draft
+            )
+            target_category_dict[item_name] = merged_item_data # Assign back
+
+            if existing_item_data is None: # New item was added
+                merged_item_data[f"added_in_chapter_{chapter_number}"] = True 
+                items_affected_count += 1
+            elif merged_item_data.get(f"updated_in_chapter_{chapter_number}") or \
+                 (from_flawed_draft and merged_item_data.get(f"source_quality_chapter_{chapter_number}")):
                 items_affected_count += 1
         
-        # Check if any item in the category was marked as added or updated
         if any(isinstance(v,dict) and (v.get(f"updated_in_chapter_{chapter_number}") or v.get(f"added_in_chapter_{chapter_number}")) 
                for v in target_category_dict.values()):
              target_category_dict[f"category_updated_in_chapter_{chapter_number}"] = True

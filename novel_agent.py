@@ -12,16 +12,16 @@ from state_manager import state_manager # Use the singleton instance
 from type import JsonStateData, EvaluationResult, SceneDetail
 
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
-from chapter_planning_logic import plan_chapter_scenes_logic # Will need internal updates
+from chapter_planning_logic import plan_chapter_scenes_logic 
 from chapter_drafting_logic import generate_chapter_draft_logic
-from chapter_evaluation_logic import evaluate_chapter_draft_logic # Will need internal updates
+from chapter_evaluation_logic import evaluate_chapter_draft_logic 
 from chapter_revision_logic import revise_chapter_draft_logic
-from knowledge_management_logic import ( # Will need internal updates
+from knowledge_management_logic import ( 
     update_all_knowledge_bases_logic,
     summarize_chapter_text_logic,
     prepopulate_kg_from_initial_data_logic
 )
-from context_generation_logic import generate_chapter_context_logic # Will need internal updates
+from context_generation_logic import generate_chapter_context_logic 
 
 
 logger = logging.getLogger(__name__)
@@ -62,9 +62,9 @@ class NovelWriterAgent:
                 elif key == "chars": self.character_profiles = {}
                 elif key == "world": self.world_building = {}
             else:
-                if key == "plot": self.plot_outline = value or {}
-                elif key == "chars": self.character_profiles = value or {}
-                elif key == "world": self.world_building = value or {}
+                if key == "plot": self.plot_outline = value if isinstance(value, dict) else {}
+                elif key == "chars": self.character_profiles = value if isinstance(value, dict) else {}
+                elif key == "world": self.world_building = value if isinstance(value, dict) else {}
         
         if not self.plot_outline:
             logger.warning("Plot outline is empty after ORM load. Expected during initial setup or if save failed previously.")
@@ -147,7 +147,7 @@ class NovelWriterAgent:
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(f"Ch {chapter_number}: Agentic planning enabled but failed to produce a plan. Proceeding with plot point focus only.")
 
-        context_for_draft = await generate_chapter_context_logic(self, chapter_number)
+        context_for_draft = await generate_chapter_context_logic(self, chapter_number) # Fixed: Pass self
         plot_point_focus, _ = self._get_plot_point_info(chapter_number)
         if plot_point_focus is None: 
             logger.error(f"Ch {chapter_number} generation halted: no plot point focus.")
@@ -213,13 +213,14 @@ class NovelWriterAgent:
             logger.error(f"Cannot finalize ch {chapter_number}: Final text is missing or empty.")
             return False
 
-        summary_task = summarize_chapter_text_logic(self, final_text, chapter_number)
+        summary_task = summarize_chapter_text_logic(final_text, chapter_number) # Removed agent
         embedding_task = asyncio.create_task(llm_interface.async_get_embedding(final_text))
         
         summary, final_embedding = await asyncio.gather(summary_task, embedding_task)
 
         if final_embedding is None:
             logger.error(f"CRITICAL: Failed to generate embedding for final text of Chapter {chapter_number}.")
+            # Consider if this should be a hard fail (return False)
 
         try:
             await state_manager.async_save_chapter_data(
