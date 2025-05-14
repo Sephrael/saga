@@ -33,7 +33,8 @@ import httpx  # For asynchronous HTTP requests
 from async_lru import alru_cache  # Import async-aware LRU cache
 
 # Type hints
-from typing import List, Optional, Dict, Any, Union, Type, JsonType
+from typing import List, Optional, Dict, Any, Union, Type
+from type import JsonType
 
 # Local imports
 import config

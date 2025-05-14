@@ -1,5 +1,5 @@
 # type.py
-from typing import TypedDict, List
+from typing import TypedDict, List, Union, Any, Dict
 
 class SceneDetail(TypedDict):
     scene_number: int
@@ -17,3 +17,6 @@ class JsonStateData(TypedDict):
     world_building: dict
 
 ChapterPlan = List[SceneDetail]
+
+# Define JsonType as a Union of common JSON data types
+JsonType = Union[Dict[str, Any], List[Any], str, int, float, bool, None]

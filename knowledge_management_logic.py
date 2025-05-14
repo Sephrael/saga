@@ -41,7 +41,7 @@ Chapter Text Snippet:
 Output ONLY the summary text. No extra commentary or "Summary:" prefix.
 """
     summary_raw = await llm_interface.async_call_llm(
-        model_name=config.SUMMARIZATION_MODEL,
+        model_name=config.SMALL_MODEL,
         prompt=prompt,
         temperature=0.6,
         max_tokens=config.MAX_SUMMARY_TOKENS
