@@ -13,6 +13,10 @@ from async_lru import alru_cache # For caching LLM calls
 
 import config
 import llm_interface
+from .type import KnowledgeGraph, Entity, Relationship, Event, Location, Character, Faction
+
+# Import thematic consistency check function
+from thematic_consistency_checker import check_thematic_consistency_logic
 # Import prompt data getters
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt,
@@ -48,8 +52,8 @@ Output ONLY the summary text. No extra commentary or "Summary:" prefix.
     )
     return llm_interface.clean_model_response(summary_raw).strip()
 
-async def summarize_chapter_text_logic(agent, chapter_text: Optional[str], chapter_number: int) -> Optional[str]:
-    """ 'agent' is an instance of NovelWriterAgent (unused here but kept for consistency if needed later)."""
+async def summarize_chapter_text_logic(chapter_text: Optional[str], chapter_number: int) -> Optional[str]:
+    """ (Unused 'agent' parameter removed - no longer used in this function) """
     if not chapter_text or len(chapter_text) < 50:
         logger.warning(f"Chapter {chapter_number} text too short for summarization ({len(chapter_text or '')} chars).")
         return None
@@ -852,14 +856,21 @@ async def update_all_knowledge_bases_logic(
         agent, final_text, chapter_number, from_flawed_draft
     )
     
+    # Add thematic consistency check
+    thematic_check_task = check_thematic_consistency_logic(
+        agent, chapter_number, final_text
+    )
+    
     try:
         # Gather results of all update tasks
         await asyncio.gather(
             update_char_profiles_task,
             update_world_profiles_task,
-            update_kg_task
+            update_kg_task,
+            thematic_check_task
         )
         logger.info(f"All knowledge base updates (JSON profiles & KG) completed for ch {chapter_number}.")
     except Exception as e:
         logger.error(f"Error during concurrent knowledge base updates for ch {chapter_number}: {e}", exc_info=True)
         # Depending on severity, might want to re-raise or handle more specifically
+        await agent._save_debug_output(chapter_number, "knowledge_base_update_exception", str(e))
