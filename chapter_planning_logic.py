@@ -130,7 +130,6 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
 
     if parsed_plan and isinstance(parsed_plan, list) and len(parsed_plan) >= 1:
         valid_scenes: List[SceneDetail] = []
-        # ... (rest of the validation logic for parsed_plan remains the same) ...
         required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
         for i, scene_item_any in enumerate(parsed_plan):
             if not isinstance(scene_item_any, dict):
@@ -165,7 +164,7 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
             return valid_scenes
         else:
             logger.error(f"All parsed scenes were invalid for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
-            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_scenes", plan_raw) # _save_debug_output is fine
+            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_scenes", plan_raw) 
             return None
     else:
         logger.error(f"Failed to generate/parse a valid JSON list for scene plan for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")

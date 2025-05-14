@@ -1,4 +1,3 @@
-      
 # main.py
 from logging.handlers import RotatingFileHandler
 import logging
@@ -42,7 +41,6 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
     logger = logging.getLogger(__name__)
     logger.info("Checking for existing plot outline...")
     
-    # Agent's plot_outline is loaded during agent.async_init()
     plot_outline_data = agent.plot_outline 
     should_regenerate_plot = False
 
@@ -52,10 +50,9 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
     elif plot_outline_data.get("is_default") is True: 
         should_regenerate_plot = True
         logger.info("Plot outline was previously marked as default. Will regenerate.")
-    # Add other conditions for regeneration if needed, e.g. missing essential keys
     elif not all(k in plot_outline_data for k in ["title", "protagonist_name", "plot_points"]):
         should_regenerate_plot = True
-        logger.info("Plot outline missing essential keys. Will regenerate.")
+        logger.info("Plot outline missing essential keys (title, protagonist_name, plot_points). Will regenerate.")
     else:
         logger.info(f"Using existing plot outline: '{plot_outline_data.get('title', 'N/A')}'")
 
@@ -65,7 +62,6 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
         logger.info("Generating a new plot outline.")
         generation_params: Dict[str, Any] = {}
         if config.UNHINGED_PLOT_MODE:
-            # ... (unhinged params logic as before) ...
             generation_params.update({
                 "genre": random.choice(config.UNHINGED_GENRES), "theme": random.choice(config.UNHINGED_THEMES),
                 "setting_archetype": random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
@@ -100,8 +96,7 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
     elif world_building_data.get("is_default") is True:
         should_regenerate_world = True
         logger.info("World-building was previously marked as default. Will regenerate.")
-    # Add other conditions for regeneration if needed
-    elif not world_building_data.get("locations"): # Example: if no locations, regenerate
+    elif not world_building_data.get("locations"): 
         should_regenerate_world = True
         logger.info("World-building data seems minimal (e.g., no locations). Will regenerate.")
     else:
@@ -113,8 +108,8 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
             await agent.generate_world_building()
             print("Generated/Refreshed initial world-building data.")
         except Exception as e:
-            logger.error(f"Error generating world building: {e}", exc_info=True)
-            # Decide if this is fatal or not
+            logger.error(f"Error generating world building: {e}. Proceeding with potentially minimal/default world data.", exc_info=True)
+            # Not returning False, allowing the process to continue if plot is fine.
     else:
         print("\n--- Using Existing World-Building Data ---")
     
@@ -191,7 +186,7 @@ async def run_novel_generation_async():
             if chapter_text:
                 chapters_successfully_written += 1
                 print(f"Chapter {i}: Successfully generated (Length: {len(chapter_text)} chars).")
-                # ... (snippet printing)
+                print(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
             else:
                 print(f"Chapter {i}: Failed to generate or save. Check logs.")
                 # break # Optionally stop on first failure
@@ -221,3 +216,113 @@ if __name__ == "__main__":
         print("Script not run with asyncio.run(). If you intended to run the novel generation, "
               "ensure RUN_WITH_ASYNCIO_RUN is True or call run_novel_generation_async() from an event loop.")
         pass
+```
+
+**7. `state_manager.py`**
+   - Comments regarding unused relationships and `drop_all` are kept as they are informational or potentially useful for development. No code changes made here based on placeholders.
+
+**8. `type.py`**
+   - `timestamp` in `Event` remains `Optional[str]`. Comments are kept as reminders for potential future evolution.
+
+**9. `thematic_consistency_checker.py` (Implemented)**
+   - Implemented a basic LLM-based thematic consistency check.
+
+```python
+# thematic_consistency_checker.py
+"""
+Handles thematic consistency checking for chapter drafts.
+"""
+import logging
+import json
+from typing import Optional
+
+import config
+import llm_interface
+
+logger = logging.getLogger(__name__)
+
+async def check_thematic_consistency_logic(agent, chapter_number: int, chapter_text: str) -> Optional[str]:
+    """
+    Checks the chapter text for thematic consistency against the novel's core elements.
+    'agent' is an instance of NovelWriterAgent.
+    Returns a string describing thematic issues, or None if consistent.
+    """
+    logger.info(f"Performing thematic consistency check for Chapter {chapter_number}.")
+
+    if not chapter_text:
+        logger.warning(f"Thematic consistency check skipped for Ch {chapter_number}: empty chapter text.")
+        return None
+
+    novel_theme = agent.plot_outline.get('theme', 'Not specified')
+    novel_genre = agent.plot_outline.get('genre', 'Not specified')
+    protagonist_arc = agent.plot_outline.get('character_arc', 'Not specified')
+    protagonist_name = agent.plot_outline.get('protagonist_name', 'The Protagonist')
+
+    # Use a snippet of the chapter text to keep the prompt manageable
+    text_snippet = chapter_text[:config.THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE].strip()
+    if len(chapter_text) > len(text_snippet):
+        text_snippet += "..."
+        logger.debug(f"Using truncated text snippet for thematic check (Ch {chapter_number}, {len(text_snippet)} chars).")
+
+
+    prompt = f"""/no_think
+You are a Literary Analyst specializing in thematic consistency.
+Your task is to evaluate if the provided Chapter Snippet aligns with the novel's established thematic elements.
+
+**Novel's Core Thematic Elements:**
+- **Genre:** {novel_genre}
+- **Central Theme:** {novel_theme}
+- **Protagonist ({protagonist_name})'s Arc:** {protagonist_arc}
+
+**Chapter {chapter_number} Snippet to Analyze:**
+--- BEGIN SNIPPET ---
+{text_snippet}
+--- END SNIPPET ---
+
+**Analysis Instructions:**
+1.  Read the Chapter Snippet carefully.
+2.  Compare its content, tone, character actions/dialogue, and plot developments against the Novel's Core Thematic Elements provided above.
+3.  Consider if the snippet:
+    - Reinforces or subtly explores the Central Theme.
+    - Adheres to the established Genre conventions and atmosphere.
+    - Contributes appropriately to the Protagonist's Arc (if the protagonist is featured).
+    - Introduces elements that seem out of place or contradictory to these core elements.
+
+**Output Format (CRITICAL):**
+-   If you find **significant thematic inconsistencies** or deviations, describe them clearly and concisely in 1-3 bullet points. Focus on specific examples from the snippet if possible.
+-   If the Chapter Snippet **aligns well** with the thematic elements or has no significant inconsistencies, respond with the single word: **None**
+
+**Your Analysis (or "None"):**
+"""
+
+    logger.debug(f"Calling LLM for thematic consistency check (Ch {chapter_number}). Model: {config.THEMATIC_CONSISTENCY_MODEL}")
+    raw_response = await llm_interface.async_call_llm(
+        model_name=config.THEMATIC_CONSISTENCY_MODEL,
+        prompt=prompt,
+        temperature=0.5, # Moderately deterministic for analysis
+        max_tokens=config.MAX_THEMATIC_CONSISTENCY_TOKENS
+    )
+
+    if not raw_response:
+        logger.warning(f"Thematic consistency check for Ch {chapter_number} received no response from LLM. Assuming consistency as fallback.")
+        return None
+
+    cleaned_response = llm_interface.clean_model_response(raw_response).strip()
+
+    if not cleaned_response:
+        logger.warning(f"Thematic consistency check for Ch {chapter_number} resulted in empty string after cleaning. Assuming consistency.")
+        return None
+        
+    if cleaned_response.lower() == "none":
+        logger.info(f"Thematic consistency check passed for Chapter {chapter_number}. No issues reported.")
+        return None
+    else:
+        logger.warning(f"Thematic inconsistency reported for Chapter {chapter_number}:\n{cleaned_response}")
+        # Add to evaluation reasons in chapter_evaluation_logic if this is to trigger revision
+        # Currently, this function just returns the issues. The calling function (update_all_knowledge_bases_logic)
+        # doesn't use the return value to trigger revisions.
+        # If it should trigger revisions, it needs to be integrated into evaluate_chapter_draft_logic.
+        # For now, it serves as a logged warning/analysis.
+        # To make it trigger revision, you'd modify chapter_evaluation_logic to call this
+        # and append its result to 'reasons' if not None.
+        return cleaned_response # Return the issues string

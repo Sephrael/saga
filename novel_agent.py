@@ -147,7 +147,7 @@ class NovelWriterAgent:
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(f"Ch {chapter_number}: Agentic planning enabled but failed to produce a plan. Proceeding with plot point focus only.")
 
-        context_for_draft = await generate_chapter_context_logic(self, chapter_number) # Fixed: Pass self
+        context_for_draft = await generate_chapter_context_logic(self, chapter_number) 
         plot_point_focus, _ = self._get_plot_point_info(chapter_number)
         if plot_point_focus is None: 
             logger.error(f"Ch {chapter_number} generation halted: no plot point focus.")
@@ -195,8 +195,8 @@ class NovelWriterAgent:
             logger.info(f"Initial draft for ch {chapter_number} passed evaluation.")
 
         if not await self._finalize_chapter_core(chapter_number, current_text, final_raw_output_log, proceeded_with_flaws):
-             logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save) ===")
-             return None
+             logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save or embedding) ===")
+             return None # Critical failure if core finalization fails
 
         await update_all_knowledge_bases_logic(self, chapter_number, current_text, proceeded_with_flaws)
         
@@ -219,8 +219,8 @@ class NovelWriterAgent:
         summary, final_embedding = await asyncio.gather(summary_task, embedding_task)
 
         if final_embedding is None:
-            logger.error(f"CRITICAL: Failed to generate embedding for final text of Chapter {chapter_number}.")
-            # Consider if this should be a hard fail (return False)
+            logger.error(f"CRITICAL: Failed to generate embedding for final text of Chapter {chapter_number}. Finalization cannot proceed.")
+            return False # Embedding is critical for context, coherence checks etc.
 
         try:
             await state_manager.async_save_chapter_data(

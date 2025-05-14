@@ -21,7 +21,7 @@ Copyright 2025 Dennis Lewis
 
 import os
 import logging
-import json # NEW: Import json
+import json 
 from typing import Optional, List
 import numpy as np 
 
@@ -74,6 +74,7 @@ INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
 PLANNING_MODEL: str = LARGE_MODEL
 DRAFTING_MODEL: str = NARRATOR_MODEL
 REVISION_MODEL: str = NARRATOR_MODEL
+THEMATIC_CONSISTENCY_MODEL: str = SMALL_MODEL # New model for thematic checks
 
 
 # --- Output and File Paths ---
@@ -86,11 +87,9 @@ CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
 DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
-# NEW: Define a directory for unhinged data files
-UNHINGED_DATA_DIR: str = "unhinged_data" # You can place this where you like, e.g., next to config.py
-os.makedirs(UNHINGED_DATA_DIR, exist_ok=True) # Ensure it exists
+UNHINGED_DATA_DIR: str = "unhinged_data" 
+os.makedirs(UNHINGED_DATA_DIR, exist_ok=True) 
 
-# NEW: Paths for unhinged data files
 UNHINGED_GENRES_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_genres.json")
 UNHINGED_THEMES_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_themes.json")
 UNHINGED_SETTINGS_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_settings_archetypes.json")
@@ -108,13 +107,13 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 # --- Generation Parameters ---
 MAX_CONTEXT_LENGTH: int = 40960
 MAX_GENERATION_TOKENS: int = 32768
-KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Used for text snippets for KG updates, summaries
-CONTEXT_CHAPTER_COUNT: int = 5 # Max number of similar past chapters for context
-CHAPTERS_PER_RUN: int = 3 # Number of chapters to generate in a single execution
+KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 
+CONTEXT_CHAPTER_COUNT: int = 5 
+CHAPTERS_PER_RUN: int = 3 
+LLM_TOP_P: float = 0.95 # Added
 
 
 # --- Caching ---
-# LRU cache sizes for LLM/Embedding calls
 EMBEDDING_CACHE_SIZE: int = 128
 SUMMARY_CACHE_SIZE: int = 32
 KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
@@ -132,19 +131,20 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-REVISION_COHERENCE_THRESHOLD: float = 0.65 # Cosine similarity threshold with previous chapter
-REVISION_CONSISTENCY_TRIGGER: bool = True # Whether to run LLM-based consistency check
-PLOT_ARC_VALIDATION_TRIGGER: bool = True # Whether to run LLM-based plot arc validation
-REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 # If revised draft is this similar to original, reject revision
+REVISION_COHERENCE_THRESHOLD: float = 0.65 
+REVISION_CONSISTENCY_TRIGGER: bool = True 
+PLOT_ARC_VALIDATION_TRIGGER: bool = True 
+REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 
 MAX_SUMMARY_TOKENS: int = 32768
 MAX_CONSISTENCY_TOKENS: int = 32768
 MAX_PLOT_VALIDATION_TOKENS: int = 32768
 MAX_KG_TRIPLE_TOKENS: int = 32768
-MAX_PREPOP_KG_TOKENS: int = 32768 # For initial KG population from plot/world
+MAX_PREPOP_KG_TOKENS: int = 32768 
+MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 # New, for thematic checks
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 # Minimum character length for a chapter draft
-ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Allow LLM to propose modifications to JSON state
-KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number assigned to pre-populated KG facts
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
+ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
+KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 
 
 # --- Embedding Configuration ---
@@ -154,7 +154,6 @@ EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32)
 
 # --- Logging ---
 LOG_LEVEL_STR: str = os.getenv("LOG_LEVEL", "INFO").upper()
-# Ensure LOG_LEVEL is a valid logging level integer
 LOG_LEVEL: int = getattr(logging, LOG_LEVEL_STR, logging.INFO)
 LOG_FORMAT: str = '%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s'
 LOG_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
@@ -162,23 +161,21 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 
 # --- Novel Configuration ---
-UNHINGED_PLOT_MODE: bool = True # If true, uses random genre/theme/etc.
+UNHINGED_PLOT_MODE: bool = True 
 CONFIGURED_GENRE: str = "dystopian horror"
 CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
+THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 2000 # New, for thematic checks
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
-# MODIFIED: Load these lists from files
-_DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"] # Fallback if file is missing/corrupt
+_DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"] 
 UNHINGED_GENRES: List[str] = _load_list_from_json(UNHINGED_GENRES_FILE, _DEFAULT_GENRE_LIST)
 UNHINGED_THEMES: List[str] = _load_list_from_json(UNHINGED_THEMES_FILE, ["the nature of reality", "the cost of power"])
 UNHINGED_SETTINGS_ARCHETYPES: List[str] = _load_list_from_json(UNHINGED_SETTINGS_FILE, ["a floating city", "a derelict starship"])
 UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = _load_list_from_json(UNHINGED_PROTAGONISTS_FILE, ["a reluctant hero", "a cynical detective"])
 UNHINGED_CONFLICT_TYPES: List[str] = _load_list_from_json(UNHINGED_CONFLICTS_FILE, ["man vs self", "man vs society"])
 
-# Example of how to check if loading was successful (optional)
 if not UNHINGED_GENRES or UNHINGED_GENRES == _DEFAULT_GENRE_LIST:
     logging.warning("UNHINGED_GENRES might be using default values. Check unhinged_genres.json.")
-# You can add similar checks for other lists if desired.

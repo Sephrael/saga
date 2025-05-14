@@ -61,8 +61,8 @@ def get_embedding(text: str) -> Optional[np.ndarray]:
         return None
 
     payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
-    # cache_info = get_embedding.cache_info()
-    # logger.debug(f"Sync Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
+    cache_info = get_embedding.cache_info()
+    logger.debug(f"Sync Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
     try:
         response = requests.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload, timeout=300)
         response.raise_for_status()
@@ -103,8 +103,8 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
         return None
 
     payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
-    # cache_info = async_get_embedding.cache_info()
-    # logger.debug(f"Async Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
+    cache_info = async_get_embedding.cache_info()
+    logger.debug(f"Async Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
 
     async with httpx.AsyncClient(timeout=300) as client:
         try:
@@ -177,12 +177,12 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "temperature": temperature,
-        "top_p": 0.95, # Consider making this configurable
+        "top_p": config.LLM_TOP_P, 
         "max_tokens": effective_max_tokens
     }
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
 
-    logger.debug(f"Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
+    logger.debug(f"Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}")
     try:
         response = requests.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=600)
         response.raise_for_status()
@@ -192,11 +192,11 @@ def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens:
         logger.error(f"LLM ('{model_name}') API request timed out.")
     except requests.exceptions.RequestException as e:
         logger.error(f"LLM ('{model_name}') API request error: {e}", exc_info=True)
-        response = getattr(e, 'response', None)
-        if response is not None:
-            logger.error(f"LLM ('{model_name}') API Response Status: {response.status_code}, Body: {response.text[:500]}...")
+        response_attr = getattr(e, 'response', None)
+        if response_attr is not None:
+            logger.error(f"LLM ('{model_name}') API Response Status: {response_attr.status_code}, Body: {response_attr.text[:500]}...")
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
+        logger.error(f"Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
     except Exception as e:
         logger.error(f"Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
     return ""
@@ -217,12 +217,12 @@ async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6,
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "temperature": temperature,
-        "top_p": 0.95,
+        "top_p": config.LLM_TOP_P,
         "max_tokens": effective_max_tokens
     }
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
 
-    logger.debug(f"Async Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}")
+    logger.debug(f"Async Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}")
     async with httpx.AsyncClient(timeout=600) as client:
         try:
             response = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
@@ -236,7 +236,7 @@ async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6,
             if hasattr(e, "response") and e.response is not None:
                 logger.error(f"Async LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
         except json.JSONDecodeError as e:
-             logger.error(f"Async: Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
+             logger.error(f"Async: Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
         except Exception as e:
             logger.error(f"Async Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
         return ""
@@ -329,10 +329,8 @@ def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = d
     # 2. Fallback: find the first occurrence of start_char and last of end_char (broad match)
     # This is greedy and might grab too much if there are nested structures or multiple JSON objects.
     # It's a common fallback when Markdown blocks are not used.
-    # To make it more robust, we could try to parse from this point.
     first_start_index = text.find(start_char)
     if first_start_index != -1:
-        # Try to find a balanced structure starting from the first start_char
         balance = 0
         potential_end_index = -1
         for i in range(first_start_index, len(text)):
@@ -347,14 +345,19 @@ def extract_json_block(text: str, expect_type: Union[Type[dict], Type[list]] = d
         if potential_end_index != -1:
             potential_json = text[first_start_index : potential_end_index + 1].strip()
             if potential_json.startswith(start_char) and potential_json.endswith(end_char):
-                logger.debug(f"Potential JSON {expect_type.__name__} found by brace/bracket matching with balance check.")
-                return potential_json
+                try:
+                    # Attempt to parse to ensure it's valid before returning
+                    json.loads(potential_json)
+                    logger.debug(f"Potential JSON {expect_type.__name__} found by brace/bracket matching with balance check and validation.")
+                    return potential_json
+                except json.JSONDecodeError:
+                    logger.debug(f"String found by brace/bracket balance check is not valid JSON: '{potential_json[:100]}...'")
+
 
     # 3. Fallback: If the entire cleaned response (after removing common LLM chat/cruft) is the JSON
     # This is useful if the LLM *only* returned JSON without any wrappers.
     cleaned_full_response = clean_model_response(text) # Apply basic cleaning
     if cleaned_full_response.startswith(start_char) and cleaned_full_response.endswith(end_char):
-        # Try to parse this cleaned version to see if it's valid JSON
         try:
             json.loads(cleaned_full_response) # Test parse
             logger.debug(f"Entire cleaned response appears to be valid JSON {expect_type.__name__}.")
@@ -390,17 +393,30 @@ async def async_parse_llm_json_response(
                 logger.warning(f"Parsed JSON for {context_for_log} is type {type(parsed_json)}, expected {expect_type.__name__}. Will attempt LLM correction.")
         except json.JSONDecodeError as e:
             logger.warning(f"Initial JSON parsing failed for {context_for_log}: {e}. Extracted: '{json_block_str[:100]}...'")
-            # Heuristic fix for truncated lists (e.g., missing closing ']')
-            if expect_type == list and e.msg.startswith("Expecting ',' delimiter") and e.pos >= len(json_block_str) - 10: # If error is near the end
+            
+            # Heuristic fixes
+            fixed_json_str = None
+            if e.msg.startswith("Expecting ',' delimiter") and json_block_str.endswith(('}', ']')):
+                # Try removing trailing comma
+                if json_block_str.rstrip().endswith(','):
+                    fixed_json_str = json_block_str.rstrip()[:-1]
+                    logger.info(f"Attempting heuristic fix for trailing comma in {context_for_log}.")
+            elif expect_type == list and e.msg.startswith("Expecting ',' delimiter") and e.pos >= len(json_block_str) - 10:
+                fixed_json_str = json_block_str + "]"
                 logger.info(f"Attempting heuristic fix for truncated list in {context_for_log}: appending ']'")
+            elif expect_type == dict and e.msg.startswith("Expecting property name enclosed in double quotes") and e.pos >= len(json_block_str) -10:
+                 fixed_json_str = json_block_str + "}"
+                 logger.info(f"Attempting heuristic fix for truncated object in {context_for_log}: appending '}}'")
+
+
+            if fixed_json_str:
                 try:
-                    parsed_json = json.loads(json_block_str + "]")
-                    if isinstance(parsed_json, list):
-                        logger.info(f"Heuristically parsed JSON list for {context_for_log} by appending ']'.")
+                    parsed_json = json.loads(fixed_json_str)
+                    if isinstance(parsed_json, expect_type):
+                        logger.info(f"Heuristically parsed JSON {expect_type.__name__} for {context_for_log}.")
                         return parsed_json
                 except json.JSONDecodeError:
-                    logger.warning(f"Heuristic ']' append failed for {context_for_log}. Proceeding to LLM correction...")
-            # Add more heuristic fixes here if common patterns emerge, e.g., for trailing commas.
+                    logger.warning(f"Heuristic fix failed for {context_for_log}. Proceeding to LLM correction...")
     else:
         logger.error(f"Could not extract any JSON {expect_type.__name__} block from initial response for {context_for_log}. Raw: '{raw_response[:200]}...'")
         # If no block was extracted, use the cleaned raw response as input for correction

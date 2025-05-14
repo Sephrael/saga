@@ -574,13 +574,12 @@ async def update_world_building_from_chapter_logic(
 
 @alru_cache(maxsize=config.KG_TRIPLE_EXTRACTION_CACHE_SIZE)
 async def llm_extract_kg_triples_logic(
-    agent, # NovelWriterAgent instance, for protagonist_name
+    protagonist_name_for_prompt: str, # Extracted protagonist name
     text_snippet_for_kg_key: str, # The text snippet itself, used as cache key
     chapter_number: int,
     candidate_entities_json_key: str # JSON string of candidate entities, used as cache key
 ) -> str: # Returns raw LLM response string
     """Cached LLM call for KG triple extraction."""
-    protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     common_predicates = [
         "is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", 
         "interacted_with", "travelled_to", "discovered", "acquired", "lost", "used_item", 
@@ -598,7 +597,7 @@ async def llm_extract_kg_triples_logic(
         )
 
     prompt = f"""/no_think
-You are a Knowledge Graph Engineer. Your task is to extract factual (Subject, Predicate, Object) triples from the provided Text Snippet from Chapter {chapter_number} of a novel (protagonist: '{protagonist_name}').
+You are a Knowledge Graph Engineer. Your task is to extract factual (Subject, Predicate, Object) triples from the provided Text Snippet from Chapter {chapter_number} of a novel (protagonist: '{protagonist_name_for_prompt}').
 
 **Chapter {chapter_number} Text Snippet:**
 --- TEXT ---
@@ -620,7 +619,7 @@ You are a Knowledge Graph Engineer. Your task is to extract factual (Subject, Pr
 {', '.join(common_predicates)}
 
 **Example Output:**
-`[["{protagonist_name}", "travelled_to", "Eclipse Spire"], ["Eclipse Spire", "is_a", "ancient ruin"], ["{protagonist_name}", "feels", "uneasy"]]`
+`[["{protagonist_name_for_prompt}", "travelled_to", "Eclipse Spire"], ["Eclipse Spire", "is_a", "ancient ruin"], ["{protagonist_name_for_prompt}", "feels", "uneasy"]]`
 
 JSON Output Only:
 [
@@ -633,7 +632,7 @@ JSON Output Only:
     )
 
 async def extract_and_store_kg_triples_logic(
-    agent, # NovelWriterAgent instance, for _save_debug_output and passing to llm_extract_kg_triples_logic
+    agent, # NovelWriterAgent instance, for _save_debug_output and plot_outline access
     chapter_text: Optional[str],
     chapter_number: int,
     from_flawed_draft: bool
@@ -654,8 +653,11 @@ async def extract_and_store_kg_triples_logic(
     logger.debug(f"Candidate entities identified for KG extraction in Ch {chapter_number}: {candidate_entities[:10]}")
     candidate_entities_json_for_prompt = json.dumps(candidate_entities) # For cache key and prompt
 
+    # Get protagonist_name for the cached LLM call
+    protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+
     raw_triples_json_str = await llm_extract_kg_triples_logic(
-        agent, text_snippet_for_kg, chapter_number, candidate_entities_json_for_prompt
+        protagonist_name, text_snippet_for_kg, chapter_number, candidate_entities_json_for_prompt
     )
             
     parsed_triples = await llm_interface.async_parse_llm_json_response(
@@ -860,5 +862,7 @@ async def update_all_knowledge_bases_logic(
         logger.info(f"All knowledge base updates (JSON profiles & KG) completed for ch {chapter_number}.")
     except Exception as e:
         logger.error(f"Error during concurrent knowledge base updates for ch {chapter_number}: {e}", exc_info=True)
-        # Depending on severity, might want to re-raise or handle more specifically
+        # Current behavior: log the error and save debug output.
+        # For more critical systems, a more sophisticated error handling strategy might be needed,
+        # such as retries for specific tasks or marking the chapter as needing knowledge reprocessing.
         await agent._save_debug_output(chapter_number, "knowledge_base_update_exception", str(e))
