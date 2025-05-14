@@ -53,8 +53,8 @@ The system is composed of several key modules:
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd saga-novel-writer # Or your repository name
+    git clone https://github.com/Lanerra/saga
+    cd saga
     ```
 
 2.  **Create a virtual environment (recommended):**
@@ -67,8 +67,7 @@ The system is composed of several key modules:
     ```bash
     pip install -r requirements.txt
     ```
-    *(You'll need to create a `requirements.txt` file based on the imports: `requests`, `httpx`, `numpy`, `sqlalchemy`, `aiosqlite`, `async_lru`)*
-
+    
 4.  **Configure Environment Variables:**
     Set the following environment variables (e.g., in a `.env` file and use a library like `python-dotenv`, or set them directly in your shell):
     *   `OLLAMA_EMBED_URL`: URL for your Ollama embedding service (e.g., `http://localhost:11434`).
