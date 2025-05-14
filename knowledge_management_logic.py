@@ -7,7 +7,7 @@ import logging
 import json
 import re
 import asyncio
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 from async_lru import alru_cache # For caching LLM calls
 
@@ -22,6 +22,8 @@ from prompt_data_getters import (
 from state_manager import state_manager
 
 logger = logging.getLogger(__name__)
+
+# --- Summarization ---
 
 @alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
 async def llm_summarize_chapter_snippet_logic(chapter_text_snippet_key: str, chapter_number: int) -> str:
@@ -63,248 +65,334 @@ async def summarize_chapter_text_logic(agent, chapter_text: Optional[str], chapt
     logger.warning(f"Failed to generate a valid summary for ch {chapter_number} via LLM.")
     return None
 
-def apply_state_modification_proposal_logic(agent, target_dict: Dict[str, Any], proposal_str: str, item_name_for_log: str, item_type_for_log: str):
-    """Applies a modification proposal string to a dictionary (profile or world item).
-    'agent' is an instance of NovelWriterAgent (unused here but kept for consistency).
-    """
+# --- JSON State Modification Proposal Logic ---
+
+def _apply_trait_modification(current_traits_list: List[str], modification_details_str: str) -> List[str]:
+    """Applies ADD/REMOVE operations to a list of traits."""
+    traits_set = set(current_traits_list)
+    # Regex to find ADD "trait" or REMOVE "trait", case insensitive for ADD/REMOVE, sensitive for trait value
+    for add_match in re.finditer(r"ADD\s+['\"]([^'\"]+)['\"]", modification_details_str, re.IGNORECASE):
+        trait_to_add = add_match.group(1).strip()
+        if trait_to_add: traits_set.add(trait_to_add)
+    for remove_match in re.finditer(r"REMOVE\s+['\"]([^'\"]+)['\"]", modification_details_str, re.IGNORECASE):
+        trait_to_remove = remove_match.group(1).strip()
+        if trait_to_remove: traits_set.discard(trait_to_remove)
+    return sorted(list(traits_set))
+
+def apply_state_modification_proposal_logic(
+    target_dict: Dict[str, Any],
+    proposal_str: str,
+    item_name_for_log: str,
+    item_type_for_log: str # e.g., "character profile", "world item"
+):
+    """Applies a modification proposal string to a dictionary (profile or world item)."""
     if not isinstance(proposal_str, str) or not proposal_str.strip():
         logger.debug(f"Empty or invalid modification proposal for '{item_name_for_log}'. Proposal: '{proposal_str}'")
         return
-    
-    logger.debug(f"Applying modification proposal for '{item_name_for_log}' ({item_type_for_log}): '{proposal_str}'")
-    
-    proposal_norm = proposal_str.strip().upper()
-    key_to_modify_match = re.match(r"MODIFY\s+([\w_]+)\s*:(.*)", proposal_norm, re.IGNORECASE)
 
-    if not key_to_modify_match:
+    logger.debug(f"Applying modification proposal for '{item_name_for_log}' ({item_type_for_log}): '{proposal_str}'")
+
+    # Format: MODIFY key_name: new_value or MODIFY traits: ADD "X", REMOVE "Y"
+    match = re.match(r"MODIFY\s+([\w_]+)\s*:(.*)", proposal_str, re.IGNORECASE)
+    if not match:
         logger.warning(f"Invalid modification proposal format for '{item_name_for_log}'. Proposal: '{proposal_str}'. Expected 'MODIFY key: value'.")
         return
 
-    key_name_upper = key_to_modify_match.group(1).strip()
-    original_key_name = next((k for k in target_dict if k.upper() == key_name_upper), key_name_upper.lower())
-    
-    value_modification_str_original_case = proposal_str[key_to_modify_match.end(1)+1:].strip() 
+    key_name_from_proposal_upper = match.group(1).strip().upper()
+    value_modification_str = match.group(2).strip() # This is the part after "key:"
+
+    # Find the actual key in target_dict (case-insensitive match)
+    # If not found, use the lowercased version of the key from the proposal
+    original_key_name = next(
+        (k for k in target_dict if k.upper() == key_name_from_proposal_upper),
+        key_name_from_proposal_upper.lower()
+    )
 
     try:
-        if original_key_name.lower() == "traits": 
+        if original_key_name.lower() == "traits":
             if "traits" not in target_dict or not isinstance(target_dict["traits"], list):
-                target_dict["traits"] = [] 
-            
-            current_traits_set = set(target_dict["traits"])
-            for add_match in re.finditer(r"ADD\s+['\"]([^'\"]+)['\"]", value_modification_str_original_case, re.IGNORECASE):
-                trait_to_add = add_match.group(1).strip()
-                if trait_to_add: current_traits_set.add(trait_to_add)
-            for remove_match in re.finditer(r"REMOVE\s+['\"]([^'\"]+)['\"]", value_modification_str_original_case, re.IGNORECASE):
-                trait_to_remove = remove_match.group(1).strip()
-                if trait_to_remove: current_traits_set.discard(trait_to_remove)
-            
-            target_dict["traits"] = sorted(list(current_traits_set))
+                target_dict["traits"] = []
+            target_dict["traits"] = _apply_trait_modification(target_dict["traits"], value_modification_str)
             logger.info(f"Applied trait modifications for '{item_name_for_log}'. New traits: {target_dict['traits']}")
-        else: 
-            new_value_str = value_modification_str_original_case.strip("'\" ") 
-            if new_value_str: 
-                target_dict[original_key_name] = new_value_str 
+        else:
+            # For other keys, assign the new value directly
+            new_value_str = value_modification_str.strip("'\" ") # Remove potential quotes around the value
+            if new_value_str: # Ensure the value is not empty after stripping
+                target_dict[original_key_name] = new_value_str
                 logger.info(f"Applied modification to '{original_key_name}' for '{item_name_for_log}'. New value: '{new_value_str[:70]}...'")
             else:
                 logger.warning(f"Modification proposal for '{original_key_name}' of '{item_name_for_log}' resulted in an empty new value. Proposal: '{proposal_str}'")
     except Exception as e:
-        logger.error(f"Error applying modification proposal for '{item_name_for_log}': {e}. Proposal: '{proposal_str}'", exc_info=True)
+        logger.error(f"Error applying modification proposal for '{item_name_for_log}': {e}. Key: {original_key_name}, Proposal: '{proposal_str}'", exc_info=True)
 
-def merge_character_profile_updates_logic(agent, updates_from_llm: Dict[str, Any], chapter_number: int, from_flawed_draft: bool):
-    """Merges LLM-proposed character updates into the agent's character_profiles.
-    'agent' is an instance of NovelWriterAgent.
-    """
+
+# --- Character Profile Merging Logic ---
+
+def _initialize_new_character_profile(
+    char_name: str,
+    char_update_data: Dict[str, Any],
+    chapter_number: int,
+    provisional_marker_key: str,
+    dev_key: str
+) -> Dict[str, Any]:
+    """Initializes a new character profile dictionary."""
+    new_profile: Dict[str, Any] = {
+        "description": char_update_data.get("description", f"A character newly introduced in Chapter {chapter_number}."),
+        "traits": sorted(list(set(t for t in char_update_data.get("traits", []) if isinstance(t, str) and t.strip()))),
+        "relationships": char_update_data.get("relationships", {}),
+        "status": char_update_data.get("status", "Newly introduced")
+    }
+    if dev_key in char_update_data:
+        new_profile[dev_key] = char_update_data[dev_key]
+    if provisional_marker_key in char_update_data: # Should be set by caller if needed
+        new_profile[provisional_marker_key] = char_update_data[provisional_marker_key]
+    
+    logger.info(f"Prepared new character profile for '{char_name}'.")
+    return new_profile
+
+def _update_existing_character_profile_fields(
+    existing_profile: Dict[str, Any],
+    char_update_data: Dict[str, Any],
+    dev_key: str,
+    provisional_marker_key: str
+):
+    """Updates fields of an existing character profile based on LLM data, excluding modification proposals."""
+    if provisional_marker_key in char_update_data:
+        existing_profile[provisional_marker_key] = char_update_data[provisional_marker_key]
+
+    for key, value in char_update_data.items():
+        if key in ["modification_proposal", provisional_marker_key, dev_key]: # Handled separately or already applied
+            continue
+
+        if key == "traits" and isinstance(value, list):
+            if "traits" not in existing_profile or not isinstance(existing_profile["traits"], list):
+                existing_profile["traits"] = []
+            valid_new_traits = {t for t in value if isinstance(t, str) and t.strip()}
+            existing_profile["traits"] = sorted(list(set(existing_profile["traits"]).union(valid_new_traits)))
+        elif key == "relationships" and isinstance(value, dict):
+            if not isinstance(existing_profile.get("relationships"), dict):
+                existing_profile["relationships"] = {}
+            existing_profile["relationships"].update(value)
+        elif key == "description" and isinstance(value, str) and value.strip():
+            # Only update if not already handled by a modification_proposal
+            existing_profile["description"] = value
+        elif key == "status" and isinstance(value, str) and value.strip():
+            existing_profile["status"] = value
+        elif key not in existing_profile and value is not None: # Add new fields
+            existing_profile[key] = value
+        # If key exists and is not one of the above, it's generally not overwritten unless by modification_proposal
+    
+    # Ensure development key is present if other updates happened
+    if dev_key in char_update_data and isinstance(char_update_data[dev_key], str) and char_update_data[dev_key].strip():
+        existing_profile[dev_key] = char_update_data[dev_key]
+
+
+def merge_character_profile_updates_logic(
+    agent, # NovelWriterAgent instance
+    updates_from_llm: Dict[str, Any],
+    chapter_number: int,
+    from_flawed_draft: bool
+):
+    """Merges LLM-proposed character updates into the agent's character_profiles."""
     if not updates_from_llm:
         logger.info(f"No character profile updates from LLM to merge for ch {chapter_number}.")
         return
-    
+
     logger.info(f"Merging character profile JSON updates for ch {chapter_number}. Characters in update: {list(updates_from_llm.keys())}")
     updated_chars_count, new_chars_count = 0, 0
-    provisional_marker_key = f"source_quality_chapter_{chapter_number}" 
+    
+    # This key is used to mark the source quality IF the update comes from a flawed draft.
+    # It's also added to the `char_update_data` before processing if `from_flawed_draft` is true.
+    provisional_marker_key = f"source_quality_chapter_{chapter_number}"
 
-    for char_name, char_update_data in updates_from_llm.items():
-        if not isinstance(char_update_data, dict):
-            logger.warning(f"Skipping invalid character update data for '{char_name}' (not a dict). Data: {char_update_data}")
+    for char_name, char_update_data_original in updates_from_llm.items():
+        if not isinstance(char_update_data_original, dict):
+            logger.warning(f"Skipping invalid character update data for '{char_name}' (not a dict). Data: {char_update_data_original}")
             continue
         
-        char_update = char_update_data.copy()
-        
-        if from_flawed_draft:
-            char_update[provisional_marker_key] = "provisional_from_unrevised_draft"
+        char_update_data = char_update_data_original.copy() # Work with a copy
+
+        if from_flawed_draft: # Mark data originating from a flawed draft
+            char_update_data[provisional_marker_key] = "provisional_from_unrevised_draft"
 
         dev_key = f"development_in_chapter_{chapter_number}"
-        if dev_key not in char_update and (len(char_update) > (1 if provisional_marker_key in char_update else 0)):
-             char_update[dev_key] = "Character appeared or was mentioned in this chapter."
-        
+        # Ensure dev_key is present if there are any updates beyond just a provisional marker
+        is_substantive_update = len(char_update_data) > (1 if provisional_marker_key in char_update_data else 0)
+        if dev_key not in char_update_data and is_substantive_update:
+            char_update_data[dev_key] = "Character appeared or was mentioned in this chapter."
+
+        modification_proposal = char_update_data.get("modification_proposal")
+
         if char_name not in agent.character_profiles:
             new_chars_count += 1
-            logger.info(f"Adding new character '{char_name}' based on ch {chapter_number} analysis.")
-            agent.character_profiles[char_name] = {
-                "description": char_update.get("description", f"A character newly introduced in Chapter {chapter_number}."),
-                "traits": sorted(list(set(t for t in char_update.get("traits", []) if isinstance(t, str) and t.strip()))),
-                "relationships": char_update.get("relationships", {}), 
-                "status": char_update.get("status", "Newly introduced")
-            }
-            if dev_key in char_update: agent.character_profiles[char_name][dev_key] = char_update[dev_key]
-            if provisional_marker_key in char_update: agent.character_profiles[char_name][provisional_marker_key] = char_update[provisional_marker_key]
-            
-            if config.ENABLE_DYNAMIC_STATE_ADAPTATION and "modification_proposal" in char_update:
-                apply_state_modification_proposal_logic(agent, agent.character_profiles[char_name], char_update["modification_proposal"], char_name, "new character profile")
-        
-        else: 
+            new_profile = _initialize_new_character_profile(char_name, char_update_data, chapter_number, provisional_marker_key, dev_key)
+            agent.character_profiles[char_name] = new_profile
+            if config.ENABLE_DYNAMIC_STATE_ADAPTATION and modification_proposal:
+                apply_state_modification_proposal_logic(
+                    agent.character_profiles[char_name], modification_proposal, char_name, "new character profile"
+                )
+        else:
             updated_chars_count += 1
-            logger.debug(f"Updating existing character '{char_name}' based on ch {chapter_number} analysis.")
             existing_profile = agent.character_profiles[char_name]
             
-            if provisional_marker_key in char_update: 
-                existing_profile[provisional_marker_key] = char_update[provisional_marker_key]
+            if config.ENABLE_DYNAMIC_STATE_ADAPTATION and modification_proposal:
+                apply_state_modification_proposal_logic(
+                    existing_profile, modification_proposal, char_name, "existing character profile"
+                )
             
-            if config.ENABLE_DYNAMIC_STATE_ADAPTATION and "modification_proposal" in char_update:
-                apply_state_modification_proposal_logic(agent, existing_profile, char_update["modification_proposal"], char_name, "existing character profile")
-            
-            for key, value in char_update.items():
-                if key in ["modification_proposal", provisional_marker_key]: continue 
-                
-                if key == "traits" and isinstance(value, list):
-                    if "traits" not in existing_profile or not isinstance(existing_profile["traits"], list):
-                        existing_profile["traits"] = []
-                    valid_new_traits = {t for t in value if isinstance(t, str) and t.strip()}
-                    existing_profile["traits"] = sorted(list(set(existing_profile["traits"]).union(valid_new_traits)))
-                elif key == "relationships" and isinstance(value, dict):
-                     if not isinstance(existing_profile.get("relationships"), dict):
-                         existing_profile["relationships"] = {}
-                     existing_profile["relationships"].update(value) 
-                elif key == "description" and isinstance(value, str) and value.strip():
-                    if not (config.ENABLE_DYNAMIC_STATE_ADAPTATION and "modification_proposal" in char_update and "MODIFY DESCRIPTION" in char_update["modification_proposal"].upper()):
-                        existing_profile["description"] = value 
-                elif key == dev_key and isinstance(value, str) and value.strip():
-                    existing_profile[key] = value 
-                elif key == "status" and isinstance(value, str) and value.strip():
-                    existing_profile["status"] = value 
-                elif key not in existing_profile and value is not None: 
-                    existing_profile[key] = value
+            # Apply other updates (description, status, traits, relationships, dev_key, provisional_marker)
+            _update_existing_character_profile_fields(existing_profile, char_update_data, dev_key, provisional_marker_key)
 
     if updated_chars_count > 0 or new_chars_count > 0:
         logger.info(f"Character profile JSON merge complete for ch {chapter_number}. Updated: {updated_chars_count}, New: {new_chars_count}.")
     else:
         logger.info(f"No character profiles were effectively updated or added for ch {chapter_number} after LLM analysis.")
 
-def robust_merge_world_item_data_logic(agent, target_dict: Dict[str, Any], update_dict: Dict[str, Any], item_name_for_log: str, chapter_num: int, from_flawed_draft_source: bool) -> Dict[str, Any]:
-    """Recursively merges update_dict into target_dict for world items.
-    'agent' is an instance of NovelWriterAgent.
+
+# --- World Item Merging Logic ---
+
+def robust_merge_world_item_data_logic(
+    target_dict: Dict[str, Any], # The existing data for the world item
+    update_dict: Dict[str, Any], # The new data from LLM for this item
+    item_name_for_log: str,      # For logging purposes, e.g., "locations.CapitalCity"
+    chapter_num: int,
+    from_flawed_draft_source: bool # If the update_dict originates from a flawed draft
+) -> Dict[str, Any]:
     """
-    current_item_data = target_dict.copy() if isinstance(target_dict, dict) else {}
-    if not isinstance(target_dict, dict) and target_dict is not None: 
-        current_item_data['description'] = str(target_dict) 
-        logger.warning(f"World item '{item_name_for_log}' was not a dict. Converted to dict, old value saved as 'description'.")
+    Recursively merges update_dict into target_dict for world items.
+    Modifies target_dict in place but also returns it.
+    """
+    current_item_data = target_dict # Modifying in place
     
+    # Ensure current_item_data is a dict; if not, initialize it.
+    if not isinstance(current_item_data, dict):
+        logger.warning(f"World item '{item_name_for_log}' was not a dict. Initializing as dict. Old value: '{current_item_data}'")
+        # Decide how to handle non-dict existing data. For simplicity, we'll overwrite with a new dict structure.
+        # Or, one could try to preserve it, e.g., current_item_data = {'_original_value': current_item_data}
+        current_item_data.clear() # Clears the original target_dict if it wasn't a dict
+        if not isinstance(target_dict, dict): # if target_dict was not a dict, make it one.
+             target_dict.update(current_item_data)
+
+
     item_was_modified_this_call = False
     provisional_marker_key = f"source_quality_chapter_{chapter_num}"
 
-    if provisional_marker_key in update_dict:
-        current_item_data[provisional_marker_key] = update_dict[provisional_marker_key]
-        item_was_modified_this_call = True 
+    # Apply provisional marker if the update source is flawed
+    if from_flawed_draft_source: # This applies to the entire update_dict
+        current_item_data[provisional_marker_key] = "provisional_from_unrevised_draft"
+        item_was_modified_this_call = True
 
+    # Handle modification proposal first
     if config.ENABLE_DYNAMIC_STATE_ADAPTATION and "modification_proposal" in update_dict:
-        proposal = update_dict.pop("modification_proposal") 
+        proposal = update_dict.pop("modification_proposal") # Remove after processing
         if isinstance(proposal, str) and proposal.strip():
-            apply_state_modification_proposal_logic(agent, current_item_data, proposal, item_name_for_log, "world item")
+            apply_state_modification_proposal_logic(current_item_data, proposal, item_name_for_log, "world item")
             item_was_modified_this_call = True
-    
+
     for key, value_from_update in update_dict.items():
-        if key in [provisional_marker_key, "modification_proposal"] or key.startswith(("updated_in_chapter_", "added_in_chapter_", "elaboration_in_chapter_")):
+        # Skip already processed keys or internal tracking keys that shouldn't be merged as plain data
+        if key in [provisional_marker_key, "modification_proposal"] or \
+           key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")): # source_quality_chapter should be handled by top level
             if key.startswith("elaboration_in_chapter_") and isinstance(value_from_update, str) and value_from_update.strip():
-                current_item_data[key] = value_from_update 
-                item_was_modified_this_call = True
+                 current_item_data[key] = value_from_update # Keep elaborations
+                 item_was_modified_this_call = True
             continue
 
         current_value_in_target = current_item_data.get(key)
 
         if isinstance(value_from_update, dict):
             if not isinstance(current_value_in_target, dict):
-                current_item_data[key] = {}
-                item_was_modified_this_call = True 
-            merged_sub_dict = robust_merge_world_item_data_logic(agent, current_item_data[key], value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source)
-            if merged_sub_dict != current_item_data[key]: 
+                current_item_data[key] = {} # Initialize if not a dict
+                item_was_modified_this_call = True
+            # Recursive call for nested dictionaries
+            merged_sub_dict = robust_merge_world_item_data_logic(
+                current_item_data[key], value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source=False # Nested elements are part of this update, not new sources
+            )
+            if merged_sub_dict != current_item_data[key]: # Check if the sub-dict actually changed
                 item_was_modified_this_call = True
             current_item_data[key] = merged_sub_dict
         elif isinstance(value_from_update, list):
             if not isinstance(current_value_in_target, list):
-                current_item_data[key] = []
-                item_was_modified_this_call = True 
+                current_item_data[key] = [] # Initialize if not a list
+                item_was_modified_this_call = True
             
             initial_list_len = len(current_item_data[key])
             for item_in_list_update in value_from_update:
-                if item_in_list_update not in current_item_data[key]:
+                if item_in_list_update not in current_item_data[key]: # Add only new, unique items
                     current_item_data[key].append(item_in_list_update)
             if len(current_item_data[key]) > initial_list_len:
                 item_was_modified_this_call = True
-        elif value_from_update != current_value_in_target: 
+        elif value_from_update != current_value_in_target: # For scalar values or if direct overwrite is intended
             current_item_data[key] = value_from_update
             item_was_modified_this_call = True
     
     if item_was_modified_this_call and not current_item_data.get(f"added_in_chapter_{chapter_num}"):
+        # Mark as updated in this chapter if any modification occurred and it wasn't a new addition in this same chapter
         current_item_data[f"updated_in_chapter_{chapter_num}"] = True
             
     return current_item_data
 
-def merge_world_item_updates_logic(agent, updates_from_llm: Dict[str, Any], chapter_number: int, from_flawed_draft: bool):
-    """Merges LLM-proposed world-building updates into the agent's world_building state.
-    'agent' is an instance of NovelWriterAgent.
-    """
+
+def merge_world_item_updates_logic(
+    agent, # NovelWriterAgent instance
+    updates_from_llm: Dict[str, Any], # Expected: {"category": {"item_name": {...updates...}}}
+    chapter_number: int,
+    from_flawed_draft: bool
+):
+    """Merges LLM-proposed world-building updates into the agent's world_building state."""
     if not updates_from_llm:
         logger.info(f"No world-building updates from LLM to merge for ch {chapter_number}.")
         return
 
     logger.info(f"Merging world-building JSON updates for ch {chapter_number}. Categories in update: {list(updates_from_llm.keys())}")
     items_affected_count = 0
-    provisional_marker_key = f"source_quality_chapter_{chapter_number}"
-
+    
     for category_key, category_updates_dict in updates_from_llm.items():
         if not isinstance(category_updates_dict, dict) or not category_updates_dict:
             logger.debug(f"Skipping empty or invalid update for world category '{category_key}' in ch {chapter_number}.")
             continue
         
+        # Ensure category exists in agent's world_building
         if category_key not in agent.world_building:
             agent.world_building[category_key] = {}
         elif not isinstance(agent.world_building[category_key], dict): 
-            logger.warning(f"Overwriting non-dictionary world category '{category_key}' with new dictionary structure.")
+            logger.warning(f"Overwriting non-dictionary world category '{category_key}' with new dictionary structure for ch {chapter_number}.")
             agent.world_building[category_key] = {}
         
-        target_category_dict = agent.world_building[category_key]
+        target_category_dict = agent.world_building[category_key] # This is a reference to agent's state
         
         for item_name, item_update_details in category_updates_dict.items():
             if not isinstance(item_update_details, dict):
-                logger.warning(f"Skipping invalid item_details for '{item_name}' in category '{category_key}' (not a dict). Data: {item_update_details}")
+                logger.warning(f"Skipping invalid item_details for '{item_name}' in category '{category_key}' (not a dict) for ch {chapter_number}. Data: {item_update_details}")
                 continue
             
             item_log_name = f"{category_key}.{item_name}"
-            update_copy = item_update_details.copy() 
-
-            if from_flawed_draft:
-                update_copy[provisional_marker_key] = "provisional_from_unrevised_draft"
             
             existing_item_data = target_category_dict.get(item_name)
             
-            if existing_item_data is None: 
+            if existing_item_data is None: # New item
                 logger.info(f"Adding new world item '{item_log_name}' from ch {chapter_number} analysis.")
-                new_item_data = robust_merge_world_item_data_logic(agent, {}, update_copy, item_log_name, chapter_number, from_flawed_draft)
+                new_item_data = {} # Start with an empty dict for the new item
+                robust_merge_world_item_data_logic(new_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
                 new_item_data[f"added_in_chapter_{chapter_number}"] = True 
                 target_category_dict[item_name] = new_item_data
                 items_affected_count +=1
-            elif isinstance(existing_item_data, dict): 
+            elif isinstance(existing_item_data, dict): # Existing item, ensure it's a dict
                 logger.debug(f"Updating existing world item '{item_log_name}' from ch {chapter_number} analysis.")
-                updated_item_data = robust_merge_world_item_data_logic(agent, existing_item_data, update_copy, item_log_name, chapter_number, from_flawed_draft)
-                target_category_dict[item_name] = updated_item_data
-                if updated_item_data.get(f"updated_in_chapter_{chapter_number}") or update_copy.get(provisional_marker_key):
+                # robust_merge_world_item_data_logic modifies existing_item_data in place
+                robust_merge_world_item_data_logic(existing_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
+                if existing_item_data.get(f"updated_in_chapter_{chapter_number}") or \
+                   (from_flawed_draft and existing_item_data.get(f"source_quality_chapter_{chapter_number}")): # If it was marked as updated or got a new provisional marker
                     items_affected_count +=1
-            else: 
-                logger.warning(f"Existing world item '{item_log_name}' is not a dictionary. Overwriting with new data from ch {chapter_number}.")
-                new_item_data = robust_merge_world_item_data_logic(agent, {}, update_copy, item_log_name, chapter_number, from_flawed_draft)
+            else: # Existing item is not a dict, treat as new/overwrite
+                logger.warning(f"Existing world item '{item_log_name}' is not a dictionary. Overwriting with new data from ch {chapter_number}. Old value: '{existing_item_data}'")
+                new_item_data = {}
+                robust_merge_world_item_data_logic(new_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft)
                 new_item_data[f"added_in_chapter_{chapter_number}"] = True 
                 target_category_dict[item_name] = new_item_data
                 items_affected_count += 1
         
+        # Check if any item in the category was marked as added or updated
         if any(isinstance(v,dict) and (v.get(f"updated_in_chapter_{chapter_number}") or v.get(f"added_in_chapter_{chapter_number}")) 
                for v in target_category_dict.values()):
              target_category_dict[f"category_updated_in_chapter_{chapter_number}"] = True
@@ -315,42 +403,28 @@ def merge_world_item_updates_logic(agent, updates_from_llm: Dict[str, Any], chap
         logger.info(f"No world-building JSON items were effectively updated or added for ch {chapter_number} after LLM analysis.")
 
 
-async def update_json_profiles_from_chapter_logic(agent, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool):
-    """Updates character and world-building JSON files based on events in the chapter.
-    'agent' is an instance of NovelWriterAgent.
-    """
-    if not chapter_text or len(chapter_text) < 100:
-        logger.info(f"Skipping JSON knowledge update for ch {chapter_number}: Text too short or None.")
-        return
+# --- JSON Profile Update Orchestration (from Chapter Text) ---
 
-    known_char_names = list(agent.character_profiles.keys())
-    known_loc_names = list(agent.world_building.get("locations", {}).keys())
-    
-    text_lower = chapter_text.lower()
-    mentioned_entities = [name for name in known_char_names if name.lower() in text_lower]
-    mentioned_entities.extend(name for name in known_loc_names if name.lower() in text_lower)
-    
-    if not mentioned_entities and chapter_number > 3 : 
-         logger.info(f"JSON knowledge update for ch {chapter_number}: No known characters or locations mentioned significantly (heuristic). Will still attempt LLM update if configured.")
-
-    logger.info(f"Attempting combined JSON (character/world) update for ch {chapter_number} (Source from flawed draft: {from_flawed_draft}). Mentions found (heuristic): {mentioned_entities[:5]}")
-    text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE] 
+async def _build_character_update_prompt(
+    agent, text_snippet: str, chapter_number: int
+) -> str:
+    """Builds the prompt for LLM character profile updates."""
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-    
-    dynamic_instr_char, dynamic_instr_world = "", ""
+    dynamic_instr_char = ""
     if config.ENABLE_DYNAMIC_STATE_ADAPTATION:
-        dynamic_instr_char = """For existing characters, if their traits, status, or core description needs modification based on THIS chapter's events, include a `"modification_proposal"` field. Example: `"modification_proposal": "MODIFY traits: ADD 'Determined', REMOVE 'Hesitant'"`. Only include characters that are updated, newly introduced, or have a modification proposal."""
-        dynamic_instr_world = """For existing world items, if their properties need modification, include a `"modification_proposal"`. Example: `"modification_proposal": "MODIFY atmosphere: 'Now heavy with magical fallout'"`. Only include world elements (locations, society items, systems, lore, history) that are new, significantly changed by THIS chapter's events, or have a modification proposal."""
+        dynamic_instr_char = (
+            f"For existing characters, if their traits, status, or core description needs modification based on THIS chapter's events, "
+            f"include a `\"modification_proposal\"` field. Example: `\"modification_proposal\": \"MODIFY traits: ADD 'Determined', REMOVE 'Hesitant'\"`. "
+            f"Only include characters that are updated, newly introduced, or have a modification proposal."
+        )
     else:
         dynamic_instr_char = "Only include characters whose information is directly updated or those newly introduced in THIS chapter."
-        dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events."
-        
-    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
-    current_world_for_prompt = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
 
-    prompt = f"""/no_think
-You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for character profiles AND world-building details.
-The output MUST be a single, valid JSON object with two top-level keys: "character_updates" and "world_building_updates".
+    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
+
+    return f"""/no_think
+You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for character profiles.
+The output MUST be a single, valid JSON object representing character updates.
 
 **Chapter {chapter_number} Text Snippet (focus on information revealed or changed IN THIS SNIPPET):**
 --- BEGIN TEXT ---
@@ -363,11 +437,84 @@ The output MUST be a single, valid JSON object with two top-level keys: "charact
 ```
 **Character Update Instructions:**
 1. Identify characters whose status, traits, relationships, or descriptions are explicitly updated or who are newly introduced in THIS chapter snippet.
-2. For each such character, create an entry in the "character_updates" object (keyed by character name).
+2. For each such character, create an entry in the output JSON object (keyed by character name).
 3. Each character entry should include relevant updated fields (e.g., "traits", "status", "description", "relationships").
 4. Crucially, add a `development_in_chapter_{chapter_number}` key to each character entry, summarizing their role, actions, or significant changes in THIS chapter.
 5. {dynamic_instr_char}
-6. If no characters are updated or introduced, the value of "character_updates" should be an empty JSON object `{{}}`.
+6. If no characters are updated or introduced, the output should be an empty JSON object `{{}}`.
+
+**CRITICAL: Output ONLY the character updates JSON object as specified.**
+Example Output Structure:
+```json
+{{
+  "CharacterName": {{ 
+    "description": "Updated description.", 
+    "traits": ["NewTrait"], 
+    "status": "Updated Status",
+    "modification_proposal": "MODIFY traits: ADD 'Brave'", 
+    "development_in_chapter_{chapter_number}": "They confronted the antagonist and revealed a new skill."
+  }},
+  "AnotherChar": {{
+    "status": "Injured",
+    "development_in_chapter_{chapter_number}": "Was wounded during the escape."
+  }}
+}}
+```
+"""
+
+async def update_character_profiles_from_chapter_logic(
+    agent, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool
+):
+    """Updates character JSON profiles based on events in the chapter."""
+    if not chapter_text or len(chapter_text) < 100: # Heuristic minimum length
+        logger.info(f"Skipping character JSON knowledge update for ch {chapter_number}: Text too short or None.")
+        return
+
+    logger.info(f"Attempting character JSON profile update for ch {chapter_number} (Source from flawed draft: {from_flawed_draft}).")
+    text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
+    
+    prompt = await _build_character_update_prompt(agent, text_snippet, chapter_number)
+    
+    raw_analysis = await llm_interface.async_call_llm(
+        model_name=config.KNOWLEDGE_UPDATE_MODEL,
+        prompt=prompt,
+        temperature=0.6
+    )
+    character_updates = await llm_interface.async_parse_llm_json_response(
+        raw_analysis, f"character JSON profile update for ch {chapter_number}", expect_type=dict
+    )
+
+    if character_updates and isinstance(character_updates, dict):
+        merge_character_profile_updates_logic(agent, character_updates, chapter_number, from_flawed_draft)
+    else:
+        logger.warning(f"LLM parsing for character JSON updates failed or returned no/invalid data for ch {chapter_number}. Raw: '{raw_analysis[:200] if raw_analysis else 'EMPTY'}'")
+
+
+async def _build_world_update_prompt(
+    agent, text_snippet: str, chapter_number: int
+) -> str:
+    """Builds the prompt for LLM world-building updates."""
+    protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+    dynamic_instr_world = ""
+    if config.ENABLE_DYNAMIC_STATE_ADAPTATION:
+        dynamic_instr_world = (
+            f"For existing world items, if their properties need modification, include a `\"modification_proposal\"`. "
+            f"Example: `\"modification_proposal\": \"MODIFY atmosphere: 'Now heavy with magical fallout'\"`. "
+            f"Only include world elements (locations, society items, systems, lore, history) that are new, significantly changed by THIS chapter's events, or have a modification proposal."
+        )
+    else:
+        dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events."
+
+    current_world_for_prompt = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
+
+    return f"""/no_think
+You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for world-building details.
+The output MUST be a single, valid JSON object representing world-building updates.
+
+**Chapter {chapter_number} Text Snippet (focus on information revealed or changed IN THIS SNIPPET):**
+--- BEGIN TEXT ---
+{text_snippet}... (snippet may be truncated)
+--- END TEXT ---
 
 **Current World Building Notes (for reference - note 'prompt_notes' for provisional status):**
 ```json
@@ -375,75 +522,72 @@ The output MUST be a single, valid JSON object with two top-level keys: "charact
 ```
 **World Building Update Instructions:**
 1. Identify new or significantly changed locations, societal elements (factions, cultures), systems (magic, tech), lore, or historical details revealed in THIS chapter snippet.
-2. For each, create an entry under the appropriate category (e.g., "locations", "society") within the "world_building_updates" object.
-3. Each world element entry should contain its updated details (e.g., "description", "atmosphere", "rules", "goals").
+2. For each, create an entry under the appropriate category (e.g., "locations", "society") within the output JSON object.
+3. Each world element entry (e.g., a specific city under "locations") should contain its updated details (e.g., "description", "atmosphere", "rules", "goals").
 4. Add an `elaboration_in_chapter_{chapter_number}` key to each world element entry, providing context or specifics from THIS chapter.
 5. {dynamic_instr_world}
-6. If no world elements are updated or introduced, the relevant category (e.g., "locations") should be an empty JSON object `{{}}`, or the entire "world_building_updates" can be `{{}}`.
+6. If no world elements are updated or introduced, the relevant category (e.g., "locations") should be an empty JSON object `{{}}`, or the entire output can be `{{}}`.
 
-**CRITICAL: Output ONLY the combined JSON object as specified.**
+**CRITICAL: Output ONLY the world-building updates JSON object as specified.**
 Example Output Structure:
 ```json
 {{
-  "character_updates": {{
-    "CharacterName": {{ 
-      "description": "Updated description.", 
-      "traits": ["NewTrait"], 
-      "status": "Updated Status",
-      "modification_proposal": "MODIFY traits: ADD 'Brave'", 
-      "development_in_chapter_{chapter_number}": "They confronted the antagonist and revealed a new skill."
+  "locations": {{
+    "NewDiscoveredCave": {{ 
+      "description": "A dark, mysterious cave pulsating with strange energy.",
+      "atmosphere": "Eerie and cold",
+      "elaboration_in_chapter_{chapter_number}": "Discovered by the protagonist after deciphering ancient map."
     }}
   }},
-  "world_building_updates": {{
-    "locations": {{
-      "NewDiscoveredCave": {{ 
-        "description": "A dark, mysterious cave pulsating with strange energy.",
-        "atmosphere": "Eerie and cold",
-        "elaboration_in_chapter_{chapter_number}": "Discovered by the protagonist after deciphering ancient map."
-      }}
-    }},
-    "systems": {{
-      "AncientMagicSystem": {{
-         "rules": "Previously unknown rule about requiring silver for casting.",
-         "modification_proposal": "MODIFY description: 'Magic is now unstable during eclipses.'", 
-         "elaboration_in_chapter_{chapter_number}": "A character failed to cast a spell during an eclipse, revealing this new property."
-      }}
+  "systems": {{
+    "AncientMagicSystem": {{
+       "rules": "Previously unknown rule about requiring silver for casting.",
+       "modification_proposal": "MODIFY description: 'Magic is now unstable during eclipses.'", 
+       "elaboration_in_chapter_{chapter_number}": "A character failed to cast a spell during an eclipse, revealing this new property."
     }}
   }}
 }}
 ```
 """
-    raw_analysis = await llm_interface.async_call_llm(
-        model_name=config.KNOWLEDGE_UPDATE_MODEL,
-        prompt=prompt, 
-        temperature=0.6 
-    )
-    combined_updates = await llm_interface.async_parse_llm_json_response(
-        raw_analysis, f"combined character/world JSON update for ch {chapter_number}"
-    )
 
-    if not combined_updates or not isinstance(combined_updates, dict):
-        logger.warning(f"LLM parsing for combined char/world JSON updates failed or returned no data for ch {chapter_number}. Raw LLM: {raw_analysis[:200] if raw_analysis else 'EMPTY'}")
+async def update_world_building_from_chapter_logic(
+    agent, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool
+):
+    """Updates world-building JSON files based on events in the chapter."""
+    if not chapter_text or len(chapter_text) < 100: # Heuristic minimum length
+        logger.info(f"Skipping world-building JSON knowledge update for ch {chapter_number}: Text too short or None.")
         return
 
-    char_updates = combined_updates.get("character_updates")
-    if char_updates and isinstance(char_updates, dict):
-        merge_character_profile_updates_logic(agent, char_updates, chapter_number, from_flawed_draft)
-    else:
-        logger.info(f"No 'character_updates' field found or it's not a dictionary in combined response for ch {chapter_number}.")
+    logger.info(f"Attempting world-building JSON update for ch {chapter_number} (Source from flawed draft: {from_flawed_draft}).")
+    text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
 
-    world_updates = combined_updates.get("world_building_updates")
+    prompt = await _build_world_update_prompt(agent, text_snippet, chapter_number)
+
+    raw_analysis = await llm_interface.async_call_llm(
+        model_name=config.KNOWLEDGE_UPDATE_MODEL,
+        prompt=prompt,
+        temperature=0.6
+    )
+    world_updates = await llm_interface.async_parse_llm_json_response(
+        raw_analysis, f"world-building JSON update for ch {chapter_number}", expect_type=dict
+    )
+
     if world_updates and isinstance(world_updates, dict):
         merge_world_item_updates_logic(agent, world_updates, chapter_number, from_flawed_draft)
     else:
-        logger.info(f"No 'world_building_updates' field found or it's not a dictionary in combined response for ch {chapter_number}.")
+        logger.warning(f"LLM parsing for world-building JSON updates failed or returned no/invalid data for ch {chapter_number}. Raw: '{raw_analysis[:200] if raw_analysis else 'EMPTY'}'")
 
+
+# --- Knowledge Graph Management ---
 
 @alru_cache(maxsize=config.KG_TRIPLE_EXTRACTION_CACHE_SIZE)
-async def llm_extract_kg_triples_logic(agent, text_snippet_for_kg_key: str, chapter_number: int, candidate_entities_json_key: str) -> str:
-    """Cached LLM call for KG triple extraction.
-    'agent' is an instance of NovelWriterAgent.
-    """
+async def llm_extract_kg_triples_logic(
+    agent, # NovelWriterAgent instance, for protagonist_name
+    text_snippet_for_kg_key: str, # The text snippet itself, used as cache key
+    chapter_number: int,
+    candidate_entities_json_key: str # JSON string of candidate entities, used as cache key
+) -> str: # Returns raw LLM response string
+    """Cached LLM call for KG triple extraction."""
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     common_predicates = [
         "is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants", 
@@ -455,8 +599,11 @@ async def llm_extract_kg_triples_logic(agent, text_snippet_for_kg_key: str, chap
     ] 
     
     candidate_entities_prompt_section = ""
-    if candidate_entities_json_key and candidate_entities_json_key != "[]": 
-        candidate_entities_prompt_section = f"**Heuristically Identified Candidate Entities (Prioritize these for Subject/Object if relevant and present in the text snippet):**\n```json\n{candidate_entities_json_key}\n```\n"
+    if candidate_entities_json_key and candidate_entities_json_key != "[]": # Check if not empty list string
+        candidate_entities_prompt_section = (
+            f"**Heuristically Identified Candidate Entities (Prioritize these for Subject/Object if relevant and present in the text snippet):**\n"
+            f"```json\n{candidate_entities_json_key}\n```\n"
+        )
 
     prompt = f"""/no_think
 You are a Knowledge Graph Engineer. Your task is to extract factual (Subject, Predicate, Object) triples from the provided Text Snippet from Chapter {chapter_number} of a novel (protagonist: '{protagonist_name}').
@@ -493,23 +640,27 @@ JSON Output Only:
         max_tokens=config.MAX_KG_TRIPLE_TOKENS
     )
 
-async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str], chapter_number: int, from_flawed_draft: bool):
-    """Extracts KG triples from chapter text and adds them to the database.
-    'agent' is an instance of NovelWriterAgent.
-    """
+async def extract_and_store_kg_triples_logic(
+    agent, # NovelWriterAgent instance, for _save_debug_output and passing to llm_extract_kg_triples_logic
+    chapter_text: Optional[str],
+    chapter_number: int,
+    from_flawed_draft: bool
+):
+    """Extracts KG triples from chapter text and adds them to the database via state_manager."""
     if not chapter_text:
         logger.warning(f"Skipping KG extraction for ch {chapter_number}: Chapter text is None or empty.")
         return
             
     logger.info(f"Extracting KG triples for ch {chapter_number} (Source from flawed draft: {from_flawed_draft})...")
     
+    # Use a larger snippet for KG extraction as it might rely on broader context within the chapter
     text_snippet_for_kg = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE * 2].strip() 
-    if len(text_snippet_for_kg) < len(chapter_text):
-        logger.warning(f"KG extraction for ch {chapter_number} will use truncated text ({len(text_snippet_for_kg)} chars out of {len(chapter_text)}).")
+    if len(text_snippet_for_kg) < len(chapter_text): # Log if truncated
+        logger.debug(f"KG extraction for ch {chapter_number} will use truncated text ({len(text_snippet_for_kg)} chars out of {len(chapter_text)}).")
 
     candidate_entities = await heuristic_entity_spotter_for_kg(agent, text_snippet_for_kg)
     logger.debug(f"Candidate entities identified for KG extraction in Ch {chapter_number}: {candidate_entities[:10]}")
-    candidate_entities_json_for_prompt = json.dumps(candidate_entities) 
+    candidate_entities_json_for_prompt = json.dumps(candidate_entities) # For cache key and prompt
 
     raw_triples_json_str = await llm_extract_kg_triples_logic(
         agent, text_snippet_for_kg, chapter_number, candidate_entities_json_for_prompt
@@ -519,12 +670,12 @@ async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str],
         raw_triples_json_str, f"KG triple extraction for chapter {chapter_number}", expect_type=list
     )
     
-    if parsed_triples is None: 
-         logger.error(f"Failed to extract or parse any KG triples for ch {chapter_number} after all attempts. Raw LLM output: {raw_triples_json_str[:200] if raw_triples_json_str else 'EMPTY'}")
+    if parsed_triples is None: # Parsing failed or LLM returned nothing usable
+         logger.error(f"Failed to extract or parse any KG triples for ch {chapter_number}. Raw LLM output: {raw_triples_json_str[:200] if raw_triples_json_str else 'EMPTY'}")
          await agent._save_debug_output(chapter_number, "kg_extraction_final_fail_raw_llm", raw_triples_json_str or "EMPTY_RAW_TRIPLES_JSON")
          return
     
-    if not parsed_triples: 
+    if not parsed_triples: # LLM returned an empty list []
         logger.info(f"No KG triples were extracted by the LLM for ch {chapter_number}.")
         return
              
@@ -532,11 +683,13 @@ async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str],
     kg_add_tasks = []
     for triple_any in parsed_triples:
         if isinstance(triple_any, list) and len(triple_any) == 3:
+            # Ensure all components are strings and stripped
             subj = str(triple_any[0]).strip() if triple_any[0] is not None else ""
             pred = str(triple_any[1]).strip() if triple_any[1] is not None else ""
             obj  = str(triple_any[2]).strip() if triple_any[2] is not None else ""
             
-            if subj and pred and obj:
+            if subj and pred and obj: # All components must be non-empty after stripping
+                # state_manager handles the actual DB interaction
                 kg_add_tasks.append(
                     state_manager.async_add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft)
                 )
@@ -549,42 +702,44 @@ async def extract_and_store_kg_triples_logic(agent, chapter_text: Optional[str],
             skipped_count += 1
     
     if kg_add_tasks:
-        await asyncio.gather(*kg_add_tasks) 
+        await asyncio.gather(*kg_add_tasks) # Execute all DB additions concurrently
     
     logger.info(f"KG update for ch {chapter_number}: Attempted to add {added_count} triples, skipped {skipped_count}. (Source Provisional: {from_flawed_draft})")
 
 
-async def prepopulate_kg_from_initial_data_logic(agent):
-    """Pre-populates the Knowledge Graph from the initial plot outline and world-building data.
-    'agent' is an instance of NovelWriterAgent.
-    """
+async def prepopulate_kg_from_initial_data_logic(agent): # NovelWriterAgent instance
+    """Pre-populates the Knowledge Graph from the initial plot outline and world-building data."""
     logger.info("Starting Knowledge Graph pre-population from plot and world data...")
 
+    # Prune data to keep the prompt manageable and focused
     pruned_plot = {
         "title": agent.plot_outline.get("title"), 
         "protagonist_name": agent.plot_outline.get("protagonist_name"),
         "genre": agent.plot_outline.get("genre"), 
         "theme": agent.plot_outline.get("theme"),
-        "setting_description": agent.plot_outline.get("setting"), 
+        "setting_description": agent.plot_outline.get("setting"), # Use 'setting' key from plot_outline
         "conflict_summary": agent.plot_outline.get("conflict"),
         "character_arc": agent.plot_outline.get("character_arc"), 
-        "key_plot_points_summary": agent.plot_outline.get("plot_points", [])[:2] 
+        "key_plot_points_summary": agent.plot_outline.get("plot_points", [])[:2] # First 2 plot points
     }
     pruned_world = {}
     for category, items in agent.world_building.items():
-        if category == "is_default" or not isinstance(items, dict): continue 
+        if category == "is_default" or not isinstance(items, dict): continue # Skip internal flags or non-dict categories
         pruned_world[category] = {}
-        for item_name, item_details in list(items.items())[:3]: 
+        for item_name, item_details in list(items.items())[:3]: # First 3 items per category
             if isinstance(item_details, dict):
-                desc = item_details.get("description", item_details.get("text", ""))
+                desc = item_details.get("description", item_details.get("text", "")) # Prefer 'description'
                 if isinstance(desc, str) and desc.strip():
                      pruned_world[category][item_name] = {"description_snippet": desc[:200].strip() + "..."}
+            elif isinstance(item_details, str) and item_details.strip(): # Handle cases where item_details is just a string
+                pruned_world[category][item_name] = {"description_snippet": item_details[:200].strip() + "..."}
+
     
     combined_pruned_data = {"plot_summary": pruned_plot, "world_highlights": pruned_world}
     try:
         combined_data_json = json.dumps(combined_pruned_data, indent=2, ensure_ascii=False, default=str)
     except TypeError as e:
-        logger.error(f"Error serializing pruned data for KG pre-population prompt: {e}")
+        logger.error(f"Error serializing pruned data for KG pre-population prompt: {e}. Data: {combined_pruned_data}")
         return
         
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
@@ -636,7 +791,7 @@ JSON Output Only:
     )
 
     if parsed_triples is None:
-        logger.error(f"Failed to extract/parse KG triples for pre-population after all attempts. Raw LLM: {raw_triples_json_str[:500] if raw_triples_json_str else 'EMPTY'}")
+        logger.error(f"Failed to extract/parse KG triples for pre-population. Raw LLM: {raw_triples_json_str[:500] if raw_triples_json_str else 'EMPTY'}")
         await agent._save_debug_output(config.KG_PREPOPULATION_CHAPTER_NUM, "kg_prepop_final_fail_raw_llm", raw_triples_json_str or "EMPTY_PREPOP_TRIPLES_JSON")
         return
 
@@ -653,7 +808,7 @@ JSON Output Only:
             obj  = str(triple_any[2]).strip() if triple_any[2] is not None else ""
             if subj and pred and obj: 
                 kg_add_tasks.append(
-                    state_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False) 
+                    state_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False) # Pre-pop data is not provisional
                 )
                 added_count += 1
             else:
@@ -667,24 +822,44 @@ JSON Output Only:
         await asyncio.gather(*kg_add_tasks)
 
     logger.info(f"KG pre-population complete: Added {added_count} foundational triples. Skipped {skipped_count} invalid triples.")
-    if added_count == 0 and parsed_triples: 
+    if added_count == 0 and parsed_triples: # Log if LLM gave data but none was valid
         logger.warning("KG pre-population resulted in 0 valid triples added despite LLM returning data. Check LLM output and parsing.")
 
 
-async def update_all_knowledge_bases_logic(agent, chapter_number: int, final_text: str, from_flawed_draft: bool):
-    """Updates JSON character/world profiles and the Knowledge Graph based on the finalized chapter.
-    'agent' is an instance of NovelWriterAgent.
-    """
+# --- Overall Knowledge Base Update Orchestration ---
+
+async def update_all_knowledge_bases_logic(
+    agent, # NovelWriterAgent instance
+    chapter_number: int,
+    final_text: str,
+    from_flawed_draft: bool # Indicates if final_text comes from an unrevised/flawed draft
+):
+    """Updates JSON character/world profiles and the Knowledge Graph based on the finalized chapter."""
     if not final_text:
-        logger.warning(f"Skipping knowledge base update for ch {chapter_number}: Final text is missing or empty.")
+        logger.warning(f"Skipping all knowledge base updates for ch {chapter_number}: Final text is missing or empty.")
         return
-    logger.info(f"Updating knowledge bases for ch {chapter_number} (Source from flawed draft: {from_flawed_draft})...")
     
-    update_json_task = await update_json_profiles_from_chapter_logic(agent, final_text, chapter_number, from_flawed_draft)
-    update_kg_task = await extract_and_store_kg_triples_logic(agent, final_text, chapter_number, from_flawed_draft)
+    logger.info(f"Updating all knowledge bases for ch {chapter_number} (Source from flawed draft: {from_flawed_draft})...")
+    
+    # Create tasks for concurrent execution
+    update_char_profiles_task = update_character_profiles_from_chapter_logic(
+        agent, final_text, chapter_number, from_flawed_draft
+    )
+    update_world_profiles_task = update_world_building_from_chapter_logic(
+        agent, final_text, chapter_number, from_flawed_draft
+    )
+    update_kg_task = extract_and_store_kg_triples_logic(
+        agent, final_text, chapter_number, from_flawed_draft
+    )
     
     try:
-        await asyncio.gather(update_json_task, update_kg_task)
-        logger.info(f"Knowledge base updates (JSON profiles & KG) completed for ch {chapter_number}.")
+        # Gather results of all update tasks
+        await asyncio.gather(
+            update_char_profiles_task,
+            update_world_profiles_task,
+            update_kg_task
+        )
+        logger.info(f"All knowledge base updates (JSON profiles & KG) completed for ch {chapter_number}.")
     except Exception as e:
-        logger.error(f"Error during concurrent knowledge base update for ch {chapter_number}: {e}", exc_info=True)
+        logger.error(f"Error during concurrent knowledge base updates for ch {chapter_number}: {e}", exc_info=True)
+        # Depending on severity, might want to re-raise or handle more specifically
