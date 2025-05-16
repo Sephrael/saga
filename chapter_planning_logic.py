@@ -2,11 +2,11 @@
 import logging
 import json
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Any, Dict # Added Any, Dict
 
 import config
 import llm_interface
-from type import SceneDetail
+from type import SceneDetail # Assuming SceneDetail is a TypedDict or similar
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
     get_world_state_snippet_for_prompt
@@ -124,49 +124,72 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
         max_tokens=config.MAX_PLANNING_TOKENS
     )
     
-    parsed_plan: Optional[List[SceneDetail]] = await llm_interface.async_parse_llm_json_response(
+    # Changed: Use a more general type for the immediate result of JSON parsing.
+    # This addresses the Pylance error at line 127.
+    parsed_json_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(
         plan_raw, f"detailed scene plan for chapter {chapter_number}", expect_type=list
     )
+    
+    # Removed: The line `if parsed_plan is None: parsed_plan = []` is no longer needed
+    # as the logic below handles `parsed_json_result` being None or not a list.
 
-    if parsed_plan and isinstance(parsed_plan, list) and len(parsed_plan) >= 1:
+    # Check if the parsed result is a list and then validate its contents.
+    if isinstance(parsed_json_result, list):
+        # If parsed_json_result is an empty list, len will be 0, and it will go to the `else`
+        # block of `if valid_scenes:`, correctly indicating no valid scenes.
+        
         valid_scenes: List[SceneDetail] = []
         required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
-        for i, scene_item_any in enumerate(parsed_plan):
+        
+        for i, scene_item_any in enumerate(parsed_json_result): # scene_item_any is of type Any
             if not isinstance(scene_item_any, dict):
                 logger.warning(f"Scene item {i+1} in plan for ch {chapter_number} is not a dict. Skipping. Item: {scene_item_any}")
                 continue
             
-            scene_item = scene_item_any 
+            # scene_item is now known to be a dictionary.
+            # For type safety, explicitly type it as Dict[str, Any].
+            scene_item: Dict[str, Any] = scene_item_any 
             
             if not required_scene_keys.issubset(scene_item.keys()):
                 logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has missing keys ({required_scene_keys - set(scene_item.keys())}). Skipping.")
                 continue
+
+            # Detailed type and content validation for each field
             if not (isinstance(scene_item.get("scene_number"), int) and
                     isinstance(scene_item.get("summary"), str) and scene_item.get("summary", "").strip() and
-                    isinstance(scene_item.get("characters_involved"), list) and
-                    isinstance(scene_item.get("key_dialogue_points"), list) and
+                    isinstance(scene_item.get("characters_involved"), list) and # Check list type first
+                    isinstance(scene_item.get("key_dialogue_points"), list) and # Check list type first
                     isinstance(scene_item.get("setting_details"), str) and scene_item.get("setting_details", "").strip() and
                     isinstance(scene_item.get("contribution"), str) and scene_item.get("contribution", "").strip()):
                 logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_item}")
                 continue
             
-            if not all(isinstance(c, str) for c in scene_item["characters_involved"]):
+            # Validate contents of lists
+            # scene_item["characters_involved"] is known to be a list due to the check above.
+            if not all(isinstance(c, str) for c in scene_item["characters_involved"]): # Original type: ignore might be needed if Pylance can't infer narrowing for dict values
                  logger.warning(f"Scene {i+1} 'characters_involved' contains non-strings. Skipping. Scene: {scene_item}")
                  continue
-            if not all(isinstance(d, str) for d in scene_item["key_dialogue_points"]):
+            # scene_item["key_dialogue_points"] is known to be a list.
+            if not all(isinstance(d, str) for d in scene_item["key_dialogue_points"]): # Original type: ignore might be needed
                  logger.warning(f"Scene {i+1} 'key_dialogue_points' contains non-strings. Skipping. Scene: {scene_item}")
                  continue
 
-            valid_scenes.append(scene_item) # type: ignore 
+            # If all checks pass, scene_item (a dict) is structurally compatible with SceneDetail (TypedDict).
+            # The original `type: ignore` might still be preferred by some linters if SceneDetail is a class
+            # or if exact TypedDict matching isn't perfectly inferred. Assuming SceneDetail is a TypedDict,
+            # this direct append should be fine.
+            valid_scenes.append(scene_item) # type: ignore # Keeping original type: ignore, can be re-evaluated
         
-        if valid_scenes and len(valid_scenes) >= 1: 
+        if valid_scenes: # Checks if list is non-empty
             logger.info(f"Generated valid detailed scene plan for chapter {chapter_number} with {len(valid_scenes)} scenes.")
             return valid_scenes
         else:
-            logger.error(f"All parsed scenes were invalid for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
-            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_scenes", plan_raw) 
+            # This means parsed_json_result was a list, but it was empty or all its items were invalid.
+            logger.error(f"Parsed list was empty or all scenes were invalid for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
+            await agent._save_debug_output(chapter_number, "detailed_plan_invalid_or_empty_scenes", plan_raw) 
             return None
     else:
+        # This means parsed_json_result was None (e.g. JSON decoding error) or not a list (e.g. a string, int, or dict at the top level).
         logger.error(f"Failed to generate/parse a valid JSON list for scene plan for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
-        await agent._save_debug_output(chapter_number, "detailed_plan_parse_fail", plan_raw)
+        await agent._save_debug_output(chapter_number, "detailed_plan_parse_fail_not_a_list", plan_raw)
         return None

@@ -3,13 +3,13 @@ import os
 import json
 import logging
 import asyncio
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any # JsonStateData might be specific, keep generic Dict for attributes
 
 import config
 import llm_interface
 # DatabaseManager is no longer used directly by NovelWriterAgent
 from state_manager import state_manager # Use the singleton instance
-from type import JsonStateData, EvaluationResult, SceneDetail
+from type import JsonStateData, EvaluationResult, SceneDetail # Keep JsonStateData in imports in case it's used correctly elsewhere or by sub-logics
 
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
 from chapter_planning_logic import plan_chapter_scenes_logic 
@@ -29,20 +29,16 @@ logger = logging.getLogger(__name__)
 class NovelWriterAgent:
     def __init__(self):
         logger.info("Initializing NovelWriterAgent instance...")
-        # state_manager is a global singleton, no need to pass db_path here
-        self.plot_outline: JsonStateData = {}
-        self.character_profiles: JsonStateData = {}
-        self.world_building: JsonStateData = {}
+        # Changed type annotation from JsonStateData to Dict[str, Any]
+        self.plot_outline: Dict[str, Any] = {}
+        self.character_profiles: Dict[str, Any] = {}
+        self.world_building: Dict[str, Any] = {}
         self.chapter_count: int = 0
         logger.info("NovelWriterAgent instance created. Call async_init() to load/prepare state.")
 
     async def async_init(self):
         """Asynchronously initializes agent state by loading from ORM and ensuring DB schema."""
         logger.info("NovelWriterAgent async_init started...")
-        
-        # Ensures DB file directory exists and tables are created based on ORM models
-        # This should be called early, e.g., in main.py, before agent init.
-        # await state_manager.create_db_and_tables() 
         
         self.chapter_count = await state_manager.async_load_chapter_count()
         logger.info(f"Loaded chapter count from ORM: {self.chapter_count}")
@@ -58,10 +54,12 @@ class NovelWriterAgent:
         for key, value in loaded_data.items():
             if isinstance(value, Exception):
                 logger.error(f"Error loading {key} during async_init: {value}", exc_info=value)
+                # Ensure attributes are initialized to empty dicts on error, consistent with their type
                 if key == "plot": self.plot_outline = {}
                 elif key == "chars": self.character_profiles = {}
                 elif key == "world": self.world_building = {}
             else:
+                # Value should be a dict. Assigning Dict[str, Any] to Dict[str, Any] is fine.
                 if key == "plot": self.plot_outline = value if isinstance(value, dict) else {}
                 elif key == "chars": self.character_profiles = value if isinstance(value, dict) else {}
                 elif key == "world": self.world_building = value if isinstance(value, dict) else {}
@@ -78,6 +76,8 @@ class NovelWriterAgent:
     async def _save_all_json_state(self):
         logger.debug("Saving agent state (plot, characters, world) to ORM...")
         
+        # self.plot_outline etc. are now Dict[str, Any]. This should be compatible
+        # with what state_manager.save_... methods expect if they take Dict[str, Any].
         tasks = [
             state_manager.save_plot_outline(self.plot_outline),
             state_manager.save_character_profiles(self.character_profiles),
@@ -101,15 +101,15 @@ class NovelWriterAgent:
         else:
             logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to ORM successfully.")
 
-    async def generate_plot_outline(self, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> JsonStateData:
+    # Changed return type from JsonStateData to Dict[str, Any]
+    async def generate_plot_outline(self, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Dict[str, Any]:
         return await generate_plot_outline_logic(self, default_protagonist_name, unhinged_mode, **kwargs)
 
-    async def generate_world_building(self) -> JsonStateData:
+    # Changed return type from JsonStateData to Dict[str, Any]
+    async def generate_world_building(self) -> Dict[str, Any]:
         return await generate_world_building_logic(self)
 
     async def _prepopulate_knowledge_graph(self):
-        # knowledge_management_logic.py's prepopulate_kg_from_initial_data_logic
-        # will use the global state_manager for DB operations.
         await prepopulate_kg_from_initial_data_logic(self)
 
     def _get_plot_point_info(self, chapter_number: int) -> Tuple[Optional[str], int]:
@@ -125,7 +125,14 @@ class NovelWriterAgent:
         plot_point_index = min(chapter_number - 1, len(plot_points) - 1)
         
         if 0 <= plot_point_index < len(plot_points):
-            return plot_points[plot_point_index], plot_point_index
+            # Ensure the plot point itself is a string, or handle appropriately if it can be complex
+            plot_point = plot_points[plot_point_index]
+            if isinstance(plot_point, str): # Or check for the expected structure of a plot point
+                return plot_point, plot_point_index
+            else:
+                logger.warning(f"Plot point at index {plot_point_index} for chapter {chapter_number} is not a string: {type(plot_point)}")
+                # Depending on expected structure, you might return str(plot_point) or handle error
+                return str(plot_point) if plot_point is not None else None, plot_point_index
         
         logger.warning(f"Could not determine plot point for chapter {chapter_number} from {len(plot_points)} available points.")
         return None, -1
@@ -141,7 +148,6 @@ class NovelWriterAgent:
             logger.error(f"Cannot write Ch {chapter_number}: Chapter number must be positive.")
             return None
 
-        # Logic functions will use global state_manager
         chapter_plan: Optional[List[SceneDetail]] = await plan_chapter_scenes_logic(self, chapter_number)
         
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
@@ -196,7 +202,7 @@ class NovelWriterAgent:
 
         if not await self._finalize_chapter_core(chapter_number, current_text, final_raw_output_log, proceeded_with_flaws):
              logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save or embedding) ===")
-             return None # Critical failure if core finalization fails
+             return None 
 
         await update_all_knowledge_bases_logic(self, chapter_number, current_text, proceeded_with_flaws)
         
@@ -213,14 +219,14 @@ class NovelWriterAgent:
             logger.error(f"Cannot finalize ch {chapter_number}: Final text is missing or empty.")
             return False
 
-        summary_task = summarize_chapter_text_logic(final_text, chapter_number) # Removed agent
+        summary_task = summarize_chapter_text_logic(final_text, chapter_number)
         embedding_task = asyncio.create_task(llm_interface.async_get_embedding(final_text))
         
         summary, final_embedding = await asyncio.gather(summary_task, embedding_task)
 
         if final_embedding is None:
             logger.error(f"CRITICAL: Failed to generate embedding for final text of Chapter {chapter_number}. Finalization cannot proceed.")
-            return False # Embedding is critical for context, coherence checks etc.
+            return False
 
         try:
             await state_manager.async_save_chapter_data(
@@ -232,22 +238,18 @@ class NovelWriterAgent:
 
         loop = asyncio.get_event_loop()
         try:
-            # File saving can remain as is, it's not DB related
             await loop.run_in_executor(None, self._save_chapter_text_files_sync, chapter_number, final_text, raw_llm_log_for_db)
             logger.info(f"Saved chapter text and raw LLM log files for ch {chapter_number}.")
         except IOError as e:
             logger.error(f"Failed writing chapter text/log files for ch {chapter_number}: {e}", exc_info=True)
-            # This might not be a fatal error for the DB state.
         
         logger.info(f"Core finalization complete for ch {chapter_number}.")
         return True
 
     def _save_chapter_text_files_sync(self, chapter_number: int, final_text: str, raw_llm_log: str):
-        """Synchronous helper for saving chapter text and raw LLM log files."""
         chapter_file_path = os.path.join(config.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt") 
         log_file_path = os.path.join(config.CHAPTER_LOGS_DIR, f"chapter_{chapter_number:04d}_raw_llm_log.txt")
 
-        # Ensure directories exist (config.py should do this, but good to be safe)
         os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
@@ -267,7 +269,6 @@ class NovelWriterAgent:
             file_path = os.path.join(config.DEBUG_OUTPUTS_DIR, file_name)
             
             loop = asyncio.get_event_loop()
-            # File saving can remain as is
             await loop.run_in_executor(None, self._save_debug_output_sync_io, file_path, content_str, chapter_number, stage_description)
         except Exception as e: 
             logger.error(f"Failed to initiate save for debug output (Ch {chapter_number}, Stage '{stage_description}'): {e}", exc_info=True)

@@ -7,6 +7,7 @@ import logging
 import json
 import re
 import asyncio # Added for the new async function
+import builtins # Import the builtins module
 from typing import Dict, List, Optional, Set, Tuple # Added Set and Tuple
 
 import config
@@ -27,7 +28,10 @@ def get_character_state_snippet_for_prompt(agent, current_chapter_num_for_filter
     if protagonist_name and protagonist_name in agent.character_profiles:
         sorted_char_names.append(protagonist_name)
     
-    for name in sorted(agent.character_profiles.keys()):
+    # Use builtins.sorted here as well if standard sorted causes issues,
+    # though the Pylance error was not reported for this specific line.
+    # For consistency and to be safe, one might change it, but let's stick to reported lines.
+    for name in sorted(agent.character_profiles.keys()): 
         if name != protagonist_name:
             sorted_char_names.append(name)
         
@@ -43,13 +47,15 @@ def get_character_state_snippet_for_prompt(agent, current_chapter_num_for_filter
         if not isinstance(profile, dict): continue 
 
         provisional_note = ""
-        if any(key.startswith("source_quality_chapter_") and 
+        # Line 72 (original): Use builtins.any
+        if builtins.any(key.startswith("source_quality_chapter_") and 
                int(key.split('_')[-1]) <= effective_filter_chapter and
                profile.get(key) == "provisional_from_unrevised_draft"
                for key in profile):
              provisional_note = " (Note: Some info may be provisional based on unrevised prior chapters)"
 
-        dev_notes_keys = sorted(
+        # Line 78 (original): Use builtins.sorted
+        dev_notes_keys = builtins.sorted(
             [k for k in profile if k.startswith("development_in_chapter_") and int(k.split('_')[-1]) <= effective_filter_chapter], 
             key=lambda x: int(x.split('_')[-1]), 
             reverse=True
@@ -76,18 +82,19 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
         else config.KG_PREPOPULATION_CHAPTER_NUM
 
     def get_provisional_note_for_category(category_dict: Dict[str, any], chapter_limit: int) -> str:
-        if any(key.startswith("source_quality_chapter_") and 
+        # If Pylance errors occurred with 'any' here, would apply builtins.any too.
+        if builtins.any(key.startswith("source_quality_chapter_") and 
                int(key.split('_')[-1]) <= chapter_limit and
                category_dict.get(key) == "provisional_from_unrevised_draft"
-               for key in category_dict):
+               for key in category_dict): # Assuming category_dict can have such keys directly
              return " (Note: Some category info may be provisional)"
         
         for item_data in category_dict.values():
             if isinstance(item_data, dict) and \
-               any(key.startswith("source_quality_chapter_") and 
+               builtins.any(key.startswith("source_quality_chapter_") and 
                    int(key.split('_')[-1]) <= chapter_limit and
                    item_data.get(key) == "provisional_from_unrevised_draft"
-                   for key in item_data):
+                   for key in item_data): # Assuming item_data can have such keys
                 return " (Note: Some items within this category may have provisional info)"
         return ""
 
@@ -205,6 +212,7 @@ async def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]
     
     common_false_positives = {"The", "A", "An", "Is", "It", "He", "She", "They"} 
     
+    # If sorted() was causing Pylance issues elsewhere, builtins.sorted could be used here too.
     return sorted([e for e in list(entities) 
                    if (len(e) > 3 or e in agent.character_profiles) and e not in common_false_positives])
 

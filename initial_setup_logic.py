@@ -6,17 +6,23 @@ These functions are called by the NovelWriterAgent during its setup phase.
 import logging
 import json
 import random
-from typing import Dict, Any
+from typing import Dict, Any, Optional # Added Optional
 
 import config
 import llm_interface
-from type import JsonStateData # Assuming novel_agent.py defines this or it's in type.py
+# from type import JsonStateData # JsonStateData is likely the full state, not what these functions return.
 
 logger = logging.getLogger(__name__)
 
-async def generate_plot_outline_logic(agent, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> JsonStateData:
+# Define type aliases for clarity, representing the structure of data these functions handle.
+# These are essentially Dict[str, Any] but provide semantic meaning.
+PlotOutlineData = Dict[str, Any]
+WorldBuildingData = Dict[str, Any]
+
+async def generate_plot_outline_logic(agent, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> PlotOutlineData:
     """Generates a new plot outline using an LLM.
     'agent' is an instance of NovelWriterAgent.
+    Returns the generated plot outline data.
     """
     logger.info(f"Generating plot outline. Unhinged mode: {unhinged_mode}")
     
@@ -89,38 +95,45 @@ Example of expected JSON structure (keys might vary slightly based on mode):
         prompt=prompt, 
         temperature=0.6 
     )
-    parsed_outline = await llm_interface.async_parse_llm_json_response(raw_outline_str, "plot outline generation")
+    
+    # Type `parsed_llm_response` as Any initially, as `async_parse_llm_json_response` might return various types or None
+    parsed_llm_response: Any = await llm_interface.async_parse_llm_json_response(raw_outline_str, "plot outline generation")
 
     is_valid = False 
-    final_outline_data: JsonStateData = {}
+    # final_outline_data will hold the successfully parsed and validated outline, or be an empty dict.
+    final_outline_data: PlotOutlineData = {} 
 
-    if parsed_outline and isinstance(parsed_outline, dict):
+    if parsed_llm_response and isinstance(parsed_llm_response, dict):
+        # Now we know parsed_llm_response is a dict, assign to a more specifically named variable
+        parsed_outline: Dict[str, Any] = parsed_llm_response
         plot_points = parsed_outline.get("plot_points")
+        
+        # Validation logic
         if (all(key in parsed_outline and isinstance(parsed_outline[key], str) and parsed_outline[key].strip()
                 for key in required_keys if key != "plot_points") and
             isinstance(plot_points, list) and len(plot_points) == 5 and
             all(isinstance(p, str) and p.strip() for p in plot_points)):
             is_valid = True
-            final_outline_data = parsed_outline 
+            final_outline_data = parsed_outline # Assign the validated dict
         else:
             missing_or_invalid = [
                 key for key in required_keys 
                 if key not in parsed_outline or 
-                   (key != "plot_points" and (not isinstance(parsed_outline[key], str) or not parsed_outline[key].strip())) or
+                   (key != "plot_points" and (not isinstance(parsed_outline.get(key), str) or not str(parsed_outline.get(key, "")).strip())) or
                    (key == "plot_points" and (not isinstance(parsed_outline.get("plot_points"), list) or
                                               len(parsed_outline.get("plot_points", [])) != 5 or
                                               not all(isinstance(p, str) and p.strip() for p in parsed_outline.get("plot_points", []))))
             ]
             logger.warning(f"Generated plot outline failed validation. Missing/invalid keys: {missing_or_invalid}. Parsed: {parsed_outline}")
 
-    if is_valid and final_outline_data:
+    if is_valid and final_outline_data: # final_outline_data is populated if is_valid
         agent.plot_outline = final_outline_data
         agent.plot_outline.update(base_elements_for_outline)
         agent.plot_outline.pop("is_default", None) 
         logger.info(f"Successfully generated plot outline: '{agent.plot_outline.get('title', 'N/A')}'")
     else:
         logger.error("Failed to generate a valid plot outline after LLM call and parsing. Applying default.")
-        agent.plot_outline = {
+        default_plot: PlotOutlineData = {
             "title": config.DEFAULT_PLOT_OUTLINE_TITLE,
             "protagonist_name": default_protagonist_name,
             "protagonist_description": f"Default protagonist: {default_protagonist_name}, a character facing challenges.",
@@ -130,30 +143,53 @@ Example of expected JSON structure (keys might vary slightly based on mode):
             "conflict": "Default conflict: The protagonist must overcome a significant obstacle.",
             "is_default": True 
         }
-        agent.plot_outline.update({k:v for k,v in base_elements_for_outline.items() if k in ["genre", "theme"]})
+        # Merge relevant base elements into the default plot
+        default_plot.update({k:v for k,v in base_elements_for_outline.items() if k in ["genre", "theme"]})
+        if unhinged_mode: # Add unhinged specific keys if in that mode
+            default_plot.update({
+                k: base_elements_for_outline[k] 
+                for k in ["setting_archetype_used", "protagonist_archetype_used", "conflict_archetype_used"] 
+                if k in base_elements_for_outline
+            })
+        agent.plot_outline = default_plot
     
     agent.plot_outline.setdefault('protagonist_name', default_protagonist_name)
     await agent._save_all_json_state() 
     return agent.plot_outline
 
 
-async def generate_world_building_logic(agent) -> JsonStateData:
+async def generate_world_building_logic(agent) -> WorldBuildingData:
     """Generates initial world-building data based on the plot outline.
     'agent' is an instance of NovelWriterAgent.
+    Returns the generated world-building data.
     """
     if agent.world_building and not agent.world_building.get("is_default", False):
-        if len(agent.world_building.keys() - {"is_default"}) > 1 or \
-           ("locations" in agent.world_building and len(agent.world_building["locations"]) > 1):
+        # Check if data is already populated and non-default (original logic preserved for behavior)
+        # Added isinstance checks and .get for robustness.
+        keys_minus_default = agent.world_building.keys() - {"is_default"}
+        locations_data = agent.world_building.get("locations")
+        has_multiple_other_keys = len(keys_minus_default) > 1
+        has_multiple_locations = (
+            "locations" in agent.world_building and 
+            isinstance(locations_data, dict) and 
+            len(locations_data) > 1
+        )
+
+        if has_multiple_other_keys or has_multiple_locations:
             logger.info("Skipping initial world-building: Data appears to be already populated and non-default.")
             return agent.world_building
 
     if not agent.plot_outline or not agent.plot_outline.get("setting"):
         logger.error("Cannot generate world-building: Plot outline or setting description is missing. Applying default world-building.")
-        agent.world_building = {
+        default_wb: WorldBuildingData = {
             "locations": {"Default Location": {"description": "A starting point for the story."}},
             "society": {"General Norms": {"description": "Basic societal structures and norms."}},
+            "systems": {}, # Ensure all expected top-level keys are present
+            "lore": {},
+            "history": {},
             "is_default": True
         }
+        agent.world_building = default_wb
         await agent._save_all_json_state()
         return agent.world_building
 
@@ -204,30 +240,43 @@ Example Structure:
         prompt=prompt,
         temperature=0.6 
     )
-    parsed_world_data = await llm_interface.async_parse_llm_json_response(raw_world_data_str, "initial world-building")
+    
+    parsed_llm_response: Any = await llm_interface.async_parse_llm_json_response(raw_world_data_str, "initial world-building")
 
     is_valid = False 
-    final_world_data: JsonStateData = {}
+    final_world_data: WorldBuildingData = {}
 
-    if parsed_world_data and isinstance(parsed_world_data, dict):
+    if parsed_llm_response and isinstance(parsed_llm_response, dict):
+        parsed_world_data: Dict[str, Any] = parsed_llm_response # Now known to be a dict
         expected_categories = ["locations", "society", "systems", "lore", "history"]
+        
+        # Check if at least one expected category is present, is a dict, and has content
         if any(cat in parsed_world_data and isinstance(parsed_world_data[cat], dict) and parsed_world_data[cat] 
                for cat in expected_categories):
+            # Ensure all expected top-level keys are present in the final data, even if empty from LLM
+            temp_data: WorldBuildingData = {}
+            for cat in expected_categories:
+                temp_data[cat] = parsed_world_data.get(cat, {}) # Default to empty dict if category missing
+            final_world_data = temp_data
             is_valid = True
-            final_world_data = parsed_world_data
         else:
             logger.warning(f"Generated world-building lacks expected structure or content. Parsed: {parsed_world_data}")
     
-    if is_valid and final_world_data:
+    if is_valid and final_world_data: # final_world_data is populated if is_valid
         agent.world_building = final_world_data
         agent.world_building.pop("is_default", None) 
         logger.info("Successfully generated initial world-building data.")
     else:
         logger.error("Failed to generate valid world-building data. Applying default.")
-        agent.world_building = {
+        default_wb: WorldBuildingData = {
             "locations": {"Default Location": {"description": "A starting point."}},
             "society": {"General": {"description": "Basic societal norms."}},
+            "systems": {},
+            "lore": {},
+            "history": {},
             "is_default": True 
         }
+        agent.world_building = default_wb
+        
     await agent._save_all_json_state() 
     return agent.world_building

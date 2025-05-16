@@ -34,7 +34,7 @@ from async_lru import alru_cache  # Import async-aware LRU cache
 
 # Type hints
 from typing import List, Optional, Dict, Any, Union, Type
-from type import JsonType
+from type import JsonType # Assuming 'type.py' defines JsonType correctly
 
 # Local imports
 import config
@@ -66,11 +66,12 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
     cache_info = async_get_embedding.cache_info()
     logger.debug(f"Async Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
 
+    api_response: Optional[httpx.Response] = None # For use in json.JSONDecodeError logging
     async with httpx.AsyncClient(timeout=300) as client:
         try:
-            response = await client.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload)
-            response.raise_for_status()
-            data = response.json()
+            api_response = await client.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload)
+            api_response.raise_for_status()
+            data = api_response.json()
 
             primary_key = "embedding"
             if primary_key in data and isinstance(data[primary_key], list):
@@ -90,18 +91,25 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
             return None
         except httpx.TimeoutException:
             logger.error(f"Async: Embedding request timed out for text: '{text[:80]}...'")
-        except httpx.RequestError as e:
-            logger.error(f"Async: Embedding request failed: {e}", exc_info=True)
-        except json.JSONDecodeError as e:
-             logger.error(f"Async: Failed to decode JSON response for embedding: {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
-        except Exception as e:
-            logger.error(f"Async: Unexpected error during embedding: {e}", exc_info=True)
+        except httpx.HTTPStatusError as e_status: # Specifically catch HTTP status errors
+            logger.error(f"Async: Embedding request failed with HTTP status {e_status.response.status_code}: {e_status}", exc_info=True)
+            # e_status.response is guaranteed by HTTPStatusError
+            logger.error(f"Async: Embedding error response body: {e_status.response.text[:200]}")
+        except httpx.RequestError as e_req: # Catch other request errors (network, connection, etc.)
+            logger.error(f"Async: Embedding request failed: {e_req}", exc_info=True)
+        except json.JSONDecodeError as e_json:
+             logger.error(
+                 f"Async: Failed to decode JSON response for embedding: {e_json}. "
+                 f"Response text: {api_response.text[:200] if api_response and hasattr(api_response, 'text') else 'N/A'}"
+             )
+        except Exception as e_exc: # General exceptions
+            logger.error(f"Async: Unexpected error during embedding: {e_exc}", exc_info=True)
         return None
 
 
 def _process_llm_response(response_data: Dict[str, Any], model_name: str, async_mode: bool = False) -> str:
     """Helper to process LLM response data and log usage."""
-    prefix = "Async: " if async_mode else "" # Prefix still useful for clarity if sync were to be re-added
+    prefix = "Async: " if async_mode else "" 
     if response_data.get("choices") and len(response_data["choices"]) > 0:
         message = response_data["choices"][0].get("message")
         if message and message.get("content"):
@@ -144,22 +152,33 @@ async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6,
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
 
     logger.debug(f"Async Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}")
+    
+    api_response: Optional[httpx.Response] = None # For use in json.JSONDecodeError logging
     async with httpx.AsyncClient(timeout=600) as client:
         try:
-            response = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
-            response.raise_for_status()
-            response_data = response.json()
+            api_response = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
+            api_response.raise_for_status() # Raises HTTPStatusError for 4xx/5xx
+            response_data = api_response.json()
             return _process_llm_response(response_data, model_name, async_mode=True)
         except httpx.TimeoutException:
             logger.error(f"Async LLM ('{model_name}') API request timed out.")
-        except httpx.RequestError as e:
-            logger.error(f"Async LLM ('{model_name}') API request error: {e}", exc_info=True)
-            if hasattr(e, "response") and e.response is not None:
-                logger.error(f"Async LLM ('{model_name}') API Response Status: {e.response.status_code}, Body: {e.response.text[:500]}...")
-        except json.JSONDecodeError as e:
-             logger.error(f"Async: Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
-        except Exception as e:
-            logger.error(f"Async Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
+        except httpx.HTTPStatusError as e_status: # Handle HTTP status errors (4xx, 5xx)
+            # This is the corrected block. e_status.response is guaranteed to exist.
+            logger.error(f"Async LLM ('{model_name}') API HTTP status error: {e_status}", exc_info=True)
+            logger.error(
+                f"Async LLM ('{model_name}') API Response Status: {e_status.response.status_code}, "
+                f"Body: {e_status.response.text[:500]}..." 
+            )
+        except httpx.RequestError as e_req: # Handle other request errors (network, connection, etc.)
+            # For these errors, e_req.response is not guaranteed or typically not present.
+            logger.error(f"Async LLM ('{model_name}') API request error (e.g., network): {e_req}", exc_info=True)
+        except json.JSONDecodeError as e_json:
+             logger.error(
+                 f"Async: Failed to decode JSON response from LLM ('{model_name}'): {e_json}. "
+                 f"Response text: {api_response.text[:200] if api_response and hasattr(api_response, 'text') else 'N/A'}"
+             )
+        except Exception as e_exc: # General exceptions
+            logger.error(f"Async Unexpected error during LLM ('{model_name}') call: {e_exc}", exc_info=True)
         return ""
 
 
