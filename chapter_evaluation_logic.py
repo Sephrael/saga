@@ -86,14 +86,11 @@ Prioritize clear contradictions with facts from the Plot Outline, Character Prof
 --- END DRAFT SNIPPET ---
 
 **Analysis Task:**
-List ONLY specific, objective contradictions, inconsistencies, or significant deviations found in the Draft Snippet when compared to the provided established information.
+List ONLY specific, objective contradictions, inconsistencies, or significant deviations found in the Draft Snippet.
+DO NOT list items that are consistent or aligned with established information.
 If NO inconsistencies are found, respond with the single word: None
-Otherwise, list each issue clearly and concisely, like:
-- Character X acts out of established trait Y.
-- Location Z is described differently than in world-building notes.
-- Event A contradicts a reliable KG fact about B.
 
-**Identified Inconsistencies (or "None"):**
+IMPORTANT: Only list actual contradictions. DO NOT list things that are consistent.
 """
     response_raw = await llm_interface.async_call_llm(
         model_name=config.CONSISTENCY_CHECK_MODEL,
