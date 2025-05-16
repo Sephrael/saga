@@ -664,6 +664,18 @@ async def extract_and_store_kg_triples_logic(
         raw_triples_json_str, f"KG triple extraction for chapter {chapter_number}", expect_type=list
     )
     
+    # Ensure parsed_triples is an iterable list before proceeding
+    if not isinstance(parsed_triples, list):
+        logger.error(f"parsed_triples is not an iterable list for ch {chapter_number}. Got type: {type(parsed_triples)}")
+        await agent._save_debug_output(chapter_number, "kg_extraction_invalid_parsed_triples_type", str(type(parsed_triples)))
+        return
+    
+    # Check if parsed_triples is actually iterable (in case of boolean or numeric types)
+    if not hasattr(parsed_triples, '__iter__'):
+        logger.error(f"parsed_triples is not iterable for ch {chapter_number}. Got type: {type(parsed_triples)}")
+        await agent._save_debug_output(chapter_number, "kg_extraction_non_iterable_parsed_triples", str(type(parsed_triples)))
+        return
+    
     if parsed_triples is None: # Parsing failed or LLM returned nothing usable
          logger.error(f"Failed to extract or parse any KG triples for ch {chapter_number}. Raw LLM output: {raw_triples_json_str[:200] if raw_triples_json_str else 'EMPTY'}")
          await agent._save_debug_output(chapter_number, "kg_extraction_final_fail_raw_llm", raw_triples_json_str or "EMPTY_RAW_TRIPLES_JSON")
@@ -784,12 +796,25 @@ JSON Output Only:
         raw_triples_json_str, "KG pre-population triple extraction", expect_type=list
     )
 
-    if parsed_triples is None:
-        logger.error(f"Failed to extract/parse KG triples for pre-population. Raw LLM: {raw_triples_json_str[:500] if raw_triples_json_str else 'EMPTY'}")
-        await agent._save_debug_output(config.KG_PREPOPULATION_CHAPTER_NUM, "kg_prepop_final_fail_raw_llm", raw_triples_json_str or "EMPTY_PREPOP_TRIPLES_JSON")
+    # Ensure parsed_triples is a list before proceeding
+    if not isinstance(parsed_triples, list):
+        logger.error(f"parsed_triples is not a list as expected for KG pre-population. Got type: {type(parsed_triples)}. Raw LLM: {raw_triples_json_str[:500] if raw_triples_json_str else 'EMPTY'}")
+        await agent._save_debug_output(config.KG_PREPOPULATION_CHAPTER_NUM, "kg_prepop_invalid_parsed_triples_type", f"Expected list, got {type(parsed_triples)}")
         return
 
-    if not parsed_triples:
+    # Check if parsed_triples is actually iterable.
+    # Given it's confirmed to be a list above, this is a defense-in-depth measure.
+    if not hasattr(parsed_triples, '__iter__'):
+        logger.error(f"parsed_triples (expected to be a list) is not iterable for KG pre-population. Got type: {type(parsed_triples)}")
+        await agent._save_debug_output(config.KG_PREPOPULATION_CHAPTER_NUM, "kg_prepop_non_iterable_parsed_triples", str(type(parsed_triples)))
+        return
+    
+    # The original `if parsed_triples is None:` check that was here (around lines 915-919)
+    # has been removed. `None` values would be caught by the `isinstance(parsed_triples, list)`
+    # check (as `isinstance(None, list)` is False) or the `hasattr(parsed_triples, '__iter__')`
+    # check (as `hasattr(None, '__iter__')` is False).
+
+    if not parsed_triples: # LLM returned an empty list []
         logger.info("No KG triples were extracted by LLM for pre-population.")
         return
 
@@ -818,7 +843,6 @@ JSON Output Only:
     logger.info(f"KG pre-population complete: Added {added_count} foundational triples. Skipped {skipped_count} invalid triples.")
     if added_count == 0 and parsed_triples: # Log if LLM gave data but none was valid
         logger.warning("KG pre-population resulted in 0 valid triples added despite LLM returning data. Check LLM output and parsing.")
-
 
 # --- Overall Knowledge Base Update Orchestration ---
 
