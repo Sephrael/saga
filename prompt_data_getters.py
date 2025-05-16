@@ -6,11 +6,12 @@ These functions typically filter or format parts of the agent's state.
 import logging
 import json
 import re
-from typing import Dict, List, Optional
+import asyncio # Added for the new async function
+from typing import Dict, List, Optional, Set, Tuple # Added Set and Tuple
 
 import config
 from state_manager import state_manager
-from type import JsonStateData
+from type import JsonStateData, SceneDetail # Added SceneDetail
 
 logger = logging.getLogger(__name__)
 
@@ -125,19 +126,11 @@ async def get_filtered_character_profiles_for_prompt(agent, up_to_chapter_inclus
     """Retrieves character profiles from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
     'agent' is an instance of NovelWriterAgent.
     """
-    # from state_manager import state_manager # No longer needed as agent.character_profiles is used if fresh
-    # profiles = await state_manager.get_character_profiles() 
-    # Using agent's in-memory state is usually more up-to-date during a run, 
-    # but for a generic getter, direct DB access might be cleaner IF this function
-    # is ever used outside the agent's direct flow.
-    # However, the function is named get_..._for_prompt(agent, ...), implying it uses agent state.
-    # Let's assume agent.character_profiles is the source of truth for this getter.
-    
-    profiles = agent.character_profiles # Use agent's current in-memory state
-    profiles_copy = json.loads(json.dumps(profiles)) # Deep copy to avoid modifying agent's state directly
+    profiles = agent.character_profiles 
+    profiles_copy = json.loads(json.dumps(profiles)) 
 
     if up_to_chapter_inclusive is None: 
-        return profiles_copy # Return copy without prompt_notes if no chapter filter
+        return profiles_copy 
 
     for char_name, profile_data in profiles_copy.items():
         if not isinstance(profile_data, dict): continue 
@@ -150,7 +143,6 @@ async def get_filtered_character_profiles_for_prompt(agent, up_to_chapter_inclus
     
         if provisional_notes_for_char:
             if "prompt_notes" not in profile_data: profile_data["prompt_notes"] = []
-            # Ensure prompt_notes is a list, even if it was something else before
             if not isinstance(profile_data["prompt_notes"], list): profile_data["prompt_notes"] = []
             for note in provisional_notes_for_char:
                 if note not in profile_data["prompt_notes"]:
@@ -162,11 +154,8 @@ async def get_filtered_world_data_for_prompt(agent, up_to_chapter_inclusive: Opt
     """Retrieves world building data from the ORM and adds 'prompt_notes' for provisional data up to a chapter.
     'agent' is an instance of NovelWriterAgent.
     """
-    # from state_manager import state_manager
-    # world_data = await state_manager.get_world_building()
-    # Similar to characters, use agent's in-memory state for prompts during a run.
     world_data = agent.world_building
-    world_data_copy = json.loads(json.dumps(world_data)) # Deep copy
+    world_data_copy = json.loads(json.dumps(world_data))
 
     if up_to_chapter_inclusive is None:
         return world_data_copy
@@ -209,8 +198,7 @@ async def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]
     """Basic heuristic to spot potential entities (proper nouns) in text, including known characters.
     'agent' is an instance of NovelWriterAgent.
     """
-    # from state_manager import state_manager # Using agent's in-memory profiles
-    entities = set(agent.character_profiles.keys()) # Use agent's current character profiles
+    entities = set(agent.character_profiles.keys()) 
     
     for match in re.finditer(r'\b([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){0,2})\b', text_snippet):
         entities.add(match.group(1).strip())
@@ -219,3 +207,68 @@ async def heuristic_entity_spotter_for_kg(agent, text_snippet: str) -> List[str]
     
     return sorted([e for e in list(entities) 
                    if (len(e) > 3 or e in agent.character_profiles) and e not in common_false_positives])
+
+async def get_reliable_kg_facts_for_drafting_prompt(
+    agent, 
+    chapter_number: int, 
+    chapter_plan: Optional[List[SceneDetail]] = None,
+    max_facts: int = 5 # Max number of distinct facts to return
+) -> str:
+    """
+    Fetches a few highly relevant, reliable (non-provisional) KG facts for the drafting prompt.
+    Focuses on the protagonist and other key characters potentially involved in the chapter.
+    'agent' is an instance of NovelWriterAgent.
+    """
+    if chapter_number <= 0: return "No KG facts applicable for pre-first chapter."
+
+    kg_chapter_limit = chapter_number - 1
+    facts_for_prompt: List[str] = []
+    
+    protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+    
+    characters_of_interest: Set[str] = {protagonist_name}
+    if chapter_plan and isinstance(chapter_plan, list):
+        for scene_detail in chapter_plan:
+            if isinstance(scene_detail, dict) and "characters_involved" in scene_detail and isinstance(scene_detail["characters_involved"], list):
+                for char_name_in_plan in scene_detail["characters_involved"]: # Renamed to avoid conflict
+                    if isinstance(char_name_in_plan, str) and char_name_in_plan.strip():
+                        characters_of_interest.add(char_name_in_plan.strip())
+    
+    logger.debug(f"KG fact gathering for Ch {chapter_number} draft: Characters of interest: {characters_of_interest}")
+
+    char_predicates = ["located_in", "status_is", "has_goal", "feels"] 
+
+    # Store tasks and their associated metadata (origin_char, origin_pred)
+    task_metadata_list: List[Tuple[str, str]] = []
+    coroutines_to_gather = []
+
+    for char_name in list(characters_of_interest)[:3]: 
+        for pred in char_predicates:
+            coroutines_to_gather.append(
+                state_manager.async_get_most_recent_value(
+                    char_name, pred, kg_chapter_limit, include_provisional=False
+                )
+            )
+            task_metadata_list.append((char_name, pred)) # Store metadata
+
+    if coroutines_to_gather:
+        kg_results = await asyncio.gather(*coroutines_to_gather, return_exceptions=True) # Added return_exceptions
+        
+        for i, value_or_exception in enumerate(kg_results):
+            if isinstance(value_or_exception, Exception):
+                logger.error(f"Error fetching KG value for {task_metadata_list[i]}: {value_or_exception}")
+                continue # Skip this result if there was an error
+
+            value = value_or_exception # Now it's the actual value
+            if value: # value can be None if not found, or the string if found
+                origin_char, origin_pred = task_metadata_list[i]
+                fact_str = f"- {origin_char} {origin_pred.replace('_', ' ')}: {value}."
+                if fact_str not in facts_for_prompt: 
+                    facts_for_prompt.append(fact_str)
+                if len(facts_for_prompt) >= max_facts:
+                    break
+    
+    if not facts_for_prompt:
+        return "No specific reliable KG facts identified for key characters in this chapter."
+        
+    return "**Key Reliable KG Facts (from pre-novel & previous reliable chapter states):**\n" + "\n".join(facts_for_prompt)

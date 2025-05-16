@@ -21,11 +21,11 @@ Copyright 2025 Dennis Lewis
 """
 
 # Standard library imports
-import functools
+import functools # Keep for potential future sync needs, or remove if strictly async
 import logging
 import json
 import re
-import requests
+# import requests # No longer needed if sync call_llm is removed
 
 # Third-party imports
 import numpy as np
@@ -53,47 +53,7 @@ def _validate_embedding(embedding_list: List[Union[float, int]], expected_dim: i
         logger.error(f"Failed to convert embedding list to numpy array: {e}")
     return None
 
-@functools.lru_cache(maxsize=config.EMBEDDING_CACHE_SIZE)
-def get_embedding(text: str) -> Optional[np.ndarray]:
-    """Synchronously retrieves an embedding for the given text."""
-    if not text or not isinstance(text, str) or not text.strip():
-        logger.warning("get_embedding: empty or invalid text provided.")
-        return None
-
-    payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
-    cache_info = get_embedding.cache_info()
-    logger.debug(f"Sync Embedding req: '{text[:80]}...' (Cache: h={cache_info.hits},m={cache_info.misses},s={cache_info.currsize})")
-    try:
-        response = requests.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload, timeout=300)
-        response.raise_for_status()
-        data = response.json()
-        
-        primary_key = "embedding"
-        if primary_key in data and isinstance(data[primary_key], list):
-            embedding = _validate_embedding(data[primary_key], config.EXPECTED_EMBEDDING_DIM, config.EMBEDDING_DTYPE)
-            if embedding is not None:
-                return embedding
-        
-        logger.warning(f"Primary embedding key '{primary_key}' failed or not found. Fallback search...")
-        for key, value in data.items():
-            if isinstance(value, list) and all(isinstance(item, (float, int)) for item in value):
-                embedding = _validate_embedding(value, config.EXPECTED_EMBEDDING_DIM, config.EMBEDDING_DTYPE)
-                if embedding is not None:
-                    logger.info(f"Fallback embedding success (key: '{key}').")
-                    return embedding
-        
-        logger.error(f"Embedding extraction failed. No suitable embedding list found in response: {data}")
-        return None
-    except requests.exceptions.Timeout:
-        logger.error(f"Embedding request timed out for text: '{text[:80]}...'")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Embedding request failed: {e}", exc_info=True)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON response for embedding: {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
-    except Exception as e:
-        logger.error(f"Unexpected error during embedding: {e}", exc_info=True)
-    return None
-
+# Synchronous get_embedding REMOVED
 
 @alru_cache(maxsize=config.EMBEDDING_CACHE_SIZE)
 async def async_get_embedding(text: str) -> Optional[np.ndarray]:
@@ -133,7 +93,7 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
         except httpx.RequestError as e:
             logger.error(f"Async: Embedding request failed: {e}", exc_info=True)
         except json.JSONDecodeError as e:
-             logger.error(f"Async: Failed to decode JSON response for embedding: {e}. Response text: {response.text[:200] if 'response' in locals() else 'N/A'}")
+             logger.error(f"Async: Failed to decode JSON response for embedding: {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
         except Exception as e:
             logger.error(f"Async: Unexpected error during embedding: {e}", exc_info=True)
         return None
@@ -141,7 +101,7 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
 
 def _process_llm_response(response_data: Dict[str, Any], model_name: str, async_mode: bool = False) -> str:
     """Helper to process LLM response data and log usage."""
-    prefix = "Async: " if async_mode else ""
+    prefix = "Async: " if async_mode else "" # Prefix still useful for clarity if sync were to be re-added
     if response_data.get("choices") and len(response_data["choices"]) > 0:
         message = response_data["choices"][0].get("message")
         if message and message.get("content"):
@@ -161,46 +121,7 @@ def _process_llm_response(response_data: Dict[str, Any], model_name: str, async_
         logger.error(f"{prefix}Invalid LLM ('{model_name}') response - missing choices: {response_data}")
     return ""
 
-
-def call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
-    """Synchronously calls the LLM with the given prompt and parameters."""
-    if not model_name:
-        logger.error("call_llm: model_name is required.")
-        return ""
-    if not prompt or not isinstance(prompt, str) or not prompt.strip():
-        logger.error("call_llm: empty or invalid prompt.")
-        return ""
-
-    effective_max_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
-    payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False,
-        "temperature": temperature,
-        "top_p": config.LLM_TOP_P, 
-        "max_tokens": effective_max_tokens
-    }
-    headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
-
-    logger.debug(f"Calling LLM '{model_name}'. Prompt len: {len(prompt)}. Max tokens: {effective_max_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}")
-    try:
-        response = requests.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers, timeout=600)
-        response.raise_for_status()
-        response_data = response.json()
-        return _process_llm_response(response_data, model_name)
-    except requests.exceptions.Timeout:
-        logger.error(f"LLM ('{model_name}') API request timed out.")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"LLM ('{model_name}') API request error: {e}", exc_info=True)
-        response_attr = getattr(e, 'response', None)
-        if response_attr is not None:
-            logger.error(f"LLM ('{model_name}') API Response Status: {response_attr.status_code}, Body: {response_attr.text[:500]}...")
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON response from LLM ('{model_name}'): {e}. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}")
-    except Exception as e:
-        logger.error(f"Unexpected error during LLM ('{model_name}') call: {e}", exc_info=True)
-    return ""
-
+# Synchronous call_llm REMOVED
 
 async def async_call_llm(model_name: str, prompt: str, temperature: float = 0.6, max_tokens: Optional[int] = None) -> str:
     """Asynchronously calls the LLM with the given prompt and parameters."""
@@ -396,10 +317,11 @@ async def async_parse_llm_json_response(
             
             # Heuristic fixes
             fixed_json_str = None
-            if e.msg.startswith("Expecting ',' delimiter") and json_block_str.endswith(('}', ']')):
+            if e.msg.startswith("Expecting ',' delimiter") and json_block_str.rstrip().endswith((',', chr(0x2c))): # Handle regular comma and unicode comma
                 # Try removing trailing comma
-                if json_block_str.rstrip().endswith(','):
-                    fixed_json_str = json_block_str.rstrip()[:-1]
+                temp_str = json_block_str.rstrip()
+                if temp_str.endswith(',') or temp_str.endswith(chr(0x2c)):
+                    fixed_json_str = temp_str[:-1]
                     logger.info(f"Attempting heuristic fix for trailing comma in {context_for_log}.")
             elif expect_type == list and e.msg.startswith("Expecting ',' delimiter") and e.pos >= len(json_block_str) - 10:
                 fixed_json_str = json_block_str + "]"

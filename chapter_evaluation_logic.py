@@ -126,7 +126,7 @@ async def validate_draft_plot_arc_logic(agent, chapter_draft_text: Optional[str]
     
     logger.info(f"Validating plot arc for ch {chapter_number} against Plot Point {plot_point_index + 1}: '{plot_point_focus[:100]}...'")
     
-    summary = await summarize_chapter_text_logic(agent, chapter_draft_text, chapter_number)
+    summary = await summarize_chapter_text_logic(chapter_draft_text, chapter_number)
     validation_text_content = summary if summary and len(summary) > 50 else chapter_draft_text[:1500]
     
     if not validation_text_content.strip():

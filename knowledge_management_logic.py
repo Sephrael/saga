@@ -412,7 +412,7 @@ async def _build_character_update_prompt(
     else:
         dynamic_instr_char = "Only include characters whose information is directly updated or those newly introduced in THIS chapter."
 
-    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
+    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(chapter_number - 1)
 
     return f"""/no_think
 You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for character profiles.
@@ -477,7 +477,7 @@ async def update_character_profiles_from_chapter_logic(
     )
 
     if character_updates and isinstance(character_updates, dict):
-        merge_character_profile_updates_logic(agent, character_updates, chapter_number, from_flawed_draft)
+        merge_character_profile_updates_logic(character_updates, chapter_number, from_flawed_draft)
     else:
         logger.warning(f"LLM parsing for character JSON updates failed or returned no/invalid data for ch {chapter_number}. Raw: '{raw_analysis[:200] if raw_analysis else 'EMPTY'}'")
 
@@ -497,7 +497,7 @@ async def _build_world_update_prompt(
     else:
         dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events."
 
-    current_world_for_prompt = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
+    current_world_for_prompt = await get_filtered_world_data_for_prompt(chapter_number - 1)
 
     return f"""/no_think
 You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for world-building details.
@@ -553,7 +553,7 @@ async def update_world_building_from_chapter_logic(
     logger.info(f"Attempting world-building JSON update for ch {chapter_number} (Source from flawed draft: {from_flawed_draft}).")
     text_snippet = chapter_text[:config.KNOWLEDGE_UPDATE_SNIPPET_SIZE]
 
-    prompt = await _build_world_update_prompt(agent, text_snippet, chapter_number)
+    prompt = await _build_world_update_prompt(text_snippet, chapter_number)
 
     raw_analysis = await llm_interface.async_call_llm(
         model_name=config.KNOWLEDGE_UPDATE_MODEL,
@@ -565,7 +565,7 @@ async def update_world_building_from_chapter_logic(
     )
 
     if world_updates and isinstance(world_updates, dict):
-        merge_world_item_updates_logic(agent, world_updates, chapter_number, from_flawed_draft)
+        merge_world_item_updates_logic(world_updates, chapter_number, from_flawed_draft)
     else:
         logger.warning(f"LLM parsing for world-building JSON updates failed or returned no/invalid data for ch {chapter_number}. Raw: '{raw_analysis[:200] if raw_analysis else 'EMPTY'}'")
 
@@ -649,7 +649,7 @@ async def extract_and_store_kg_triples_logic(
     if len(text_snippet_for_kg) < len(chapter_text): # Log if truncated
         logger.debug(f"KG extraction for ch {chapter_number} will use truncated text ({len(text_snippet_for_kg)} chars out of {len(chapter_text)}).")
 
-    candidate_entities = await heuristic_entity_spotter_for_kg(agent, text_snippet_for_kg)
+    candidate_entities = await heuristic_entity_spotter_for_kg(text_snippet_for_kg)
     logger.debug(f"Candidate entities identified for KG extraction in Ch {chapter_number}: {candidate_entities[:10]}")
     candidate_entities_json_for_prompt = json.dumps(candidate_entities) # For cache key and prompt
 

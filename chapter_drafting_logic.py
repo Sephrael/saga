@@ -8,11 +8,12 @@ from typing import Tuple, Optional, List
 
 import config
 import llm_interface
-from type import SceneDetail # Assuming this is in type.py
+from type import SceneDetail 
 from state_manager import state_manager
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt,
     get_filtered_world_data_for_prompt,
+    get_reliable_kg_facts_for_drafting_prompt # New import
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     world_building_data = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
     world_building_json = json.dumps(world_building_data, indent=2, ensure_ascii=False, default=str)
 
+    # New: Get reliable KG facts for the draft
+    reliable_kg_facts_for_prompt = await get_reliable_kg_facts_for_drafting_prompt(agent, chapter_number, chapter_plan)
+
     prompt = f"""/no_think
 You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}".
 **Story Bible / Core Information:**
@@ -55,6 +59,8 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
   - Protagonist's Character Arc: {agent.plot_outline.get('character_arc', 'N/A')}
 
 {plan_section_for_prompt}
+{reliable_kg_facts_for_prompt} 
+
 **World Building Notes (JSON format - pay attention to any 'prompt_notes' indicating provisional data from previous unrevised chapters):**
 ```json
 {world_building_json}
@@ -72,7 +78,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 1. Write a compelling and engaging chapter, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.
 2. If a **Detailed Scene Plan** is provided, adhere to it closely, fleshing out each scene.
 3. If no detailed plan is available, focus on achieving the **Overall Plot Point Focus** for this chapter.
-4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).
+4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, **Key Reliable KG Facts**, Previous Context).
 5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{agent.plot_outline.get('genre', 'story')}'.
 6. **Output ONLY the chapter text itself.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.
 
