@@ -412,7 +412,7 @@ async def _build_character_update_prompt(
     else:
         dynamic_instr_char = "Only include characters whose information is directly updated or those newly introduced in THIS chapter."
 
-    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(chapter_number - 1)
+    current_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
 
     return f"""/no_think
 You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for character profiles.
@@ -497,7 +497,7 @@ async def _build_world_update_prompt(
     else:
         dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events."
 
-    current_world_for_prompt = await get_filtered_world_data_for_prompt(chapter_number - 1)
+    current_world_for_prompt = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
 
     return f"""/no_think
 You are a meticulous literary analyst. Your task is to analyze the provided Chapter {chapter_number} Text Snippet (protagonist: {protagonist_name}) and identify updates for world-building details.
