@@ -14,9 +14,10 @@ from type import SceneDetail # Assuming this is in type.py
 
 logger = logging.getLogger(__name__)
 
-async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: int, revision_reason: str, context_from_previous: str, chapter_plan: Optional[List[SceneDetail]]) -> Optional[Tuple[str, str]]:
-    """Attempts to revise a chapter based on evaluation feedback.
+async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: int, revision_reason: str, hybrid_context_for_revision: str, chapter_plan: Optional[List[SceneDetail]]) -> Optional[Tuple[str, str]]:
+    """Attempts to revise a chapter based on evaluation feedback, using HYBRID CONTEXT.
     'agent' is an instance of NovelWriterAgent.
+    'hybrid_context_for_revision' contains semantic context and KG facts.
     Returns (revised_cleaned_text, revised_raw_llm_output) or None if revision fails.
     """
     if not original_text or not revision_reason:
@@ -30,10 +31,11 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
         
     logger.warning(f"Attempting revision for chapter {chapter_number}. Reason(s):\n{clean_reason}")
     
-    context_limit = config.MAX_CONTEXT_LENGTH // 4  
-    original_text_limit = config.MAX_CONTEXT_LENGTH // 2
-    
-    context_snippet = context_from_previous[:context_limit].strip() + ("..." if len(context_from_previous) > context_limit else "")
+    # Context and original text limits are still relevant for the prompt construction itself,
+    # even if hybrid_context_for_revision is passed in full.
+    # The hybrid_context_for_revision itself should already be size-managed by its generator.
+    # However, the original_snippet is still constructed here.
+    original_text_limit = config.MAX_CONTEXT_LENGTH // 2 # Original text snippet limit
     original_snippet = original_text[:original_text_limit].strip() + ("..." if len(original_text) > original_text_limit else "")
     
     plan_focus_section = ""
@@ -60,10 +62,10 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 --- FEEDBACK END ---
 
 {plan_focus_section}
-**Context from Previous Chapters (for flow and continuity):**
---- BEGIN CONTEXT ---
-{context_snippet if context_snippet else "No previous context (e.g., Chapter 1)."}
---- END CONTEXT ---
+**Hybrid Context from Previous Chapters (Semantic Context for Flow & KG Facts for Canon):**
+--- BEGIN HYBRID CONTEXT ---
+{hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context (e.g., Chapter 1)."}
+--- END HYBRID CONTEXT ---
 
 **Original Draft Snippet (for reference ONLY - your main goal is to address the critique and align with the plan/focus):**
 --- BEGIN ORIGINAL DRAFT SNIPPET ---
@@ -74,7 +76,9 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 1. **PRIORITY:** Thoroughly address all issues listed in the **Critique/Reason(s) for Revision**.
 2. **Rewrite the ENTIRE chapter text.** Do not just patch the original.
 3. Align the rewritten chapter with the **Original Detailed Scene Plan** (if provided) or the **Original Chapter Focus**.
-4. Ensure the revised chapter flows smoothly with the **Context from Previous Chapters**.
+4. Ensure the revised chapter flows smoothly with the **Hybrid Context from Previous Chapters**.
+   - Pay particular attention to the `KEY RELIABLE KG FACTS` section of the Hybrid Context for established canon.
+   - Use the `SEMANTIC CONTEXT` section of the Hybrid Context for narrative flow and tone.
 5. Maintain the established tone, style, and genre ('{agent.plot_outline.get('genre', 'story')}') of the novel.
 6. The revised chapter should be substantial, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.
 7. **Output ONLY the rewritten chapter text.** No "Chapter X" headers, titles, or meta-commentary.
