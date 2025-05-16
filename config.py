@@ -56,8 +56,8 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
-LARGE_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-30B-A3B"
+LARGE_MODEL_DEFAULT: str = "Qwen3-32B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
 NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B"
 
