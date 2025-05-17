@@ -1,0 +1,596 @@
+2025-05-17 08:11:52 - INFO - [root:32] - File logging enabled. Log file: novel_output/saga_run.log
+2025-05-17 08:11:52 - INFO - [root:37] - Logging setup complete. Level: INFO
+2025-05-17 08:11:52 - INFO - [__main__:148] - --- Starting Saga Novel Generation (Execution Mode: Async) ---
+2025-05-17 08:11:52 - INFO - [state_manager:120] - Database tables created/verified via ORM based on current models.
+2025-05-17 08:11:52 - INFO - [__main__:153] - state_manager initialized and database tables checked/created.
+2025-05-17 08:11:52 - INFO - [novel_agent:32] - Initializing NovelWriterAgent instance...
+2025-05-17 08:11:52 - INFO - [novel_agent:38] - NovelWriterAgent instance created. Call async_init() to load/prepare state.
+2025-05-17 08:11:52 - INFO - [novel_agent:42] - NovelWriterAgent async_init started...
+2025-05-17 08:11:52 - INFO - [state_manager:216] - Async ORM loaded chapter count: 0
+2025-05-17 08:11:52 - INFO - [novel_agent:45] - Loaded chapter count from ORM: 0
+2025-05-17 08:11:52 - WARNING - [novel_agent:69] - Plot outline is empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-17 08:11:52 - WARNING - [novel_agent:71] - Character profiles are empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-17 08:11:52 - WARNING - [novel_agent:73] - World building is empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-17 08:11:52 - INFO - [novel_agent:75] - NovelWriterAgent async_init complete.
+2025-05-17 08:11:52 - INFO - [__main__:157] - NovelWriterAgent initialized and state loaded successfully.
+2025-05-17 08:11:52 - INFO - [__main__:42] - Checking for existing plot outline...
+2025-05-17 08:11:52 - INFO - [__main__:49] - Plot outline data is empty from ORM. Will generate new.
+2025-05-17 08:11:52 - INFO - [__main__:62] - Generating a new plot outline.
+2025-05-17 08:11:52 - INFO - [initial_setup_logic:27] - Generating plot outline. Unhinged mode: False
+2025-05-17 08:11:52 - INFO - [initial_setup_logic:92] - Calling LLM for plot outline generation...
+2025-05-17 08:12:02 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:12:02 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 336 tk, Comp: 315 tk, Total: 651 tk
+2025-05-17 08:12:02 - INFO - [llm_interface:369] - Successfully parsed JSON dict for plot outline generation on 1st attempt.
+2025-05-17 08:12:02 - INFO - [initial_setup_logic:133] - Successfully generated plot outline: 'The Memory Exchange'
+2025-05-17 08:12:02 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:12:02 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:12:02 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:12:02 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:12:02 - INFO - [__main__:90] - Checking for existing world-building data...
+2025-05-17 08:12:02 - INFO - [__main__:95] - World-building data is empty from ORM. Will generate new.
+2025-05-17 08:12:02 - INFO - [initial_setup_logic:237] - Generating initial world-building data via LLM...
+2025-05-17 08:12:22 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:12:22 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 562 tk, Comp: 1468 tk, Total: 2030 tk
+2025-05-17 08:12:22 - INFO - [llm_interface:369] - Successfully parsed JSON dict for initial world-building on 1st attempt.
+2025-05-17 08:12:22 - INFO - [initial_setup_logic:268] - Successfully generated initial world-building data.
+2025-05-17 08:12:22 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:12:22 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:12:22 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:12:22 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:12:22 - INFO - [knowledge_management_logic:487] - Starting Knowledge Graph pre-population from plot and world data...
+2025-05-17 08:12:22 - INFO - [knowledge_management_logic:557] - Calling LLM for KG pre-population triple extraction...
+2025-05-17 08:12:35 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:12:35 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 1687 tk, Comp: 847 tk, Total: 2534 tk
+2025-05-17 08:12:35 - INFO - [llm_interface:369] - Successfully parsed JSON list for KG pre-population triple extraction on 1st attempt.
+2025-05-17 08:12:36 - INFO - [knowledge_management_logic:591] - KG pre-population complete: Added 40 foundational triples. Skipped 0 invalid triples.
+2025-05-17 08:12:36 - INFO - [novel_agent:142] - === Starting Chapter 1 Generation ===
+2025-05-17 08:12:36 - INFO - [chapter_planning_logic:23] - Planning Chapter 1 with detailed scenes...
+2025-05-17 08:12:36 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 1...
+2025-05-17 08:13:27 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:13:27 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 821 tk, Comp: 2081 tk, Total: 2902 tk
+2025-05-17 08:13:27 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 1 on 1st attempt.
+2025-05-17 08:13:27 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 1 with 15 scenes.
+2025-05-17 08:13:27 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 1...
+2025-05-17 08:13:27 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 1, Length: 343 chars.
+2025-05-17 08:13:27 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 1 was truncated for the prompt.
+2025-05-17 08:13:27 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 1 draft generation.
+2025-05-17 08:14:45 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:14:45 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 4074 tk, Comp: 1728 tk, Total: 5802 tk
+2025-05-17 08:14:45 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 1 (Length: 7894 chars).
+2025-05-17 08:14:45 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 1 draft (length: 7894 chars)...
+2025-05-17 08:14:45 - INFO - [chapter_evaluation_logic:197] - Skipping coherence check for Chapter 1.
+2025-05-17 08:14:47 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:14:47 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 1...
+2025-05-17 08:14:55 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:14:55 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 4345 tk, Comp: 32 tk, Total: 4377 tk
+2025-05-17 08:14:55 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 1 on 1st attempt.
+2025-05-17 08:14:55 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 1 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:14:55 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 1 complete. Needs revision: False.
+2025-05-17 08:14:55 - INFO - [novel_agent:206] - Initial draft for ch 1 passed evaluation.
+2025-05-17 08:14:55 - INFO - [novel_agent:223] - Finalizing chapter 1 (From flawed draft: False). Text length: 7894.
+2025-05-17 08:15:02 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:15:02 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 1816 tk, Comp: 77 tk, Total: 1893 tk
+2025-05-17 08:15:02 - INFO - [knowledge_management_logic:65] - Generated summary for ch 1: 'Sága infiltrates a mysterious house in the Outskirts, discovering a hidden Memory Vault that holds m...'
+2025-05-17 08:15:02 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 1.
+2025-05-17 08:15:02 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 1.
+2025-05-17 08:15:02 - INFO - [novel_agent:253] - Core finalization complete for ch 1.
+2025-05-17 08:15:02 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 1 (Source from flawed draft: False)...
+2025-05-17 08:15:02 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 1...
+2025-05-17 08:15:02 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 1).
+2025-05-17 08:15:11 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:15:11 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 4408 tk, Comp: 568 tk, Total: 4976 tk
+2025-05-17 08:15:11 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 1 on 1st attempt.
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 1 complete. Char updates: 1, World updates categories: 3, KG Triples: 13.
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 1. Characters in update: ['Sága']
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:148] - Prepared new character profile for 'Sága'.
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Curious', 'Determined']
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 1. Updated: 0, New: 1.
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 1. Categories in update: ['locations', 'systems', 'lore']
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:122] - Applied modification to 'rules' for 'systems.Memory Exchange Protocol'. New value: 'ADD 'Memories can be used to access hidden locations...'
+2025-05-17 08:15:11 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 1. Approximately 3 items affected/added.
+2025-05-17 08:15:12 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 1: Attempted to add 13 triples, skipped 0.
+2025-05-17 08:15:12 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 1.
+2025-05-17 08:15:12 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:15:12 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:15:12 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:15:12 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:15:12 - INFO - [novel_agent:219] - === Finished Ch 1 Successfully ===
+2025-05-17 08:15:12 - INFO - [novel_agent:142] - === Starting Chapter 2 Generation ===
+2025-05-17 08:15:12 - INFO - [chapter_planning_logic:23] - Planning Chapter 2 with detailed scenes...
+2025-05-17 08:15:12 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 2...
+2025-05-17 08:16:01 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:16:01 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 959 tk, Comp: 1987 tk, Total: 2946 tk
+2025-05-17 08:16:01 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 2 on 1st attempt.
+2025-05-17 08:16:01 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 2 with 15 scenes.
+2025-05-17 08:16:01 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 2...
+2025-05-17 08:16:01 - INFO - [context_generation_logic:32] - Semantic context query for ch 2 based on Plot Point 2: 'She begins secretly retrieving memories from the vault, risking her life and the wrath of the city's...'
+2025-05-17 08:16:01 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:16:01 - INFO - [state_manager:300] - Async ORM: Retrieved 1 past embeddings.
+2025-05-17 08:16:01 - INFO - [context_generation_logic:87] - Top 1 relevant chapters for SEMANTIC context (semantic search): [1] (Scores: ['0.691'])
+2025-05-17 08:16:01 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 399 chars from chapters [1].
+2025-05-17 08:16:01 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 2, Length: 694 chars.
+2025-05-17 08:16:01 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 2 was truncated for the prompt.
+2025-05-17 08:16:01 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 2 draft generation.
+2025-05-17 08:17:37 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:17:37 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 4451 tk, Comp: 2110 tk, Total: 6561 tk
+2025-05-17 08:17:37 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 2 (Length: 9526 chars).
+2025-05-17 08:17:37 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 2 draft (length: 9526 chars)...
+2025-05-17 08:17:37 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:17:37 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (1): 0.6182
+2025-05-17 08:17:37 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 2...
+2025-05-17 08:17:44 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:17:44 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 5138 tk, Comp: 32 tk, Total: 5170 tk
+2025-05-17 08:17:44 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 2 on 1st attempt.
+2025-05-17 08:17:44 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 2 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:17:44 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 2 complete. Needs revision: True.
+2025-05-17 08:17:44 - WARNING - [novel_agent:183] - Ch 2 flagged for revision. Reason(s):
+- Low coherence with previous chapter (Score: 0.6182, Threshold: 0.65).
+2025-05-17 08:17:44 - WARNING - [chapter_revision_logic:32] - Attempting revision for chapter 2. Reason(s):
+Low coherence with previous chapter (Score: 0.6182, Threshold: 0.65).
+2025-05-17 08:19:20 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:19:20 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 4728 tk, Comp: 2255 tk, Total: 6983 tk
+2025-05-17 08:19:20 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:19:20 - INFO - [chapter_revision_logic:110] - Revision similarity score with original draft: 0.8899
+2025-05-17 08:19:20 - INFO - [chapter_revision_logic:118] - Revision for ch 2 accepted (Length: 10283 chars).
+2025-05-17 08:19:20 - INFO - [novel_agent:190] - Revision successful for ch 2. Re-evaluating revised draft...
+2025-05-17 08:19:20 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 2 draft (length: 10283 chars)...
+2025-05-17 08:19:20 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (1): 0.7250
+2025-05-17 08:19:20 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 2...
+2025-05-17 08:19:27 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:19:27 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 5284 tk, Comp: 32 tk, Total: 5316 tk
+2025-05-17 08:19:27 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 2 on 1st attempt.
+2025-05-17 08:19:27 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 2 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:19:27 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 2 complete. Needs revision: False.
+2025-05-17 08:19:27 - INFO - [novel_agent:197] - Revised draft for ch 2 passed re-evaluation.
+2025-05-17 08:19:27 - INFO - [novel_agent:223] - Finalizing chapter 2 (From flawed draft: False). Text length: 10283.
+2025-05-17 08:19:35 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:19:35 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2343 tk, Comp: 94 tk, Total: 2437 tk
+2025-05-17 08:19:35 - INFO - [knowledge_management_logic:65] - Generated summary for ch 2: 'Sága infiltrates the Memory Vault to retrieve proof of the Council's atrocities, uncovering a system...'
+2025-05-17 08:19:35 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 2.
+2025-05-17 08:19:35 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 2.
+2025-05-17 08:19:35 - INFO - [novel_agent:253] - Core finalization complete for ch 2.
+2025-05-17 08:19:35 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 2 (Source from flawed draft: False)...
+2025-05-17 08:19:35 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 2...
+2025-05-17 08:19:35 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 2).
+2025-05-17 08:19:51 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:19:51 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 5318 tk, Comp: 970 tk, Total: 6288 tk
+2025-05-17 08:19:51 - WARNING - [llm_interface:347] - Failed to extract a likely JSON dict block from text: '<think>
+
+</think>
+
+{
+  "character_updates": {
+    "Sága": {
+      "status": "Updated",
+      "modification_proposal": "MODIFY description: ADD 'determ...'
+2025-05-17 08:19:51 - ERROR - [llm_interface:398] - Could not extract any JSON dict block from initial response for unified knowledge extraction for ch 2. Raw: '<think>
+
+</think>
+
+{
+  "character_updates": {
+    "Sága": {
+      "status": "Updated",
+      "modification_proposal": "MODIFY description: ADD 'determined', REMOVE 'initially hesitant'",
+      "develo...'
+2025-05-17 08:19:51 - INFO - [llm_interface:407] - Attempting LLM JSON correction for unified knowledge extraction for ch 2 using model Qwen3-4B...
+2025-05-17 08:20:05 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:20:05 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 1012 tk, Comp: 886 tk, Total: 1898 tk
+2025-05-17 08:20:05 - INFO - [llm_interface:445] - Successfully parsed JSON dict for unified knowledge extraction for ch 2 after LLM correction.
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 2 complete. Char updates: 2, World updates categories: 4, KG Triples: 27.
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 2. Characters in update: ['Sága', 'Aelric']
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:122] - Applied modification to 'description' for 'Sága'. New value: 'ADD 'determined', REMOVE 'initially hesitant...'
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:148] - Prepared new character profile for 'Aelric'.
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 2. Updated: 1, New: 1.
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 2. Categories in update: ['locations', 'systems', 'society', 'lore']
+2025-05-17 08:20:05 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 2. Approximately 5 items affected/added.
+2025-05-17 08:20:05 - WARNING - [knowledge_management_logic:650] - Skipping invalid KG triple format (not a list of 3) from unified_extraction in ch 2: ['Council', 'rewrote_history']
+2025-05-17 08:20:06 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 2: Attempted to add 26 triples, skipped 1.
+2025-05-17 08:20:06 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 2.
+2025-05-17 08:20:06 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:20:06 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:20:06 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:20:06 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:20:06 - INFO - [novel_agent:219] - === Finished Ch 2 Successfully ===
+2025-05-17 08:20:06 - INFO - [novel_agent:142] - === Starting Chapter 3 Generation ===
+2025-05-17 08:20:06 - INFO - [chapter_planning_logic:23] - Planning Chapter 3 with detailed scenes...
+2025-05-17 08:20:06 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 3...
+2025-05-17 08:20:54 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:20:54 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1058 tk, Comp: 1938 tk, Total: 2996 tk
+2025-05-17 08:20:54 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 3 on 1st attempt.
+2025-05-17 08:20:54 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 3 with 15 scenes.
+2025-05-17 08:20:54 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 3...
+2025-05-17 08:20:54 - INFO - [context_generation_logic:32] - Semantic context query for ch 3 based on Plot Point 3: 'Sága's attempts to preserve her own memories lead to a rift with her family, who have become depende...'
+2025-05-17 08:20:54 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:20:54 - INFO - [state_manager:300] - Async ORM: Retrieved 2 past embeddings.
+2025-05-17 08:20:54 - INFO - [context_generation_logic:87] - Top 2 relevant chapters for SEMANTIC context (semantic search): [1, 2] (Scores: ['0.729', '0.654'])
+2025-05-17 08:20:54 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 885 chars from chapters [2, 1].
+2025-05-17 08:20:54 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 3, Length: 1129 chars.
+2025-05-17 08:20:54 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 3 was truncated for the prompt.
+2025-05-17 08:20:54 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 3 draft generation.
+2025-05-17 08:22:18 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:22:18 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 4990 tk, Comp: 1927 tk, Total: 6917 tk
+2025-05-17 08:22:18 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 3 (Length: 8532 chars).
+2025-05-17 08:22:18 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 3 draft (length: 8532 chars)...
+2025-05-17 08:22:18 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:22:18 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (2): 0.8542
+2025-05-17 08:22:18 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 3...
+2025-05-17 08:22:25 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:22:25 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 5454 tk, Comp: 32 tk, Total: 5486 tk
+2025-05-17 08:22:25 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 3 on 1st attempt.
+2025-05-17 08:22:25 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 3 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:22:25 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 3 complete. Needs revision: False.
+2025-05-17 08:22:25 - INFO - [novel_agent:206] - Initial draft for ch 3 passed evaluation.
+2025-05-17 08:22:25 - INFO - [novel_agent:223] - Finalizing chapter 3 (From flawed draft: False). Text length: 8532.
+2025-05-17 08:22:32 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:22:32 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2015 tk, Comp: 69 tk, Total: 2084 tk
+2025-05-17 08:22:32 - INFO - [knowledge_management_logic:65] - Generated summary for ch 3: 'Sága discovers her family has sold their memories to survive, including her own childhood, and confr...'
+2025-05-17 08:22:32 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 3.
+2025-05-17 08:22:32 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 3.
+2025-05-17 08:22:32 - INFO - [novel_agent:253] - Core finalization complete for ch 3.
+2025-05-17 08:22:32 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 3 (Source from flawed draft: False)...
+2025-05-17 08:22:32 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 3...
+2025-05-17 08:22:32 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 3).
+2025-05-17 08:22:49 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:22:49 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 5353 tk, Comp: 1044 tk, Total: 6397 tk
+2025-05-17 08:22:49 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 3 on 1st attempt.
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 3 complete. Char updates: 2, World updates categories: 4, KG Triples: 32.
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 3. Characters in update: ['Sága', 'Aelric']
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Curious', 'Determined']
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 3. Updated: 2, New: 0.
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 3. Categories in update: ['locations', 'systems', 'society', 'lore']
+2025-05-17 08:22:49 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 3. Approximately 4 items affected/added.
+2025-05-17 08:22:52 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 3: Attempted to add 32 triples, skipped 0.
+2025-05-17 08:22:52 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 3.
+2025-05-17 08:22:52 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:22:52 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:22:52 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:22:52 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:22:52 - INFO - [novel_agent:219] - === Finished Ch 3 Successfully ===
+2025-05-17 08:22:52 - INFO - [novel_agent:142] - === Starting Chapter 4 Generation ===
+2025-05-17 08:22:52 - INFO - [chapter_planning_logic:23] - Planning Chapter 4 with detailed scenes...
+2025-05-17 08:22:52 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 4...
+2025-05-17 08:23:44 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:23:44 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1024 tk, Comp: 2163 tk, Total: 3187 tk
+2025-05-17 08:23:44 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 4 on 1st attempt.
+2025-05-17 08:23:44 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 4 with 15 scenes.
+2025-05-17 08:23:44 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 4...
+2025-05-17 08:23:44 - INFO - [context_generation_logic:32] - Semantic context query for ch 4 based on Plot Point 4: 'A rebellion is sparked by those who have lost their memories, and Sága is forced to choose between j...'
+2025-05-17 08:23:44 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:23:44 - INFO - [state_manager:300] - Async ORM: Retrieved 3 past embeddings.
+2025-05-17 08:23:44 - INFO - [context_generation_logic:87] - Top 3 relevant chapters for SEMANTIC context (semantic search): [3, 1, 2] (Scores: ['0.766', '0.731', '0.695'])
+2025-05-17 08:23:44 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 1268 chars from chapters [3, 2, 1].
+2025-05-17 08:23:44 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 4, Length: 1520 chars.
+2025-05-17 08:23:44 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 4 was truncated for the prompt.
+2025-05-17 08:23:44 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 4 draft generation.
+2025-05-17 08:25:29 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:25:29 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 5468 tk, Comp: 2424 tk, Total: 7892 tk
+2025-05-17 08:25:29 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 4 (Length: 10666 chars).
+2025-05-17 08:25:29 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 4 draft (length: 10666 chars)...
+2025-05-17 08:25:29 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:25:29 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (3): 0.8870
+2025-05-17 08:25:29 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 4...
+2025-05-17 08:25:36 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:25:36 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 6381 tk, Comp: 32 tk, Total: 6413 tk
+2025-05-17 08:25:36 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 4 on 1st attempt.
+2025-05-17 08:25:36 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 4 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:25:36 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 4 complete. Needs revision: False.
+2025-05-17 08:25:36 - INFO - [novel_agent:206] - Initial draft for ch 4 passed evaluation.
+2025-05-17 08:25:36 - INFO - [novel_agent:223] - Finalizing chapter 4 (From flawed draft: False). Text length: 10666.
+2025-05-17 08:25:44 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:25:44 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2512 tk, Comp: 101 tk, Total: 2613 tk
+2025-05-17 08:25:44 - INFO - [knowledge_management_logic:65] - Generated summary for ch 4: 'Sága and Aelric uncover the Memory Vault's true purpose as a system that erases memories to control...'
+2025-05-17 08:25:44 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 4.
+2025-05-17 08:25:44 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 4.
+2025-05-17 08:25:44 - INFO - [novel_agent:253] - Core finalization complete for ch 4.
+2025-05-17 08:25:44 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 4 (Source from flawed draft: False)...
+2025-05-17 08:25:44 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 4...
+2025-05-17 08:25:44 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 4).
+2025-05-17 08:26:06 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:26:06 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 6236 tk, Comp: 1342 tk, Total: 7578 tk
+2025-05-17 08:26:06 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 4 on 1st attempt.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 4 complete. Char updates: 5, World updates categories: 5, KG Triples: 32.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 4. Characters in update: ['Sága', 'Aelric', 'Mira', "Sága's Sister", "Sága's Father"]
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Curious', 'Determined']
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:148] - Prepared new character profile for 'Mira'.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:148] - Prepared new character profile for 'Sága's Sister'.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:148] - Prepared new character profile for 'Sága's Father'.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 4. Updated: 2, New: 3.
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 4. Categories in update: ['locations', 'society', 'systems', 'lore', 'history']
+2025-05-17 08:26:06 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 4. Approximately 7 items affected/added.
+2025-05-17 08:26:06 - WARNING - [knowledge_management_logic:650] - Skipping invalid KG triple format (not a list of 3) from unified_extraction in ch 4: ['The Memory Exchange Protocol', 'requires_memory_usage']
+2025-05-17 08:26:07 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 4: Attempted to add 31 triples, skipped 1.
+2025-05-17 08:26:07 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 4.
+2025-05-17 08:26:07 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:26:07 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:26:07 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:26:07 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:26:07 - INFO - [novel_agent:219] - === Finished Ch 4 Successfully ===
+2025-05-17 08:26:07 - INFO - [novel_agent:142] - === Starting Chapter 5 Generation ===
+2025-05-17 08:26:07 - INFO - [chapter_planning_logic:23] - Planning Chapter 5 with detailed scenes...
+2025-05-17 08:26:07 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 5...
+2025-05-17 08:27:02 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:27:02 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1220 tk, Comp: 2246 tk, Total: 3466 tk
+2025-05-17 08:27:02 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 5 on 1st attempt.
+2025-05-17 08:27:02 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 5 with 15 scenes.
+2025-05-17 08:27:02 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 5...
+2025-05-17 08:27:02 - INFO - [context_generation_logic:32] - Semantic context query for ch 5 based on Plot Point 5: 'In the end, Sága sacrifices her life to destroy the memory exchange, freeing the city from the cycle...'
+2025-05-17 08:27:02 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:27:02 - INFO - [state_manager:300] - Async ORM: Retrieved 4 past embeddings.
+2025-05-17 08:27:02 - INFO - [context_generation_logic:87] - Top 4 relevant chapters for SEMANTIC context (semantic search): [3, 4, 1, 2] (Scores: ['0.761', '0.752', '0.751', '0.679'])
+2025-05-17 08:27:02 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 1766 chars from chapters [4, 3, 2, 1].
+2025-05-17 08:27:02 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 5, Length: 2018 chars.
+2025-05-17 08:27:02 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 5 was truncated for the prompt.
+2025-05-17 08:27:02 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 5 draft generation.
+2025-05-17 08:28:48 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:28:48 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 6257 tk, Comp: 2412 tk, Total: 8669 tk
+2025-05-17 08:28:48 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 5 (Length: 10603 chars).
+2025-05-17 08:28:48 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 5 draft (length: 10603 chars)...
+2025-05-17 08:28:48 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:28:48 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (4): 0.8474
+2025-05-17 08:28:48 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 5...
+2025-05-17 08:28:56 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:28:56 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 7254 tk, Comp: 32 tk, Total: 7286 tk
+2025-05-17 08:28:56 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 5 on 1st attempt.
+2025-05-17 08:28:56 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 5 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:28:56 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 5 complete. Needs revision: False.
+2025-05-17 08:28:56 - INFO - [novel_agent:206] - Initial draft for ch 5 passed evaluation.
+2025-05-17 08:28:56 - INFO - [novel_agent:223] - Finalizing chapter 5 (From flawed draft: False). Text length: 10603.
+2025-05-17 08:29:03 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:29:03 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2500 tk, Comp: 105 tk, Total: 2605 tk
+2025-05-17 08:29:03 - INFO - [knowledge_management_logic:65] - Generated summary for ch 5: 'Sága interfaces with the Memory Vault's core, witnessing the system's true nature as a predator that...'
+2025-05-17 08:29:03 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 5.
+2025-05-17 08:29:03 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 5.
+2025-05-17 08:29:03 - INFO - [novel_agent:253] - Core finalization complete for ch 5.
+2025-05-17 08:29:03 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 5 (Source from flawed draft: False)...
+2025-05-17 08:29:03 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 5...
+2025-05-17 08:29:03 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 5).
+2025-05-17 08:29:24 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:29:24 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 7038 tk, Comp: 1209 tk, Total: 8247 tk
+2025-05-17 08:29:24 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 5 on 1st attempt.
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 5 complete. Char updates: 5, World updates categories: 5, KG Triples: 33.
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 5. Characters in update: ['Sága', 'Aelric', "Sága's Father", "Sága's Sister", 'Mira']
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:122] - Applied modification to 'description' for 'Sága'. New value: 'ADD 'determined', REMOVE 'initially hesitant...'
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 5. Updated: 5, New: 0.
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 5. Categories in update: ['locations', 'society', 'systems', 'lore', 'history']
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:122] - Applied modification to 'rules' for 'systems.Memory Exchange Protocol'. New value: 'ADD 'allows access to restricted areas through memory usage...'
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:122] - Applied modification to 'description' for 'lore.The Vault remembers what we choose to forget'. New value: 'ADD 'the Vault’s true purpose of controlling and preserving memories...'
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:122] - Applied modification to 'description' for 'history.The Founding of Erevan'. New value: 'ADD 'based on a brutal trade system where citizens sacrificed their me...'
+2025-05-17 08:29:24 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 5. Approximately 5 items affected/added.
+2025-05-17 08:29:25 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 5: Attempted to add 33 triples, skipped 0.
+2025-05-17 08:29:25 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 5.
+2025-05-17 08:29:25 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:29:25 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:29:25 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:29:25 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:29:25 - INFO - [novel_agent:219] - === Finished Ch 5 Successfully ===
+2025-05-17 08:29:25 - INFO - [novel_agent:142] - === Starting Chapter 6 Generation ===
+2025-05-17 08:29:25 - INFO - [chapter_planning_logic:23] - Planning Chapter 6 with detailed scenes...
+2025-05-17 08:29:25 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 6...
+2025-05-17 08:30:16 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:30:16 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1222 tk, Comp: 2064 tk, Total: 3286 tk
+2025-05-17 08:30:16 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 6 on 1st attempt.
+2025-05-17 08:30:16 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 6 with 15 scenes.
+2025-05-17 08:30:16 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 6...
+2025-05-17 08:30:16 - INFO - [context_generation_logic:32] - Semantic context query for ch 6 based on Plot Point 5: 'In the end, Sága sacrifices her life to destroy the memory exchange, freeing the city from the cycle...'
+2025-05-17 08:30:16 - INFO - [state_manager:300] - Async ORM: Retrieved 5 past embeddings.
+2025-05-17 08:30:16 - INFO - [context_generation_logic:87] - Top 5 relevant chapters for SEMANTIC context (semantic search): [3, 4, 1, 5, 2] (Scores: ['0.761', '0.752', '0.751', '0.701', '0.679'])
+2025-05-17 08:30:16 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 2319 chars from chapters [5, 4, 3, 2, 1].
+2025-05-17 08:30:16 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 6, Length: 2624 chars.
+2025-05-17 08:30:16 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 6 was truncated for the prompt.
+2025-05-17 08:30:16 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 6 draft generation.
+2025-05-17 08:31:33 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:31:33 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 6839 tk, Comp: 1673 tk, Total: 8512 tk
+2025-05-17 08:31:33 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 6 (Length: 7294 chars).
+2025-05-17 08:31:33 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 6 draft (length: 7294 chars)...
+2025-05-17 08:31:33 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:31:33 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (5): 0.8607
+2025-05-17 08:31:33 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 6...
+2025-05-17 08:31:41 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:31:41 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 7069 tk, Comp: 32 tk, Total: 7101 tk
+2025-05-17 08:31:41 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 6 on 1st attempt.
+2025-05-17 08:31:41 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 6 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:31:41 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 6 complete. Needs revision: False.
+2025-05-17 08:31:41 - INFO - [novel_agent:206] - Initial draft for ch 6 passed evaluation.
+2025-05-17 08:31:41 - INFO - [novel_agent:223] - Finalizing chapter 6 (From flawed draft: False). Text length: 7294.
+2025-05-17 08:31:48 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:31:48 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 1761 tk, Comp: 82 tk, Total: 1843 tk
+2025-05-17 08:31:48 - INFO - [knowledge_management_logic:65] - Generated summary for ch 6: 'Sága and Aelric confront the unstable Memory Vault, uncovering painful memories that reveal Sága's f...'
+2025-05-17 08:31:48 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 6.
+2025-05-17 08:31:48 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 6.
+2025-05-17 08:31:48 - INFO - [novel_agent:253] - Core finalization complete for ch 6.
+2025-05-17 08:31:48 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 6 (Source from flawed draft: False)...
+2025-05-17 08:31:48 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 6...
+2025-05-17 08:31:48 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 6).
+2025-05-17 08:32:03 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:32:03 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 6684 tk, Comp: 903 tk, Total: 7587 tk
+2025-05-17 08:32:03 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 6 on 1st attempt.
+2025-05-17 08:32:03 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 6 complete. Char updates: 5, World updates categories: 3, KG Triples: 21.
+2025-05-17 08:32:03 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 6. Characters in update: ['Aelric', 'Mira', 'Sága', "Sága's Father", "Sága's Sister"]
+2025-05-17 08:32:03 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 6. Updated: 5, New: 0.
+2025-05-17 08:32:03 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 6. Categories in update: ['lore', 'systems', 'history']
+2025-05-17 08:32:03 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 6. Approximately 3 items affected/added.
+2025-05-17 08:32:04 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 6: Attempted to add 21 triples, skipped 0.
+2025-05-17 08:32:04 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 6.
+2025-05-17 08:32:04 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:32:04 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:32:04 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:32:04 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:32:04 - INFO - [novel_agent:219] - === Finished Ch 6 Successfully ===
+2025-05-17 08:32:04 - INFO - [novel_agent:142] - === Starting Chapter 7 Generation ===
+2025-05-17 08:32:04 - INFO - [chapter_planning_logic:23] - Planning Chapter 7 with detailed scenes...
+2025-05-17 08:32:04 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 7...
+2025-05-17 08:32:55 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:32:55 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1202 tk, Comp: 2044 tk, Total: 3246 tk
+2025-05-17 08:32:55 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 7 on 1st attempt.
+2025-05-17 08:32:55 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 7 with 15 scenes.
+2025-05-17 08:32:55 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 7...
+2025-05-17 08:32:55 - INFO - [context_generation_logic:32] - Semantic context query for ch 7 based on Plot Point 5: 'In the end, Sága sacrifices her life to destroy the memory exchange, freeing the city from the cycle...'
+2025-05-17 08:32:55 - INFO - [state_manager:300] - Async ORM: Retrieved 6 past embeddings.
+2025-05-17 08:32:55 - INFO - [context_generation_logic:87] - Top 5 relevant chapters for SEMANTIC context (semantic search): [3, 4, 1, 6, 5] (Scores: ['0.761', '0.752', '0.751', '0.719', '0.701'])
+2025-05-17 08:32:55 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 2235 chars from chapters [6, 5, 4, 3, 1].
+2025-05-17 08:32:55 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 7, Length: 2540 chars.
+2025-05-17 08:32:55 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 7 was truncated for the prompt.
+2025-05-17 08:32:55 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 7 draft generation.
+2025-05-17 08:34:34 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:34:34 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7273 tk, Comp: 2216 tk, Total: 9489 tk
+2025-05-17 08:34:34 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 7 (Length: 9601 chars).
+2025-05-17 08:34:34 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 7 draft (length: 9601 chars)...
+2025-05-17 08:34:35 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:34:35 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (6): 0.8668
+2025-05-17 08:34:35 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 7...
+2025-05-17 08:34:43 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:34:43 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 7969 tk, Comp: 32 tk, Total: 8001 tk
+2025-05-17 08:34:43 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 7 on 1st attempt.
+2025-05-17 08:34:43 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 7 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:34:43 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 7 complete. Needs revision: False.
+2025-05-17 08:34:43 - INFO - [novel_agent:206] - Initial draft for ch 7 passed evaluation.
+2025-05-17 08:34:43 - INFO - [novel_agent:223] - Finalizing chapter 7 (From flawed draft: False). Text length: 9601.
+2025-05-17 08:34:50 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:34:50 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2304 tk, Comp: 87 tk, Total: 2391 tk
+2025-05-17 08:34:50 - INFO - [knowledge_management_logic:65] - Generated summary for ch 7: 'Sága and Aelric confront the Memory Vault's core, where memories of loved ones and victims are trapp...'
+2025-05-17 08:34:50 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 7.
+2025-05-17 08:34:50 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 7.
+2025-05-17 08:34:50 - INFO - [novel_agent:253] - Core finalization complete for ch 7.
+2025-05-17 08:34:50 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 7 (Source from flawed draft: False)...
+2025-05-17 08:34:50 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 7...
+2025-05-17 08:34:50 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 7).
+2025-05-17 08:35:08 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:35:08 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 7615 tk, Comp: 1036 tk, Total: 8651 tk
+2025-05-17 08:35:08 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 7 on 1st attempt.
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 7 complete. Char updates: 5, World updates categories: 3, KG Triples: 32.
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 7. Characters in update: ['Aelric', 'Mira', 'Sága', "Sága's Sister", "Sága's Father"]
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Aelric'. New traits: ['Determined', 'Regretful', 'Resilient']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Mira'. New traits: ['Regretful']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Curious', 'Determined']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Sister'. New traits: ['Regretful']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Father'. New traits: ['Regretful']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 7. Updated: 5, New: 0.
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 7. Categories in update: ['lore', 'systems', 'locations']
+2025-05-17 08:35:08 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 7. Approximately 3 items affected/added.
+2025-05-17 08:35:09 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 7: Attempted to add 32 triples, skipped 0.
+2025-05-17 08:35:09 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 7.
+2025-05-17 08:35:09 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:35:09 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:35:09 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:35:09 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:35:09 - INFO - [novel_agent:219] - === Finished Ch 7 Successfully ===
+2025-05-17 08:35:09 - INFO - [novel_agent:142] - === Starting Chapter 8 Generation ===
+2025-05-17 08:35:09 - INFO - [chapter_planning_logic:23] - Planning Chapter 8 with detailed scenes...
+2025-05-17 08:35:09 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 8...
+2025-05-17 08:36:02 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:36:02 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1204 tk, Comp: 2157 tk, Total: 3361 tk
+2025-05-17 08:36:02 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 8 on 1st attempt.
+2025-05-17 08:36:02 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 8 with 15 scenes.
+2025-05-17 08:36:02 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 8...
+2025-05-17 08:36:02 - INFO - [context_generation_logic:32] - Semantic context query for ch 8 based on Plot Point 5: 'In the end, Sága sacrifices her life to destroy the memory exchange, freeing the city from the cycle...'
+2025-05-17 08:36:02 - INFO - [state_manager:300] - Async ORM: Retrieved 7 past embeddings.
+2025-05-17 08:36:02 - INFO - [context_generation_logic:87] - Top 5 relevant chapters for SEMANTIC context (semantic search): [3, 4, 1, 6, 7] (Scores: ['0.761', '0.752', '0.751', '0.719', '0.711'])
+2025-05-17 08:36:02 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 2102 chars from chapters [7, 6, 4, 3, 1].
+2025-05-17 08:36:02 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 8, Length: 2407 chars.
+2025-05-17 08:36:02 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 8 was truncated for the prompt.
+2025-05-17 08:36:02 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 8 draft generation.
+2025-05-17 08:37:31 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:37:31 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7594 tk, Comp: 1949 tk, Total: 9543 tk
+2025-05-17 08:37:31 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 8 (Length: 8459 chars).
+2025-05-17 08:37:31 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 8 draft (length: 8459 chars)...
+2025-05-17 08:37:31 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:37:31 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (7): 0.8782
+2025-05-17 08:37:31 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 8...
+2025-05-17 08:37:39 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:37:39 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 8055 tk, Comp: 32 tk, Total: 8087 tk
+2025-05-17 08:37:39 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 8 on 1st attempt.
+2025-05-17 08:37:39 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 8 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:37:39 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 8 complete. Needs revision: False.
+2025-05-17 08:37:39 - INFO - [novel_agent:206] - Initial draft for ch 8 passed evaluation.
+2025-05-17 08:37:39 - INFO - [novel_agent:223] - Finalizing chapter 8 (From flawed draft: False). Text length: 8459.
+2025-05-17 08:37:46 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:37:46 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 2037 tk, Comp: 91 tk, Total: 2128 tk
+2025-05-17 08:37:46 - INFO - [knowledge_management_logic:65] - Generated summary for ch 8: 'Sága confronts the Memory Vault's core, realizing her sister and father are trapped within it, and d...'
+2025-05-17 08:37:46 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 8.
+2025-05-17 08:37:46 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 8.
+2025-05-17 08:37:46 - INFO - [novel_agent:253] - Core finalization complete for ch 8.
+2025-05-17 08:37:46 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 8 (Source from flawed draft: False)...
+2025-05-17 08:37:46 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 8...
+2025-05-17 08:37:46 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 8).
+2025-05-17 08:38:05 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:38:05 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 7714 tk, Comp: 1048 tk, Total: 8762 tk
+2025-05-17 08:38:05 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 8 on 1st attempt.
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 8 complete. Char updates: 5, World updates categories: 3, KG Triples: 32.
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 8. Characters in update: ['Aelric', 'Mira', "Sága's Sister", "Sága's Father", 'Sága']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Aelric'. New traits: ['Determined', 'Regretful', 'Resilient']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:122] - Applied modification to 'relationships' for 'Mira'. New value: 'REMOVE 'enemy_of', ADD 'ally_of...'
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Sister'. New traits: ['Regretful']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Father'. New traits: ['Regretful']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Curious', 'Determined']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 8. Updated: 5, New: 0.
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 8. Categories in update: ['locations', 'systems', 'society']
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:122] - Applied modification to 'rules' for 'systems.Memory Exchange Protocol'. New value: 'ADD 'allows access to restricted areas through memory usage...'
+2025-05-17 08:38:05 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 8. Approximately 3 items affected/added.
+2025-05-17 08:38:06 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 8: Attempted to add 32 triples, skipped 0.
+2025-05-17 08:38:06 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 8.
+2025-05-17 08:38:06 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:38:06 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:38:06 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:38:06 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:38:06 - INFO - [novel_agent:219] - === Finished Ch 8 Successfully ===
+2025-05-17 08:38:06 - INFO - [novel_agent:142] - === Starting Chapter 9 Generation ===
+2025-05-17 08:38:06 - INFO - [chapter_planning_logic:23] - Planning Chapter 9 with detailed scenes...
+2025-05-17 08:38:06 - INFO - [chapter_planning_logic:124] - Calling LLM (Qwen3-8B) for detailed scene plan for chapter 9...
+2025-05-17 08:38:54 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:38:54 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 1202 tk, Comp: 1938 tk, Total: 3140 tk
+2025-05-17 08:38:54 - INFO - [llm_interface:369] - Successfully parsed JSON list for detailed scene plan for chapter 9 on 1st attempt.
+2025-05-17 08:38:54 - INFO - [chapter_planning_logic:172] - Generated valid detailed scene plan for chapter 9 with 15 scenes.
+2025-05-17 08:38:54 - INFO - [context_generation_logic:145] - Generating HYBRID context for Chapter 9...
+2025-05-17 08:38:54 - INFO - [context_generation_logic:32] - Semantic context query for ch 9 based on Plot Point 5: 'In the end, Sága sacrifices her life to destroy the memory exchange, freeing the city from the cycle...'
+2025-05-17 08:38:54 - INFO - [state_manager:300] - Async ORM: Retrieved 8 past embeddings.
+2025-05-17 08:38:54 - INFO - [context_generation_logic:87] - Top 5 relevant chapters for SEMANTIC context (semantic search): [3, 4, 1, 8, 6] (Scores: ['0.761', '0.752', '0.751', '0.750', '0.719'])
+2025-05-17 08:38:54 - INFO - [context_generation_logic:130] - Constructed final SEMANTIC context: 2146 chars from chapters [8, 6, 4, 3, 1].
+2025-05-17 08:38:54 - INFO - [context_generation_logic:189] - Generated HYBRID context for Chapter 9, Length: 2451 chars.
+2025-05-17 08:38:54 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 9 was truncated for the prompt.
+2025-05-17 08:38:54 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 9 draft generation.
+2025-05-17 08:40:19 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:40:19 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7976 tk, Comp: 1859 tk, Total: 9835 tk
+2025-05-17 08:40:19 - INFO - [chapter_drafting_logic:110] - Generated initial draft for ch 9 (Length: 8183 chars).
+2025-05-17 08:40:19 - INFO - [chapter_evaluation_logic:170] - Evaluating chapter 9 draft (length: 8183 chars)...
+2025-05-17 08:40:19 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-17 08:40:19 - INFO - [chapter_evaluation_logic:190] - Coherence score with previous chapter (8): 0.9150
+2025-05-17 08:40:19 - INFO - [chapter_evaluation_logic:124] - Calling LLM (Qwen3-8B) for comprehensive evaluation of chapter 9...
+2025-05-17 08:40:27 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:40:27 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-8B') Usage - Prompt: 8348 tk, Comp: 32 tk, Total: 8380 tk
+2025-05-17 08:40:27 - INFO - [llm_interface:369] - Successfully parsed JSON dict for comprehensive evaluation for ch 9 on 1st attempt.
+2025-05-17 08:40:27 - INFO - [chapter_evaluation_logic:156] - Comprehensive evaluation for Ch 9 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No.
+2025-05-17 08:40:27 - INFO - [chapter_evaluation_logic:219] - Evaluation for Ch 9 complete. Needs revision: False.
+2025-05-17 08:40:27 - INFO - [novel_agent:206] - Initial draft for ch 9 passed evaluation.
+2025-05-17 08:40:27 - INFO - [novel_agent:223] - Finalizing chapter 9 (From flawed draft: False). Text length: 8183.
+2025-05-17 08:40:34 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:40:34 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 1945 tk, Comp: 71 tk, Total: 2016 tk
+2025-05-17 08:40:34 - INFO - [knowledge_management_logic:65] - Generated summary for ch 9: 'Sága and Aelric attempt to dismantle the Memory Vault, confronting her father and sister, who have b...'
+2025-05-17 08:40:34 - INFO - [state_manager:257] - Async ORM: Successfully saved chapter data for chapter 9.
+2025-05-17 08:40:34 - INFO - [novel_agent:249] - Saved chapter text and raw LLM log files for ch 9.
+2025-05-17 08:40:34 - INFO - [novel_agent:253] - Core finalization complete for ch 9.
+2025-05-17 08:40:34 - INFO - [knowledge_management_logic:611] - Updating all knowledge bases for ch 9 (Source from flawed draft: False)...
+2025-05-17 08:40:34 - INFO - [knowledge_management_logic:318] - Performing unified knowledge extraction for Chapter 9...
+2025-05-17 08:40:34 - INFO - [knowledge_management_logic:437] - Calling LLM (Qwen3-4B) for unified knowledge extraction (Ch 9).
+2025-05-17 08:40:52 - INFO - [httpx:1740] - HTTP Request: POST http://192.168.64.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-17 08:40:52 - INFO - [llm_interface:144] - Async: LLM ('Qwen3-4B') Usage - Prompt: 8001 tk, Comp: 1005 tk, Total: 9006 tk
+2025-05-17 08:40:52 - INFO - [llm_interface:369] - Successfully parsed JSON dict for unified knowledge extraction for ch 9 on 1st attempt.
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:473] - Unified knowledge extraction for Ch 9 complete. Char updates: 5, World updates categories: 3, KG Triples: 26.
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:183] - Merging character profile JSON updates for ch 9. Characters in update: ['Aelric', 'Mira', 'Sága', "Sága's Father", "Sága's Sister"]
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Aelric'. New traits: ['Determined', 'Resilient']
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:122] - Applied modification to 'relationships' for 'Mira'. New value: 'ADD 'ally_of', REMOVE 'enemy_of...'
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága'. New traits: ['Determined']
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Father'. New traits: ['Regretful']
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:117] - Applied trait modifications for 'Sága's Sister'. New traits: ['Regretful']
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:210] - Character profile JSON merge complete for ch 9. Updated: 5, New: 0.
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:269] - Merging world-building JSON updates for ch 9. Categories in update: ['locations', 'systems', 'society']
+2025-05-17 08:40:52 - INFO - [knowledge_management_logic:301] - World-building JSON merge complete for ch 9. Approximately 3 items affected/added.
+2025-05-17 08:40:53 - INFO - [knowledge_management_logic:655] - KG update from unified_extraction for ch 9: Attempted to add 26 triples, skipped 0.
+2025-05-17 08:40:53 - INFO - [knowledge_management_logic:661] - All knowledge base updates from unified extraction completed for ch 9.
+2025-05-17 08:40:53 - INFO - [state_manager:150] - Saved plot outline to ORM.
+2025-05-17 08:40:53 - INFO - [state_manager:198] - Saved world building to ORM.
+2025-05-17 08:40:53 - INFO - [state_manager:174] - Saved character profiles to ORM.
+2025-05-17 08:40:53 - INFO - [novel_agent:101] - All (3) state objects saved to ORM successfully.
+2025-05-17 08:40:53 - INFO - [novel_agent:219] - === Finished Ch 9 Successfully ===
+2025-05-17 08:40:53 - INFO - [state_manager:216] - Async ORM loaded chapter count: 9
+2025-05-17 08:40:53 - INFO - [__main__:201] - --- Saga Novel Generation Run Finished. Final DB chapter count: 9 ---
