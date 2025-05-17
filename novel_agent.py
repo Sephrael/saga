@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple, Any # JsonStateData might be spe
 
 import config
 import llm_interface
-# DatabaseManager is no longer used directly by NovelWriterAgent
 from state_manager import state_manager # Use the singleton instance
 from type import JsonStateData, EvaluationResult, SceneDetail # Keep JsonStateData in imports in case it's used correctly elsewhere or by sub-logics
 
@@ -21,8 +20,7 @@ from knowledge_management_logic import (
     summarize_chapter_text_logic,
     prepopulate_kg_from_initial_data_logic
 )
-# from context_generation_logic import generate_chapter_context_logic # Old
-from context_generation_logic import generate_hybrid_chapter_context_logic # New
+from context_generation_logic import generate_hybrid_chapter_context_logic
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +28,6 @@ logger = logging.getLogger(__name__)
 class NovelWriterAgent:
     def __init__(self):
         logger.info("Initializing NovelWriterAgent instance...")
-        # Changed type annotation from JsonStateData to Dict[str, Any]
         self.plot_outline: Dict[str, Any] = {}
         self.character_profiles: Dict[str, Any] = {}
         self.world_building: Dict[str, Any] = {}
@@ -77,8 +74,6 @@ class NovelWriterAgent:
     async def _save_all_json_state(self):
         logger.debug("Saving agent state (plot, characters, world) to ORM...")
         
-        # self.plot_outline etc. are now Dict[str, Any]. This should be compatible
-        # with what state_manager.save_... methods expect if they take Dict[str, Any].
         tasks = [
             state_manager.save_plot_outline(self.plot_outline),
             state_manager.save_character_profiles(self.character_profiles),

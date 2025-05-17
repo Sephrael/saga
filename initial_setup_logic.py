@@ -10,7 +10,6 @@ from typing import Dict, Any, Optional # Added Optional
 
 import config
 import llm_interface
-# from type import JsonStateData # JsonStateData is likely the full state, not what these functions return.
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +164,6 @@ async def generate_world_building_logic(agent) -> WorldBuildingData:
     """
     if agent.world_building and not agent.world_building.get("is_default", False):
         # Check if data is already populated and non-default (original logic preserved for behavior)
-        # Added isinstance checks and .get for robustness.
         keys_minus_default = agent.world_building.keys() - {"is_default"}
         locations_data = agent.world_building.get("locations")
         has_multiple_other_keys = len(keys_minus_default) > 1

@@ -55,7 +55,7 @@ OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "http://192.168.64.1:8080/v1
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
-# Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
+# Model Aliases
 LARGE_MODEL_DEFAULT: str = "Qwen3-8B"
 MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
@@ -76,7 +76,6 @@ FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL
 
 MAIN_GENERATION_MODEL: str = NARRATOR_MODEL # Retained for clarity, but Narrator Model is primary
 JSON_CORRECTION_MODEL: str = SMALL_MODEL
-# CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL # Superseded by EVALUATION_MODEL
 KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # Needs good comprehension for unified extraction
 INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # Good balance for initial creative tasks
 PLANNING_MODEL: str = LARGE_MODEL # Needs strong reasoning
@@ -115,7 +114,6 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 # --- Generation Parameters ---
 MAX_CONTEXT_LENGTH: int = 131072 # Max characters for combined context in prompts
 MAX_GENERATION_TOKENS: int = 65536 # Max tokens LLM can generate in one go
-# KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Less relevant if using full text for extraction/evaluation
 CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
 CHAPTERS_PER_RUN: int = 9 # How many chapters to attempt writing in one execution
 LLM_TOP_P: float = 0.95 # LLM nucleus sampling parameter
@@ -130,7 +128,6 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified ca
 # --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
 MAX_PLANNING_TOKENS: int = 65536
-# Reduced for prompt brevity
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120 
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -141,16 +138,11 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 # --- Revision and Validation ---
 REVISION_COHERENCE_THRESHOLD: float = 0.60 
-# REVISION_CONSISTENCY_TRIGGER: bool = True  # Implicitly handled by comprehensive evaluation
-# PLOT_ARC_VALIDATION_TRIGGER: bool = True # Implicitly handled by comprehensive evaluation
 # Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
 MAX_SUMMARY_TOKENS: int = 65536 # For summarization output
-# MAX_CONSISTENCY_TOKENS: int = 65536 # Superseded by EVALUATION_MODEL's token limits
-# MAX_PLOT_VALIDATION_TOKENS: int = 65536 # Superseded by EVALUATION_MODEL's token limits
 MAX_KG_TRIPLE_TOKENS: int = 65536 # Still relevant for the KG part of unified extraction if needed
 MAX_PREPOP_KG_TOKENS: int = 65536 
-# MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 # Superseded by EVALUATION_MODEL
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
@@ -180,7 +172,6 @@ CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
-# THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 16384 # No longer needed
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
 _DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"] 

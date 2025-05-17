@@ -25,9 +25,6 @@ class Chapter(Base):
     is_provisional = Column(Boolean, default=False)
     
     embedding = relationship("Embedding", back_populates="chapter", uselist=False, cascade="all, delete-orphan")
-    # Relationship for knowledge_triples if chapter_added is a FK
-    # knowledge_triples = relationship("KnowledgeGraphTriple", back_populates="chapter_ref")
-
 
 class Embedding(Base):
     __tablename__ = 'embeddings'
@@ -50,10 +47,6 @@ class KnowledgeGraphTriple(Base):
     chapter_added = Column(Integer, nullable=False) 
     confidence = Column(Float, default=1.0)
     is_provisional = Column(Boolean, default=False)
-
-    # If chapter_added is a foreign key to chapters.chapter_number:
-    # chapter_ref_id = Column(Integer, ForeignKey('chapters.chapter_number'))
-    # chapter_ref = relationship("Chapter", back_populates="knowledge_triples")
 
     __table_args__ = (
         Index('idx_kg_subject', 'subject'),
@@ -146,7 +139,6 @@ class state_managerSingleton:
                 else:
                     entry = OrmPlotOutline(key="main_plot", value=json_value)
                     session.add(entry)
-            # session.begin() handles commit/rollback automatically
         self.logger.info("Saved plot outline to ORM.")
         return True
 

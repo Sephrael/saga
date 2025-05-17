@@ -13,7 +13,6 @@ from async_lru import alru_cache # For caching LLM calls
 
 import config
 import llm_interface
-from type import KnowledgeGraph, Entity, Relationship, Event, Location, Character, Faction # Keep for potential future structured KG
 
 from prompt_data_getters import (
     get_filtered_world_data_for_prompt,
@@ -31,7 +30,6 @@ async def llm_summarize_full_chapter_text_logic(chapter_text_full_key: str, chap
     """Cached LLM call for summarizing full chapter text. Key is the full text to cache effectively."""
     # Note: If chapter_text_full_key is very long, it might exceed practical limits for a cache key
     # or LLM input limits depending on the model.
-    # This implements the "full text" change as requested.
     prompt = f"""/no_think
 You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.
 The summary should be 1-3 sentences long and capture the most crucial information.
@@ -57,7 +55,6 @@ async def summarize_chapter_text_logic(chapter_text: Optional[str], chapter_numb
         logger.warning(f"Chapter {chapter_number} text too short for summarization ({len(chapter_text or '')} chars).")
         return None
             
-    # Per request, use full text for summarization LLM call.
     # The effectiveness of caching with full text as key needs to be monitored.
     cleaned_summary = await llm_summarize_full_chapter_text_logic(chapter_text, chapter_number)
 
@@ -481,7 +478,7 @@ Output ONLY the JSON object.
         return default_response
 
 
-# --- Knowledge Graph Pre-population (Remains largely the same, but uses full plot/world from agent state) ---
+# --- Knowledge Graph Pre-population ---
 
 async def prepopulate_kg_from_initial_data_logic(agent): # NovelWriterAgent instance
     logger.info("Starting Knowledge Graph pre-population from plot and world data...")
@@ -656,6 +653,4 @@ async def update_all_knowledge_bases_logic(
     else:
         logger.info(f"No KG triples received from unified extraction for ch {chapter_number}.")
 
-    # Thematic consistency check is now part of evaluate_chapter_draft_logic, so no separate call here.
-    
     logger.info(f"All knowledge base updates from unified extraction completed for ch {chapter_number}.")

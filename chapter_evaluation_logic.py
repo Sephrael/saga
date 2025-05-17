@@ -224,5 +224,4 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
         "consistency_issues": consistency_issues_str, 
         "plot_deviation_reason": plot_deviation_reason_str,
         "thematic_issues": thematic_issues_str  # Added to match EvaluationResult type requirements
-        # EvaluationResult in type.py does not have thematic_issues. I will add it.
     }
