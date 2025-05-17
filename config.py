@@ -59,7 +59,7 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 LARGE_MODEL_DEFAULT: str = "Qwen3-8B"
 MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-30B-A3B" # Primary high-quality model
+NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B" # Primary high-quality model
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -76,13 +76,13 @@ FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL
 
 MAIN_GENERATION_MODEL: str = NARRATOR_MODEL # Retained for clarity, but Narrator Model is primary
 JSON_CORRECTION_MODEL: str = SMALL_MODEL
-CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL # Can be a smaller model for speed
-KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # Needs good comprehension
+# CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL # Superseded by EVALUATION_MODEL
+KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # Needs good comprehension for unified extraction
 INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # Good balance for initial creative tasks
 PLANNING_MODEL: str = LARGE_MODEL # Needs strong reasoning
 DRAFTING_MODEL: str = NARRATOR_MODEL # High quality needed
 REVISION_MODEL: str = NARRATOR_MODEL # High quality needed
-THEMATIC_CONSISTENCY_MODEL: str = SMALL_MODEL # New model for thematic checks
+EVALUATION_MODEL: str = LARGE_MODEL # For comprehensive chapter evaluation
 
 
 # --- Output and File Paths ---
@@ -115,16 +115,16 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 # --- Generation Parameters ---
 MAX_CONTEXT_LENGTH: int = 40960 # Max characters for combined context in prompts
 MAX_GENERATION_TOKENS: int = 32768 # Max tokens LLM can generate in one go
-KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Snippet size from chapter text for KG/JSON updates
+# KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Less relevant if using full text for extraction/evaluation
 CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
-CHAPTERS_PER_RUN: int = 6 # How many chapters to attempt writing in one execution
+CHAPTERS_PER_RUN: int = 9 # How many chapters to attempt writing in one execution
 LLM_TOP_P: float = 0.95 # LLM nucleus sampling parameter
 
 
 # --- Caching ---
 EMBEDDING_CACHE_SIZE: int = 128
-SUMMARY_CACHE_SIZE: int = 32
-KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # Reduced slightly as prompts might change more often
+SUMMARY_CACHE_SIZE: int = 32 # Summarization might still use full text as cache key
+KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified call, this specific cache might be less used
 
 
 # --- Agentic Planning & Prompt Context Snippets ---
@@ -141,16 +141,16 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 # --- Revision and Validation ---
 REVISION_COHERENCE_THRESHOLD: float = 0.65 
-REVISION_CONSISTENCY_TRIGGER: bool = True 
-PLOT_ARC_VALIDATION_TRIGGER: bool = True 
+# REVISION_CONSISTENCY_TRIGGER: bool = True  # Implicitly handled by comprehensive evaluation
+# PLOT_ARC_VALIDATION_TRIGGER: bool = True # Implicitly handled by comprehensive evaluation
 # Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
-MAX_SUMMARY_TOKENS: int = 32768
-MAX_CONSISTENCY_TOKENS: int = 32768
-MAX_PLOT_VALIDATION_TOKENS: int = 32768
-MAX_KG_TRIPLE_TOKENS: int = 32768
+MAX_SUMMARY_TOKENS: int = 32768 # For summarization output
+# MAX_CONSISTENCY_TOKENS: int = 32768 # Superseded by EVALUATION_MODEL's token limits
+# MAX_PLOT_VALIDATION_TOKENS: int = 32768 # Superseded by EVALUATION_MODEL's token limits
+MAX_KG_TRIPLE_TOKENS: int = 32768 # Still relevant for the KG part of unified extraction if needed
 MAX_PREPOP_KG_TOKENS: int = 32768 
-MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 
+# MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 # Superseded by EVALUATION_MODEL
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
@@ -180,7 +180,7 @@ CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
-THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 16384
+# THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 16384 # No longer needed
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
 _DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"] 

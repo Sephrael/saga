@@ -85,7 +85,7 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
     revised_raw_llm_output = await llm_interface.async_call_llm(
         model_name=config.REVISION_MODEL,
         prompt=prompt, 
-        temperature=0.6,
+        temperature=0.8,
         allow_fallback=True 
     ) 
     if not revised_raw_llm_output:

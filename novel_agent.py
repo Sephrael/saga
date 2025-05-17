@@ -163,60 +163,16 @@ class NovelWriterAgent:
             return None
 
         initial_draft_text, initial_raw_llm_text = await generate_chapter_draft_logic(
-            self, chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan # Pass hybrid_context
+            self, chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
         )
 
         if not initial_draft_text:
             logger.error(f"Failed to generate initial draft for ch {chapter_number}.")
             await self._save_debug_output(chapter_number, "initial_draft_fail_raw_llm", initial_raw_llm_text or "")
             return None
-
-        # For evaluation, we still need the "previous chapters context" which is the semantic part.
-        # The consistency checker might also benefit from a cleaner semantic context.
-        # Let's regenerate just the semantic part for evaluation or pass hybrid_context and let evaluation logic parse it.
-        # For simplicity now, let's pass hybrid_context to evaluation; it can choose to ignore KG facts if it wants.
-        # More robustly, evaluation could also use a hybrid context, or we provide it specific parts.
-        # The current `evaluate_chapter_draft_logic` takes `previous_chapters_context`. We need to provide it
-        # with something equivalent to what it used to get, or update it to handle hybrid context.
-        # For now, let's assume evaluation also benefits from the full hybrid context.
-        # If evaluation specifically needs *only* semantic context, this would need adjustment.
-        # Let's check chapter_evaluation_logic - it uses previous_chapters_context for consistency check.
-        # The consistency check prompt *already* fetches its own KG facts.
-        # So, for `evaluate_chapter_draft_logic`, we should pass it the semantic part of the hybrid context.
-        # This requires _generate_semantic_chapter_context_logic to be callable from novel_agent or passed through.
-        # Alternative: the drafting context IS the hybrid context. The evaluation context could be simpler.
-        # Let's provide the semantic part of the context to evaluation.
         
-        # For evaluation, use semantic context only if `evaluate_chapter_draft_logic` isn't designed for hybrid.
-        # The `check_draft_consistency_logic` internally gets its own KG facts.
-        # So, it's better to pass only the semantic part to `evaluate_chapter_draft_logic` if it's expecting just "previous chapter text/summaries".
-        # To do this cleanly, `_generate_semantic_chapter_context_logic` would need to be exposed or called again.
-        # For now, let's make a simplifying assumption: evaluation will use the `hybrid_context_for_draft` and its sub-components
-        # can be intelligent about what they need. Or, we pass the semantic portion.
-        # The `evaluate_chapter_draft_logic` takes `previous_chapters_context`.
-        # Let's fetch semantic context separately for evaluation for now.
-        # This implies `_generate_semantic_chapter_context_logic` should be accessible or
-        # `generate_hybrid_chapter_context_logic` should return components.
-        # For now, let `evaluate_chapter_draft_logic` get the full hybrid context and internally adapt.
-        # This is simpler for this iteration. It can ignore the KG fact section if it does its own KG fact fetching.
-        # **Correction**: `evaluate_chapter_draft_logic` calls `check_draft_consistency_logic`, which takes `previous_chapters_context`.
-        # This `previous_chapters_context` is used for the "Previous Context (Snippet from prior chapters)" section in its prompt.
-        # It *also* fetches its own KG facts. So, we should pass *only* the semantic context part here.
-        # We will make `generate_hybrid_chapter_context_logic` return both components.
-
-        # Re-fetch semantic context for evaluation logic for now.
-        # A better way would be for generate_hybrid_chapter_context_logic to return components.
-        # For this iteration, we'll call the internal semantic generator again for clarity.
-        # This means _generate_semantic_chapter_context_logic should be exposed from context_generation_logic
-        # OR, we can extract it from hybrid_context_for_draft (less clean).
-        # Let's assume context_generation_logic exposes _generate_semantic_chapter_context_logic
-        # No, it's cleaner to pass the full hybrid context and let the evaluation logic use it as needed,
-        # or have hybrid context return a dict.
-        # For now, the simplest change is to pass `hybrid_context_for_draft` to evaluation and have it parse/use.
-        # *Actually*, the existing `check_draft_consistency_logic` does its OWN KG fact retrieval.
-        # It just needs general previous context. So let's pass `hybrid_context_for_draft` there,
-        # and its prompt will just show it.
-        
+        # The `evaluate_chapter_draft_logic` now uses the `hybrid_context_for_draft` (passed as `previous_chapters_context`)
+        # for its comprehensive evaluation, including the consistency check aspects that previously needed context.
         evaluation = await evaluate_chapter_draft_logic(self, initial_draft_text, chapter_number, hybrid_context_for_draft)
         current_text = initial_draft_text
         final_raw_output_log = f"--- INITIAL DRAFT (RAW LLM OUTPUT) ---\n{initial_raw_llm_text}\n\n"
@@ -226,14 +182,12 @@ class NovelWriterAgent:
             revision_reason_str = "\n- ".join(evaluation["reasons"])
             logger.warning(f"Ch {chapter_number} flagged for revision. Reason(s):\n- {revision_reason_str}")
             
-            # Revision logic also needs context. It should also use the hybrid context.
             revised_text_tuple = await revise_chapter_draft_logic(
                 self, current_text, chapter_number, revision_reason_str, hybrid_context_for_draft, chapter_plan
             )
             if revised_text_tuple:
                 revised_text, raw_revision_llm_output = revised_text_tuple
                 logger.info(f"Revision successful for ch {chapter_number}. Re-evaluating revised draft...")
-                # Re-evaluation also uses hybrid_context_for_draft
                 revised_evaluation = await evaluate_chapter_draft_logic(self, revised_text, chapter_number, hybrid_context_for_draft)
                 
                 if revised_evaluation["needs_revision"]:
@@ -255,6 +209,7 @@ class NovelWriterAgent:
              logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save or embedding) ===")
              return None 
 
+        # update_all_knowledge_bases_logic now uses unified extraction with full text.
         await update_all_knowledge_bases_logic(self, chapter_number, current_text, proceeded_with_flaws)
         
         self.chapter_count = max(self.chapter_count, chapter_number) 
@@ -270,6 +225,7 @@ class NovelWriterAgent:
             logger.error(f"Cannot finalize ch {chapter_number}: Final text is missing or empty.")
             return False
 
+        # summarize_chapter_text_logic now takes full text for its summarization LLM call
         summary_task = summarize_chapter_text_logic(final_text, chapter_number)
         embedding_task = asyncio.create_task(llm_interface.async_get_embedding(final_text))
         
