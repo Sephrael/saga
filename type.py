@@ -15,6 +15,7 @@ class EvaluationResult(TypedDict):
     coherence_score: Optional[float] # New
     consistency_issues: Optional[str] # New
     plot_deviation_reason: Optional[str] # New
+    thematic_issues: Optional[str] # New, added for comprehensive evaluation
 
 class JsonStateData(TypedDict): # This seems to be a general container, might not be strictly enforced everywhere
     plot_outline: dict
