@@ -113,8 +113,8 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 40960 # Max characters for combined context in prompts
-MAX_GENERATION_TOKENS: int = 32768 # Max tokens LLM can generate in one go
+MAX_CONTEXT_LENGTH: int = 131072 # Max characters for combined context in prompts
+MAX_GENERATION_TOKENS: int = 65536 # Max tokens LLM can generate in one go
 # KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Less relevant if using full text for extraction/evaluation
 CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
 CHAPTERS_PER_RUN: int = 9 # How many chapters to attempt writing in one execution
@@ -129,7 +129,7 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified ca
 
 # --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
-MAX_PLANNING_TOKENS: int = 32768
+MAX_PLANNING_TOKENS: int = 65536
 # Reduced for prompt brevity
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120 
@@ -140,16 +140,16 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-REVISION_COHERENCE_THRESHOLD: float = 0.65 
+REVISION_COHERENCE_THRESHOLD: float = 0.60 
 # REVISION_CONSISTENCY_TRIGGER: bool = True  # Implicitly handled by comprehensive evaluation
 # PLOT_ARC_VALIDATION_TRIGGER: bool = True # Implicitly handled by comprehensive evaluation
 # Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
-MAX_SUMMARY_TOKENS: int = 32768 # For summarization output
-# MAX_CONSISTENCY_TOKENS: int = 32768 # Superseded by EVALUATION_MODEL's token limits
-# MAX_PLOT_VALIDATION_TOKENS: int = 32768 # Superseded by EVALUATION_MODEL's token limits
-MAX_KG_TRIPLE_TOKENS: int = 32768 # Still relevant for the KG part of unified extraction if needed
-MAX_PREPOP_KG_TOKENS: int = 32768 
+MAX_SUMMARY_TOKENS: int = 65536 # For summarization output
+# MAX_CONSISTENCY_TOKENS: int = 65536 # Superseded by EVALUATION_MODEL's token limits
+# MAX_PLOT_VALIDATION_TOKENS: int = 65536 # Superseded by EVALUATION_MODEL's token limits
+MAX_KG_TRIPLE_TOKENS: int = 65536 # Still relevant for the KG part of unified extraction if needed
+MAX_PREPOP_KG_TOKENS: int = 65536 
 # MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 # Superseded by EVALUATION_MODEL
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
