@@ -5,22 +5,20 @@ Now includes a hybrid approach combining semantic context and Knowledge Graph fa
 """
 import logging
 import asyncio
-from typing import List, Optional # Added Optional
+from typing import List, Optional 
 
 import config
 import llm_interface
-import utils # For numpy_cosine_similarity
+import utils 
 from state_manager import state_manager
-# Import the specific KG fact getter from prompt_data_getters
 from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt
-from type import SceneDetail # For chapter_plan type hint
+from type import SceneDetail 
 
 logger = logging.getLogger(__name__)
 
 async def _generate_semantic_chapter_context_logic(agent, current_chapter_number: int) -> str:
     """
     Constructs SEMANTIC context for the current chapter from previous summaries/text.
-    This was the original generate_chapter_context_logic.
     'agent' is an instance of NovelWriterAgent.
     """
     if current_chapter_number <= 1:
@@ -41,9 +39,9 @@ async def _generate_semantic_chapter_context_logic(agent, current_chapter_number
         logger.warning("Failed to generate embedding for semantic context query. Falling back to sequential previous chapter summaries/text for semantic portion.")
         context_parts: List[str] = []
         total_chars = 0
-        # Limit fallback to a reasonable number of chapters or total length
         fallback_chapter_limit = config.CONTEXT_CHAPTER_COUNT 
-        max_fallback_chars = config.MAX_CONTEXT_LENGTH // 2 # Reserve space for potential KG facts
+        # Slightly more aggressive truncation for fallback to save tokens
+        max_fallback_chars = config.MAX_CONTEXT_LENGTH // 3 
 
         for i in range(max(1, current_chapter_number - fallback_chapter_limit), current_chapter_number):
             if total_chars >= max_fallback_chars: break
@@ -83,7 +81,6 @@ async def _generate_semantic_chapter_context_logic(agent, current_chapter_number
         logger.info("No valid similarities found with past embeddings for semantic context.")
         return ""
     
-    # Limit semantic context to a portion of MAX_CONTEXT_LENGTH to leave room for KG facts
     max_semantic_chars = (config.MAX_CONTEXT_LENGTH * 2) // 3 
     
     top_n_indices = [cs[0] for cs in similarities[:config.CONTEXT_CHAPTER_COUNT]]
@@ -91,8 +88,6 @@ async def _generate_semantic_chapter_context_logic(agent, current_chapter_number
     
     immediate_prev_chap_num = current_chapter_number - 1
     if immediate_prev_chap_num > 0 and immediate_prev_chap_num not in top_n_indices:
-        # Add immediate previous if not already in top N, ensuring it's prioritized for recency.
-        # We might re-sort or just fetch it along with others.
         top_n_indices.append(immediate_prev_chap_num)
         logger.debug(f"Added immediate previous chapter {immediate_prev_chap_num} to semantic context list.")
         
@@ -110,7 +105,7 @@ async def _generate_semantic_chapter_context_logic(agent, current_chapter_number
     chap_data_map = dict(zip(chap_data_tasks.keys(), chap_data_results_list))
 
     for chap_num in chapters_to_fetch: 
-        if total_chars >= max_semantic_chars: break # Respect max length for semantic part
+        if total_chars >= max_semantic_chars: break 
         chap_data = chap_data_map.get(chap_num)
         if chap_data:
             content = (chap_data.get('summary') or chap_data.get('text', '')).strip()
@@ -144,25 +139,19 @@ async def generate_hybrid_chapter_context_logic(agent, current_chapter_number: i
     'agent' is an instance of NovelWriterAgent.
     'chapter_plan' is the plan for the current_chapter_number, used by KG fact getter.
     """
-    if current_chapter_number <= 0: # Should not happen if called from write_chapter
+    if current_chapter_number <= 0: 
         return ""
     
     logger.info(f"Generating HYBRID context for Chapter {current_chapter_number}...")
 
-    # Task 1: Generate Semantic Context
     semantic_context_task = _generate_semantic_chapter_context_logic(agent, current_chapter_number)
-
-    # Task 2: Get Reliable KG Facts
-    # get_reliable_kg_facts_for_drafting_prompt needs chapter_number and chapter_plan
     kg_facts_task = get_reliable_kg_facts_for_drafting_prompt(agent, current_chapter_number, chapter_plan)
 
-    # Execute tasks concurrently
     semantic_context_str, kg_facts_str = await asyncio.gather(
         semantic_context_task,
         kg_facts_task
     )
 
-    # Combine the results
     hybrid_context_parts = []
     if semantic_context_str and semantic_context_str.strip():
         hybrid_context_parts.append("--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---")
@@ -173,32 +162,29 @@ async def generate_hybrid_chapter_context_logic(agent, current_chapter_number: i
         hybrid_context_parts.append("No relevant semantic context could be retrieved.")
         hybrid_context_parts.append("--- END SEMANTIC CONTEXT ---")
 
-
-    # kg_facts_str from get_reliable_kg_facts_for_drafting_prompt already includes a header
-    # like "**Key Reliable KG Facts (...)**" or "No specific reliable KG facts..."
-    # We'll add our own consistent wrapper for clarity in the final prompt.
     if kg_facts_str and kg_facts_str.strip():
         hybrid_context_parts.append("\n\n--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---")
-        # Remove the getter's own header if present, to avoid double headers.
-        # The getter's header is usually "**Key Reliable KG Facts (...)**\n"
         cleaned_kg_facts = kg_facts_str.split("\n", 1)[-1] if kg_facts_str.startswith("**Key Reliable KG Facts") else kg_facts_str
         if not cleaned_kg_facts.strip() or cleaned_kg_facts.lower().startswith("no specific reliable kg facts"):
             hybrid_context_parts.append("No specific reliable KG facts were identified as highly relevant for this chapter's focus.")
         else:
             hybrid_context_parts.append(cleaned_kg_facts)
         hybrid_context_parts.append("--- END KEY RELIABLE KG FACTS ---")
-    else: # Should not happen if getter always returns a string, but defensive
+    else: 
         hybrid_context_parts.append("\n\n--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---")
         hybrid_context_parts.append("Knowledge Graph fact retrieval did not yield specific results for this chapter.")
         hybrid_context_parts.append("--- END KEY RELIABLE KG FACTS ---")
 
     final_hybrid_context = "\n".join(hybrid_context_parts).strip()
     
-    # Ensure total length is somewhat managed, though individual parts were already capped.
-    # This is a final safeguard.
-    if len(final_hybrid_context) > config.MAX_CONTEXT_LENGTH * 1.1: # Allow slight overrun for headers
-        logger.warning(f"Hybrid context length ({len(final_hybrid_context)}) exceeds typical max. Truncating.")
-        final_hybrid_context = final_hybrid_context[:config.MAX_CONTEXT_LENGTH] + "\n... (Hybrid context truncated)"
+    # Final safeguard for total context length
+    if len(final_hybrid_context) > config.MAX_CONTEXT_LENGTH: # Strict enforcement now
+        logger.warning(f"Hybrid context length ({len(final_hybrid_context)}) exceeds MAX_CONTEXT_LENGTH ({config.MAX_CONTEXT_LENGTH}). Truncating.")
+        # Prioritize keeping KG facts if possible, truncate semantic context more aggressively.
+        # This is a simple truncation; more sophisticated would re-evaluate parts.
+        # For now, just truncate the whole thing.
+        final_hybrid_context = final_hybrid_context[:config.MAX_CONTEXT_LENGTH - len("\n... (Hybrid context truncated)")] + "\n... (Hybrid context truncated)"
+
 
     logger.info(f"Generated HYBRID context for Chapter {current_chapter_number}, Length: {len(final_hybrid_context)} chars.")
     return final_hybrid_context

@@ -2,16 +2,16 @@
 import logging
 import json
 import asyncio
-from typing import List, Optional, Any, Dict # Added Any, Dict
+from typing import List, Optional, Any, Dict 
 
 import config
 import llm_interface
-from type import SceneDetail # Assuming SceneDetail is a TypedDict or similar
+from type import SceneDetail 
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
     get_world_state_snippet_for_prompt
 )
-from state_manager import state_manager # Import the global instance
+from state_manager import state_manager 
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,6 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
 
     context_summary = ""
     if chapter_number > 1:
-        # Use state_manager for DB access
         prev_chap_data = await state_manager.async_get_chapter_data_from_db(chapter_number - 1)
         if prev_chap_data:
             prev_summary = prev_chap_data.get('summary')
@@ -37,7 +36,7 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
             if prev_summary: 
                 context_summary += f"{summary_prefix}({chapter_number - 1}):\n{prev_summary[:1000].strip()}...\n"
             else: 
-                prev_text = prev_chap_data.get('text', '') # raw_text might be better if 'text' is cleaned
+                prev_text = prev_chap_data.get('text', '') 
                 text_prefix = "[Provisional Text Snippet from Prev Ch] " if prev_is_provisional and prev_text else "[Text Snippet from Prev Ch] "
                 if prev_text: 
                     context_summary += f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
@@ -46,7 +45,6 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
     kg_chapter_limit = chapter_number - 1 
     
     kg_tasks = {
-        # Use state_manager for DB access
         "location": state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False),
         "status": state_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
     }
@@ -60,9 +58,16 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
     
     kg_context_section = "**Relevant Reliable KG Facts (up to prev chapter/pre-novel):**\n" + "\n".join(kg_facts_for_prompt) + "\n" if kg_facts_for_prompt else ""
 
-    # These getters use agent's in-memory state, which is fine
     character_state_snippet = get_character_state_snippet_for_prompt(agent, chapter_number)
     world_state_snippet = get_world_state_snippet_for_prompt(agent, chapter_number)
+
+    # Bidirectional Context: Include next plot point if available
+    future_plot_context = ""
+    all_plot_points = agent.plot_outline.get('plot_points', [])
+    if plot_point_index + 1 < len(all_plot_points):
+        next_plot_point = all_plot_points[plot_point_index + 1]
+        if isinstance(next_plot_point, str) and next_plot_point.strip():
+            future_plot_context = f"\n**Anticipated Next Major Plot Point (for context, not this chapter's focus):**\n{next_plot_point.strip()}\n"
 
     prompt = f"""/no_think
 You are a master plotter outlining **between 8 and 15 detailed scenes** for Chapter {chapter_number} of a novel.
@@ -75,7 +80,7 @@ You are a master plotter outlining **between 8 and 15 detailed scenes** for Chap
 
 **Mandatory Focus for THIS Chapter (Plot Point {plot_point_index + 1} of {len(agent.plot_outline.get('plot_points',[]))}):**
 {plot_point_focus}
-
+{future_plot_context}
 **Recent Context from Previous Chapter(s):**
 {context_summary if context_summary else "This is the first chapter, or no prior summary is available."}
 {kg_context_section}
@@ -117,79 +122,60 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
 [
 """
     logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number}...")
+    # Planning is critical, allow fallback if primary planning model fails
     plan_raw = await llm_interface.async_call_llm(
         model_name=config.PLANNING_MODEL,
         prompt=prompt, 
         temperature=0.6, 
-        max_tokens=config.MAX_PLANNING_TOKENS
+        max_tokens=config.MAX_PLANNING_TOKENS,
+        allow_fallback=True 
     )
     
-    # Changed: Use a more general type for the immediate result of JSON parsing.
-    # This addresses the Pylance error at line 127.
     parsed_json_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(
         plan_raw, f"detailed scene plan for chapter {chapter_number}", expect_type=list
     )
     
-    # Removed: The line `if parsed_plan is None: parsed_plan = []` is no longer needed
-    # as the logic below handles `parsed_json_result` being None or not a list.
-
-    # Check if the parsed result is a list and then validate its contents.
     if isinstance(parsed_json_result, list):
-        # If parsed_json_result is an empty list, len will be 0, and it will go to the `else`
-        # block of `if valid_scenes:`, correctly indicating no valid scenes.
-        
         valid_scenes: List[SceneDetail] = []
         required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
         
-        for i, scene_item_any in enumerate(parsed_json_result): # scene_item_any is of type Any
+        for i, scene_item_any in enumerate(parsed_json_result): 
             if not isinstance(scene_item_any, dict):
                 logger.warning(f"Scene item {i+1} in plan for ch {chapter_number} is not a dict. Skipping. Item: {scene_item_any}")
                 continue
             
-            # scene_item is now known to be a dictionary.
-            # For type safety, explicitly type it as Dict[str, Any].
             scene_item: Dict[str, Any] = scene_item_any 
             
             if not required_scene_keys.issubset(scene_item.keys()):
                 logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has missing keys ({required_scene_keys - set(scene_item.keys())}). Skipping.")
                 continue
 
-            # Detailed type and content validation for each field
             if not (isinstance(scene_item.get("scene_number"), int) and
                     isinstance(scene_item.get("summary"), str) and scene_item.get("summary", "").strip() and
-                    isinstance(scene_item.get("characters_involved"), list) and # Check list type first
-                    isinstance(scene_item.get("key_dialogue_points"), list) and # Check list type first
+                    isinstance(scene_item.get("characters_involved"), list) and 
+                    isinstance(scene_item.get("key_dialogue_points"), list) and 
                     isinstance(scene_item.get("setting_details"), str) and scene_item.get("setting_details", "").strip() and
                     isinstance(scene_item.get("contribution"), str) and scene_item.get("contribution", "").strip()):
                 logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_item}")
                 continue
             
-            # Validate contents of lists
-            # scene_item["characters_involved"] is known to be a list due to the check above.
-            if not all(isinstance(c, str) for c in scene_item["characters_involved"]): # Original type: ignore might be needed if Pylance can't infer narrowing for dict values
+            if not all(isinstance(c, str) for c in scene_item["characters_involved"]): 
                  logger.warning(f"Scene {i+1} 'characters_involved' contains non-strings. Skipping. Scene: {scene_item}")
                  continue
-            # scene_item["key_dialogue_points"] is known to be a list.
-            if not all(isinstance(d, str) for d in scene_item["key_dialogue_points"]): # Original type: ignore might be needed
+            if not all(isinstance(d, str) for d in scene_item["key_dialogue_points"]): 
                  logger.warning(f"Scene {i+1} 'key_dialogue_points' contains non-strings. Skipping. Scene: {scene_item}")
                  continue
 
-            # If all checks pass, scene_item (a dict) is structurally compatible with SceneDetail (TypedDict).
-            # The original `type: ignore` might still be preferred by some linters if SceneDetail is a class
-            # or if exact TypedDict matching isn't perfectly inferred. Assuming SceneDetail is a TypedDict,
-            # this direct append should be fine.
-            valid_scenes.append(scene_item) # type: ignore # Keeping original type: ignore, can be re-evaluated
+            valid_scenes.append(scene_item) # type: ignore 
         
-        if valid_scenes: # Checks if list is non-empty
+        if valid_scenes: 
             logger.info(f"Generated valid detailed scene plan for chapter {chapter_number} with {len(valid_scenes)} scenes.")
             return valid_scenes
         else:
-            # This means parsed_json_result was a list, but it was empty or all its items were invalid.
             logger.error(f"Parsed list was empty or all scenes were invalid for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
             await agent._save_debug_output(chapter_number, "detailed_plan_invalid_or_empty_scenes", plan_raw) 
             return None
     else:
-        # This means parsed_json_result was None (e.g. JSON decoding error) or not a list (e.g. a string, int, or dict at the top level).
         logger.error(f"Failed to generate/parse a valid JSON list for scene plan for chapter {chapter_number}. Raw LLM output: '{plan_raw[:500]}...'")
         await agent._save_debug_output(chapter_number, "detailed_plan_parse_fail_not_a_list", plan_raw)
         return None

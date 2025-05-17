@@ -13,12 +13,8 @@ from state_manager import state_manager
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt,
     get_filtered_world_data_for_prompt
-    # get_reliable_kg_facts_for_drafting_prompt is no longer directly imported here,
-    # as its output is part of the hybrid_context.
 )
-# The hybrid context generator will provide the KG facts now.
-# from context_generation_logic import generate_chapter_context_logic # Old
-from context_generation_logic import generate_hybrid_chapter_context_logic # New
+from context_generation_logic import generate_hybrid_chapter_context_logic 
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +33,13 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
         if chapter_plan and isinstance(chapter_plan, list): 
             try:
                 plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
+                # Truncate plan if too long for the prompt, focusing on first few scenes
+                max_plan_chars_for_prompt = config.MAX_CONTEXT_LENGTH // 5 # Example: 1/5th of total context for plan
+                if len(plan_json_str) > max_plan_chars_for_prompt:
+                    # A more sophisticated truncation might try to preserve full scene objects
+                    plan_json_str = plan_json_str[:max_plan_chars_for_prompt] + "\n... (plan truncated in prompt)"
+                    logger.warning(f"Chapter plan for Ch {chapter_number} was truncated for the prompt.")
+                
                 plan_section_for_prompt = f"**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**\n```json\n{plan_json_str}\n```\n"
                 logger.info(f"Using detailed scene plan for Ch {chapter_number} draft generation.")
             except TypeError as e:
@@ -52,7 +55,6 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     world_building_data = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
     world_building_json = json.dumps(world_building_data, indent=2, ensure_ascii=False, default=str)
 
-    # reliable_kg_facts_for_prompt is now part of hybrid_context
 
     prompt = f"""/no_think
 You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}".
@@ -89,13 +91,15 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
 --- BEGIN CHAPTER {chapter_number} TEXT ---
 """
+    # Drafting is critical, allow fallback if primary drafting model fails
     raw_llm_text = await llm_interface.async_call_llm(
         model_name=config.DRAFTING_MODEL,
         prompt=prompt, 
-        temperature=0.6 
+        temperature=0.6,
+        allow_fallback=True 
     )
     if not raw_llm_text:
-        logger.error(f"LLM returned no content for Ch {chapter_number} draft.")
+        logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
         return None, None 
         
     cleaned_text = llm_interface.clean_model_response(raw_llm_text)

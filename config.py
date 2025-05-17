@@ -56,24 +56,32 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases (consider populating from environment or a more dynamic config if models change frequently)
-LARGE_MODEL_DEFAULT: str = "Qwen3-32B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
+LARGE_MODEL_DEFAULT: str = "Qwen3-8B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B"
+NARRATOR_MODEL_DEFAULT: str = "Qwen3-30B-A3B" # Primary high-quality model
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
 SMALL_MODEL: str = os.getenv("SMALL_MODEL", SMALL_MODEL_DEFAULT)
 NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT)
 
-MAIN_GENERATION_MODEL: str = NARRATOR_MODEL
+# --- LLM Call Settings & Fallbacks ---
+LLM_RETRY_ATTEMPTS: int = 3 # Number of retry attempts for LLM calls
+LLM_RETRY_DELAY_SECONDS: float = 2.0 # Initial delay for retries (will be increased exponentially)
+# Fallback model to use if a primary model fails after retries for critical generation tasks.
+# Should be a capable, but potentially faster or more reliable model.
+FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL 
+
+
+MAIN_GENERATION_MODEL: str = NARRATOR_MODEL # Retained for clarity, but Narrator Model is primary
 JSON_CORRECTION_MODEL: str = SMALL_MODEL
-CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL
-KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
-INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
-PLANNING_MODEL: str = LARGE_MODEL
-DRAFTING_MODEL: str = NARRATOR_MODEL
-REVISION_MODEL: str = NARRATOR_MODEL
+CONSISTENCY_CHECK_MODEL: str = SMALL_MODEL # Can be a smaller model for speed
+KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # Needs good comprehension
+INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # Good balance for initial creative tasks
+PLANNING_MODEL: str = LARGE_MODEL # Needs strong reasoning
+DRAFTING_MODEL: str = NARRATOR_MODEL # High quality needed
+REVISION_MODEL: str = NARRATOR_MODEL # High quality needed
 THEMATIC_CONSISTENCY_MODEL: str = SMALL_MODEL # New model for thematic checks
 
 
@@ -105,25 +113,26 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 40960
-MAX_GENERATION_TOKENS: int = 32768
-KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 
-CONTEXT_CHAPTER_COUNT: int = 5 
-CHAPTERS_PER_RUN: int = 3 
-LLM_TOP_P: float = 0.95 # Added
+MAX_CONTEXT_LENGTH: int = 40960 # Max characters for combined context in prompts
+MAX_GENERATION_TOKENS: int = 32768 # Max tokens LLM can generate in one go
+KNOWLEDGE_UPDATE_SNIPPET_SIZE: int = 32768 # Snippet size from chapter text for KG/JSON updates
+CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
+CHAPTERS_PER_RUN: int = 6 # How many chapters to attempt writing in one execution
+LLM_TOP_P: float = 0.95 # LLM nucleus sampling parameter
 
 
 # --- Caching ---
 EMBEDDING_CACHE_SIZE: int = 128
 SUMMARY_CACHE_SIZE: int = 32
-KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
+KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # Reduced slightly as prompts might change more often
 
 
-# --- Agentic Planning ---
+# --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
 MAX_PLANNING_TOKENS: int = 32768
-PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 100
-PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 150
+# Reduced for prompt brevity
+PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
+PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120 
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
 PLANNING_CONTEXT_MAX_LOCATIONS_IN_SNIPPET: int = 3
 PLANNING_CONTEXT_MAX_FACTIONS_IN_SNIPPET: int = 2
@@ -134,13 +143,14 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 REVISION_COHERENCE_THRESHOLD: float = 0.65 
 REVISION_CONSISTENCY_TRIGGER: bool = True 
 PLOT_ARC_VALIDATION_TRIGGER: bool = True 
-REVISION_SIMILARITY_ACCEPTANCE: float = 0.99 
+# Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
+REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
 MAX_SUMMARY_TOKENS: int = 32768
 MAX_CONSISTENCY_TOKENS: int = 32768
 MAX_PLOT_VALIDATION_TOKENS: int = 32768
 MAX_KG_TRIPLE_TOKENS: int = 32768
 MAX_PREPOP_KG_TOKENS: int = 32768 
-MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 # New, for thematic checks
+MAX_THEMATIC_CONSISTENCY_TOKENS: int = 1024 
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
@@ -148,8 +158,11 @@ KG_PREPOPULATION_CHAPTER_NUM: int = 0
 
 
 # --- Embedding Configuration ---
-EXPECTED_EMBEDDING_DIM: int = 768
-EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32)
+EXPECTED_EMBEDDING_DIM: int = 768 # Keep this matching your embedding model's output dimension
+# Using float16 for embeddings to reduce memory.
+# Note: This can impact precision of similarity scores. Test thoroughly.
+# If issues arise, revert to np.float32.
+EMBEDDING_DTYPE: np.dtype = np.dtype(np.float16) 
 
 
 # --- Logging ---
@@ -161,13 +174,13 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 
 # --- Novel Configuration ---
-UNHINGED_PLOT_MODE: bool = True 
+UNHINGED_PLOT_MODE: bool = False 
 CONFIGURED_GENRE: str = "dystopian horror"
 CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
-THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 2000 # New, for thematic checks
+THEMATIC_CONSISTENCY_CHAPTER_SNIPPET_SIZE: int = 16384
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
 _DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"] 

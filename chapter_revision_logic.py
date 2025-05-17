@@ -9,8 +9,8 @@ from typing import Tuple, Optional, List
 
 import config
 import llm_interface
-import utils # For numpy_cosine_similarity
-from type import SceneDetail # Assuming this is in type.py
+import utils 
+from type import SceneDetail 
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,7 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
         
     logger.warning(f"Attempting revision for chapter {chapter_number}. Reason(s):\n{clean_reason}")
     
-    # Context and original text limits are still relevant for the prompt construction itself,
-    # even if hybrid_context_for_revision is passed in full.
-    # The hybrid_context_for_revision itself should already be size-managed by its generator.
-    # However, the original_snippet is still constructed here.
-    original_text_limit = config.MAX_CONTEXT_LENGTH // 2 # Original text snippet limit
+    original_text_limit = config.MAX_CONTEXT_LENGTH // 3 # Snippet limit, more aggressive
     original_snippet = original_text[:original_text_limit].strip() + ("..." if len(original_text) > original_text_limit else "")
     
     plan_focus_section = ""
@@ -44,9 +40,9 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         try:
             plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
-            plan_snippet_for_prompt = plan_json_str[:(config.MAX_CONTEXT_LENGTH // 4)] 
+            plan_snippet_for_prompt = plan_json_str[:(config.MAX_CONTEXT_LENGTH // 5)] 
             if len(plan_json_str) > len(plan_snippet_for_prompt):
-                plan_snippet_for_prompt += "\n... (plan truncated)"
+                plan_snippet_for_prompt += "\n... (plan truncated in prompt)"
             plan_focus_section = f"**Original Detailed Scene Plan (Target - align with this while fixing issues):**\n```json\n{plan_snippet_for_prompt}\n```\n"
         except TypeError: 
              plan_focus_section = f"**Original Chapter Focus (Target):**\n{plot_point_focus or 'Not specified.'}\n"
@@ -56,7 +52,7 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     prompt = f"""/no_think
 You are a skilled revising author tasked with rewriting Chapter {chapter_number} of a novel featuring protagonist {protagonist_name}.
-**Critique/Reason(s) for Revision (These issues MUST be addressed comprehensively):**
+**Critique/Reason(s) for Revision (These issues MUST be addressed comprehensively and demonstrably. Your revision should show clear changes related to these points.):**
 --- FEEDBACK START ---
 {clean_reason}
 --- FEEDBACK END ---
@@ -67,14 +63,14 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 {hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context (e.g., Chapter 1)."}
 --- END HYBRID CONTEXT ---
 
-**Original Draft Snippet (for reference ONLY - your main goal is to address the critique and align with the plan/focus):**
+**Original Draft Snippet (for reference ONLY - your main goal is to address the critique and align with the plan/focus, NOT to make minimal changes):**
 --- BEGIN ORIGINAL DRAFT SNIPPET ---
 {original_snippet}
 --- END ORIGINAL DRAFT SNIPPET ---
 
 **Revision Instructions:**
-1. **PRIORITY:** Thoroughly address all issues listed in the **Critique/Reason(s) for Revision**.
-2. **Rewrite the ENTIRE chapter text.** Do not just patch the original.
+1. **ABSOLUTE PRIORITY:** Thoroughly and demonstrably address ALL issues listed in the **Critique/Reason(s) for Revision**. The rewritten chapter must clearly show how these points were resolved.
+2. **Rewrite the ENTIRE chapter text.** Do not just patch the original. Produce a fresh, coherent narrative that incorporates the fixes.
 3. Align the rewritten chapter with the **Original Detailed Scene Plan** (if provided) or the **Original Chapter Focus**.
 4. Ensure the revised chapter flows smoothly with the **Hybrid Context from Previous Chapters**.
    - Pay particular attention to the `KEY RELIABLE KG FACTS` section of the Hybrid Context for established canon.
@@ -85,13 +81,15 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 
 --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
 """
+    # Revision is critical, allow fallback if primary revision model fails
     revised_raw_llm_output = await llm_interface.async_call_llm(
         model_name=config.REVISION_MODEL,
         prompt=prompt, 
-        temperature=0.6 
+        temperature=0.6,
+        allow_fallback=True 
     ) 
     if not revised_raw_llm_output:
-        logger.error(f"Revision LLM call failed for ch {chapter_number} (returned empty).")
+        logger.error(f"Revision LLM call failed for ch {chapter_number} (returned empty from primary and potential fallback).")
         return None
         
     revised_cleaned_text = llm_interface.clean_model_response(revised_raw_llm_output)
@@ -105,10 +103,13 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
     original_embedding, revised_embedding = await asyncio.gather(original_embedding_task, revised_embedding_task)
 
     if original_embedding is not None and revised_embedding is not None:
+        # Note: numpy_cosine_similarity might be less precise with float16 embeddings.
+        # If this becomes an issue, consider converting to float32 for similarity calculation
+        # or adjust REVISION_SIMILARITY_ACCEPTANCE.
         similarity_score = utils.numpy_cosine_similarity(original_embedding, revised_embedding)
         logger.info(f"Revision similarity score with original draft: {similarity_score:.4f}")
         if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE:
-            logger.warning(f"Revision for ch {chapter_number} rejected: Too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}).")
+            logger.warning(f"Revision for ch {chapter_number} rejected: Too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}). This might indicate the LLM did not make sufficient changes.")
             await agent._save_debug_output(chapter_number, "revision_rejected_similar_raw_llm", revised_raw_llm_output)
             return None 
     else:
