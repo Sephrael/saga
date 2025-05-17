@@ -7,8 +7,7 @@ import logging
 import json
 import re
 import asyncio
-import builtins # Import the builtins module
-from typing import Dict, List, Optional, Set, Tuple # Added Set and Tuple
+from typing import Dict, List, Optional, Set, Tuple, Any, Iterable # Added Set and Tuple
 
 import config
 from state_manager import state_manager
@@ -48,14 +47,16 @@ def get_character_state_snippet_for_prompt(agent, current_chapter_num_for_filter
 
         provisional_note = ""
         # Line 72 (original): Use builtins.any
-        if builtins.any(key.startswith("source_quality_chapter_") and 
+        if any(key.startswith("source_quality_chapter_") and 
                int(key.split('_')[-1]) <= effective_filter_chapter and
                profile.get(key) == "provisional_from_unrevised_draft"
                for key in profile):
              provisional_note = " (Note: Some info may be provisional based on unrevised prior chapters)"
 
-        # Line 78 (original): Use builtins.sorted
-        dev_notes_keys = builtins.sorted(
+        def sort_key_dev(key: str) -> int:
+            return int(key.split('_')[-1])
+        
+        dev_notes_keys = sorted(
             [k for k in profile if k.startswith("development_in_chapter_") and int(k.split('_')[-1]) <= effective_filter_chapter], 
             key=lambda x: int(x.split('_')[-1]), 
             reverse=True
@@ -75,26 +76,25 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
     """Creates a concise JSON string of key world states for prompts.
     'agent' is an instance of NovelWriterAgent.
     """
-    snippet_data: Dict[str, any] = {}
+    snippet_data: Dict[str, Any] = {}
     
     effective_filter_chapter = (current_chapter_num_for_filtering - 1) \
         if current_chapter_num_for_filtering is not None and current_chapter_num_for_filtering > 0 \
         else config.KG_PREPOPULATION_CHAPTER_NUM
 
-    def get_provisional_note_for_category(category_dict: Dict[str, any], chapter_limit: int) -> str:
-        # If Pylance errors occurred with 'any' here, would apply builtins.any too.
-        if builtins.any(key.startswith("source_quality_chapter_") and 
-               int(key.split('_')[-1]) <= chapter_limit and
-               category_dict.get(key) == "provisional_from_unrevised_draft"
-               for key in category_dict): # Assuming category_dict can have such keys directly
-             return " (Note: Some category info may be provisional)"
+    def get_provisional_note_for_category(category_dict: Dict[str, Any], chapter_limit: int) -> str:
+        if any(key.startswith("source_quality_chapter_") and 
+            int(key.split('_')[-1]) <= chapter_limit and
+            category_dict.get(key) == "provisional_from_unrevised_draft"
+            for key in category_dict): # Assuming category_dict can have such keys directly
+            return " (Note: Some category info may be provisional)"
         
         for item_data in category_dict.values():
             if isinstance(item_data, dict) and \
-               builtins.any(key.startswith("source_quality_chapter_") and 
-                   int(key.split('_')[-1]) <= chapter_limit and
-                   item_data.get(key) == "provisional_from_unrevised_draft"
-                   for key in item_data): # Assuming item_data can have such keys
+                any(key.startswith("source_quality_chapter_") and 
+                    int(key.split('_')[-1]) <= chapter_limit and
+                    item_data.get(key) == "provisional_from_unrevised_draft"
+                    for key in item_data): # Assuming item_data can have such keys
                 return " (Note: Some items within this category may have provisional info)"
         return ""
 
@@ -102,11 +102,11 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
         "locations": config.PLANNING_CONTEXT_MAX_LOCATIONS_IN_SNIPPET,
         "systems": config.PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET,
     }
-    
+
     for category_name, max_items in world_categories_for_snippet.items():
         category_data = agent.world_building.get(category_name, {})
         if isinstance(category_data, dict) and category_data:
-            prov_note = get_provisional_note_for_category(category_data, effective_filter_chapter)
+            prov_note = get_provisional_note_for_category(category_data, effective_filter_chapter) # Call to nested helper
             item_snippets = []
             for item_name, item_details in list(category_data.items())[:max_items]:
                 if item_name.startswith(("source_quality_chapter_", "category_updated_in_chapter_")): continue 
@@ -117,16 +117,16 @@ def get_world_state_snippet_for_prompt(agent, current_chapter_num_for_filtering:
 
             if item_snippets:
                 snippet_data[f"key_{category_name}{prov_note}"] = item_snippets
-    
+
     society_data = agent.world_building.get("society", {})
     if isinstance(society_data, dict):
         factions_data = society_data.get("Key Factions", society_data.get("factions", {})) 
         if isinstance(factions_data, dict) and factions_data:
-            prov_note_factions = get_provisional_note_for_category(factions_data, effective_filter_chapter)
+            prov_note_factions = get_provisional_note_for_category(factions_data, effective_filter_chapter) # Call to nested helper
             faction_names = [name for name in list(factions_data.keys()) if not name.startswith("source_quality_chapter_")][:config.PLANNING_CONTEXT_MAX_FACTIONS_IN_SNIPPET]
             if faction_names:
-                 snippet_data[f"key_factions{prov_note_factions}"] = faction_names
-                 
+                snippet_data[f"key_factions{prov_note_factions}"] = faction_names
+                
     return json.dumps(snippet_data, indent=2, ensure_ascii=False, default=str) if snippet_data else "No significant world-building data available or applicable."
 
 async def get_filtered_character_profiles_for_prompt(agent, up_to_chapter_inclusive: Optional[int] = None) -> JsonStateData:
