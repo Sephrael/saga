@@ -70,7 +70,7 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
             future_plot_context = f"\n**Anticipated Next Major Plot Point (for context, not this chapter's focus):**\n{next_plot_point.strip()}\n"
 
     prompt = f"""/no_think
-You are a master plotter outlining **between 8 and 15 detailed scenes** for Chapter {chapter_number} of a novel.
+You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {config.TARGET_SCENES_MAX} detailed scenes** for Chapter {chapter_number} of a novel.
 **Novel Concept:**
   - Title: {agent.plot_outline.get('title', 'Untitled')}
   - Genre: {agent.plot_outline.get('genre', 'N/A')}
@@ -91,12 +91,13 @@ You are a master plotter outlining **between 8 and 15 detailed scenes** for Chap
 {world_state_snippet}
 
 **Task:**
-Create a detailed plan of 8 to 15 scenes for Chapter {chapter_number}. Each scene description in the plan MUST:
+Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}. Each scene description in the plan MUST:
 1. Directly advance or build towards the **Mandatory Focus** for this chapter.
 2. Logically follow from the **Recent Context** and any provided **KG Facts**.
 3. Involve relevant characters and world elements as appropriate.
 4. Contribute to the **Protagonist's Arc** or the overall plot progression.
 5. Be distinct from other scenes in this chapter plan.
+6. Include 'scene_focus_elements': a list of 1-2 specific aspects (e.g., "Deepen protagonist's internal conflict about X", "Elaborate on the oppressive atmosphere of Y", "Extend key dialogue for foreshadowing Z", "Show character's emotional reaction in detail") that should be emphasized and elaborated upon during drafting to ensure a rich, substantial, and longer scene.
 
 **Output Format:**
 Provide ONLY a single, valid JSON list of scene objects. Each object in the list must have the following keys:
@@ -105,6 +106,7 @@ Provide ONLY a single, valid JSON list of scene objects. Each object in the list
   - `characters_involved` (list[str]): A list of key character names involved in this scene.
   - `key_dialogue_points` (list[str]): 1-3 brief points outlining crucial dialogue or internal monologue.
   - `setting_details` (str): Brief description of the specific setting/location for this scene.
+  - `scene_focus_elements` (list[str]): 1-2 specific aspects for targeted elaboration during drafting.
   - `contribution` (str): A short explanation of how this scene contributes to the chapter's goals or plot.
 
 **Example JSON Scene (this would be one item in the list):**
@@ -115,13 +117,14 @@ Provide ONLY a single, valid JSON list of scene objects. Each object in the list
   "characters_involved": ["{protagonist_name}"],
   "key_dialogue_points": ["'What could this symbol mean?'", "A sudden realization about a past event."],
   "setting_details": "A dusty, forgotten attic in the protagonist's ancestral home, late at night.",
+  "scene_focus_elements": ["Protagonist's mounting fear and obsessive curiosity", "Detailed sensory description of the attic and the locket"],
   "contribution": "Serves as the inciting incident for this chapter's mystery/quest."
 }}
 ```
 Output the JSON list `[...]` directly. Do not include any other text, markdown, or explanation.
 [
 """
-    logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number}...")
+    logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX})...")
     # Planning is critical, allow fallback if primary planning model fails
     plan_raw = await llm_interface.async_call_llm(
         model_name=config.PLANNING_MODEL,
@@ -137,7 +140,7 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
     
     if isinstance(parsed_json_result, list):
         valid_scenes: List[SceneDetail] = []
-        required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "contribution"}
+        required_scene_keys = {"scene_number", "summary", "characters_involved", "key_dialogue_points", "setting_details", "scene_focus_elements", "contribution"}
         
         for i, scene_item_any in enumerate(parsed_json_result): 
             if not isinstance(scene_item_any, dict):
@@ -147,7 +150,8 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
             scene_item: Dict[str, Any] = scene_item_any 
             
             if not required_scene_keys.issubset(scene_item.keys()):
-                logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has missing keys ({required_scene_keys - set(scene_item.keys())}). Skipping.")
+                missing_keys = required_scene_keys - set(scene_item.keys())
+                logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has missing keys ({missing_keys}). Skipping. Scene: {scene_item}")
                 continue
 
             if not (isinstance(scene_item.get("scene_number"), int) and
@@ -155,6 +159,7 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
                     isinstance(scene_item.get("characters_involved"), list) and 
                     isinstance(scene_item.get("key_dialogue_points"), list) and 
                     isinstance(scene_item.get("setting_details"), str) and scene_item.get("setting_details", "").strip() and
+                    isinstance(scene_item.get("scene_focus_elements"), list) and # Added check for scene_focus_elements
                     isinstance(scene_item.get("contribution"), str) and scene_item.get("contribution", "").strip()):
                 logger.warning(f"Scene {i+1} in plan for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_item}")
                 continue
@@ -165,6 +170,10 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
             if not all(isinstance(d, str) for d in scene_item["key_dialogue_points"]): 
                  logger.warning(f"Scene {i+1} 'key_dialogue_points' contains non-strings. Skipping. Scene: {scene_item}")
                  continue
+            if not all(isinstance(f, str) for f in scene_item["scene_focus_elements"]): # Added check for scene_focus_elements content
+                 logger.warning(f"Scene {i+1} 'scene_focus_elements' contains non-strings. Skipping. Scene: {scene_item}")
+                 continue
+
 
             valid_scenes.append(scene_item) # type: ignore 
         

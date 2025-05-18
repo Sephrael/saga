@@ -40,7 +40,7 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         try:
             plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
-            plan_snippet_for_prompt = plan_json_str[:(config.MAX_CONTEXT_LENGTH // 5)] 
+            plan_snippet_for_prompt = plan_json_str[:(config.MAX_CONTEXT_LENGTH // 4)] # was //5 
             if len(plan_json_str) > len(plan_snippet_for_prompt):
                 plan_snippet_for_prompt += "\n... (plan truncated in prompt)"
             plan_focus_section = f"**Original Detailed Scene Plan (Target - align with this while fixing issues):**\n```json\n{plan_snippet_for_prompt}\n```\n"
@@ -48,6 +48,19 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
              plan_focus_section = f"**Original Chapter Focus (Target):**\n{plot_point_focus or 'Not specified.'}\n"
     else: 
         plan_focus_section = f"**Original Chapter Focus (Target):**\n{plot_point_focus or 'Not specified.'}\n"
+
+    length_issue_explicit_instruction = ""
+    # Check for keywords related to length or depth issues in the cleaned revision reason
+    if any(kw in clean_reason.lower() for kw in ["too short", "lacking in depth", "brief", "expand", "length", "narrative depth", "detail"]):
+        length_issue_explicit_instruction = (
+            "\n**Specific Focus on Expansion:** A key critique involves insufficient length or narrative depth. "
+            "Your revision MUST substantially expand the narrative. This means: \n"
+            "- Adding more detailed descriptions of settings, character appearances, and actions.\n"
+            "- Fleshing out character thoughts, internal monologues, and emotional reactions.\n"
+            "- Extending dialogue sequences, making them more nuanced and revealing.\n"
+            "- Exploring the sensory details and emotional impact of events more thoroughly.\n"
+            f"Do not just rephrase; aim to significantly increase the volume of narrative content towards the {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} character target, guided by the original scene plan and critique."
+        )
         
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     prompt = f"""/no_think
@@ -56,7 +69,7 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 --- FEEDBACK START ---
 {clean_reason}
 --- FEEDBACK END ---
-
+{length_issue_explicit_instruction}
 {plan_focus_section}
 **Hybrid Context from Previous Chapters (Semantic Context for Flow & KG Facts for Canon):**
 --- BEGIN HYBRID CONTEXT ---
@@ -76,11 +89,12 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
    - Pay particular attention to the `KEY RELIABLE KG FACTS` section of the Hybrid Context for established canon.
    - Use the `SEMANTIC CONTEXT` section of the Hybrid Context for narrative flow and tone.
 5. Maintain the established tone, style, and genre ('{agent.plot_outline.get('genre', 'story')}') of the novel.
-6. The revised chapter should be substantial, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.
+6. The revised chapter should be substantial, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters, ideally closer to {config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.
 7. **Output ONLY the rewritten chapter text.** No "Chapter X" headers, titles, or meta-commentary.
 
 --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
 """
+    logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} revision. Target length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars.")
     # Revision is critical, allow fallback if primary revision model fails
     revised_raw_llm_output = await llm_interface.async_call_llm(
         model_name=config.REVISION_MODEL,
@@ -94,7 +108,7 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
         
     revised_cleaned_text = llm_interface.clean_model_response(revised_raw_llm_output)
     if not revised_cleaned_text or len(revised_cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-        logger.error(f"Revised draft for ch {chapter_number} is too short ({len(revised_cleaned_text or '')} chars) after cleaning. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
+        logger.error(f"Revised draft for ch {chapter_number} is too short ({len(revised_cleaned_text or '')} chars) after cleaning. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.")
         await agent._save_debug_output(chapter_number, "revision_fail_short_raw_llm", revised_raw_llm_output)
         return None
     
@@ -109,7 +123,7 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
         similarity_score = utils.numpy_cosine_similarity(original_embedding, revised_embedding)
         logger.info(f"Revision similarity score with original draft: {similarity_score:.4f}")
         if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE:
-            logger.warning(f"Revision for ch {chapter_number} rejected: Too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}). This might indicate the LLM did not make sufficient changes.")
+            logger.warning(f"Revision for ch {chapter_number} rejected: Too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}). This might indicate the LLM did not make sufficient changes, especially if length/depth was an issue.")
             await agent._save_debug_output(chapter_number, "revision_rejected_similar_raw_llm", revised_raw_llm_output)
             return None 
     else:

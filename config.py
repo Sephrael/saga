@@ -128,6 +128,8 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified ca
 # --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
 MAX_PLANNING_TOKENS: int = 65536
+TARGET_SCENES_MIN: int = 10 # NEW: Minimum number of scenes for the planner
+TARGET_SCENES_MAX: int = 18 # NEW: Maximum number of scenes for the planner
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120 
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -144,7 +146,8 @@ MAX_SUMMARY_TOKENS: int = 65536 # For summarization output
 MAX_KG_TRIPLE_TOKENS: int = 65536 # Still relevant for the KG part of unified extraction if needed
 MAX_PREPOP_KG_TOKENS: int = 65536 
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 5120 
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 16000 # INCREASED from 5120
+TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 22000 # NEW: Ideal upper bound for chapter length
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 

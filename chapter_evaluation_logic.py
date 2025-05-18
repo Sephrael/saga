@@ -22,10 +22,11 @@ async def comprehensive_chapter_evaluation(
 ) -> Dict[str, Any]:
     """
     Performs a comprehensive evaluation of the chapter text using a single LLM call.
-    Checks for consistency, plot arc alignment, and thematic alignment.
+    Checks for consistency, plot arc alignment, thematic alignment, and narrative depth/length.
     'agent' is an instance of NovelWriterAgent.
     'previous_chapters_context' is the hybrid context or relevant prior context.
-    Returns a dictionary with keys: "consistency_issues", "plot_arc_deviation", "thematic_issues".
+    Returns a dictionary with keys: "consistency_issues", "plot_arc_deviation", 
+                                    "thematic_issues", "narrative_depth_issues".
     Values are strings describing issues, or None if no issues for that aspect.
     """
     if not chapter_text:
@@ -33,7 +34,8 @@ async def comprehensive_chapter_evaluation(
         return {
             "consistency_issues": "Skipped (empty draft)",
             "plot_arc_deviation": "Skipped (empty draft)",
-            "thematic_issues": "Skipped (empty draft)"
+            "thematic_issues": "Skipped (empty draft)",
+            "narrative_depth_issues": "Skipped (empty draft)"
         }
 
     plot_point_focus, plot_point_index = agent._get_plot_point_info(chapter_number)
@@ -48,7 +50,7 @@ async def comprehensive_chapter_evaluation(
     protagonist_arc_str = agent.plot_outline.get('character_arc', 'Not specified')
     protagonist_name_str = agent.plot_outline.get('protagonist_name', 'The Protagonist')
     
-    # For consistency check prompt context (similar to old check_draft_consistency_logic)
+    # For consistency check prompt context
     kg_chapter_limit = chapter_number - 1
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     kg_loc_task = state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
@@ -64,13 +66,14 @@ async def comprehensive_chapter_evaluation(
 
     prompt = f"""/no_think
 You are a Master Editor evaluating Chapter {chapter_number} of a novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}" (Protagonist: {protagonist_name_str}).
-Analyze the **Complete Chapter Text** provided below and provide structured feedback on THREE key aspects:
+Analyze the **Complete Chapter Text** provided below and provide structured feedback on FOUR key aspects:
 1.  **CONSISTENCY**: Check for contradictions with Plot Outline, Character Profiles, World Building, Key Reliable KG Facts, Previous Context, or internal inconsistencies within THIS chapter.
 2.  **PLOT_ARC**: Determine if this chapter clearly and substantially addresses or advances its Intended Plot Point: "{plot_point_focus_str}" (Plot Point #{plot_point_index + 1}).
 3.  **THEMATIC_ALIGNMENT**: Assess alignment with the novel's core elements:
     - Genre: {novel_genre_str}
     - Central Theme: {novel_theme_str}
     - Protagonist's Arc: {protagonist_arc_str}
+4.  **NARRATIVE_DEPTH_AND_LENGTH**: Assess if the chapter provides sufficient descriptive detail, character introspection, and dialogue development. Does it feel appropriately paced or rushed? Is the narrative length substantial (aiming for {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} characters of text), or does it feel too brief for the events covered and the target length?
 
 **Reference Information for CONSISTENCY Check:**
   **Plot Outline Summary:**
@@ -98,17 +101,19 @@ Analyze the **Complete Chapter Text** provided below and provide structured feed
 
 **Output Format (CRITICAL):**
 Provide your evaluation ONLY as a single, valid JSON object.
-The JSON object *must* have these three top-level keys:
+The JSON object *must* have these four top-level keys:
 -   `"consistency_issues"`: A string describing specific contradictions or inconsistencies. If none, use `null`.
 -   `"plot_arc_deviation"`: A string explaining how the chapter deviates from or fails to address the Intended Plot Point. If it aligns well, use `null`.
 -   `"thematic_issues"`: A string describing significant thematic misalignments or deviations from genre/theme/arc. If it aligns well, use `null`.
+-   `"narrative_depth_issues"`: A string describing issues with narrative depth, detail, pacing, or length relative to the target ({config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars). If adequate, use `null`.
 
 Example of a valid JSON response if issues are found:
 ```json
 {{
   "consistency_issues": "Character X acts out of character based on their profile (e.g., suddenly cowardly when described as brave). Location Y is described differently than in world notes.",
   "plot_arc_deviation": "The chapter focuses on a side quest not related to the main plot point of 'finding the artifact'.",
-  "thematic_issues": "A humorous scene feels tonally inconsistent with the 'dystopian horror' genre. The protagonist's actions in this chapter contradict their stated character arc of 'learning empathy'."
+  "thematic_issues": "A humorous scene feels tonally inconsistent with the 'dystopian horror' genre. The protagonist's actions in this chapter contradict their stated character arc of 'learning empathy'.",
+  "narrative_depth_issues": "The chapter feels rushed, particularly the climax. Key emotional beats for the protagonist are glossed over. The total length is below the desired {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters."
 }}
 ```
 Example of a valid JSON response if no issues are found:
@@ -116,7 +121,8 @@ Example of a valid JSON response if no issues are found:
 {{
   "consistency_issues": null,
   "plot_arc_deviation": null,
-  "thematic_issues": null
+  "thematic_issues": null,
+  "narrative_depth_issues": null
 }}
 ```
 Output ONLY the JSON object.
@@ -136,24 +142,27 @@ Output ONLY the JSON object.
     default_response = {
         "consistency_issues": "Evaluation LLM call failed or returned invalid format.",
         "plot_arc_deviation": "Evaluation LLM call failed or returned invalid format.",
-        "thematic_issues": "Evaluation LLM call failed or returned invalid format."
+        "thematic_issues": "Evaluation LLM call failed or returned invalid format.",
+        "narrative_depth_issues": "Evaluation LLM call failed or returned invalid format."
     }
 
     if isinstance(parsed_result, dict):
         # Validate that the expected keys are present, even if null
         final_result = {
-            "consistency_issues": parsed_result.get("consistency_issues"), # None if missing or null
-            "plot_arc_deviation": parsed_result.get("plot_arc_deviation"), # None if missing or null
-            "thematic_issues": parsed_result.get("thematic_issues")         # None if missing or null
+            "consistency_issues": parsed_result.get("consistency_issues"), 
+            "plot_arc_deviation": parsed_result.get("plot_arc_deviation"), 
+            "thematic_issues": parsed_result.get("thematic_issues"),
+            "narrative_depth_issues": parsed_result.get("narrative_depth_issues") # Added new key
         }
-        if not all(key in parsed_result for key in ["consistency_issues", "plot_arc_deviation", "thematic_issues"]):
+        expected_keys = ["consistency_issues", "plot_arc_deviation", "thematic_issues", "narrative_depth_issues"]
+        if not all(key in parsed_result for key in expected_keys):
             logger.warning(f"Comprehensive evaluation for Ch {chapter_number} missing one or more core keys in response. Parsed: {parsed_result}")
             # Fill missing keys from default, but keep existing ones
-            if "consistency_issues" not in parsed_result: final_result["consistency_issues"] = default_response["consistency_issues"]
-            if "plot_arc_deviation" not in parsed_result: final_result["plot_arc_deviation"] = default_response["plot_arc_deviation"]
-            if "thematic_issues" not in parsed_result: final_result["thematic_issues"] = default_response["thematic_issues"]
+            for key in expected_keys:
+                if key not in parsed_result:
+                    final_result[key] = default_response[key]
         
-        logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. Issues - Consistency: {'Yes' if final_result['consistency_issues'] else 'No'}, Plot Arc: {'Yes' if final_result['plot_arc_deviation'] else 'No'}, Thematic: {'Yes' if final_result['thematic_issues'] else 'No'}.")
+        logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. Issues - Consistency: {'Yes' if final_result['consistency_issues'] else 'No'}, Plot Arc: {'Yes' if final_result['plot_arc_deviation'] else 'No'}, Thematic: {'Yes' if final_result['thematic_issues'] else 'No'}, Depth/Length: {'Yes' if final_result['narrative_depth_issues'] else 'No'}.")
         return final_result
     else:
         logger.error(f"Failed to parse comprehensive evaluation for Ch {chapter_number} into a dict. Raw: '{raw_evaluation[:500]}...'")
@@ -173,9 +182,12 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
     needs_revision = False
     coherence_score: Optional[float] = None
     
-    if not draft_text or len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+    if not draft_text: # Check for empty text first
         needs_revision = True
-        reasons.append(f"Draft is too short ({len(draft_text or '')} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
+        reasons.append("Draft is empty.")
+    elif len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+        needs_revision = True
+        reasons.append(f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target range: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.")
         # If too short, comprehensive LLM eval might not be useful or could be skipped.
         # For now, proceed, but this is a point for future optimization.
 
@@ -202,7 +214,8 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
 
     consistency_issues_str = llm_eval_results.get("consistency_issues")
     plot_deviation_reason_str = llm_eval_results.get("plot_arc_deviation")
-    thematic_issues_str = llm_eval_results.get("thematic_issues") # Added
+    thematic_issues_str = llm_eval_results.get("thematic_issues")
+    narrative_depth_issues_str = llm_eval_results.get("narrative_depth_issues") # Added
 
     if consistency_issues_str:
         needs_revision = True
@@ -212,9 +225,13 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
         needs_revision = True
         reasons.append(f"Plot Arc Deviation: {plot_deviation_reason_str}")
     
-    if thematic_issues_str: # Added thematic issues to revision trigger
+    if thematic_issues_str: 
         needs_revision = True
         reasons.append(f"Thematic Issues: {thematic_issues_str}")
+    
+    if narrative_depth_issues_str: # Added narrative depth/length issues to revision trigger
+        needs_revision = True
+        reasons.append(f"Narrative Depth/Length Issues: {narrative_depth_issues_str}")
             
     logger.info(f"Evaluation for Ch {chapter_number} complete. Needs revision: {needs_revision}.")
     return {
@@ -223,5 +240,6 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
         "coherence_score": coherence_score, 
         "consistency_issues": consistency_issues_str, 
         "plot_deviation_reason": plot_deviation_reason_str,
-        "thematic_issues": thematic_issues_str  # Added to match EvaluationResult type requirements
+        "thematic_issues": thematic_issues_str,
+        "narrative_depth_issues": narrative_depth_issues_str # Added to match EvaluationResult type
     }
