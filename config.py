@@ -68,7 +68,7 @@ NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT)
 
 # --- LLM Call Settings & Fallbacks ---
 LLM_RETRY_ATTEMPTS: int = 3 # Number of retry attempts for LLM calls
-LLM_RETRY_DELAY_SECONDS: float = 2.0 # Initial delay for retries (will be increased exponentially)
+LLM_RETRY_DELAY_SECONDS: float = 3.0 # Initial delay for retries (will be increased exponentially)
 # Fallback model to use if a primary model fails after retries for critical generation tasks.
 # Should be a capable, but potentially faster or more reliable model.
 FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL 
@@ -115,7 +115,7 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 MAX_CONTEXT_LENGTH: int = 131072 # Max characters for combined context in prompts
 MAX_GENERATION_TOKENS: int = 65536 # Max tokens LLM can generate in one go
 CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
-CHAPTERS_PER_RUN: int = 9 # How many chapters to attempt writing in one execution
+CHAPTERS_PER_RUN: int = 3 # How many chapters to attempt writing in one execution
 LLM_TOP_P: float = 0.95 # LLM nucleus sampling parameter
 
 

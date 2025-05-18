@@ -22,7 +22,8 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     """Generates the initial draft text for a chapter using HYBRID CONTEXT.
     'agent' is an instance of NovelWriterAgent.
     'hybrid_context' contains both semantic context and KG facts.
-    Returns (cleaned_text, raw_llm_text).
+    Returns (cleaned_text, raw_llm_text). 
+    Cleaned_text can be short, to be caught by evaluation, or None if LLM truly failed.
     """
     if not plot_point_focus:
         plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
@@ -34,9 +35,8 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
             try:
                 plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
                 # Truncate plan if too long for the prompt, focusing on first few scenes
-                max_plan_chars_for_prompt = config.MAX_CONTEXT_LENGTH // 4 # Example: 1/4th of total context for plan (was //5)
+                max_plan_chars_for_prompt = config.MAX_CONTEXT_LENGTH // 4 
                 if len(plan_json_str) > max_plan_chars_for_prompt:
-                    # A more sophisticated truncation might try to preserve full scene objects
                     plan_json_str = plan_json_str[:max_plan_chars_for_prompt] + "\n... (plan truncated in prompt)"
                     logger.warning(f"Chapter plan for Ch {chapter_number} was truncated for the prompt.")
                 
@@ -95,7 +95,6 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 --- BEGIN CHAPTER {chapter_number} TEXT ---
 """
     logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars.")
-    # Drafting is critical, allow fallback if primary drafting model fails
     raw_llm_text = await llm_interface.async_call_llm(
         model_name=config.DRAFTING_MODEL,
         prompt=prompt, 
@@ -107,9 +106,23 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
         return None, None 
         
     cleaned_text = llm_interface.clean_model_response(raw_llm_text)
-    if not cleaned_text or len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-         logger.error(f"Ch {chapter_number} draft is too short ({len(cleaned_text or '')} chars) after cleaning. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}. Raw LLM output snippet: '{raw_llm_text[:200]}...'")
-         return None, raw_llm_text 
+
+    # If LLM truly failed and cleaning resulted in virtually no content, treat as failure.
+    # A very small threshold (e.g., 50 chars) distinguishes this from "short but has substance".
+    if not cleaned_text or len(cleaned_text) < 50: 
+        logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
+        return None, raw_llm_text # Indicates a true generation failure.
+    
+    # If it has some content but is below the *acceptable* minimum, log it as a warning.
+    # The text will still be returned to be evaluated and potentially revised for length.
+    if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+         logger.warning(
+             f"Ch {chapter_number} draft is short ({len(cleaned_text)} chars) after cleaning, but will be passed for evaluation/revision. "
+             f"Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}. "
+             f"Snippet: '{cleaned_text[:200].replace(chr(10), ' ')}...'"
+         )
+         # Note: We no longer return None here solely based on MIN_ACCEPTABLE_DRAFT_LENGTH.
+         # The evaluation step will catch this and flag it for revision.
          
     logger.info(f"Generated initial draft for ch {chapter_number} (Length: {len(cleaned_text)} chars).")
     return cleaned_text, raw_llm_text
