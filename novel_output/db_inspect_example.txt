@@ -1,0 +1,166 @@
+SAGA Knowledge Graph Inspector
+1. View all facts (grouped by chapter)
+2. Search for specific facts
+3. Export to JSON
+4. Just show summary
+
+Choose option (1-4): 1
+=== SAGA Knowledge Graph Summary ===
+Total facts: 146
+Provisional facts: 88
+Reliable facts: 58
+
+
+--- Pre-novel/Setup ---
+  Eterna Prime -> primary_setting_is -> walled city
+  Eterna Prime -> is_a -> walled city
+  Eterna Prime -> has_description_snippet -> A towering walled city built upon the bones of an ancient memory archive, its skyline pierced by crystalline spires that store and project human recollections. The city is divided into sectors, each g...
+  Lifespan Extension Protocol -> is_a -> system
+  Lifespan Extension Protocol -> has_description_snippet -> A system that grants additional years to citizens who surrender their most precious memories. The protocol is administered by the Memory Guilds and is tied to the city's energy grid, which uses memory...
+  Lifespan Extension Protocol -> related_to -> Memory Guilds
+  Memory Exchange -> is_a -> digital ledger system
+  Memory Exchange -> has_description_snippet -> A digital ledger system that tracks all memory transactions within Eterna Prime. Every memory traded is logged, valued, and assigned a unique code. The system is maintained by the Memory Guilds and is...
+  Memory Exchange -> related_to -> Memory Guilds
+  Memory Guilds -> is_a -> clans of traders
+  Memory Guilds -> has_description_snippet -> Clans of traders who specialize in the extraction, classification, and sale of memories. Each guild is associated with a specific type of memory—such as joy, sorrow, or trauma—and operates under stric...
+  Memory Guilds -> governed_by -> the city's rulers
+  Neural Siphoning -> is_a -> biotechnological process
+  Neural Siphoning -> has_description_snippet -> A biotechnological process that allows for the extraction of memories from a person's brain. It involves a neural siphon device that attaches to the cerebral cortex and harvests memories in a controll...
+  Sága Vorn -> has_trait -> compliant participant
+  Sága Vorn -> has_trait -> defiant rebel
+  Sága Vorn -> initial_status_is -> working as a memory trader
+  Sága Vorn -> has_goal -> challenging the oppressive regime
+  Sága Vorn -> key_element_is -> memory trader
+  Sága Vorn -> key_element_is -> discovery of hidden archive
+  Sága Vorn -> has_goal -> resisting the temptation to preserve her own memories
+  Sága Vorn -> is_a -> protagonist
+  The Archive Vaults -> has_description_snippet -> A subterranean labyrinth beneath Eterna Prime where memories are extracted, stored, and traded. The walls are lined with shimmering memory-threads that pulse with the energy of recollection, and the a...
+  The Archive Vaults -> located_in -> Eterna Prime
+  The Archive Vaults -> is_a -> subterranean labyrinth
+  The First Memory Trade -> is_a -> ancient ritual
+  The First Memory Trade -> has_description_snippet -> An ancient ritual where the first human willingly surrendered a memory to gain an extra year of life. This act was celebrated as a breakthrough in longevity, but it also marked the beginning of the re...
+  The Forgotten -> is_a -> individuals
+  The Forgotten -> has_description_snippet -> Individuals who have surrendered all their memories in exchange for extended lifespans. They are stripped of their identity and reduced to mere husks, wandering the Hollow Expanse with no recollection...
+  The Forgotten -> located_in -> The Hollow Expanse
+  The Founding Era -> is_a -> period
+  The Founding Era -> has_description_snippet -> A period of great upheaval and discovery, where scientists and philosophers first uncovered the link between memories and longevity. The city of Eterna Prime was built as a sanctuary for this research...
+  The Great Memory Plague -> is_a -> catastrophic event
+  The Great Memory Plague -> has_description_snippet -> A catastrophic event that occurred when a malfunction in the Archive Vaults caused an uncontrolled release of memories into the city's atmosphere. Citizens began to experience hallucinations, emotiona...
+  The Great Memory Plague -> related_to -> Archive Vaults
+  The Hollow Expanse -> is_a -> desolate wasteland
+  The Hollow Expanse -> surrounding -> Eterna Prime
+  The Hollow Expanse -> has_description_snippet -> A desolate wasteland surrounding Eterna Prime, where people who have surrendered too many memories wander in a trance-like state. Their eyes are hollow, their bodies withered, and they speak in fragme...
+  The Memory Enforcers -> is_a -> secret police force
+  The Memory Enforcers -> has_description_snippet -> A secret police force that monitors and punishes unauthorized memory transactions. They are equipped with neural dampeners and memory scanners, allowing them to detect and confiscate memories without...
+  The Memory Enforcers -> governed_by -> the city's rulers
+  The Memory Revolution -> is_a -> uprising
+  The Memory Revolution -> has_description_snippet -> A failed uprising led by the Remnant Council against the Memory Guilds. The revolution was crushed, and its leaders were executed in public as a warning to others. However, the seeds of rebellion were...
+  The Memory Revolution -> related_to -> Remnant Council
+  The Memory Thief -> is_a -> mythical figure
+  The Memory Thief -> has_description_snippet -> A mythical figure said to have stolen the last memory of a dying god. Their existence is debated, but some believe they are still alive in the Hollow Expanse, feeding on memories and growing stronger...
+  The Memory Thief -> related_to -> Hollow Expanse
+  The Memory Veil -> is_a -> phenomenon
+  The Memory Veil -> has_description_snippet -> A phenomenon where individuals who have surrendered too many memories begin to lose their sense of self. They become invisible to others, unable to form new relationships or recall their own pasts. Th...
+  The Memory Veil -> related_to -> The Forgotten
+  The Price of Eternity -> has_setting_description -> a walled city where precious memories can be surrendered for an extension to one's lifespan
+  The Price of Eternity -> has_genre -> dystopian horror
+  The Price of Eternity -> has_protagonist -> Sága Vorn
+  The Price of Eternity -> has_conflict_summary -> Sága must navigate the corrupt system of memory trading and lifespan extension while resisting the temptation to preserve her own memories, ultimately challenging the oppressive regime that exploits human recollection for control.
+  The Price of Eternity -> has_theme -> the cost of power
+  The Price of Eternity -> has_character_arc -> Sága evolves from a compliant participant in the memory trade to a defiant rebel who confronts the moral cost of power and chooses selflessness over survival.
+  The Price of Eternity -> has_key_plot_points_summary -> She discovers a hidden archive of memories that reveal the city's rulers have been erasing dissenters' pasts to maintain control.
+  The Price of Eternity -> has_key_plot_points_summary -> Sága Vorn works as a memory trader in the walled city, exchanging personal recollections for extended life.
+
+--- Chapter 1 ---
+  Eterna Prime -> has_feature -> crystalline spires [PROVISIONAL]
+  Eterna Prime -> has_atmosphere -> synthetic pulse of memory extraction [PROVISIONAL]
+  Kael -> said -> they take more than just memories [PROVISIONAL]
+  Kael -> interacted_with -> Sága Vorn [PROVISIONAL]
+  Kael -> believes -> system erases identity [PROVISIONAL]
+  Lira -> wants -> to survive [PROVISIONAL]
+  Lira -> interacted_with -> Sága Vorn [PROVISIONAL]
+  Lira -> lost -> a piece of her identity [PROVISIONAL]
+  Memory Exchange -> used_item -> neural siphon device [PROVISIONAL]
+  Memory Exchange -> has_trait -> suspected data manipulation [PROVISIONAL]
+  Memory Exchange -> contains -> memory logs [PROVISIONAL]
+  Memory Guilds -> has_goal -> maintain control over recollection [PROVISIONAL]
+  Memory Tax -> leads_to -> forced memory extraction [PROVISIONAL]
+  Memory Veil -> related_to -> identity loss [PROVISIONAL]
+  Neural Siphoning -> caused_by -> Memory Guilds [PROVISIONAL]
+  Sága Vorn -> works_for -> Memory Guilds [PROVISIONAL]
+  Sága Vorn -> decided_to -> investigate memory system [PROVISIONAL]
+  Sága Vorn -> thought_about -> system's true purpose [PROVISIONAL]
+  Sága Vorn -> interacted_with -> Kael [PROVISIONAL]
+  Sága Vorn -> feels -> doubt [PROVISIONAL]
+  Sága Vorn -> observed -> memory anomalies [PROVISIONAL]
+  Sága Vorn -> discovered -> hidden memory manipulation [PROVISIONAL]
+  The Archive Vaults -> located_in -> Eterna Prime [PROVISIONAL]
+  The Echoing Heart -> related_to -> city's fate [PROVISIONAL]
+  The Great Memory Plague -> caused_by -> malfunction in Archive Vaults [PROVISIONAL]
+  The Hollow Expanse -> is_a -> desolate wasteland [PROVISIONAL]
+
+--- Chapter 2 ---
+  Eterna Prime -> contains -> memory-lamps [PROVISIONAL]
+  Kael -> believed -> the system was erasing people [PROVISIONAL]
+  Kael -> interacted_with -> Sága Vorn [PROVISIONAL]
+  Kael -> said -> They’re not just hiding memories. They’re erasing people. [PROVISIONAL]
+  Kael -> works_for -> Memory Guilds [PROVISIONAL]
+  Lira -> had_transaction -> Memory Tax [PROVISIONAL]
+  Memory Exchange -> contains -> memory logs [PROVISIONAL]
+  Memory Exchange -> part_of -> Memory Guilds [PROVISIONAL]
+  Memory Tax -> caused_by -> the Memory Guilds [PROVISIONAL]
+  Memory Veil -> is_a -> phenomenon [PROVISIONAL]
+  Mira -> lives_in -> Hollow Expanse [PROVISIONAL]
+  Mira -> interacted_with -> Sága Vorn [PROVISIONAL]
+  Sága Vorn -> thought_about -> rewriting history [PROVISIONAL]
+  Sága Vorn -> decided_to -> infiltrate the Archive Vaults [PROVISIONAL]
+  Sága Vorn -> acquired -> blueprints of the Archive Vaults [PROVISIONAL]
+  Sága Vorn -> observed -> people losing identity in the Echo Gardens [PROVISIONAL]
+  Sága Vorn -> used_item -> data drive [PROVISIONAL]
+  Sága Vorn -> has_trait -> defiant [PROVISIONAL]
+  Sága Vorn -> travelled_to -> Hollow Expanse [PROVISIONAL]
+  Sága Vorn -> discovered -> unaccounted memories [PROVISIONAL]
+  Sága Vorn -> has_goal -> uncover the truth about the system [PROVISIONAL]
+  Sága Vorn -> feels -> determined [PROVISIONAL]
+  The Archive Vaults -> located_in -> Eterna Prime [PROVISIONAL]
+  The Archive Vaults -> used_for -> feeding the city’s artificial intelligence [PROVISIONAL]
+  The Archive Vaults -> is_a -> location [PROVISIONAL]
+  The Memory Exchange -> has_feature -> neural siphon devices [PROVISIONAL]
+  The Memory Exchange -> is_a -> digital ledger system [PROVISIONAL]
+  The Memory Exchange -> contains -> restricted files [PROVISIONAL]
+  The Memory Exchange -> is_a -> system [PROVISIONAL]
+  The Memory Guilds -> member_of -> Memory Exchange [PROVISIONAL]
+  The Memory Guilds -> controls -> the Memory Exchange [PROVISIONAL]
+  The Memory Guilds -> has_trait -> ruthless [PROVISIONAL]
+  The Memory Guilds -> controls -> the city's artificial intelligence [PROVISIONAL]
+  The Memory Tax -> leads_to -> forced extraction [PROVISIONAL]
+  The Memory Tax -> is_a -> system [PROVISIONAL]
+  The Memory Tax -> caused_by -> the Memory Guilds [PROVISIONAL]
+  The Memory Thief -> related_to -> Hollow Expanse [PROVISIONAL]
+  The Memory Veil -> related_to -> identity loss [PROVISIONAL]
+
+--- Chapter 3 ---
+  Eterna Prime -> has_feature -> memory-lamps [PROVISIONAL]
+  Kael -> thought_about -> the consequences of memory erasure [PROVISIONAL]
+  Kael -> helped -> Sága Vorn [PROVISIONAL]
+  Kael -> interacted_with -> Sága Vorn [PROVISIONAL]
+  Kael -> provided -> a memory scanner [PROVISIONAL]
+  Kael -> believed -> the system is more than just memory control [PROVISIONAL]
+  Lira -> lost -> her identity [PROVISIONAL]
+  Lira -> said -> I don’t remember who I was [PROVISIONAL]
+  Memory Exchange -> contains -> restricted files [PROVISIONAL]
+  Memory Exchange -> part_of -> the system of control [PROVISIONAL]
+  Memory Exchange -> used_item -> neural siphoning machines [PROVISIONAL]
+  Memory Exchange -> leads_to -> erasure of people [PROVISIONAL]
+  Memory Tax -> caused_by -> the Memory Guilds [PROVISIONAL]
+  Sága Vorn -> felt -> fear [PROVISIONAL]
+  Sága Vorn -> observed -> fractured recollections in the Archive Vaults [PROVISIONAL]
+  Sága Vorn -> travelled_to -> The Hollow Expanse [PROVISIONAL]
+  Sága Vorn -> decided_to -> expose the truth [PROVISIONAL]
+  Sága Vorn -> discovered -> unaccounted memories [PROVISIONAL]
+  Sága Vorn -> acquired -> a data crystal [PROVISIONAL]
+  The Archive Vaults -> used_item -> data crystal [PROVISIONAL]
+  The Archive Vaults -> is_a -> subterranean labyrinth [PROVISIONAL]
+  The Memory Tax -> related_to -> identity loss [PROVISIONAL]
+  The Memory Thief -> linked_to -> unaccounted memory theft [PROVISIONAL]
+  The Memory Veil -> is_a -> system of identity loss [PROVISIONAL]
