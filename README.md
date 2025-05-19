@@ -1,5 +1,8 @@
 # SAGA - Semantic And Graph-Enhanced Authoring
 
+> ** ⚠️ WARNING **
+>The current implementation is *EXTREMELY* token heavy. This system was designed with locally-running models in mind for generation. If you connect this to a paid API, it will likely be costly.
+
 > **⚠️ Early Development Notice**  
 > This project is in active development and should be considered experimental. Features, APIs, and configuration options may change significantly between versions. Use at your own discretion.
 
