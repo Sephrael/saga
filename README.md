@@ -1,134 +1,222 @@
-# SAGA: Semantic And Graph-enhanced Authoring
+# SAGA - Autonomous Creative Writing System
 
-**⚠️ Early Development Stage:** This project is currently in its early stages of development. Features may be incomplete, and the codebase is subject to significant changes.
+> **⚠️ Early Development Notice**  
+> This project is in active development and should be considered experimental. Features, APIs, and configuration options may change significantly between versions. Use at your own discretion.
 
-## Overview
+SAGA (Systematic Autonomous Generation Assistant) is a sophisticated AI-powered creative writing system designed to generate full-length novels with consistent characters, coherent world-building, and compelling narratives. Unlike simple prompt-based writing tools, SAGA employs a multi-stage pipeline that mirrors professional writing processes: planning, drafting, evaluation, and revision.
 
-SAGA is a Python-based system designed to autonomously write novels. It leverages Large Language Models (LLMs) for various creative and analytical tasks, including plot generation, world-building, character development, chapter drafting, content evaluation, and knowledge graph construction. The system aims to produce coherent, consistent, and engaging long-form narratives.
+## 🌟 Key Features
 
-## Key Features
+- **Multi-Stage Writing Pipeline**: Separate planning, drafting, evaluation, and revision phases with specialized LLM prompts
+- **Hybrid Knowledge Management**: Combines JSON-based character/world profiles with a knowledge graph for factual consistency
+- **Intelligent Context Generation**: Uses semantic similarity and reliable knowledge facts to provide relevant context for each chapter
+- **Comprehensive Quality Control**: Evaluates consistency, plot alignment, thematic coherence, and narrative depth
+- **Agentic Planning**: Detailed scene-by-scene planning with focus elements for narrative depth
+- **Provisional Data Tracking**: Marks data quality based on source reliability to maintain canon integrity
+- **Adaptive Revision**: Targeted revision strategies based on specific evaluation feedback
 
-*   **Automated Plot & World Generation:** Creates initial plot outlines, character archetypes, and foundational world-building details.
-*   **Agentic Chapter Planning:** (Optional) Generates detailed scene-by-scene plans for each chapter.
-*   **Iterative Chapter Drafting & Revision:**
-    *   Generates initial chapter drafts.
-    *   Evaluates drafts for coherence, consistency with established lore, and plot arc alignment.
-    *   Revises drafts based on evaluation feedback.
-*   **Dynamic Knowledge Management:**
-    *   Updates character profiles and world-building documents based on events in each chapter.
-    *   Constructs and maintains a knowledge graph (triples) of facts derived from the narrative.
-*   **Context-Aware Generation:** Utilizes summaries of previous chapters and semantically relevant content to maintain narrative flow.
-*   **Configurable Models & Parameters:** Allows easy configuration of LLM models, API endpoints, and generation parameters.
-*   **Persistent State:** Uses SQLAlchemy and SQLite to store novel data, including chapter text, summaries, embeddings, and knowledge graph triples.
-*   **Asynchronous Operations:** Built with `asyncio` for efficient handling of LLM API calls and database operations.
+## 🏗️ Architecture Overview
 
-## Architecture
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Planning      │    │   Drafting      │    │   Evaluation    │
+│                 │───▶│                 │───▶│                 │
+│ • Scene details │    │ • Context gen   │    │ • Consistency   │
+│ • Focus elements│    │ • Target length │    │ • Plot alignment│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+┌─────────────────┐    ┌─────────────────┐              │
+│ Knowledge Update│◀───│    Revision     │◀─────────────┘
+│                 │    │                 │
+│ • Char profiles │    │ • Targeted fixes│
+│ • World building│    │ • Length expand │
+│ • Knowledge KG  │    │ • Quality improv│
+└─────────────────┘    └─────────────────┘
+```
 
-The system is composed of several key modules:
+## 🚀 Getting Started
 
-*   **`novel_agent.py`:** The main orchestrator (NovelWriterAgent) that manages the overall novel writing process.
-*   **`main.py`:** Entry point for running the agent. Handles setup and invokes the agent's writing loop.
-*   **`config.py`:** Centralized configuration for all system parameters, API keys, model names, and file paths.
-*   **`llm_interface.py`:** Handles all direct interactions with LLMs and embedding models, including API calls, response cleaning, and JSON parsing/correction.
-*   **`state_manager.py`:** Manages persistent storage using SQLAlchemy, handling all database reads and writes for plot outlines, character profiles, world-building data, chapter content, and knowledge graph triples.
-*   **`*_logic.py` Files:** These contain the core business logic for specific tasks:
-    *   `initial_setup_logic.py`: Logic for generating the initial plot outline and world-building.
-    *   `chapter_planning_logic.py`: Logic for creating detailed chapter plans.
-    *   `context_generation_logic.py`: Logic for assembling contextual information for chapter drafting.
-    *   `chapter_drafting_logic.py`: Logic for generating the first draft of a chapter.
-    *   `chapter_evaluation_logic.py`: Logic for evaluating chapter drafts against various criteria.
-    *   `chapter_revision_logic.py`: Logic for revising chapter drafts based on evaluation feedback.
-    *   `knowledge_management_logic.py`: Logic for summarizing chapters, extracting knowledge, and updating character/world profiles and the knowledge graph.
-*   **`prompt_data_getters.py`:** Helper functions to retrieve and format data snippets for LLM prompts.
-*   **`type.py`:** Defines custom `TypedDict` types used across the project.
-*   **`utils.py`:** General utility functions (e.g., cosine similarity).
+### Prerequisites
 
-## Prerequisites
+- Python 3.10+
+- OpenAI-compatible API endpoint (local LLM server recommended)
+- Sufficient disk space for SQLite database and generated content
 
-*   Python 3.11+
-*   Access to an OpenAI-compatible LLM API endpoint.
-*   Access to an Ollama-compatible embedding API endpoint (for `nomic-embed-text` or similar).
+### Installation
 
-## Setup
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/saga.git
+cd saga
+```
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Lanerra/saga
-    cd saga
-    ```
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-2.  **Create a virtual environment (recommended):**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
+### Quick Start
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    
-4.  **Configure Environment Variables:**
-    Set the following environment variables (e.g., in a `.env` file and use a library like `python-dotenv`, or set them directly in your shell):
-    *   `OLLAMA_EMBED_URL`: URL for your Ollama embedding service (e.g., `http://localhost:11434`).
-    *   `OPENAI_API_BASE`: URL for your OpenAI-compatible API (e.g., `http://localhost:8080/v1`).
-    *   `OPENAI_API_KEY`: Your API key (can be a placeholder like "nope" if your local LLM doesn't require one).
-    *   `EMBEDDING_MODEL`: Name of the embedding model (e.g., `nomic-embed-text:latest`).
-    *   `LARGE_MODEL`, `MEDIUM_MODEL`, `SMALL_MODEL`, `NARRATOR_MODEL`: Names of your LLM models.
-    *   `LOG_LEVEL`: (Optional) Logging level, e.g., `INFO`, `DEBUG`. Defaults to `INFO`.
-
-5.  **(Optional) Unhinged Mode Data:**
-    If using `UNHINGED_PLOT_MODE = True` in `config.py`, create a directory named `unhinged_data` (or as configured in `config.UNHINGED_DATA_DIR`) and populate it with JSON files containing lists of strings for genres, themes, etc. (see `config.py` for filenames like `unhinged_genres.json`). Example `unhinged_genres.json`:
-    ```json
-    [
-        "space opera",
-        "cyberpunk",
-        "high fantasy",
-        "urban fantasy",
-        "cosmic horror"
-    ]
-    ```
-
-## Configuration
-
-Most operational parameters are controlled via `config.py`. This includes:
-*   LLM model names for different tasks (drafting, summarization, planning, etc.).
-*   API endpoints and keys (primarily via environment variables).
-*   Output directory paths.
-*   Generation parameters (e.g., context length, token limits, minimum draft length).
-*   Validation thresholds (e.g., coherence scores).
-*   Feature flags (e.g., `ENABLE_AGENTIC_PLANNING`, `UNHINGED_PLOT_MODE`).
-
-Review and adjust `config.py` to suit your local LLM setup and desired novel characteristics.
-
-## Running the Agent
-
-To start the novel generation process:
-
+1. Configure your models in `config.py` or via environment variables
+2. Run the system:
 ```bash
 python main.py
 ```
 
-The agent will:
-1.  Initialize or load existing plot, world, and character data.
-2.  If necessary, generate a new plot outline and world-building information.
-3.  Pre-populate the knowledge graph from initial data (if it's a new novel).
-4.  Proceed to write chapters sequentially, up to `config.CHAPTERS_PER_RUN`.
+3. The system will:
+   - Generate or load a plot outline
+   - Create initial world-building
+   - Pre-populate the knowledge graph
+   - Begin writing chapters iteratively
+   - Resume from the last chapter it left off on
 
-Output, including chapter text, logs, and the SQLite database (`novel_data.db`), will be saved in the directory specified by `config.BASE_OUTPUT_DIR` (defaults to `novel_output`).
+## ⚙️ Configuration
 
-## Future Work / Contributing
+### Model Configuration
 
-This project is actively evolving. Potential areas for future development include:
-*   Enhanced LLM prompting strategies for higher quality and more diverse outputs.
-*   More sophisticated evaluation metrics.
-*   User interface for interaction and guidance.
-*   Support for different LLM backends.
-*   Advanced character arc tracking and enforcement.
-*   Multi-agent collaboration for different aspects of writing.
+Configure your LLM models in `config.py`:
 
-Contributions, suggestions, and feedback are welcome! Please open an issue or pull request.
+```python
+# Primary models for different tasks
+PLANNING_MODEL = "large-model-name"
+DRAFTING_MODEL = "narrator-model-name"
+EVALUATION_MODEL = "large-model-name"
+REVISION_MODEL = "narrator-model-name"
 
-## License
+# API endpoints
+OPENAI_API_BASE = "http://localhost:8080/v1"
+EMBEDDING_MODEL = "nomic-embed-text:latest"
+```
 
-This project is licensed under the Apache License, Version 2.0. See the `config.py` header or include a `LICENSE` file for details.
+### Generation Parameters
+
+Control output quality and length:
+
+```python
+# Target chapter length (characters)
+MIN_ACCEPTABLE_DRAFT_LENGTH = 16000
+TARGET_DRAFT_LENGTH_UPPER_BOUND = 22000
+
+# Scene planning targets
+TARGET_SCENES_MIN = 10
+TARGET_SCENES_MAX = 18
+
+# Context and generation limits
+MAX_CONTEXT_LENGTH = 40960
+CHAPTERS_PER_RUN = 3
+```
+
+### Novel Settings
+
+Configure your story parameters:
+
+```python
+# Direct configuration
+CONFIGURED_GENRE = "dystopian horror"
+CONFIGURED_THEME = "the cost of power"
+CONFIGURED_SETTING_DESCRIPTION = "a walled city where memories are traded for lifespan"
+
+# Or enable "unhinged mode" for random combinations
+UNHINGED_PLOT_MODE = True
+```
+
+## 📚 Core Components
+
+### NovelWriterAgent
+The main orchestrator that coordinates all writing phases and maintains state.
+
+### State Manager
+Handles persistence using SQLAlchemy with async support for chapters, embeddings, and knowledge graph data.
+
+### Knowledge Management
+- **Character Profiles**: Dynamic JSON structures tracking development across chapters
+- **World Building**: Hierarchical organization of locations, systems, lore, and history
+- **Knowledge Graph**: Factual triples for consistency and canonicity
+
+### Context Generation
+Hybrid system combining:
+- Semantic similarity search across previous chapters
+- Reliable knowledge graph facts relevant to current chapter
+- Filtered character and world data with provisional markers
+
+### Quality Control
+Multi-dimensional evaluation:
+- **Consistency**: Character behavior, world rules, established facts
+- **Plot Alignment**: Advancement of intended plot points
+- **Thematic Coherence**: Genre, theme, and character arc alignment
+- **Narrative Depth**: Descriptive detail, pacing, and length targets
+
+## 🔧 Advanced Features
+
+### Provisional Data Tracking
+The system marks data extracted from potentially flawed drafts as "provisional," allowing it to maintain integrity while working with imperfect intermediate content.
+
+### Scene Focus Elements
+Each planned scene includes specific focus elements that guide the drafting LLM toward deeper elaboration of particular aspects, naturally increasing chapter length and narrative richness.
+
+### Unified Knowledge Extraction
+A single LLM call extracts character updates, world-building changes, and knowledge graph facts from each chapter, reducing API calls and improving consistency.
+
+### Intelligent Revision
+The revision system detects the type of issues found during evaluation and applies targeted strategies, such as explicit expansion instructions for length-related problems.
+
+## 📁 Project Structure
+
+```
+saga/
+├── main.py                     # Entry point and execution logic
+├── novel_agent.py              # Main NovelWriterAgent class
+├── state_manager.py            # Database ORM and state persistence
+├── config.py                   # Configuration and constants
+├── type.py                     # Type definitions
+├── chapter_planning_logic.py   # Scene planning and structure
+├── chapter_drafting_logic.py   # Chapter text generation
+├── chapter_evaluation_logic.py # Quality assessment
+├── chapter_revision_logic.py   # Targeted improvements
+├── context_generation_logic.py # Context preparation
+├── knowledge_management_logic.py # Profile and KG updates
+├── initial_setup_logic.py      # Plot and world generation
+├── prompt_data_getters.py      # Data formatting for prompts
+├── llm_interface.py            # LLM API interactions
+├── utils.py                    # Utility functions
+└── novel_output/               # Generated content directory
+    ├── chapters/               # Final chapter texts
+    ├── chapter_logs/           # Raw LLM outputs
+    ├── debug_outputs/          # Debugging information
+    └── novel_data.db          # SQLite database
+```
+
+## 🚦 Current Status
+
+This system is actively developed and has successfully generated multi-chapter works with:
+- Consistent character development across chapters
+- Coherent world-building that evolves organically
+- Plot advancement that follows planned structure
+- Chapters regularly exceeding 16,000 characters with rich narrative depth
+
+### Known Limitations
+
+- Heavy reliance on LLM quality and consistency
+- Processing time scales with chapter count due to context complexity
+- Evaluation is primarily qualitative rather than quantitative
+
+## 🤝 Contributing
+
+This project is in early development. If you're interested in contributing:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with appropriate tests
+4. Submit a pull request with detailed description
+
+## 📄 License
+
+Licensed under the Apache License, Version 2.0. See `LICENSE` file for details.
+
+## 🙏 Acknowledgments
+
+This system builds upon advances in large language models, async Python programming, and the creative writing process itself. Special thanks to the open-source community for the foundational tools and libraries.
+
+---
+
+For questions, issues, or discussions about creative AI, please open an issue on GitHub.
