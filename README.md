@@ -1,4 +1,4 @@
-# SAGA - Autonomous Creative Writing System
+# SAGA - Semantic And Graph-Enhanced Authoring
 
 > **⚠️ Early Development Notice**  
 > This project is in active development and should be considered experimental. Features, APIs, and configuration options may change significantly between versions. Use at your own discretion.
