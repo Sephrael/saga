@@ -40,8 +40,7 @@ async def _generate_semantic_chapter_context_logic(agent, current_chapter_number
         context_parts: List[str] = []
         total_chars = 0
         fallback_chapter_limit = config.CONTEXT_CHAPTER_COUNT 
-        # Slightly more aggressive truncation for fallback to save tokens
-        max_fallback_chars = config.MAX_CONTEXT_LENGTH // 3 
+        max_fallback_chars = config.MAX_CONTEXT_LENGTH
 
         for i in range(max(1, current_chapter_number - fallback_chapter_limit), current_chapter_number):
             if total_chars >= max_fallback_chars: break
@@ -180,9 +179,6 @@ async def generate_hybrid_chapter_context_logic(agent, current_chapter_number: i
     # Final safeguard for total context length
     if len(final_hybrid_context) > config.MAX_CONTEXT_LENGTH: # Strict enforcement now
         logger.warning(f"Hybrid context length ({len(final_hybrid_context)}) exceeds MAX_CONTEXT_LENGTH ({config.MAX_CONTEXT_LENGTH}). Truncating.")
-        # Prioritize keeping KG facts if possible, truncate semantic context more aggressively.
-        # This is a simple truncation; more sophisticated would re-evaluate parts.
-        # For now, just truncate the whole thing.
         final_hybrid_context = final_hybrid_context[:config.MAX_CONTEXT_LENGTH - len("\n... (Hybrid context truncated)")] + "\n... (Hybrid context truncated)"
 
 

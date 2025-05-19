@@ -6,7 +6,7 @@
 > **⚠️ Early Development Notice**  
 > This project is in active development and should be considered experimental. Features, APIs, and configuration options may change significantly between versions. Use at your own discretion.
 
-SAGA (Systematic Autonomous Generation Assistant) is a sophisticated AI-powered creative writing system designed to generate full-length novels with consistent characters, coherent world-building, and compelling narratives. Unlike simple prompt-based writing tools, SAGA employs a multi-stage pipeline that mirrors professional writing processes: planning, drafting, evaluation, and revision.
+SAGA (Semantic And Graph-enhanced Authoring) is a sophisticated AI-powered creative writing system designed to generate full-length novels with consistent characters, coherent world-building, and compelling narratives. Unlike simple prompt-based writing tools, SAGA employs a multi-stage pipeline that mirrors professional writing processes: planning, drafting, evaluation, and revision.
 
 ## 🌟 Key Features
 
