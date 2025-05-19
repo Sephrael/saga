@@ -50,16 +50,16 @@ def _load_list_from_json(file_path: str, default_if_missing: Optional[List[str]]
         return default_if_missing
 
 # --- API and Model Configuration ---
-OLLAMA_EMBED_URL: str = os.getenv("OLLAMA_EMBED_URL", "http://192.168.64.1:11434")
-OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "http://192.168.64.1:8080/v1")
+OLLAMA_EMBED_URL: str = os.getenv("OLLAMA_EMBED_URL", "http://127.0.0.1:11434")
+OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "http://127.0.0.1:8080/v1")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases
-LARGE_MODEL_DEFAULT: str = "Qwen3-8B"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-4B"
-SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B" # Primary high-quality model
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B-IQ4" # 4-ish bpw for decent speed with quality
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B" # 8.0 bpw for quality
+SMALL_MODEL_DEFAULT: str = "Qwen3-4B" # 8.0 bpw for quality
+NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B" # 8.0 bpw for quality and coherence
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -112,8 +112,8 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_LENGTH: int = 131072 # Max characters for combined context in prompts
-MAX_GENERATION_TOKENS: int = 65536 # Max tokens LLM can generate in one go
+MAX_CONTEXT_LENGTH: int = 40960 # Max characters for combined context in prompts
+MAX_GENERATION_TOKENS: int = 32768 # Max tokens LLM can generate in one go
 CONTEXT_CHAPTER_COUNT: int = 5 # Default number of past chapters for semantic context
 CHAPTERS_PER_RUN: int = 3 # How many chapters to attempt writing in one execution
 LLM_TOP_P: float = 0.95 # LLM nucleus sampling parameter
@@ -127,7 +127,7 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified ca
 
 # --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
-MAX_PLANNING_TOKENS: int = 65536
+MAX_PLANNING_TOKENS: int = 40960
 TARGET_SCENES_MIN: int = 10 # NEW: Minimum number of scenes for the planner
 TARGET_SCENES_MAX: int = 18 # NEW: Maximum number of scenes for the planner
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
@@ -142,22 +142,19 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 REVISION_COHERENCE_THRESHOLD: float = 0.60 
 # Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
-MAX_SUMMARY_TOKENS: int = 65536 # For summarization output
-MAX_KG_TRIPLE_TOKENS: int = 65536 # Still relevant for the KG part of unified extraction if needed
-MAX_PREPOP_KG_TOKENS: int = 65536 
+MAX_SUMMARY_TOKENS: int = 32768 # For summarization output
+MAX_KG_TRIPLE_TOKENS: int = 32768 # Still relevant for the KG part of unified extraction if needed
+MAX_PREPOP_KG_TOKENS: int = 32768 
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 16000 # INCREASED from 5120
-TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 22000 # NEW: Ideal upper bound for chapter length
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 15000 # INCREASED from 5120
+TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 20000 # NEW: Ideal upper bound for chapter length
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 
 
 # --- Embedding Configuration ---
 EXPECTED_EMBEDDING_DIM: int = 768 # Keep this matching your embedding model's output dimension
-# Using float16 for embeddings to reduce memory.
-# Note: This can impact precision of similarity scores. Test thoroughly.
-# If issues arise, revert to np.float32.
-EMBEDDING_DTYPE: np.dtype = np.dtype(np.float16) 
+EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32) 
 
 
 # --- Logging ---

@@ -1,7 +1,14 @@
 # state_manager.py
 from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, Float, Index, LargeBinary
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base, selectinload
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+    sessionmaker,
+    selectinload,
+    declarative_base
+)
 from sqlalchemy.future import select
 import logging
 import json
@@ -97,8 +104,8 @@ class state_managerSingleton:
             bind=self.engine,
             class_=AsyncSession,
             expire_on_commit=False,
-            autoflush=False, # Recommended for async
-            autocommit=False # Recommended for async
+            autoflush=False,  # Recommended for async
+            autocommit=False  # Recommended for async
         )
         self._initialized_flag = True
         self.logger.info(f"Async state_managerSingleton initialized with engine for {config.DATABASE_FILE}")
