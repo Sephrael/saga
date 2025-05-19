@@ -42,11 +42,13 @@ Full Chapter Text:
 
 Output ONLY the summary text. No extra commentary or "Summary:" prefix.
 """
+    # Summaries are small, no need to stream to disk.
     summary_raw = await llm_interface.async_call_llm(
         model_name=config.SMALL_MODEL, # Usually a smaller model for summarization
         prompt=prompt,
         temperature=0.6,
-        max_tokens=config.MAX_SUMMARY_TOKENS # Max output tokens for the summary
+        max_tokens=config.MAX_SUMMARY_TOKENS, # Max output tokens for the summary
+        stream_to_disk=False 
     )
     return llm_interface.clean_model_response(summary_raw).strip()
 
@@ -432,11 +434,13 @@ Output ONLY the JSON object.
 """
     
     logger.info(f"Calling LLM ({config.KNOWLEDGE_UPDATE_MODEL}) for unified knowledge extraction (Ch {chapter_number}).")
+    # Unified knowledge extraction produces a potentially large JSON.
     raw_extraction_json = await llm_interface.async_call_llm(
         model_name=config.KNOWLEDGE_UPDATE_MODEL,
         prompt=prompt,
         temperature=0.6,
-        allow_fallback=True # Knowledge extraction is important
+        allow_fallback=True, # Knowledge extraction is important
+        stream_to_disk=True # Output can be a large JSON
     )
 
     parsed_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(
@@ -552,11 +556,13 @@ JSON Output Only:
 [
 """
     logger.info("Calling LLM for KG pre-population triple extraction...")
+    # KG pre-population output is JSON list of triples, could be moderately sized.
     raw_triples_json_str = await llm_interface.async_call_llm(
         model_name=config.KNOWLEDGE_UPDATE_MODEL, 
         prompt=prompt, 
         temperature=0.6, 
-        max_tokens=config.MAX_PREPOP_KG_TOKENS
+        max_tokens=config.MAX_PREPOP_KG_TOKENS,
+        stream_to_disk=True # JSON output, can be moderately large
     )
     parsed_triples = await llm_interface.async_parse_llm_json_response(
         raw_triples_json_str, "KG pre-population triple extraction", expect_type=list

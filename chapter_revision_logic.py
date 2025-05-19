@@ -95,12 +95,13 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
 """
     logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} revision. Target length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars.")
-    # Revision is critical, allow fallback if primary revision model fails
+    # Revision is critical, allow fallback if primary revision model fails. Output is large text.
     revised_raw_llm_output = await llm_interface.async_call_llm(
         model_name=config.REVISION_MODEL,
         prompt=prompt, 
         temperature=0.6,
-        allow_fallback=True 
+        allow_fallback=True,
+        stream_to_disk=True # Enable streaming for large revision outputs
     ) 
     if not revised_raw_llm_output:
         logger.error(f"Revision LLM call failed for ch {chapter_number} (returned empty from primary and potential fallback).")

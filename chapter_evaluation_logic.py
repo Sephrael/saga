@@ -128,11 +128,13 @@ Example of a valid JSON response if no issues are found:
 Output ONLY the JSON object.
 """
     logger.info(f"Calling LLM ({config.EVALUATION_MODEL}) for comprehensive evaluation of chapter {chapter_number}...")
+    # Evaluation output is JSON and expected to be relatively small. Streaming to disk not strictly needed.
     raw_evaluation = await llm_interface.async_call_llm(
         model_name=config.EVALUATION_MODEL,
         prompt=prompt,
         temperature=0.5, # Lower temperature for more consistent evaluation
-        allow_fallback=True # Evaluation is critical
+        allow_fallback=True, # Evaluation is critical
+        stream_to_disk=False # Output is JSON, likely not excessively large
     )
     
     parsed_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(

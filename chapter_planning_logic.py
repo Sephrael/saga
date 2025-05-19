@@ -125,13 +125,14 @@ Output the JSON list `[...]` directly. Do not include any other text, markdown, 
 [
 """
     logger.info(f"Calling LLM ({config.PLANNING_MODEL}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX})...")
-    # Planning is critical, allow fallback if primary planning model fails
+    # Planning output is JSON, potentially large.
     plan_raw = await llm_interface.async_call_llm(
         model_name=config.PLANNING_MODEL,
         prompt=prompt, 
         temperature=0.6, 
         max_tokens=config.MAX_PLANNING_TOKENS,
-        allow_fallback=True 
+        allow_fallback=True,
+        stream_to_disk=True # Planning output can be large JSON
     )
     
     parsed_json_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(

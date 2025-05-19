@@ -89,10 +89,12 @@ Example of expected JSON structure (keys might vary slightly based on mode):
 }}
 """
     logger.info("Calling LLM for plot outline generation...")
+    # Plot outline JSON is expected to be somewhat large.
     raw_outline_str = await llm_interface.async_call_llm(
         model_name=config.INITIAL_SETUP_MODEL,
         prompt=prompt, 
-        temperature=0.6 
+        temperature=0.6,
+        stream_to_disk=True # Output can be a fairly large JSON
     )
     
     # Type `parsed_llm_response` as Any initially, as `async_parse_llm_json_response` might return various types or None
@@ -233,10 +235,12 @@ Example Structure:
 }}
 """
     logger.info("Generating initial world-building data via LLM...")
+    # World building JSON can also be large.
     raw_world_data_str = await llm_interface.async_call_llm(
         model_name=config.INITIAL_SETUP_MODEL,
         prompt=prompt,
-        temperature=0.6 
+        temperature=0.6,
+        stream_to_disk=True # Output can be a fairly large JSON
     )
     
     parsed_llm_response: Any = await llm_interface.async_parse_llm_json_response(raw_world_data_str, "initial world-building")

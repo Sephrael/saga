@@ -99,7 +99,8 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
         model_name=config.DRAFTING_MODEL,
         prompt=prompt, 
         temperature=0.6,
-        allow_fallback=True 
+        allow_fallback=True,
+        stream_to_disk=True # Enable streaming for large draft outputs
     )
     if not raw_llm_text:
         logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
