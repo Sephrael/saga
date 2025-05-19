@@ -80,7 +80,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 --- END HYBRID CONTEXT ---
 
 **Writing Instructions:**
-1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters, ideally closer to {config.TARGET_DRAFT_LENGTH_UPPER_BOUND} characters of narrative text.
+1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.
 2. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'summary', 'key_dialogue_points', 'setting_details', and **especially its 'scene_focus_elements'**. Use the 'scene_focus_elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.
 3. If no detailed plan is available, focus on achieving the **Overall Plot Point Focus** for this chapter.
 4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).
@@ -94,7 +94,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
 --- BEGIN CHAPTER {chapter_number} TEXT ---
 """
-    logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars.")
+    logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
     raw_llm_text = await llm_interface.async_call_llm(
         model_name=config.DRAFTING_MODEL,
         prompt=prompt, 
@@ -119,7 +119,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
     if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
          logger.warning(
              f"Ch {chapter_number} draft is short ({len(cleaned_text)} chars) after cleaning, but will be passed for evaluation/revision. "
-             f"Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}. "
+             f"Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. "
              f"Snippet: '{cleaned_text[:200].replace(chr(10), ' ')}...'"
          )
          # Note: We no longer return None here solely based on MIN_ACCEPTABLE_DRAFT_LENGTH.

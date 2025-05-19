@@ -59,7 +59,7 @@ async def revise_chapter_draft_logic(agent, original_text: str, chapter_number: 
             "- Fleshing out character thoughts, internal monologues, and emotional reactions.\n"
             "- Extending dialogue sequences, making them more nuanced and revealing.\n"
             "- Exploring the sensory details and emotional impact of events more thoroughly.\n"
-            f"Do not just rephrase; aim to significantly increase the volume of narrative content towards the {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} character target, guided by the original scene plan and critique."
+            f"Do not just rephrase; aim to significantly increase the volume of narrative content to at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters, guided by the original scene plan and critique."
         )
         
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
@@ -89,12 +89,12 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
    - Pay particular attention to the `KEY RELIABLE KG FACTS` section of the Hybrid Context for established canon.
    - Use the `SEMANTIC CONTEXT` section of the Hybrid Context for narrative flow and tone.
 5. Maintain the established tone, style, and genre ('{agent.plot_outline.get('genre', 'story')}') of the novel.
-6. The revised chapter should be substantial, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters, ideally closer to {config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.
+6. The revised chapter should be substantial, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.
 7. **Output ONLY the rewritten chapter text.** No "Chapter X" headers, titles, or meta-commentary.
 
 --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
 """
-    logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} revision. Target length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars.")
+    logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} revision. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
     # Revision is critical, allow fallback if primary revision model fails. Output is large text.
     revised_raw_llm_output = await llm_interface.async_call_llm(
         model_name=config.REVISION_MODEL,
@@ -109,7 +109,7 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
         
     revised_cleaned_text = llm_interface.clean_model_response(revised_raw_llm_output)
     if not revised_cleaned_text or len(revised_cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-        logger.error(f"Revised draft for ch {chapter_number} is too short ({len(revised_cleaned_text or '')} chars) after cleaning. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.")
+        logger.error(f"Revised draft for ch {chapter_number} is too short ({len(revised_cleaned_text or '')} chars) after cleaning. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
         await agent._save_debug_output(chapter_number, "revision_fail_short_raw_llm", revised_raw_llm_output)
         return None
     

@@ -73,7 +73,7 @@ Analyze the **Complete Chapter Text** provided below and provide structured feed
     - Genre: {novel_genre_str}
     - Central Theme: {novel_theme_str}
     - Protagonist's Arc: {protagonist_arc_str}
-4.  **NARRATIVE_DEPTH_AND_LENGTH**: Assess if the chapter provides sufficient descriptive detail, character introspection, and dialogue development. Does it feel appropriately paced or rushed? Is the narrative length substantial (aiming for {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} characters of text), or does it feel too brief for the events covered and the target length?
+4.  **NARRATIVE_DEPTH_AND_LENGTH**: Assess if the chapter provides sufficient descriptive detail, character introspection, and dialogue development. Does it feel appropriately paced or rushed? Is the narrative length substantial (aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of text), or does it feel too brief for the events covered and the target length?
 
 **Reference Information for CONSISTENCY Check:**
   **Plot Outline Summary:**
@@ -105,7 +105,7 @@ The JSON object *must* have these four top-level keys:
 -   `"consistency_issues"`: A string describing specific contradictions or inconsistencies. If none, use `null`.
 -   `"plot_arc_deviation"`: A string explaining how the chapter deviates from or fails to address the Intended Plot Point. If it aligns well, use `null`.
 -   `"thematic_issues"`: A string describing significant thematic misalignments or deviations from genre/theme/arc. If it aligns well, use `null`.
--   `"narrative_depth_issues"`: A string describing issues with narrative depth, detail, pacing, or length relative to the target ({config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND} chars). If adequate, use `null`.
+-   `"narrative_depth_issues"`: A string describing issues with narrative depth, detail, pacing, or length relative to the target of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars. If adequate, use `null`.
 
 Example of a valid JSON response if issues are found:
 ```json
@@ -189,7 +189,7 @@ async def evaluate_chapter_draft_logic(agent, draft_text: str, chapter_number: i
         reasons.append("Draft is empty.")
     elif len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         needs_revision = True
-        reasons.append(f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. Target range: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}-{config.TARGET_DRAFT_LENGTH_UPPER_BOUND}.")
+        reasons.append(f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
         # If too short, comprehensive LLM eval might not be useful or could be skipped.
         # For now, proceed, but this is a point for future optimization.
 

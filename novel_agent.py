@@ -149,7 +149,6 @@ class NovelWriterAgent:
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(f"Ch {chapter_number}: Agentic planning enabled but failed to produce a plan. Proceeding with plot point focus only.")
 
-        # Generate hybrid context using the chapter_plan
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(self, chapter_number, chapter_plan) 
         
         plot_point_focus, _ = self._get_plot_point_info(chapter_number)
@@ -161,56 +160,122 @@ class NovelWriterAgent:
             self, chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
         )
 
-        if not initial_draft_text:
+        if not initial_draft_text or not initial_raw_llm_text: # ensure raw_llm_text is also present
             logger.error(f"Failed to generate initial draft for ch {chapter_number}.")
-            await self._save_debug_output(chapter_number, "initial_draft_fail_raw_llm", initial_raw_llm_text or "")
+            await self._save_debug_output(chapter_number, "initial_draft_fail_raw_llm", initial_raw_llm_text or "Initial draft LLM output was None")
             return None
         
-        # The `evaluate_chapter_draft_logic` now uses the `hybrid_context_for_draft` (passed as `previous_chapters_context`)
-        # for its comprehensive evaluation, including the consistency check aspects that previously needed context.
-        evaluation = await evaluate_chapter_draft_logic(self, initial_draft_text, chapter_number, hybrid_context_for_draft)
         current_text = initial_draft_text
-        final_raw_output_log = f"--- INITIAL DRAFT (RAW LLM OUTPUT) ---\n{initial_raw_llm_text}\n\n"
+        chosen_draft_raw_llm_output = initial_raw_llm_text
         proceeded_with_flaws = False 
+
+        evaluation = await evaluate_chapter_draft_logic(self, initial_draft_text, chapter_number, hybrid_context_for_draft)
 
         if evaluation["needs_revision"]:
             revision_reason_str = "\n- ".join(evaluation["reasons"])
-            logger.warning(f"Ch {chapter_number} flagged for revision. Reason(s):\n- {revision_reason_str}")
+            logger.warning(f"Ch {chapter_number} initial draft flagged for revision. Reason(s):\n- {revision_reason_str}")
             
             revised_text_tuple = await revise_chapter_draft_logic(
-                self, current_text, chapter_number, revision_reason_str, hybrid_context_for_draft, chapter_plan
+                self, initial_draft_text, chapter_number, revision_reason_str, hybrid_context_for_draft, chapter_plan
             )
+
             if revised_text_tuple:
                 revised_text, raw_revision_llm_output = revised_text_tuple
-                logger.info(f"Revision successful for ch {chapter_number}. Re-evaluating revised draft...")
+                logger.info(f"Revision attempted for ch {chapter_number}. Re-evaluating revised draft...")
                 revised_evaluation = await evaluate_chapter_draft_logic(self, revised_text, chapter_number, hybrid_context_for_draft)
                 
                 if revised_evaluation["needs_revision"]:
                     logger.error(f"Revised draft for ch {chapter_number} STILL FAILED evaluation. Reasons:\n- " + "\n- ".join(revised_evaluation["reasons"]))
+                    
+                    # Decision logic to choose between initial_draft_text and revised_text
+                    initial_len = len(initial_draft_text)
+                    revised_len = len(revised_text)
+                    initial_coh = evaluation.get("coherence_score")
+                    revised_coh = revised_evaluation.get("coherence_score")
+
+                    initial_ok_len = initial_len >= config.MIN_ACCEPTABLE_DRAFT_LENGTH
+                    revised_ok_len = revised_len >= config.MIN_ACCEPTABLE_DRAFT_LENGTH
+
+                    # Temporarily assume revised is better, then check if initial is preferable
+                    current_text_candidate = revised_text
+                    raw_output_candidate = raw_revision_llm_output
+                    log_choice_reason = ""
+
+                    if initial_ok_len and not revised_ok_len:
+                        current_text_candidate = initial_draft_text
+                        raw_output_candidate = initial_raw_llm_text
+                        log_choice_reason = f"Reverted to original draft (length {initial_len}, acceptable) as revised draft was too short (length {revised_len})."
+                    elif not initial_ok_len and revised_ok_len:
+                        # Stays as revised
+                        log_choice_reason = f"Kept revised draft (length {revised_len}, acceptable) as original draft was too short (length {initial_len})."
+                    elif initial_ok_len and revised_ok_len: # Both acceptably long
+                        if initial_coh is not None and revised_coh is not None:
+                            if initial_coh > revised_coh:
+                                current_text_candidate = initial_draft_text
+                                raw_output_candidate = initial_raw_llm_text
+                                log_choice_reason = f"Both drafts acceptably long. Reverted to original (coherence {initial_coh:.4f}) over revised (coherence {revised_coh:.4f})."
+                            else: # revised_coh >= initial_coh
+                                log_choice_reason = f"Both drafts acceptably long. Kept revised (coherence {revised_coh:.4f}) over original (coherence {initial_coh:.4f})."
+                        elif initial_coh is not None: # Only initial has coherence
+                             current_text_candidate = initial_draft_text
+                             raw_output_candidate = initial_raw_llm_text
+                             log_choice_reason = f"Both drafts acceptably long. Reverted to original (has coherence {initial_coh:.4f}) as revised has no coherence score."
+                        else: # Revised might have coherence or neither does; default to revised if both ok_len
+                             log_choice_reason = f"Both drafts acceptably long. Kept revised (coherence {revised_coh}) as original has no coherence score (or neither do)."
+                    else: # Neither is acceptably long
+                        if initial_len > revised_len:
+                            current_text_candidate = initial_draft_text
+                            raw_output_candidate = initial_raw_llm_text
+                            log_choice_reason = f"Both drafts too short. Reverted to original (length {initial_len}) as it's longer than revised (length {revised_len})."
+                        elif revised_len > initial_len:
+                            log_choice_reason = f"Both drafts too short. Kept revised (length {revised_len}) as it's longer than original (length {initial_len})."
+                        else: # Equal length, both too short
+                            if initial_coh is not None and revised_coh is not None:
+                                if initial_coh > revised_coh:
+                                    current_text_candidate = initial_draft_text
+                                    raw_output_candidate = initial_raw_llm_text
+                                    log_choice_reason = f"Both drafts too short and same length. Reverted to original (coherence {initial_coh:.4f}) over revised (coherence {revised_coh:.4f})."
+                                else: # revised_coh >= initial_coh
+                                    log_choice_reason = f"Both drafts too short and same length. Kept revised (coherence {revised_coh:.4f}) over original (coherence {initial_coh:.4f})."
+                            elif initial_coh is not None:
+                                current_text_candidate = initial_draft_text
+                                raw_output_candidate = initial_raw_llm_text
+                                log_choice_reason = f"Both drafts too short and same length. Reverted to original (has coherence {initial_coh:.4f}) as revised has no coherence score."
+                            else: # Revised might have coherence or neither does; default to revised
+                                log_choice_reason = f"Both drafts too short and same length. Kept revised (coherence {revised_coh}) as original has no coherence score (or neither do)."
+                    
+                    current_text = current_text_candidate
+                    chosen_draft_raw_llm_output = raw_output_candidate
+                    logger.info(f"Ch {chapter_number}: {log_choice_reason}")
                     proceeded_with_flaws = True
-                else:
+                    chosen_draft_source = "original" if current_text is initial_draft_text else "revised"
+                    logger.warning(f"Ch {chapter_number}: Proceeding with the {chosen_draft_source} draft, which was flagged as needing revision, after the other attempt also failed or was worse.")
+                else: # Revised draft passed re-evaluation
+                    current_text = revised_text
+                    chosen_draft_raw_llm_output = raw_revision_llm_output
                     logger.info(f"Revised draft for ch {chapter_number} passed re-evaluation.")
-                
-                current_text = revised_text 
-                final_raw_output_log += f"--- REVISION (Reason: {evaluation['reasons']}) (RAW LLM OUTPUT) ---\n{raw_revision_llm_output}\n\n"
+                    proceeded_with_flaws = False
             else: 
-                logger.error(f"Revision attempt failed for ch {chapter_number}. Proceeding with the original (flawed) draft.")
-                proceeded_with_flaws = True
-                final_raw_output_log += f"--- REVISION ATTEMPT FAILED (Reason: {evaluation['reasons']}) ---\n\n"
+                logger.error(f"Revision attempt failed for ch {chapter_number} (no text produced). Proceeding with the original (flawed) draft.")
+                # current_text remains initial_draft_text
+                # chosen_draft_raw_llm_output remains initial_raw_llm_text
+                proceeded_with_flaws = True # Because initial draft needed revision
         else:
             logger.info(f"Initial draft for ch {chapter_number} passed evaluation.")
+            # current_text is initial_draft_text
+            # chosen_draft_raw_llm_output is initial_raw_llm_text
+            proceeded_with_flaws = False
 
-        if not await self._finalize_chapter_core(chapter_number, current_text, final_raw_output_log, proceeded_with_flaws):
+        if not await self._finalize_chapter_core(chapter_number, current_text, chosen_draft_raw_llm_output, proceeded_with_flaws):
              logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save or embedding) ===")
              return None 
 
-        # update_all_knowledge_bases_logic now uses unified extraction with full text.
         await update_all_knowledge_bases_logic(self, chapter_number, current_text, proceeded_with_flaws)
         
         self.chapter_count = max(self.chapter_count, chapter_number) 
         await self._save_all_json_state() 
         
-        status_message = "Successfully" if not proceeded_with_flaws else "With Flaws (Accepted after failed revision or due to issues)"
+        status_message = "Successfully" if not proceeded_with_flaws else "With Flaws (Accepted after failed revision, no revision, or due to issues)"
         logger.info(f"=== Finished Ch {chapter_number} {status_message} ===")
         return current_text
 
@@ -219,8 +284,11 @@ class NovelWriterAgent:
         if not final_text:
             logger.error(f"Cannot finalize ch {chapter_number}: Final text is missing or empty.")
             return False
+        
+        # Ensure raw_llm_log_for_db is a string, even if None was passed (e.g. if initial draft gen failed badly)
+        effective_raw_llm_log = raw_llm_log_for_db if raw_llm_log_for_db is not None else "Raw LLM output was not available for this version."
 
-        # summarize_chapter_text_logic now takes full text for its summarization LLM call
+
         summary_task = summarize_chapter_text_logic(final_text, chapter_number)
         embedding_task = asyncio.create_task(llm_interface.async_get_embedding(final_text))
         
@@ -232,7 +300,7 @@ class NovelWriterAgent:
 
         try:
             await state_manager.async_save_chapter_data(
-                chapter_number, final_text, raw_llm_log_for_db, summary, final_embedding, from_flawed_draft
+                chapter_number, final_text, effective_raw_llm_log, summary, final_embedding, from_flawed_draft
             )
         except Exception as e: 
             logger.error(f"ORM save failed for chapter {chapter_number}: {e}", exc_info=True)
@@ -240,7 +308,8 @@ class NovelWriterAgent:
 
         loop = asyncio.get_event_loop()
         try:
-            await loop.run_in_executor(None, self._save_chapter_text_files_sync, chapter_number, final_text, raw_llm_log_for_db)
+            # Pass effective_raw_llm_log here as well
+            await loop.run_in_executor(None, self._save_chapter_text_files_sync, chapter_number, final_text, effective_raw_llm_log)
             logger.info(f"Saved chapter text and raw LLM log files for ch {chapter_number}.")
         except IOError as e:
             logger.error(f"Failed writing chapter text/log files for ch {chapter_number}: {e}", exc_info=True)
@@ -258,7 +327,8 @@ class NovelWriterAgent:
         with open(chapter_file_path, 'w', encoding='utf-8') as f:
             f.write(final_text)
         with open(log_file_path, 'w', encoding='utf-8') as f:
-            f.write(raw_llm_log)
+            f.write(raw_llm_log if raw_llm_log is not None else "Raw LLM log content was None.")
+
 
     async def _save_debug_output(self, chapter_number: int, stage_description: str, content: Any):
         if content is None: return 

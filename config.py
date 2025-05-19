@@ -56,7 +56,7 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
 # Model Aliases
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B-IQ4" # 4-ish bpw for decent speed with quality
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B" # 4-ish bpw for decent speed with quality
 MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B" # 8.0 bpw for quality
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B" # 8.0 bpw for quality
 NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B" # 8.0 bpw for quality and coherence
@@ -147,7 +147,7 @@ MAX_KG_TRIPLE_TOKENS: int = 32768 # Still relevant for the KG part of unified ex
 MAX_PREPOP_KG_TOKENS: int = 32768 
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 15000 # INCREASED from 5120
-TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 20000 # NEW: Ideal upper bound for chapter length
+# TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 20000 # REMOVED: Ideal upper bound for chapter length
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 
