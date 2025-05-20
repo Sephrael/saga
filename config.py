@@ -55,6 +55,11 @@ OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "http://127.0.0.1:8080/v1")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 
+# Neo4j Connection Settings
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "saga_password")
+
 # Model Aliases
 LARGE_MODEL_DEFAULT: str = "Qwen3-14B" # 4-ish bpw for decent speed with quality
 MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B" # 8.0 bpw for quality
