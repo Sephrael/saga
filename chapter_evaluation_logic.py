@@ -9,7 +9,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 
 import config
-import llm_interface
+import llm_interface # Required for extract_json_block and clean_model_response in the heuristic
 import utils 
 from type import EvaluationResult, ProblemDetail # Updated import
 from state_manager import state_manager
@@ -160,9 +160,56 @@ Output ONLY the JSON object.
         stream_to_disk=False 
     )
     
-    parsed_result: Optional[Any] = await llm_interface.async_parse_llm_json_response(
-        raw_evaluation, f"comprehensive quote-based evaluation for ch {chapter_number}", expect_type=dict
-    )
+    parsed_result: Optional[Any] = None # Initialize before heuristic block
+
+    # --- BEGIN NEW HEURISTIC BLOCK for "no issues" text ---
+    # Check if raw_evaluation looks like a "no issues" natural language response
+    # This applies if JSON parsing might fail for such a response.
+    # The comprehensive evaluation expects a dict: {"problems_found": []} when no issues.
+    
+    # Attempt to extract JSON first. If it succeeds, we trust it.
+    # If it fails, then we check for "no issues" keywords.
+    potential_json_block = llm_interface.extract_json_block(raw_evaluation, dict)
+    
+    if potential_json_block:
+        # A JSON block was found. Attempt to parse it normally.
+        # The standard parsing will happen below.
+        pass # Let the standard parsing logic handle this.
+    else:
+        # No clear JSON block found. Check for natural language "no issues" indicators.
+        cleaned_raw_eval_lower = llm_interface.clean_model_response(raw_evaluation).lower()
+        no_issues_keywords = [
+            "no issues found", "no problems found", "no revision needed",
+            "no changes needed", "all clear", "looks good", "is fine",
+            "is acceptable", "passes evaluation", "meets criteria",
+            "no significant issues", "evaluation passed",
+            "therefore, no revision is needed" 
+            # Add more keywords if necessary
+        ]
+        is_likely_no_issues_text = False
+        if cleaned_raw_eval_lower.strip(): # Only if there's some text to check
+            for keyword in no_issues_keywords:
+                if keyword in cleaned_raw_eval_lower:
+                    is_likely_no_issues_text = True
+                    break
+        
+        if is_likely_no_issues_text:
+            logger.info(
+                f"Heuristic: Raw evaluation for Ch {chapter_number} appears to be 'no issues' text "
+                f"and no primary JSON block was extracted ('{raw_evaluation[:100]}...'). "
+                f"Forcing to 'no problems found' JSON structure."
+            )
+            # Construct the expected "no problems" JSON structure directly
+            parsed_result = {"problems_found": []} 
+            # This bypasses async_parse_llm_json_response for this specific case.
+    
+    # If parsed_result was not set by the heuristic, proceed with normal JSON parsing
+    if parsed_result is None:
+        parsed_result = await llm_interface.async_parse_llm_json_response(
+            raw_evaluation, f"comprehensive quote-based evaluation for ch {chapter_number}", expect_type=dict
+        )
+    # --- END NEW HEURISTIC BLOCK ---
+
 
     default_response = {
         "problems_found": [{
