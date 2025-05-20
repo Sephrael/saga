@@ -13,7 +13,7 @@ import llm_interface # Required for extract_json_block and clean_model_response 
 import utils 
 from type import EvaluationResult, ProblemDetail # Updated import
 from state_manager import state_manager
-from prompt_data_getters import get_filtered_character_profiles_for_prompt, get_filtered_world_data_for_prompt
+from prompt_data_getters import get_filtered_character_profiles_for_prompt, get_filtered_world_data_for_prompt, get_reliable_kg_facts_for_drafting_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -55,18 +55,12 @@ async def comprehensive_chapter_evaluation(
     protagonist_arc_str = agent.plot_outline.get('character_arc', 'Not specified')
     protagonist_name_str = agent.plot_outline.get('protagonist_name', 'The Protagonist')
     
-    kg_chapter_limit = chapter_number - 1
-    protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-    kg_loc_task = state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False)
-    kg_status_task = state_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
-    kg_location, kg_status = await asyncio.gather(kg_loc_task, kg_status_task)
-    kg_facts_for_prompt_list: list[str] = []
-    if kg_location: kg_facts_for_prompt_list.append(f"- {protagonist_name}'s last reliably known location: {kg_location}.")
-    if kg_status: kg_facts_for_prompt_list.append(f"- {protagonist_name}'s last reliably known status: {kg_status}.")
-    kg_check_results_text = "**Key Reliable KG Facts (from pre-novel & previous chapters):**\n" + "\n".join(kg_facts_for_prompt_list) + "\n" if kg_facts_for_prompt_list else "**Key Reliable KG Facts:** None available or protagonist not tracked.\n"
+    # Use the enhanced KG fact getter here, potentially with a small context window
+    # For evaluation, we want reliable facts up to *before* this chapter, so chapter_number - 1.
+    kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(agent, chapter_number, None)
 
-    char_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, kg_chapter_limit)
-    world_building_for_prompt =  await get_filtered_world_data_for_prompt(agent, kg_chapter_limit)
+    char_profiles_for_prompt = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
+    world_building_for_prompt =  await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
 
     prompt = f"""/no_think
 You are a Master Editor evaluating Chapter {chapter_number} of a novel titled "{agent.plot_outline.get('title', 'Untitled Novel')}" (Protagonist: {protagonist_name_str}).

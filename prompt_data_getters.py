@@ -244,39 +244,63 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     
     logger.debug(f"KG fact gathering for Ch {chapter_number} draft: Characters of interest: {characters_of_interest}")
 
-    char_predicates = ["located_in", "status_is", "has_goal", "feels"] 
+    # Prioritize certain predicates for important character states/facts
+    char_predicates = ["located_in", "status_is", "has_goal", "feels", "interacted_with", "ally_of", "enemy_of"] 
 
     # Store tasks and their associated metadata (origin_char, origin_pred)
     task_metadata_list: List[Tuple[str, str]] = []
     coroutines_to_gather = []
 
-    for char_name in list(characters_of_interest)[:3]: 
+    # Attempt to get direct facts about characters of interest
+    for char_name in list(characters_of_interest)[:5]: # Limit to top 5 characters for KG facts
         for pred in char_predicates:
             coroutines_to_gather.append(
                 state_manager.async_get_most_recent_value(
                     char_name, pred, kg_chapter_limit, include_provisional=False
                 )
             )
-            task_metadata_list.append((char_name, pred)) # Store metadata
+            task_metadata_list.append((char_name, pred))
+
+    # Also, fetch some general "core" facts (e.g., novel's theme, main conflict) from KG if available
+    core_novel_facts_queries = [
+        ("Novel Title", "has_theme"),
+        ("Novel Title", "conflict_summary_is")
+    ]
+    novel_title = agent.plot_outline.get("title", "Untitled Novel")
+    for subj, pred in core_novel_facts_queries:
+        coroutines_to_gather.append(
+            state_manager.async_get_most_recent_value(
+                novel_title if subj == "Novel Title" else subj, pred, kg_chapter_limit, include_provisional=False
+            )
+        )
+        task_metadata_list.append((subj, pred))
 
     if coroutines_to_gather:
-        kg_results = await asyncio.gather(*coroutines_to_gather, return_exceptions=True) # Added return_exceptions
+        kg_results = await asyncio.gather(*coroutines_to_gather, return_exceptions=True)
         
         for i, value_or_exception in enumerate(kg_results):
             if isinstance(value_or_exception, Exception):
                 logger.error(f"Error fetching KG value for {task_metadata_list[i]}: {value_or_exception}")
-                continue # Skip this result if there was an error
+                continue
 
-            value = value_or_exception # Now it's the actual value
-            if value: # value can be None if not found, or the string if found
-                origin_char, origin_pred = task_metadata_list[i]
-                fact_str = f"- {origin_char} {origin_pred.replace('_', ' ')}: {value}."
-                if fact_str not in facts_for_prompt: 
+            value = value_or_exception
+            if value:
+                origin_subj, origin_pred = task_metadata_list[i]
+                
+                # Format fact string for clarity
+                if origin_subj == "Novel Title":
+                    fact_str = f"- The novel's {origin_pred.replace('_', ' ')}: {value}."
+                elif origin_pred.startswith("interacted_with"):
+                    fact_str = f"- {origin_subj} last interacted with: {value}."
+                else:
+                    fact_str = f"- {origin_subj} {origin_pred.replace('_', ' ')}: {value}."
+                
+                if fact_str not in facts_for_prompt:
                     facts_for_prompt.append(fact_str)
                 if len(facts_for_prompt) >= max_facts:
                     break
     
     if not facts_for_prompt:
-        return "No specific reliable KG facts identified for key characters in this chapter."
+        return "No specific reliable KG facts identified as highly relevant for this chapter's focus."
         
     return "**Key Reliable KG Facts (from pre-novel & previous reliable chapter states):**\n" + "\n".join(facts_for_prompt)

@@ -114,9 +114,14 @@ async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
         logger.info(f"Skipping KG pre-population: Plot outline is default or source is unclear ('{plot_source}').")
         return
 
-    if agent.chapter_count > 0:
-        logger.info(f"Skipping KG pre-population: Novel already has {agent.chapter_count} chapters.")
-        return
+    # Check if the Neo4j connection is established before querying
+    if state_manager.driver is None:
+        logger.warning("Neo4j driver not connected. Attempting to connect for KG pre-population check.")
+        try:
+            await state_manager.connect()
+        except Exception as e:
+            logger.error(f"Failed to connect to Neo4j, cannot check for existing KG pre-population: {e}")
+            return
 
     existing_prepop_facts = await state_manager.async_query_kg(
         chapter_limit=config.KG_PREPOPULATION_CHAPTER_NUM, 
@@ -140,57 +145,64 @@ async def run_novel_generation_async():
     logger.info(f"--- Starting Saga Novel Generation (Execution Mode: Async) ---")
 
     try:
-        # Initialize state_manager and create DB tables first
-        await state_manager.create_db_and_tables()
-        logger.info("state_manager initialized and database tables checked/created.")
+        # Initialize state_manager and connect to Neo4j
+        await state_manager.connect()
+        await state_manager.create_db_and_tables() # This will now create Neo4j constraints/indexes
+        logger.info("state_manager initialized and Neo4j connection/constraints verified.")
 
         agent = NovelWriterAgent()
-        await agent.async_init() # Load agent's state from DB
+        await agent.async_init() # Load agent's state from Neo4j
         logger.info("NovelWriterAgent initialized and state loaded successfully.")
     except Exception as e:
         logger.critical(f"Failed to initialize state_manager or NovelWriterAgent: {e}", exc_info=True)
         print(f"\nFATAL: Could not initialize. Check logs. Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    if not await perform_initial_setup(agent):
-        logger.critical("Initial setup (plot/world) failed. Halting generation.")
-        sys.exit(1)
+    try:
+        if not await perform_initial_setup(agent):
+            logger.critical("Initial setup (plot/world) failed. Halting generation.")
+            sys.exit(1)
 
-    await prepopulate_kg_if_needed(agent)
+        await prepopulate_kg_if_needed(agent)
 
-    print("\n--- Starting Novel Writing Process ---")
-    start_chapter = agent.chapter_count + 1
-    end_chapter = start_chapter + config.CHAPTERS_PER_RUN if config.CHAPTERS_PER_RUN > 0 else start_chapter
+        print("\n--- Starting Novel Writing Process ---")
+        start_chapter = agent.chapter_count + 1
+        end_chapter = start_chapter + config.CHAPTERS_PER_RUN if config.CHAPTERS_PER_RUN > 0 else start_chapter
 
-    print(f"Current Chapter Count (from ORM at agent init): {agent.chapter_count}")
-    if start_chapter < end_chapter :
-        print(f"Targeting Chapters: {start_chapter} to {end_chapter - 1} in this run.")
-    else:
-        print(f"CHAPTERS_PER_RUN ({config.CHAPTERS_PER_RUN}) results in no new chapters. Current: {agent.chapter_count}.")
-        logger.info(f"CHAPTERS_PER_RUN is {config.CHAPTERS_PER_RUN}, skipping chapter writing loop.")
+        print(f"Current Chapter Count (from Neo4j at agent init): {agent.chapter_count}")
+        if start_chapter < end_chapter :
+            print(f"Targeting Chapters: {start_chapter} to {end_chapter - 1} in this run.")
+        else:
+            print(f"CHAPTERS_PER_RUN ({config.CHAPTERS_PER_RUN}) results in no new chapters. Current: {agent.chapter_count}.")
+            logger.info(f"CHAPTERS_PER_RUN is {config.CHAPTERS_PER_RUN}, skipping chapter writing loop.")
 
 
-    chapters_successfully_written = 0
-    for i in range(start_chapter, end_chapter):
-        print(f"\n--- Attempting Chapter {i} ---")
-        try:
-            chapter_text = await agent.write_chapter(i)
-            if chapter_text:
-                chapters_successfully_written += 1
-                print(f"Chapter {i}: Successfully generated (Length: {len(chapter_text)} chars).")
-                print(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
-            else:
-                print(f"Chapter {i}: Failed to generate or save. Check logs.")
-                # break # Optionally stop on first failure
-        except Exception as e:
-            logger.critical(f"Critical error during chapter {i} writing process: {e}", exc_info=True)
-            break 
+        chapters_successfully_written = 0
+        for i in range(start_chapter, end_chapter):
+            print(f"\n--- Attempting Chapter {i} ---")
+            try:
+                chapter_text = await agent.write_chapter(i)
+                if chapter_text:
+                    chapters_successfully_written += 1
+                    print(f"Chapter {i}: Successfully generated (Length: {len(chapter_text)} chars).")
+                    print(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
+                else:
+                    print(f"Chapter {i}: Failed to generate or save. Check logs.")
+                    # break # Optionally stop on first failure
+            except Exception as e:
+                logger.critical(f"Critical error during chapter {i} writing process: {e}", exc_info=True)
+                break 
 
-    print(f"\n--- Novel writing process finished for this run ---")
-    final_chapter_count_from_db = await state_manager.async_load_chapter_count()
-    print(f"Successfully wrote {chapters_successfully_written} chapter(s).")
-    print(f"Current total chapters in database: {final_chapter_count_from_db}")
-    logger.info(f"--- Saga Novel Generation Run Finished. Final DB chapter count: {final_chapter_count_from_db} ---")
+        print(f"\n--- Novel writing process finished for this run ---")
+        final_chapter_count_from_db = await state_manager.async_load_chapter_count()
+        print(f"Successfully wrote {chapters_successfully_written} chapter(s).")
+        print(f"Current total chapters in database: {final_chapter_count_from_db}")
+        logger.info(f"--- Saga Novel Generation Run Finished. Final Neo4j chapter count: {final_chapter_count_from_db} ---")
+
+    finally:
+        await state_manager.close() # Ensure Neo4j driver is closed
+        logger.info("Neo4j driver successfully closed on application exit.")
+
 
 if __name__ == "__main__":
     setup_logging() 

@@ -79,7 +79,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 ```json
 {world_building_json}
 ```
-**Character Profiles (JSON format - pay attention to any 'prompt_notes' indicating provisional data from previous unrevised chapters):**
+**Character Profiles (JSON format - pay attention to any 'prompt_notes' indicating provisional status):**
 ```json
 {char_profiles_json}
 ```

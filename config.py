@@ -92,7 +92,7 @@ PATCH_GENERATION_MODEL: str = MEDIUM_MODEL # Model for generating targeted fixes
 
 # --- Output and File Paths ---
 BASE_OUTPUT_DIR: str = "novel_output"
-DATABASE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "novel_data.db")
+# DATABASE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "novel_data.db") # Removed, as we're moving to Neo4j
 PLOT_OUTLINE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "plot_outline.json")
 CHARACTER_PROFILES_FILE: str = os.path.join(BASE_OUTPUT_DIR, "character_profiles.json")
 WORLD_BUILDER_FILE: str = os.path.join(BASE_OUTPUT_DIR, "world_building.json")

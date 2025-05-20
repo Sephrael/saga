@@ -15,9 +15,9 @@ import config
 import llm_interface
 
 from prompt_data_getters import (
-    get_filtered_world_data_for_prompt,
+    get_filtered_character_profiles_for_prompt,
     heuristic_entity_spotter_for_kg,
-    get_filtered_character_profiles_for_prompt
+    get_filtered_world_data_for_prompt
 )
 from state_manager import state_manager
 

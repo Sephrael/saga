@@ -9,7 +9,8 @@ import llm_interface
 from type import SceneDetail 
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
-    get_world_state_snippet_for_prompt
+    get_world_state_snippet_for_prompt,
+    get_reliable_kg_facts_for_drafting_prompt # Will be improved with subgraph query
 )
 from state_manager import state_manager 
 
@@ -44,19 +45,14 @@ async def plan_chapter_scenes_logic(agent, chapter_number: int) -> Optional[List
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     kg_chapter_limit = chapter_number - 1 
     
-    kg_tasks = {
-        "location": state_manager.async_get_most_recent_value(protagonist_name, "located_in", kg_chapter_limit, include_provisional=False),
-        "status": state_manager.async_get_most_recent_value(protagonist_name, "status_is", kg_chapter_limit, include_provisional=False)
-    }
-    
-    kg_results = await asyncio.gather(*kg_tasks.values())
-    kg_fact_map = dict(zip(kg_tasks.keys(), kg_results))
-
-    kg_facts_for_prompt: List[str] = []
-    if kg_fact_map.get("location"): kg_facts_for_prompt.append(f"- {protagonist_name} is currently located in (reliable KG): {kg_fact_map['location']}.")
-    if kg_fact_map.get("status"): kg_facts_for_prompt.append(f"- {protagonist_name}'s current status (reliable KG): {kg_fact_map['status']}.")
-    
-    kg_context_section = "**Relevant Reliable KG Facts (up to prev chapter/pre-novel):**\n" + "\n".join(kg_facts_for_prompt) + "\n" if kg_facts_for_prompt else ""
+    # Using the enhanced KG fact getter for planning prompt
+    # Note: This is an initial step. For true "subgraph" context, a dedicated Cypher query and formatting might be needed here.
+    # For now, get_reliable_kg_facts_for_drafting_prompt focuses on key facts for main characters.
+    kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
+        agent,
+        chapter_number, # Pass current chapter number to prompt data getter
+        None # No chapter plan yet for planning prompt, so pass None
+    )
 
     character_state_snippet = get_character_state_snippet_for_prompt(agent, chapter_number)
     world_state_snippet = get_world_state_snippet_for_prompt(agent, chapter_number)

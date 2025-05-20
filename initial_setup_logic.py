@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 
 import config
 import llm_interface
+from state_manager import state_manager # Import state_manager
 
 logger = logging.getLogger(__name__)
 

@@ -194,6 +194,7 @@ async def generate_hybrid_chapter_context_logic(agent, current_chapter_number: i
 
     if kg_facts_str and kg_facts_str.strip():
         hybrid_context_parts.append("\n\n--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---")
+        # Remove a potential leading header from get_reliable_kg_facts_for_drafting_prompt if it includes one
         cleaned_kg_facts = kg_facts_str.split("\n", 1)[-1] if kg_facts_str.startswith("**Key Reliable KG Facts") else kg_facts_str
         if not cleaned_kg_facts.strip() or cleaned_kg_facts.lower().startswith("no specific reliable kg facts"):
             hybrid_context_parts.append("No specific reliable KG facts were identified as highly relevant for this chapter's focus.")

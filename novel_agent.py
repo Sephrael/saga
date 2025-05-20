@@ -35,11 +35,11 @@ class NovelWriterAgent:
         logger.info("NovelWriterAgent instance created. Call async_init() to load/prepare state.")
 
     async def async_init(self):
-        """Asynchronously initializes agent state by loading from ORM and ensuring DB schema."""
+        """Asynchronously initializes agent state by loading from Neo4j."""
         logger.info("NovelWriterAgent async_init started...")
         
         self.chapter_count = await state_manager.async_load_chapter_count()
-        logger.info(f"Loaded chapter count from ORM: {self.chapter_count}")
+        logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
 
         load_tasks = {
             "plot": state_manager.get_plot_outline(),
@@ -52,6 +52,7 @@ class NovelWriterAgent:
         for key, value in loaded_data.items():
             if isinstance(value, Exception):
                 logger.error(f"Error loading {key} during async_init: {value}", exc_info=value)
+                # Ensure defaults are set if loading fails
                 if key == "plot": self.plot_outline = {}
                 elif key == "chars": self.character_profiles = {}
                 elif key == "world": self.world_building = {}
@@ -61,16 +62,16 @@ class NovelWriterAgent:
                 elif key == "world": self.world_building = value if isinstance(value, dict) else {}
         
         if not self.plot_outline:
-            logger.warning("Plot outline is empty after ORM load. Expected during initial setup or if save failed previously.")
+            logger.warning("Plot outline is empty after Neo4j load. Expected during initial setup or if save failed previously.")
         if not self.character_profiles:
-            logger.warning("Character profiles are empty after ORM load. Expected during initial setup or if save failed previously.")
+            logger.warning("Character profiles are empty after Neo4j load. Expected during initial setup or if save failed previously.")
         if not self.world_building:
-            logger.warning("World building is empty after ORM load. Expected during initial setup or if save failed previously.")
+            logger.warning("World building is empty after Neo4j load. Expected during initial setup or if save failed previously.")
         
         logger.info("NovelWriterAgent async_init complete.")
 
     async def _save_all_json_state(self):
-        logger.debug("Saving agent state (plot, characters, world) to ORM...")
+        logger.debug("Saving agent state (plot, characters, world) to Neo4j...")
         
         tasks = [
             state_manager.save_plot_outline(self.plot_outline),
@@ -84,16 +85,16 @@ class NovelWriterAgent:
         for i, res in enumerate(results):
             item_name = ["plot_outline", "character_profiles", "world_building"][i]
             if isinstance(res, Exception):
-                logger.error(f"Failed to save {item_name} to ORM: {res}", exc_info=res)
-            elif res is True:
+                logger.error(f"Failed to save {item_name} to Neo4j: {res}", exc_info=res)
+            elif res is True: # state_manager.save_* methods return True on success
                 success_count += 1
             else: 
                 logger.warning(f"Unexpected return value from save_{item_name}: {res}")
 
         if success_count == len(tasks):
-            logger.info(f"All ({success_count}) state objects saved to ORM successfully.")
+            logger.info(f"All ({success_count}) state objects saved to Neo4j successfully.")
         else:
-            logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to ORM successfully.")
+            logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to Neo4j successfully.")
 
     async def generate_plot_outline(self, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Dict[str, Any]:
         return await generate_plot_outline_logic(self, default_protagonist_name, unhinged_mode, **kwargs)
@@ -221,7 +222,7 @@ class NovelWriterAgent:
 
 
         if not await self._finalize_chapter_core(chapter_number, current_text_to_process, current_raw_llm_output, is_from_flawed_source):
-             logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (DB/File save or embedding) ===")
+             logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (Neo4j/File save or embedding) ===")
              return None 
 
         await update_all_knowledge_bases_logic(self, chapter_number, current_text_to_process, is_from_flawed_source)
@@ -252,11 +253,12 @@ class NovelWriterAgent:
             return False
 
         try:
+            # Now saving to Neo4j via state_manager
             await state_manager.async_save_chapter_data(
                 chapter_number, final_text, effective_raw_llm_log, summary, final_embedding, from_flawed_draft
             )
         except Exception as e: 
-            logger.error(f"ORM save failed for chapter {chapter_number}: {e}", exc_info=True)
+            logger.error(f"Neo4j save failed for chapter {chapter_number}: {e}", exc_info=True)
             return False 
 
         loop = asyncio.get_event_loop()
@@ -270,6 +272,7 @@ class NovelWriterAgent:
         return True
 
     def _save_chapter_text_files_sync(self, chapter_number: int, final_text: str, raw_llm_log: str):
+        # These are local file system saves, still relevant for debugging/local copies
         chapter_file_path = os.path.join(config.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt") 
         log_file_path = os.path.join(config.CHAPTER_LOGS_DIR, f"chapter_{chapter_number:04d}_raw_llm_log.txt")
 
