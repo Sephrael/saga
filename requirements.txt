@@ -6,3 +6,4 @@ numpy==1.26.4
 async_lru==2.0.4
 SQLAlchemy==2.0.29
 aiosqlite==0.20.0
+tiktoken
