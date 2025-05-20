@@ -80,8 +80,9 @@ KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL # Needs good comprehension for unifie
 INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # Good balance for initial creative tasks
 PLANNING_MODEL: str = LARGE_MODEL # Needs strong reasoning
 DRAFTING_MODEL: str = NARRATOR_MODEL # High quality needed
-REVISION_MODEL: str = NARRATOR_MODEL # High quality needed
+REVISION_MODEL: str = NARRATOR_MODEL # High quality needed for full rewrite
 EVALUATION_MODEL: str = LARGE_MODEL # For comprehensive chapter evaluation
+PATCH_GENERATION_MODEL: str = MEDIUM_MODEL # Model for generating targeted fixes (can be smaller)
 
 
 # --- Output and File Paths ---
@@ -130,8 +131,8 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16 # KG extraction now part of unified ca
 # --- Agentic Planning & Prompt Context Snippets ---
 ENABLE_AGENTIC_PLANNING: bool = True
 MAX_PLANNING_TOKENS: int = 40960
-TARGET_SCENES_MIN: int = 10 # NEW: Minimum number of scenes for the planner
-TARGET_SCENES_MAX: int = 18 # NEW: Maximum number of scenes for the planner
+TARGET_SCENES_MIN: int = 10 
+TARGET_SCENES_MAX: int = 18 
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80 
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120 
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -141,21 +142,22 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
+ENABLE_PATCH_BASED_REVISION: bool = True # NEW: Enable patch-based revisions
+MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 7 # NEW: Max patches to generate in one revision cycle
+MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 1000 # NEW: Max characters around a quote for patch generation context
 REVISION_COHERENCE_THRESHOLD: float = 0.60 
-# Slightly relaxed revision similarity to avoid rejecting minor rephrasing that fixed issues
 REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 
-MAX_SUMMARY_TOKENS: int = 32768 # For summarization output
-MAX_KG_TRIPLE_TOKENS: int = 32768 # Still relevant for the KG part of unified extraction if needed
+MAX_SUMMARY_TOKENS: int = 32768 
+MAX_KG_TRIPLE_TOKENS: int = 32768 
 MAX_PREPOP_KG_TOKENS: int = 32768 
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 15000 # INCREASED from 5120
-# TARGET_DRAFT_LENGTH_UPPER_BOUND: int = 20000 # REMOVED: Ideal upper bound for chapter length
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = 15000 
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True 
 KG_PREPOPULATION_CHAPTER_NUM: int = 0 
 
 
 # --- Embedding Configuration ---
-EXPECTED_EMBEDDING_DIM: int = 768 # Keep this matching your embedding model's output dimension
+EXPECTED_EMBEDDING_DIM: int = 768 
 EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32) 
 
 
