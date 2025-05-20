@@ -484,64 +484,127 @@ Output ONLY the JSON object.
 
 # --- Knowledge Graph Pre-population ---
 
+def _prepare_prepopulation_data_summary(agent) -> Dict[str, Any]:
+    """Prepares a structured summary of plot, characters, and world for KG pre-population prompt."""
+    summary = {}
+
+    # Plot Outline Summary
+    plot_summary = {
+        "title": agent.plot_outline.get("title"),
+        "genre": agent.plot_outline.get("genre"),
+        "theme": agent.plot_outline.get("theme"),
+        "logline": agent.plot_outline.get("logline"),
+        "protagonist_name": agent.plot_outline.get("protagonist_name"),
+        "protagonist_description": agent.plot_outline.get("protagonist_description"),
+        "protagonist_character_arc": agent.plot_outline.get("character_arc"),
+        "antagonist_name": agent.plot_outline.get("antagonist_name"),
+        "antagonist_description": agent.plot_outline.get("antagonist_description"),
+        "antagonist_motivations": agent.plot_outline.get("antagonist_motivations"),
+        "setting_description": agent.plot_outline.get("setting"),
+        "conflict_summary": agent.plot_outline.get("conflict"),
+        "inciting_incident": agent.plot_outline.get("inciting_incident"),
+        "climax_event_preview": agent.plot_outline.get("climax_event_preview"),
+        "key_plot_points_summary": agent.plot_outline.get("plot_points", [])[:5] # Show all 5 if available
+    }
+    summary["novel_concept_and_plot"] = {k: v for k, v in plot_summary.items() if v} # Filter out empty values
+
+    # Character Profiles Summary
+    char_summary = {}
+    for char_name, profile in agent.character_profiles.items():
+        if isinstance(profile, dict):
+            char_summary[char_name] = {
+                "description": profile.get("description", "")[:200] + "...",
+                "role": profile.get("role", profile.get("role_in_story", "N/A")),
+                "initial_status": profile.get("status", ""),
+                "traits_preview": profile.get("traits", [])[:5],
+                "motivations": profile.get("motivations", "") # if antagonist
+            }
+    if char_summary:
+        summary["key_characters"] = char_summary
+    
+    # World Building Highlights
+    world_highlights = {}
+    overview = agent.world_building.get("_overview_")
+    if overview and isinstance(overview, dict) and overview.get("description"):
+        world_highlights["overall_setting_description"] = overview["description"]
+
+    for category, items in agent.world_building.items():
+        if category in ["_overview_", "is_default", "user_supplied_data", "source"] or not isinstance(items, dict):
+            continue
+        
+        category_highlights = {}
+        item_count = 0
+        for item_name, item_details in items.items():
+            if item_name.startswith(("_", "source_quality_chapter_", "category_updated_in_chapter_")): # Skip internal/meta keys
+                 continue
+            if item_count >= 3 and category != "locations": # More locations, fewer of others for brevity
+                 break
+            if item_count >=5 and category == "locations":
+                 break
+
+            if isinstance(item_details, dict):
+                desc = item_details.get("description", "")
+                if desc:
+                    category_highlights[item_name] = {"description_snippet": desc[:150] + "..."}
+                    if item_details.get("atmosphere"):
+                         category_highlights[item_name]["atmosphere_snippet"] = str(item_details["atmosphere"])[:100]
+                    if item_details.get("goals"):
+                         category_highlights[item_name]["goals_preview"] = item_details["goals"][:3]
+                    if item_details.get("rules"):
+                         category_highlights[item_name]["rules_preview"] = item_details["rules"][:3]
+                item_count +=1
+            elif isinstance(item_details, str) and item_details.strip(): # E.g. for very simple world items
+                category_highlights[item_name] = {"description_snippet": item_details[:150] + "..."}
+                item_count += 1
+        if category_highlights:
+            world_highlights[category] = category_highlights
+            
+    if world_highlights:
+        summary["world_highlights"] = world_highlights
+        
+    return summary
+
+
 async def prepopulate_kg_from_initial_data_logic(agent): # NovelWriterAgent instance
     logger.info("Starting Knowledge Graph pre-population from plot and world data...")
     
-    # Using full agent.plot_outline and agent.world_building as context for this pre-population.
-    # Pruning is still good for the prompt, but it's based on the complete data.
-    pruned_plot = {
-        "title": agent.plot_outline.get("title"), 
-        "protagonist_name": agent.plot_outline.get("protagonist_name"),
-        "genre": agent.plot_outline.get("genre"), 
-        "theme": agent.plot_outline.get("theme"),
-        "setting_description": agent.plot_outline.get("setting"),
-        "conflict_summary": agent.plot_outline.get("conflict"),
-        "character_arc": agent.plot_outline.get("character_arc"), 
-        "key_plot_points_summary": agent.plot_outline.get("plot_points", [])[:2]
-    }
-    pruned_world = {}
-    for category, items in agent.world_building.items():
-        if category == "is_default" or not isinstance(items, dict): continue
-        pruned_world[category] = {}
-        for item_name, item_details in list(items.items())[:3]: 
-            if isinstance(item_details, dict):
-                desc = item_details.get("description", item_details.get("text", ""))
-                if isinstance(desc, str) and desc.strip():
-                     pruned_world[category][item_name] = {"description_snippet": desc[:200].strip() + "..."}
-            elif isinstance(item_details, str) and item_details.strip():
-                pruned_world[category][item_name] = {"description_snippet": item_details[:200].strip() + "..."}
+    # Prepare a more structured summary for the LLM
+    structured_initial_data_summary = _prepare_prepopulation_data_summary(agent)
 
-    combined_pruned_data = {"plot_summary": pruned_plot, "world_highlights": pruned_world}
     try:
-        combined_data_json = json.dumps(combined_pruned_data, indent=2, ensure_ascii=False, default=str)
+        initial_data_json_for_prompt = json.dumps(structured_initial_data_summary, indent=2, ensure_ascii=False, default=str)
     except TypeError as e:
-        logger.error(f"Error serializing pruned data for KG pre-population prompt: {e}. Data: {combined_pruned_data}")
+        logger.error(f"Error serializing structured initial data for KG pre-population prompt: {e}.")
         return
         
     protagonist_name = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
     novel_title = agent.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE)
+    
     common_predicates_prepop = [
-        "is_a", "has_title", "has_protagonist", "has_genre", "has_theme", "has_setting_description", 
-        "has_conflict_summary", "has_character_arc", "has_description", "has_trait", "initial_status_is",
+        "is_a", "has_title", "has_protagonist", "has_antagonist", "has_genre", "has_theme", "has_logline",
+        "primary_setting_is", "setting_description_is", "conflict_summary_is", "inciting_incident_is",
+        "protagonist_arc_is", "has_description", "has_trait", "initial_status_is", "has_motivation",
+        "has_role", "key_location_is", "faction_is", "lore_item_is", "magic_system_is",
         "related_to", "located_in", "has_goal", "part_of", "member_of", "governed_by", 
-        "known_for", "primary_setting_is", "key_element_is"
+        "known_for", "key_element_is", "atmosphere_is", "rule_is"
     ]
 
     prompt = f"""/no_think
-You are a Knowledge Graph Engineer. Your task is to extract foundational (Subject, Predicate, Object) triples from the provided summarized Plot Outline and World Building Highlights for the novel titled '{novel_title}' (protagonist: '{protagonist_name}').
+You are a Knowledge Graph Engineer. Your task is to extract foundational (Subject, Predicate, Object) triples 
+from the provided structured summary of the Novel Concept, Key Characters, and World Highlights for the novel titled '{novel_title}' (protagonist: '{protagonist_name}').
 These triples will form the initial, canonical knowledge base before chapter generation begins.
 
-**Input JSON Data (Summarized Plot & World Highlights):**
+**Input JSON Data (Structured Initial Story Summary):**
 ```json
-{combined_data_json}
+{initial_data_json_for_prompt}
 ```
 **Instructions for Triple Extraction:**
-1. Analyze the input JSON. Keys within "plot_summary" and "world_highlights" often map to Subjects or Predicates. Values often map to Objects or provide descriptive text from which Objects can be extracted.
-2. Extract core entities (the novel itself, protagonist, key locations, factions, concepts), their types (e.g., ["{protagonist_name}", "is_a", "protagonist"]), attributes, and key relationships.
+1. Analyze the input JSON. Keys and values within the nested structures often map to Subjects, Predicates, or Objects.
+2. Extract core entities (the novel itself, protagonist, antagonist, other key characters, key locations, factions, concepts), their types (e.g., ["{protagonist_name}", "is_a", "protagonist"]), attributes, and key relationships.
 3. Use predicates from the Suggested Predicates list or create concise, descriptive alternatives if necessary. Predicates should be lowercase with underscores.
-4. For the novel itself, use "{novel_title}" (or its variable if name changes) as the Subject for facts like genre, theme, protagonist.
-5. For the protagonist '{protagonist_name}', extract their initial description, core traits, and initial status (if implied).
-6. For key locations, factions, etc., from "world_highlights", extract their names and core descriptions/properties.
+4. For the novel itself, use its title (e.g., "{novel_title}") as the Subject for facts like genre, theme, protagonist.
+5. For characters, extract their names, descriptions, roles, initial status, traits, and motivations.
+6. For key locations, factions, lore items, etc., from "world_highlights", extract their names and core descriptions/properties.
 7. All three components of a triple `["Subject", "predicate_name", "Object"]` MUST be non-empty strings.
 8. **CRITICAL OUTPUT FORMAT:** Output ONLY a valid JSON list of lists (triples). If no meaningful facts, output `[]`.
 9. **NO other text, markdown, explanations, or commentary.** The response must start with `[` and end with `]`.
@@ -550,19 +613,18 @@ These triples will form the initial, canonical knowledge base before chapter gen
 {', '.join(common_predicates_prepop)}
 
 **Example Output:**
-`[["{novel_title}", "has_protagonist", "{protagonist_name}"], ["{protagonist_name}", "is_a", "protagonist"], ["{protagonist_name}", "initial_status_is", "seeking answers"], ["MainCity", "is_a", "capital city"], ["MainCity", "located_in", "PrimaryKingdom"]]`
+`[["{novel_title}", "has_protagonist", "{protagonist_name}"], ["{protagonist_name}", "is_a", "protagonist"], ["{protagonist_name}", "initial_status_is", "seeking answers"], ["{protagonist_name}", "has_trait", "Intelligent"], ["MainCity", "is_a", "capital city"], ["MainCity", "located_in", "PrimaryKingdom"], ["OrderOfShadows", "is_a", "faction"], ["OrderOfShadows", "has_goal", "World Domination"]]`
 
 JSON Output Only:
 [
 """
     logger.info("Calling LLM for KG pre-population triple extraction...")
-    # KG pre-population output is JSON list of triples, could be moderately sized.
     raw_triples_json_str = await llm_interface.async_call_llm(
         model_name=config.KNOWLEDGE_UPDATE_MODEL, 
         prompt=prompt, 
         temperature=0.6, 
         max_tokens=config.MAX_PREPOP_KG_TOKENS,
-        stream_to_disk=True # JSON output, can be moderately large
+        stream_to_disk=True
     )
     parsed_triples = await llm_interface.async_parse_llm_json_response(
         raw_triples_json_str, "KG pre-population triple extraction", expect_type=list
@@ -586,10 +648,17 @@ JSON Output Only:
             pred = str(triple_any[1]).strip() if triple_any[1] is not None else ""
             obj  = str(triple_any[2]).strip() if triple_any[2] is not None else ""
             if subj and pred and obj: 
-                kg_add_tasks.append(state_manager.async_add_kg_triple(subj, pred, obj, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False))
+                # Ensure object is not excessively long for KG
+                obj_truncated = obj[:250] + "..." if len(obj) > 253 else obj
+                kg_add_tasks.append(state_manager.async_add_kg_triple(subj, pred, obj_truncated, config.KG_PREPOPULATION_CHAPTER_NUM, is_provisional=False))
                 added_count += 1
-            else: logger.warning(f"Skipping invalid pre-population triple (empty component after strip): {triple_any}")
-        else: logger.warning(f"Skipping invalid pre-population triple format (not list of 3): {triple_any}")
+            else: 
+                logger.warning(f"Skipping invalid pre-population triple (empty component after strip): {triple_any}")
+                skipped_count +=1
+        else: 
+            logger.warning(f"Skipping invalid pre-population triple format (not list of 3): {triple_any}")
+            skipped_count += 1
+            
     if kg_add_tasks: await asyncio.gather(*kg_add_tasks)
     logger.info(f"KG pre-population complete: Added {added_count} foundational triples. Skipped {skipped_count} invalid triples.")
     if added_count == 0 and parsed_triples:
@@ -642,8 +711,9 @@ async def update_all_knowledge_bases_logic(
                 pred = str(triple_any[1]).strip() if triple_any[1] is not None else ""
                 obj  = str(triple_any[2]).strip() if triple_any[2] is not None else ""
                 if subj and pred and obj:
+                    obj_truncated = obj[:250] + "..." if len(obj) > 253 else obj # Truncate long objects for KG
                     kg_add_tasks.append(
-                        state_manager.async_add_kg_triple(subj, pred, obj, chapter_number, is_provisional=from_flawed_draft)
+                        state_manager.async_add_kg_triple(subj, pred, obj_truncated, chapter_number, is_provisional=from_flawed_draft)
                     )
                     added_count += 1
                 else:

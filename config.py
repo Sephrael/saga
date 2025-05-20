@@ -94,6 +94,8 @@ CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
 DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
+USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.json" # NEW: Path for user-supplied file
+
 UNHINGED_DATA_DIR: str = "unhinged_data" 
 os.makedirs(UNHINGED_DATA_DIR, exist_ok=True) 
 

@@ -39,87 +39,79 @@ def setup_logging():
 
 async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
     logger = logging.getLogger(__name__)
-    logger.info("Checking for existing plot outline...")
+    logger.info("Performing initial setup...")
+
+    # generate_plot_outline_logic now handles user file, LLM gen, or default.
+    # It populates agent.plot_outline, agent.character_profiles, and potentially agent.world_building.
+    print("\n--- Initializing Plot, Characters, and World ---")
+    generation_params: Dict[str, Any] = {}
+    if config.UNHINGED_PLOT_MODE and not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH): # Unhinged only if no user file
+        generation_params.update({
+            "genre": random.choice(config.UNHINGED_GENRES), "theme": random.choice(config.UNHINGED_THEMES),
+            "setting_archetype": random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
+            "protagonist_archetype": random.choice(config.UNHINGED_PROTAGONIST_ARCHETYPES),
+            "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES)
+        })
+    elif not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH): # Configured mode if no user file and not unhinged
+        generation_params.update({
+            "genre": config.CONFIGURED_GENRE, "theme": config.CONFIGURED_THEME,
+            "setting_description": config.CONFIGURED_SETTING_DESCRIPTION
+        })
     
-    plot_outline_data = agent.plot_outline 
-    should_regenerate_plot = False
-
-    if not plot_outline_data: 
-        should_regenerate_plot = True
-        logger.info("Plot outline data is empty from ORM. Will generate new.")
-    elif plot_outline_data.get("is_default") is True: 
-        should_regenerate_plot = True
-        logger.info("Plot outline was previously marked as default. Will regenerate.")
-    elif not all(k in plot_outline_data for k in ["title", "protagonist_name", "plot_points"]):
-        should_regenerate_plot = True
-        logger.info("Plot outline missing essential keys (title, protagonist_name, plot_points). Will regenerate.")
-    else:
-        logger.info(f"Using existing plot outline: '{plot_outline_data.get('title', 'N/A')}'")
-
-
-    if should_regenerate_plot:
-        print("\n--- Generating New Plot Outline ---")
-        logger.info("Generating a new plot outline.")
-        generation_params: Dict[str, Any] = {}
-        if config.UNHINGED_PLOT_MODE:
-            generation_params.update({
-                "genre": random.choice(config.UNHINGED_GENRES), "theme": random.choice(config.UNHINGED_THEMES),
-                "setting_archetype": random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
-                "protagonist_archetype": random.choice(config.UNHINGED_PROTAGONIST_ARCHETYPES),
-                "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES)
-            })
+    try:
+        # This call will populate plot_outline, character_profiles, and potentially world_building
+        # if a user file is found and processed.
+        await agent.generate_plot_outline(
+            default_protagonist_name=config.DEFAULT_PROTAGONIST_NAME,
+            unhinged_mode=config.UNHINGED_PLOT_MODE if not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH) else False,
+            **generation_params
+        )
+        
+        # Log how the plot outline was sourced
+        plot_source = agent.plot_outline.get("source", "unknown")
+        if plot_source == "user_supplied":
+            print(f"Loaded story elements from user file: '{config.USER_STORY_ELEMENTS_FILE_PATH}'")
+            print(f"   Novel Title: '{agent.plot_outline.get('title', 'N/A')}'")
+        elif plot_source.startswith("llm_generated"):
+            print(f"Generated Plot Outline via LLM for: '{agent.plot_outline.get('title', 'N/A')}'")
+        elif plot_source == "default_fallback":
+            print(f"Plot Outline defaulted for: '{agent.plot_outline.get('title', 'N/A')}'")
         else:
-            generation_params.update({
-                "genre": config.CONFIGURED_GENRE, "theme": config.CONFIGURED_THEME,
-                "setting_description": config.CONFIGURED_SETTING_DESCRIPTION
-            })
-        try:
-            outline = await agent.generate_plot_outline(
-                default_protagonist_name=config.DEFAULT_PROTAGONIST_NAME,
-                unhinged_mode=config.UNHINGED_PLOT_MODE,
-                **generation_params
-            )
-            print(f"Generated Plot Outline for: '{outline.get('title', 'N/A')}'")
-        except Exception as e:
-            logger.critical(f"Critical error during plot outline generation: {e}", exc_info=True)
-            return False 
-    else:
-        print("\n--- Using Existing Plot Outline ---")
-        print(f"Loaded outline for: '{agent.plot_outline.get('title', 'N/A')}'")
+            print(f"Plot Outline initialized for: '{agent.plot_outline.get('title', 'N/A')}' (source: {plot_source})")
 
-    logger.info("Checking for existing world-building data...")
-    world_building_data = agent.world_building
-    should_regenerate_world = False
-    if not world_building_data:
-        should_regenerate_world = True
-        logger.info("World-building data is empty from ORM. Will generate new.")
-    elif world_building_data.get("is_default") is True:
-        should_regenerate_world = True
-        logger.info("World-building was previously marked as default. Will regenerate.")
-    elif not world_building_data.get("locations"): 
-        should_regenerate_world = True
-        logger.info("World-building data seems minimal (e.g., no locations). Will regenerate.")
-    else:
-        logger.info("Using existing world-building data.")
+        # Now call generate_world_building. It will skip LLM generation if
+        # world_building was already populated from a user file.
+        await agent.generate_world_building()
+        world_source = agent.world_building.get("source", agent.world_building.get("user_supplied_data"))
+        if world_source == "user_supplied_data" or agent.world_building.get("user_supplied_data"): # Redundant check for clarity
+            print("   World-building data also loaded from user file.")
+        elif world_source == "llm_generated":
+            print("   Generated initial world-building data via LLM.")
+        elif world_source == "default_fallback":
+            print("   World-building data defaulted.")
+        else:
+             logger.info("   World-building data seems pre-existing or source unclear, using as-is.")
 
-    if should_regenerate_world:
-        print("\n--- Generating Initial World-Building Data ---")
-        try:
-            await agent.generate_world_building()
-            print("Generated/Refreshed initial world-building data.")
-        except Exception as e:
-            logger.error(f"Error generating world building: {e}. Proceeding with potentially minimal/default world data.", exc_info=True)
-            # Not returning False, allowing the process to continue if plot is fine.
-    else:
-        print("\n--- Using Existing World-Building Data ---")
+
+    except Exception as e:
+        logger.critical(f"Critical error during initial setup (plot/character/world generation): {e}", exc_info=True)
+        return False 
+    
+    if not agent.plot_outline or agent.plot_outline.get("is_default"):
+        logger.warning("Initial setup resulted in a default or empty plot outline. This might impact generation quality.")
+        # Not returning False, as system might still run with defaults.
     
     return True 
 
 async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
     logger = logging.getLogger(__name__)
     
-    if agent.plot_outline.get("is_default", False) or agent.world_building.get("is_default", False):
-        logger.info("Skipping KG pre-population: Plot outline or world-building is default.")
+    # Check if initial setup was from user file or resulted in default, which might affect KG pre-population decision
+    plot_source = agent.plot_outline.get("source", "")
+    is_user_or_llm_plot = plot_source == "user_supplied" or plot_source.startswith("llm_generated")
+
+    if not is_user_or_llm_plot:
+        logger.info(f"Skipping KG pre-population: Plot outline is default or source is unclear ('{plot_source}').")
         return
 
     if agent.chapter_count > 0:
@@ -136,7 +128,7 @@ async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
         logger.info(f"Found {len(prepop_facts_at_zero)} existing KG triples at chapter {config.KG_PREPOPULATION_CHAPTER_NUM}. Assuming KG pre-populated.")
         return
         
-    print("\n--- Pre-populating Knowledge Graph from Plot and World Data ---")
+    print("\n--- Pre-populating Knowledge Graph from Initial Data ---")
     try:
         await agent._prepopulate_knowledge_graph()
         print("Knowledge Graph pre-population step complete.")
