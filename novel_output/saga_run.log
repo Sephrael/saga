@@ -1,286 +1,350 @@
-2025-05-19 17:23:19 - INFO - [root:32] - File logging enabled. Log file: novel_output/saga_run.log
-2025-05-19 17:23:19 - INFO - [root:37] - Logging setup complete. Level: INFO
-2025-05-19 17:23:19 - INFO - [__main__:140] - --- Starting Saga Novel Generation (Execution Mode: Async) ---
-2025-05-19 17:23:19 - INFO - [state_manager:120] - Database tables created/verified via ORM based on current models.
-2025-05-19 17:23:19 - INFO - [__main__:145] - state_manager initialized and database tables checked/created.
-2025-05-19 17:23:19 - INFO - [novel_agent:30] - Initializing NovelWriterAgent instance...
-2025-05-19 17:23:19 - INFO - [novel_agent:35] - NovelWriterAgent instance created. Call async_init() to load/prepare state.
-2025-05-19 17:23:19 - INFO - [novel_agent:39] - NovelWriterAgent async_init started...
-2025-05-19 17:23:19 - INFO - [state_manager:215] - Async ORM loaded chapter count: 0
-2025-05-19 17:23:19 - INFO - [novel_agent:42] - Loaded chapter count from ORM: 0
-2025-05-19 17:23:19 - WARNING - [novel_agent:66] - Plot outline is empty after ORM load. Expected during initial setup or if save failed previously.
-2025-05-19 17:23:19 - WARNING - [novel_agent:68] - Character profiles are empty after ORM load. Expected during initial setup or if save failed previously.
-2025-05-19 17:23:19 - WARNING - [novel_agent:70] - World building is empty after ORM load. Expected during initial setup or if save failed previously.
-2025-05-19 17:23:19 - INFO - [novel_agent:72] - NovelWriterAgent async_init complete.
-2025-05-19 17:23:19 - INFO - [__main__:149] - NovelWriterAgent initialized and state loaded successfully.
-2025-05-19 17:23:19 - INFO - [__main__:42] - Performing initial setup...
-2025-05-19 17:23:19 - INFO - [initial_setup_logic:186] - Generating plot outline. Unhinged mode: False
-2025-05-19 17:23:19 - INFO - [initial_setup_logic:59] - Successfully loaded user-supplied story data from 'user_story_elements.json'.
-2025-05-19 17:23:19 - INFO - [initial_setup_logic:191] - Processing user-supplied story data for initial setup.
-2025-05-19 17:23:19 - INFO - [initial_setup_logic:177] - Agent state (plot_outline, character_profiles, world_building) populated from user-supplied data.
-2025-05-19 17:23:19 - INFO - [state_manager:173] - Saved character profiles to ORM.
-2025-05-19 17:23:19 - INFO - [state_manager:197] - Saved world building to ORM.
-2025-05-19 17:23:19 - INFO - [state_manager:149] - Saved plot outline to ORM.
-2025-05-19 17:23:19 - INFO - [novel_agent:96] - All (3) state objects saved to ORM successfully.
-2025-05-19 17:23:19 - INFO - [initial_setup_logic:322] - Skipping LLM world-building generation: Data was supplied by user file.
-2025-05-19 17:23:19 - INFO - [knowledge_management_logic:569] - Starting Knowledge Graph pre-population from plot and world data...
-2025-05-19 17:23:19 - INFO - [knowledge_management_logic:621] - Calling LLM for KG pre-population triple extraction...
-2025-05-19 17:23:20 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:24:23 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 2265 tk, Comp: 2441 tk, Total: 4706 tk
-2025-05-19 17:24:23 - INFO - [llm_interface:466] - Successfully parsed JSON list for KG pre-population triple extraction on 1st attempt.
-2025-05-19 17:24:23 - WARNING - [knowledge_management_logic:659] - Skipping invalid pre-population triple format (not list of 3): ['magic_system_is', 'primary_magic_system']
-2025-05-19 17:24:24 - INFO - [knowledge_management_logic:663] - KG pre-population complete: Added 74 foundational triples. Skipped 1 invalid triples.
-2025-05-19 17:24:24 - INFO - [novel_agent:137] - === Starting Chapter 1 Generation ===
-2025-05-19 17:24:24 - INFO - [chapter_planning_logic:23] - Planning Chapter 1 with detailed scenes...
-2025-05-19 17:24:24 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 1 (target scenes: 10-18)...
-2025-05-19 17:24:30 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:26:32 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1245 tk, Comp: 3212 tk, Total: 4457 tk
-2025-05-19 17:26:32 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 1 on 1st attempt.
-2025-05-19 17:26:32 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 1 with 18 scenes.
-2025-05-19 17:26:32 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 1...
-2025-05-19 17:26:32 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 1, Length: 343 chars.
-2025-05-19 17:26:32 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 1 was truncated for the prompt.
-2025-05-19 17:26:32 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 1 draft generation.
-2025-05-19 17:26:32 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 1 draft. Target minimum length: 15000 chars.
-2025-05-19 17:26:34 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:30:19 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 4429 tk, Comp: 4935 tk, Total: 9364 tk
-2025-05-19 17:30:19 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 1 (Length: 21986 chars).
-2025-05-19 17:30:19 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 1 draft (length: 21986 chars)...
-2025-05-19 17:30:19 - INFO - [chapter_evaluation_logic:211] - Skipping coherence check for Chapter 1.
-2025-05-19 17:30:21 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:30:21 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 1...
-2025-05-19 17:30:34 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:30:34 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7891 tk, Comp: 142 tk, Total: 8033 tk
-2025-05-19 17:30:34 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 1 on 1st attempt.
-2025-05-19 17:30:34 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 1 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: Yes.
-2025-05-19 17:30:34 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 1 complete. Needs revision: True.
-2025-05-19 17:30:34 - WARNING - [novel_agent:176] - Ch 1 initial draft flagged for revision. Reason(s):
-- Narrative Depth/Length Issues: The chapter provides strong descriptive detail and character introspection, particularly in Elara’s internal conflict and her haunting past. However, the narrative length is below the target of at least 15000 characters, which may feel brief for the events covered and the depth of world-building and emotional stakes introduced. The pacing is deliberate and appropriate for establishing tension and character motivation, but more expansion on dialogue with Theron’s cult or the immediate consequences of the inciting incident would enhance the chapter’s impact.
-2025-05-19 17:30:34 - WARNING - [chapter_revision_logic:32] - Attempting revision for chapter 1. Reason(s):
-Narrative Depth/Length Issues: The chapter provides strong descriptive detail and character introspection, particularly in Elara’s internal conflict and her haunting past. However, the narrative length is below the target of at least 15000 characters, which may feel brief for the events covered and the depth of world-building and emotional stakes introduced. The pacing is deliberate and appropriate for establishing tension and character motivation, but more expansion on dialogue with Theron’s cult or the immediate consequences of the inciting incident would enhance the chapter’s impact.
-2025-05-19 17:30:34 - INFO - [chapter_revision_logic:97] - Calling LLM (Qwen3-14B) for Ch 1 revision. Target minimum length: 15000 chars.
-2025-05-19 17:30:38 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:34:44 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 6216 tk, Comp: 4851 tk, Total: 11067 tk
-2025-05-19 17:34:44 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:34:44 - INFO - [chapter_revision_logic:125] - Revision similarity score with original draft: 0.8024
-2025-05-19 17:34:44 - INFO - [chapter_revision_logic:133] - Revision for ch 1 accepted (Length: 21767 chars).
-2025-05-19 17:34:44 - INFO - [novel_agent:184] - Revision attempted for ch 1. Re-evaluating revised draft...
-2025-05-19 17:34:44 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 1 draft (length: 21767 chars)...
-2025-05-19 17:34:44 - INFO - [chapter_evaluation_logic:211] - Skipping coherence check for Chapter 1.
-2025-05-19 17:34:44 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 1...
-2025-05-19 17:34:55 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:34:55 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7807 tk, Comp: 111 tk, Total: 7918 tk
-2025-05-19 17:34:55 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 1 on 1st attempt.
-2025-05-19 17:34:55 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 1 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: Yes.
-2025-05-19 17:34:55 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 1 complete. Needs revision: True.
-2025-05-19 17:34:55 - ERROR - [novel_agent:188] - Revised draft for ch 1 STILL FAILED evaluation. Reasons:
-- Narrative Depth/Length Issues: The chapter provides rich descriptive detail, character introspection, and dialogue development, aligning with the dark fantasy tone and thematic elements. However, the narrative length is slightly below the target of at least 15000 characters, though it is close and effectively covers the inciting incident with depth and pacing appropriate for its role in the story.
-2025-05-19 17:34:55 - INFO - [novel_agent:249] - Ch 1: Both drafts acceptably long. Kept revised (coherence None) as original has no coherence score (or neither do).
-2025-05-19 17:34:55 - WARNING - [novel_agent:252] - Ch 1: Proceeding with the revised draft, which was flagged as needing revision, after the other attempt also failed or was worse.
-2025-05-19 17:34:55 - INFO - [novel_agent:283] - Finalizing chapter 1 (From flawed draft: True). Text length: 21767.
-2025-05-19 17:35:03 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:35:03 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 4939 tk, Comp: 129 tk, Total: 5068 tk
-2025-05-19 17:35:03 - INFO - [knowledge_management_logic:64] - Generated summary for ch 1: 'Elara Vance, a scholar haunted by the past failure at Veylan’s Hollow, is drawn back to the Obsidian...'
-2025-05-19 17:35:03 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 1.
-2025-05-19 17:35:03 - INFO - [novel_agent:313] - Saved chapter text and raw LLM log files for ch 1.
-2025-05-19 17:35:03 - INFO - [novel_agent:317] - Core finalization complete for ch 1.
-2025-05-19 17:35:03 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 1 (Source from flawed draft: True)...
-2025-05-19 17:35:03 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 1...
-2025-05-19 17:35:03 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 1).
-2025-05-19 17:35:10 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:36:00 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 7470 tk, Comp: 2068 tk, Total: 9538 tk
-2025-05-19 17:36:00 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 1 on 1st attempt.
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 1 complete. Char updates: 5, World updates categories: 4, KG Triples: 21.
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 1. Characters in update: ['Elara Vance', 'High Justicar Theron', 'Mistress Evangeline', 'Kaelen', 'Professor Alden']
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Determined', 'Guilt-ridden', 'Haunted', 'Intelligent', 'Resourceful']
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'High Justicar Theron'. New value: 'ADD 'Actively pursuing the Obsidian Heart', and possibly 'Destructive'...'
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:121] - Applied modification to 'role_in_story' for 'Mistress Evangeline'. New value: 'ADD 'Advisor' or 'Guardian of Forbidden Knowledge'; MODIFY description...'
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:121] - Applied modification to 'role_in_story' for 'Kaelen'. New value: 'ADD 'Potential Ally' or 'Called Upon for Support'; MODIFY description:...'
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'Professor Alden'.
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'Professor Alden'. New value: 'ADD 'Warned Elara about the dangers of the Obsidian Heart'; MODIFY rol...'
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 1. Updated: 4, New: 1.
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 1. Categories in update: ['locations', 'lore', 'systems', 'history']
-2025-05-19 17:36:00 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 1. Approximately 8 items affected/added.
-2025-05-19 17:36:01 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 1: Attempted to add 21 triples, skipped 0.
-2025-05-19 17:36:01 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 1.
-2025-05-19 17:36:01 - INFO - [state_manager:149] - Saved plot outline to ORM.
-2025-05-19 17:36:01 - INFO - [state_manager:173] - Saved character profiles to ORM.
-2025-05-19 17:36:01 - INFO - [state_manager:197] - Saved world building to ORM.
-2025-05-19 17:36:01 - INFO - [novel_agent:96] - All (3) state objects saved to ORM successfully.
-2025-05-19 17:36:01 - INFO - [novel_agent:279] - === Finished Ch 1 With Flaws (Accepted after failed revision, no revision, or due to issues) ===
-2025-05-19 17:36:01 - INFO - [novel_agent:137] - === Starting Chapter 2 Generation ===
-2025-05-19 17:36:01 - INFO - [chapter_planning_logic:23] - Planning Chapter 2 with detailed scenes...
-2025-05-19 17:36:01 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 2 (target scenes: 10-18)...
-2025-05-19 17:36:08 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:38:11 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1641 tk, Comp: 3180 tk, Total: 4821 tk
-2025-05-19 17:38:11 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 2 on 1st attempt.
-2025-05-19 17:38:11 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 2 with 18 scenes.
-2025-05-19 17:38:11 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 2...
-2025-05-19 17:38:11 - INFO - [context_generation_logic:32] - Semantic context query for ch 2 based on Plot Point 2: 'Rising Action 1: Elara, with Kaelen's reluctant help, seeks information from Mistress Evangeline and...'
-2025-05-19 17:38:11 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:38:11 - INFO - [state_manager:299] - Async ORM: Retrieved 1 past embeddings.
-2025-05-19 17:38:11 - INFO - [context_generation_logic:86] - Top 1 relevant chapters for SEMANTIC context (semantic search): [1] (Scores: ['0.679'])
-2025-05-19 17:38:11 - INFO - [context_generation_logic:129] - Constructed final SEMANTIC context: 632 chars from chapters [1].
-2025-05-19 17:38:11 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 2, Length: 927 chars.
-2025-05-19 17:38:11 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 2 was truncated for the prompt.
-2025-05-19 17:38:11 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 2 draft generation.
-2025-05-19 17:38:11 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 2 draft. Target minimum length: 15000 chars.
-2025-05-19 17:38:15 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:40:57 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 6363 tk, Comp: 3370 tk, Total: 9733 tk
-2025-05-19 17:40:57 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 2 (Length: 15136 chars).
-2025-05-19 17:40:57 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 2 draft (length: 15136 chars)...
-2025-05-19 17:40:57 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:40:57 - INFO - [chapter_evaluation_logic:204] - Coherence score with previous chapter (1): 0.7797
-2025-05-19 17:40:57 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 2...
-2025-05-19 17:41:13 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:41:13 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 8304 tk, Comp: 171 tk, Total: 8475 tk
-2025-05-19 17:41:13 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 2 on 1st attempt.
-2025-05-19 17:41:13 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 2 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: Yes.
-2025-05-19 17:41:13 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 2 complete. Needs revision: True.
-2025-05-19 17:41:13 - WARNING - [novel_agent:176] - Ch 2 initial draft flagged for revision. Reason(s):
-- Narrative Depth/Length Issues: The chapter provides a substantial amount of descriptive detail and character introspection, especially in Elara’s internal conflict and the atmospheric setting of the Grand Library. However, the narrative length is slightly below the target of at least 15000 characters (approximately 14,800 characters). While it covers the key events of Rising Action 1—seeking information from Mistress Evangeline, learning the true danger of the Obsidian Heart, and being pursued by Theron’s agents—the pacing feels tight in places, particularly during the fight scene, which could benefit from more extended tension or character interaction to fully immerse the reader.
-2025-05-19 17:41:13 - WARNING - [chapter_revision_logic:32] - Attempting revision for chapter 2. Reason(s):
-Narrative Depth/Length Issues: The chapter provides a substantial amount of descriptive detail and character introspection, especially in Elara’s internal conflict and the atmospheric setting of the Grand Library. However, the narrative length is slightly below the target of at least 15000 characters (approximately 14,800 characters). While it covers the key events of Rising Action 1—seeking information from Mistress Evangeline, learning the true danger of the Obsidian Heart, and being pursued by Theron’s agents—the pacing feels tight in places, particularly during the fight scene, which could benefit from more extended tension or character interaction to fully immerse the reader.
-2025-05-19 17:41:13 - INFO - [chapter_revision_logic:97] - Calling LLM (Qwen3-14B) for Ch 2 revision. Target minimum length: 15000 chars.
-2025-05-19 17:41:18 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:45:19 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 6337 tk, Comp: 4671 tk, Total: 11008 tk
-2025-05-19 17:45:19 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:45:19 - INFO - [chapter_revision_logic:125] - Revision similarity score with original draft: 0.6880
-2025-05-19 17:45:19 - INFO - [chapter_revision_logic:133] - Revision for ch 2 accepted (Length: 21060 chars).
-2025-05-19 17:45:19 - INFO - [novel_agent:184] - Revision attempted for ch 2. Re-evaluating revised draft...
-2025-05-19 17:45:19 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 2 draft (length: 21060 chars)...
-2025-05-19 17:45:19 - INFO - [chapter_evaluation_logic:204] - Coherence score with previous chapter (1): 0.7124
-2025-05-19 17:45:19 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 2...
-2025-05-19 17:45:25 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:45:25 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 9605 tk, Comp: 42 tk, Total: 9647 tk
-2025-05-19 17:45:25 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 2 on 1st attempt.
-2025-05-19 17:45:25 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 2 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: No.
-2025-05-19 17:45:25 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 2 complete. Needs revision: False.
-2025-05-19 17:45:25 - INFO - [novel_agent:256] - Revised draft for ch 2 passed re-evaluation.
-2025-05-19 17:45:25 - INFO - [novel_agent:283] - Finalizing chapter 2 (From flawed draft: False). Text length: 21060.
-2025-05-19 17:45:33 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:45:33 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 4759 tk, Comp: 94 tk, Total: 4853 tk
-2025-05-19 17:45:33 - INFO - [knowledge_management_logic:64] - Generated summary for ch 2: 'Elara enters the Grand Library of Aethelburg to uncover the truth about the Obsidian Heart, which sh...'
-2025-05-19 17:45:33 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 2.
-2025-05-19 17:45:33 - INFO - [novel_agent:313] - Saved chapter text and raw LLM log files for ch 2.
-2025-05-19 17:45:33 - INFO - [novel_agent:317] - Core finalization complete for ch 2.
-2025-05-19 17:45:33 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 2 (Source from flawed draft: False)...
-2025-05-19 17:45:33 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 2...
-2025-05-19 17:45:33 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 2).
-2025-05-19 17:45:41 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:46:41 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 9068 tk, Comp: 2407 tk, Total: 11475 tk
-2025-05-19 17:46:41 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 2 on 1st attempt.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 2 complete. Char updates: 4, World updates categories: 4, KG Triples: 25.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 2. Characters in update: ['Elara Vance', 'Kaelen', 'Mistress Evangeline', 'High Justicar Theron']
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Brave', 'Determined', 'Guilt-ridden', 'Haunted', 'Initially Cautious', 'Intelligent', 'Living force tied to her actions.', 'Resourceful']
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Kaelen'. New traits: ['Cynical', 'Haunted', 'Loyal', 'Past connection to the Obsidian Heart.', 'Pragmatic', 'Skilled Fighter']
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Mistress Evangeline'. New traits: ['Ancient', 'Defiant', 'Knowledgeable', 'Mysterious', 'Neutral?', 'True nature of Obsidian Heart is a prison and a god.']
-2025-05-19 17:46:41 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'High Justicar Theron'. Proposal: 'ADD 'Enemy_of': 'Elara Vance'; MODIFY status: ADD 'Directly opposed by Elara and Evangeline.''. Expected 'MODIFY key: value'.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 2. Updated: 4, New: 0.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 2. Categories in update: ['locations', 'lore', 'systems', 'history']
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 2. Approximately 10 items affected/added.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 2: Attempted to add 25 triples, skipped 0.
-2025-05-19 17:46:41 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 2.
-2025-05-19 17:46:41 - INFO - [state_manager:149] - Saved plot outline to ORM.
-2025-05-19 17:46:41 - INFO - [state_manager:173] - Saved character profiles to ORM.
-2025-05-19 17:46:41 - INFO - [state_manager:197] - Saved world building to ORM.
-2025-05-19 17:46:41 - INFO - [novel_agent:96] - All (3) state objects saved to ORM successfully.
-2025-05-19 17:46:41 - INFO - [novel_agent:279] - === Finished Ch 2 Successfully ===
-2025-05-19 17:46:41 - INFO - [novel_agent:137] - === Starting Chapter 3 Generation ===
-2025-05-19 17:46:41 - INFO - [chapter_planning_logic:23] - Planning Chapter 3 with detailed scenes...
-2025-05-19 17:46:41 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 3 (target scenes: 10-18)...
-2025-05-19 17:46:48 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:49:21 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1710 tk, Comp: 3919 tk, Total: 5629 tk
-2025-05-19 17:49:21 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 3 on 1st attempt.
-2025-05-19 17:49:21 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 3 with 18 scenes.
-2025-05-19 17:49:21 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 3...
-2025-05-19 17:49:21 - INFO - [context_generation_logic:32] - Semantic context query for ch 3 based on Plot Point 3: 'Rising Action 2: Elara and Kaelen navigate the Serpent's Coil Bazaar to find a map or key to the Obs...'
-2025-05-19 17:49:21 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:49:21 - INFO - [state_manager:299] - Async ORM: Retrieved 2 past embeddings.
-2025-05-19 17:49:21 - INFO - [context_generation_logic:86] - Top 2 relevant chapters for SEMANTIC context (semantic search): [1, 2] (Scores: ['0.658', '0.652'])
-2025-05-19 17:49:21 - INFO - [context_generation_logic:129] - Constructed final SEMANTIC context: 1069 chars from chapters [2, 1].
-2025-05-19 17:49:21 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 3, Length: 1364 chars.
-2025-05-19 17:49:21 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 3 was truncated for the prompt.
-2025-05-19 17:49:21 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 3 draft generation.
-2025-05-19 17:49:21 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 3 draft. Target minimum length: 15000 chars.
-2025-05-19 17:49:25 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:51:50 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 7591 tk, Comp: 2964 tk, Total: 10555 tk
-2025-05-19 17:51:50 - WARNING - [chapter_drafting_logic:120] - Ch 3 draft is short (12840 chars) after cleaning, but will be passed for evaluation/revision. Min required: 15000. Snippet: 'The tavern was a place of shadows and secrets, its walls lined with damp, peeling plaster and the scent of stale ale clinging to the air like a second skin. Elara sat hunched over a table in one of th...'
-2025-05-19 17:51:50 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 3 (Length: 12840 chars).
-2025-05-19 17:51:50 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 3 draft (length: 12840 chars)...
-2025-05-19 17:51:50 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:51:50 - INFO - [chapter_evaluation_logic:204] - Coherence score with previous chapter (2): 0.4109
-2025-05-19 17:51:50 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 3...
-2025-05-19 17:52:04 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:52:04 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 9038 tk, Comp: 123 tk, Total: 9161 tk
-2025-05-19 17:52:04 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 3 on 1st attempt.
-2025-05-19 17:52:04 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 3 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: Yes.
-2025-05-19 17:52:04 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 3 complete. Needs revision: True.
-2025-05-19 17:52:04 - WARNING - [novel_agent:176] - Ch 3 initial draft flagged for revision. Reason(s):
-- Draft is too short (12840 chars). Minimum required: 15000.
-- Low coherence with previous chapter (Score: 0.4109, Threshold: 0.6).
-- Narrative Depth/Length Issues: The chapter provides sufficient descriptive detail, character introspection, and dialogue development to support its narrative events. However, the total length is slightly below the target of at least 15000 characters, which may feel brief for the amount of world-building, tension, and character development covered. Some emotional beats could be expanded further to deepen Elara’s internal conflict and Kaelen’s dynamic with her.
-2025-05-19 17:52:04 - WARNING - [chapter_revision_logic:32] - Attempting revision for chapter 3. Reason(s):
-Draft is too short (12840 chars). Minimum required: 15000.
-- Low coherence with previous chapter (Score: 0.4109, Threshold: 0.6).
-- Narrative Depth/Length Issues: The chapter provides sufficient descriptive detail, character introspection, and dialogue development to support its narrative events. However, the total length is slightly below the target of at least 15000 characters, which may feel brief for the amount of world-building, tension, and character development covered. Some emotional beats could be expanded further to deepen Elara’s internal conflict and Kaelen’s dynamic with her.
-2025-05-19 17:52:04 - INFO - [chapter_revision_logic:97] - Calling LLM (Qwen3-14B) for Ch 3 revision. Target minimum length: 15000 chars.
-2025-05-19 17:52:09 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:56:50 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 6453 tk, Comp: 5409 tk, Total: 11862 tk
-2025-05-19 17:56:52 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
-2025-05-19 17:56:52 - INFO - [chapter_revision_logic:125] - Revision similarity score with original draft: 0.3460
-2025-05-19 17:56:52 - INFO - [chapter_revision_logic:133] - Revision for ch 3 accepted (Length: 24074 chars).
-2025-05-19 17:56:52 - INFO - [novel_agent:184] - Revision attempted for ch 3. Re-evaluating revised draft...
-2025-05-19 17:56:52 - INFO - [chapter_evaluation_logic:181] - Evaluating chapter 3 draft (length: 24074 chars)...
-2025-05-19 17:56:52 - INFO - [chapter_evaluation_logic:204] - Coherence score with previous chapter (2): 0.7878
-2025-05-19 17:56:52 - INFO - [chapter_evaluation_logic:130] - Calling LLM (Qwen3-14B) for comprehensive evaluation of chapter 3...
-2025-05-19 17:57:04 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:57:04 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 11483 tk, Comp: 117 tk, Total: 11600 tk
-2025-05-19 17:57:04 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive evaluation for ch 3 on 1st attempt.
-2025-05-19 17:57:04 - INFO - [chapter_evaluation_logic:167] - Comprehensive evaluation for Ch 3 complete. Issues - Consistency: No, Plot Arc: No, Thematic: No, Depth/Length: Yes.
-2025-05-19 17:57:04 - INFO - [chapter_evaluation_logic:238] - Evaluation for Ch 3 complete. Needs revision: True.
-2025-05-19 17:57:04 - ERROR - [novel_agent:188] - Revised draft for ch 3 STILL FAILED evaluation. Reasons:
-- Narrative Depth/Length Issues: The chapter provides rich descriptive detail, emotional introspection, and dialogue development, but it may feel slightly brief for the complexity of events and the target length of at least 15000 characters. While the pacing is appropriate for a tense exploration and confrontation, some internal monologue and world-building elements could be expanded to deepen the reader’s immersion and understanding of the stakes.
-2025-05-19 17:57:04 - INFO - [novel_agent:249] - Ch 3: Kept revised draft (length 24074, acceptable) as original draft was too short (length 12840).
-2025-05-19 17:57:04 - WARNING - [novel_agent:252] - Ch 3: Proceeding with the revised draft, which was flagged as needing revision, after the other attempt also failed or was worse.
-2025-05-19 17:57:04 - INFO - [novel_agent:283] - Finalizing chapter 3 (From flawed draft: True). Text length: 24074.
-2025-05-19 17:57:12 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:57:12 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 5497 tk, Comp: 112 tk, Total: 5609 tk
-2025-05-19 17:57:12 - INFO - [knowledge_management_logic:64] - Generated summary for ch 3: 'Elara realizes the Obsidian Heart was not just hidden but sealed by an ancient order, and she must c...'
-2025-05-19 17:57:12 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 3.
-2025-05-19 17:57:12 - INFO - [novel_agent:313] - Saved chapter text and raw LLM log files for ch 3.
-2025-05-19 17:57:12 - INFO - [novel_agent:317] - Core finalization complete for ch 3.
-2025-05-19 17:57:12 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 3 (Source from flawed draft: True)...
-2025-05-19 17:57:12 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 3...
-2025-05-19 17:57:12 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 3).
-2025-05-19 17:57:21 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
-2025-05-19 17:58:26 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 10850 tk, Comp: 2559 tk, Total: 13409 tk
-2025-05-19 17:58:26 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 3 on 1st attempt.
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 3 complete. Char updates: 6, World updates categories: 3, KG Triples: 29.
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 3. Characters in update: ['Elara Vance', 'Kaelen', 'Mistress Evangeline', 'High Justicar Theron', 'Riven', 'The Merchant']
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Brave', 'Determined', 'Guilt-ridden', 'Haunted', 'Intelligent', 'Living force tied to her actions.', 'Resolute', 'Resourceful']
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Kaelen'. New traits: ['Cynical', 'Haunted', 'Loyal', 'Past connection to the Obsidian Heart.', 'Pragmatic', 'Skilled Fighter', 'Strategic']
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'status' for 'Mistress Evangeline'. New value: 'Still in Aethelburg, but her influence is felt through her prior guida...'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'status' for 'High Justicar Theron'. New value: 'Active in pursuit of Elara and the Obsidian Heart. His cult has expand...'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'Riven'.
-2025-05-19 17:58:26 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'Riven'. Proposal: 'ADD traits: 'Cynical', 'Mysterious', 'Deals in forbidden knowledge'. ADD role_in_story: 'Smuggler in the Undercroft who aids Elara and Kaelen.''. Expected 'MODIFY key: value'.
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Merchant'.
-2025-05-19 17:58:26 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'The Merchant'. Proposal: 'ADD traits: 'Keeper of forbidden knowledge', 'Mysterious'. ADD role_in_story: 'Dealer in relics and secrets of the Undercroft.''. Expected 'MODIFY key: value'.
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 3. Updated: 4, New: 2.
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 3. Categories in update: ['locations', 'lore', 'systems']
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'locations.The Serpent's Coil Bazaar'. New value: 'ADD 'Labyrinthine structure with hidden corridors.' MODIFY atmosphere:...'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'locations.The Obsidian Archives'. New value: 'ADD 'Hidden beneath the Bazaar, accessible through secret passages.' M...'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'locations.The Undercroft'. New value: 'ADD 'Home to outcasts, smugglers, and secret knowledge.' MODIFY atmosp...'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'lore.The Obsidian Heart'. New value: 'ADD 'Prison of an ancient god or entity....'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'lore.The Great Silencing'. New value: 'ADD 'Directly linked to the sealing of the Obsidian Heart....'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'systems.Primary Magic System'. New value: 'ADD 'Feeds on magic and is a sentient force....'
-2025-05-19 17:58:26 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 3. Approximately 6 items affected/added.
-2025-05-19 17:58:27 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 3: Attempted to add 29 triples, skipped 0.
-2025-05-19 17:58:27 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 3.
-2025-05-19 17:58:27 - INFO - [state_manager:149] - Saved plot outline to ORM.
-2025-05-19 17:58:27 - INFO - [state_manager:197] - Saved world building to ORM.
-2025-05-19 17:58:27 - INFO - [state_manager:173] - Saved character profiles to ORM.
-2025-05-19 17:58:27 - INFO - [novel_agent:96] - All (3) state objects saved to ORM successfully.
-2025-05-19 17:58:27 - INFO - [novel_agent:279] - === Finished Ch 3 With Flaws (Accepted after failed revision, no revision, or due to issues) ===
-2025-05-19 17:58:27 - INFO - [state_manager:215] - Async ORM loaded chapter count: 3
-2025-05-19 17:58:27 - INFO - [__main__:193] - --- Saga Novel Generation Run Finished. Final DB chapter count: 3 ---
+2025-05-19 22:35:15 - INFO - [root:32] - File logging enabled. Log file: novel_output/saga_run.log
+2025-05-19 22:35:15 - INFO - [root:37] - Logging setup complete. Level: INFO
+2025-05-19 22:35:15 - INFO - [__main__:140] - --- Starting Saga Novel Generation (Execution Mode: Async) ---
+2025-05-19 22:35:15 - INFO - [state_manager:120] - Database tables created/verified via ORM based on current models.
+2025-05-19 22:35:15 - INFO - [__main__:145] - state_manager initialized and database tables checked/created.
+2025-05-19 22:35:15 - INFO - [novel_agent:30] - Initializing NovelWriterAgent instance...
+2025-05-19 22:35:15 - INFO - [novel_agent:35] - NovelWriterAgent instance created. Call async_init() to load/prepare state.
+2025-05-19 22:35:15 - INFO - [novel_agent:39] - NovelWriterAgent async_init started...
+2025-05-19 22:35:15 - INFO - [state_manager:215] - Async ORM loaded chapter count: 0
+2025-05-19 22:35:15 - INFO - [novel_agent:42] - Loaded chapter count from ORM: 0
+2025-05-19 22:35:15 - WARNING - [novel_agent:64] - Plot outline is empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-19 22:35:15 - WARNING - [novel_agent:66] - Character profiles are empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-19 22:35:15 - WARNING - [novel_agent:68] - World building is empty after ORM load. Expected during initial setup or if save failed previously.
+2025-05-19 22:35:15 - INFO - [novel_agent:70] - NovelWriterAgent async_init complete.
+2025-05-19 22:35:15 - INFO - [__main__:149] - NovelWriterAgent initialized and state loaded successfully.
+2025-05-19 22:35:15 - INFO - [__main__:42] - Performing initial setup...
+2025-05-19 22:35:15 - INFO - [initial_setup_logic:186] - Generating plot outline. Unhinged mode: False
+2025-05-19 22:35:15 - INFO - [initial_setup_logic:59] - Successfully loaded user-supplied story data from 'user_story_elements.json'.
+2025-05-19 22:35:15 - INFO - [initial_setup_logic:191] - Processing user-supplied story data for initial setup.
+2025-05-19 22:35:15 - INFO - [initial_setup_logic:177] - Agent state (plot_outline, character_profiles, world_building) populated from user-supplied data.
+2025-05-19 22:35:15 - INFO - [state_manager:197] - Saved world building to ORM.
+2025-05-19 22:35:15 - INFO - [state_manager:173] - Saved character profiles to ORM.
+2025-05-19 22:35:15 - INFO - [state_manager:149] - Saved plot outline to ORM.
+2025-05-19 22:35:15 - INFO - [novel_agent:94] - All (3) state objects saved to ORM successfully.
+2025-05-19 22:35:15 - INFO - [initial_setup_logic:322] - Skipping LLM world-building generation: Data was supplied by user file.
+2025-05-19 22:35:15 - INFO - [knowledge_management_logic:569] - Starting Knowledge Graph pre-population from plot and world data...
+2025-05-19 22:35:15 - INFO - [knowledge_management_logic:621] - Calling LLM for KG pre-population triple extraction...
+2025-05-19 22:35:16 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:36:15 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 2265 tk, Comp: 2316 tk, Total: 4581 tk
+2025-05-19 22:36:15 - INFO - [llm_interface:466] - Successfully parsed JSON list for KG pre-population triple extraction on 1st attempt.
+2025-05-19 22:36:16 - INFO - [knowledge_management_logic:663] - KG pre-population complete: Added 75 foundational triples. Skipped 0 invalid triples.
+2025-05-19 22:36:16 - INFO - [novel_agent:131] - === Starting Chapter 1 Generation ===
+2025-05-19 22:36:16 - INFO - [chapter_planning_logic:23] - Planning Chapter 1 with detailed scenes...
+2025-05-19 22:36:16 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 1 (target scenes: 10-18)...
+2025-05-19 22:36:22 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:38:33 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1245 tk, Comp: 3442 tk, Total: 4687 tk
+2025-05-19 22:38:33 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 1 on 1st attempt.
+2025-05-19 22:38:33 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 1 with 18 scenes.
+2025-05-19 22:38:33 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 1...
+2025-05-19 22:38:33 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 1, Length: 343 chars.
+2025-05-19 22:38:33 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 1 was truncated for the prompt.
+2025-05-19 22:38:33 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 1 draft generation.
+2025-05-19 22:38:33 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 1 draft. Target minimum length: 15000 chars.
+2025-05-19 22:38:35 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:41:01 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 4470 tk, Comp: 3262 tk, Total: 7732 tk
+2025-05-19 22:41:01 - WARNING - [chapter_drafting_logic:120] - Ch 1 draft is short (14389 chars) after cleaning, but will be passed for evaluation/revision. Min required: 15000. Snippet: 'The pawn shop was a relic of the city’s forgotten past, its wooden sign sagging under the weight of time and neglect. Elara Vance stood before it now, her breath catching in the damp chill of the even...'
+2025-05-19 22:41:01 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 1 (Length: 14389 chars).
+2025-05-19 22:41:01 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 1 draft (length: 14389 chars)...
+2025-05-19 22:41:01 - INFO - [chapter_evaluation_logic:287] - Skipping coherence check for Chapter 1.
+2025-05-19 22:41:03 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:41:03 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 1...
+2025-05-19 22:41:39 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:41:39 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 6454 tk, Comp: 649 tk, Total: 7103 tk
+2025-05-19 22:41:39 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 1 on 1st attempt.
+2025-05-19 22:41:39 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 1 complete. Problems found: 5 (consistency: 1, plot_arc: 1).
+2025-05-19 22:41:39 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 1 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Draft is too short (14389 chars). Minimum required: 15000.; Plot Arc deviation identified by LLM.. Detailed problems: 6
+2025-05-19 22:41:39 - WARNING - [novel_agent:170] - Ch 1 initial draft (14389 chars) flagged for revision. Reasons: Consistency issues identified by LLM.; Draft is too short (14389 chars). Minimum required: 15000.; Plot Arc deviation identified by LLM.
+2025-05-19 22:41:39 - WARNING - [chapter_revision_logic:302] - Attempting revision for chapter 1. Reason(s) summary:
+- Consistency issues identified by LLM.
+- Draft is too short (14389 chars). Minimum required: 15000.
+- Plot Arc deviation identified by LLM.
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:308] - Patch-based revision enabled. Attempting to generate and apply patches for Ch 1 (6 problems identified).
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:187] - Skipping patch generation for 'N/A - General Issue' problem in Ch 1: 'Draft is too short (14389 chars). Minimum required: 15000.'. This type of issue is hard to target with specific quote-based patches and will be assessed by overall chapter length evaluation after other patches.
+2025-05-19 22:41:39 - WARNING - [chapter_revision_logic:36] - Quote for context window not found in text: 'You shouldn’t have found that manuscript. You don’...' Returning full text snippet as fallback.
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 1. Problem: The antagonist, High Justicar Theron, is not directly refere... Quote: They are coming for what you now know. You should have left ...
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 1. Problem: The inciting incident is not clearly resolved or fully estab... Quote: You shouldn’t have found that manuscript. You don’t understa...
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 1. Problem: The theme of the corrupting influence of ancient power and t... Quote: She had spent years avoiding anything that might remind her ...
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 1. Problem: The chapter lacks sufficient descriptive detail and emotiona... Quote: Elara’s mind was a blur of fear and guilt. She had thought s...
+2025-05-19 22:41:39 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 1. Problem: The chapter is somewhat short for the amount of plot progres... Quote: The bazaar was a labyrinth of narrow passageways and towerin...
+2025-05-19 22:41:50 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:41:50 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2489 tk, Comp: 155 tk, Total: 2644 tk
+2025-05-19 22:41:54 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:41:54 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2536 tk, Comp: 319 tk, Total: 2855 tk
+2025-05-19 22:42:02 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:42:02 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2604 tk, Comp: 311 tk, Total: 2915 tk
+2025-05-19 22:42:03 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:42:03 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2463 tk, Comp: 510 tk, Total: 2973 tk
+2025-05-19 22:42:06 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:42:06 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2518 tk, Comp: 191 tk, Total: 2709 tk
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:212] - Generated 5 patch instructions for Ch 1.
+2025-05-19 22:42:06 - WARNING - [chapter_revision_logic:235] - Patching: `search_text` not found in original text. Skipping patch. Search: 'You shouldn’t have found that manuscript. You don’t understand what you’ve touched....'
+2025-05-19 22:42:06 - WARNING - [chapter_revision_logic:249] - 1/5 patches could not be applied because their search_text was not found in the original chapter.
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 11032-11146 (len 114) with new text (len 1405). Snippet: 'Elara’s mind was a blur of fear and guilt, her tho...'
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 8282-8504 (len 222) with new text (len 1398). Snippet: 'The bazaar was a labyrinth of narrow passageways a...'
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 5755-5831 (len 76) with new text (len 632). Snippet: 'They are coming for what you now know. You should ...'
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 2923-3030 (len 107) with new text (len 898). Snippet: 'She had spent years running from the weight of the...'
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:319] - Successfully applied 5 patches to Ch 1. Original len: 14389, Patched len: 18203.
+2025-05-19 22:42:06 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:348] - Patched text similarity score with original draft: 0.6899
+2025-05-19 22:42:06 - INFO - [chapter_revision_logic:477] - Revision process for ch 1 produced a candidate text (Length: 18203 chars).
+2025-05-19 22:42:06 - INFO - [novel_agent:184] - Revision attempted for ch 1. Re-evaluating revised draft (18203 chars)...
+2025-05-19 22:42:06 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 1 draft (length: 18203 chars)...
+2025-05-19 22:42:06 - INFO - [chapter_evaluation_logic:287] - Skipping coherence check for Chapter 1.
+2025-05-19 22:42:06 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 1...
+2025-05-19 22:42:43 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:42:43 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 7294 tk, Comp: 653 tk, Total: 7947 tk
+2025-05-19 22:42:43 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 1 on 1st attempt.
+2025-05-19 22:42:43 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 1 complete. Problems found: 5 (consistency: 1, plot_arc: 1).
+2025-05-19 22:42:43 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 1 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.. Detailed problems: 5
+2025-05-19 22:42:43 - ERROR - [novel_agent:190] - Revised draft for ch 1 STILL FAILED evaluation. Reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.
+2025-05-19 22:42:43 - WARNING - [novel_agent:201] - Proceeding with revised draft (18203 chars) despite failing re-evaluation, as it's preferred over original (14389 chars) or original was too short.
+2025-05-19 22:42:43 - INFO - [novel_agent:237] - Finalizing chapter 1 (From flawed draft: True). Text length: 18203.
+2025-05-19 22:42:51 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:42:51 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 4190 tk, Comp: 115 tk, Total: 4305 tk
+2025-05-19 22:42:51 - INFO - [knowledge_management_logic:64] - Generated summary for ch 1: 'Elara Vance discovers an ancient manuscript about the Obsidian Heart in a mysterious pawn shop, lear...'
+2025-05-19 22:42:51 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 1.
+2025-05-19 22:42:51 - INFO - [novel_agent:265] - Saved chapter text and raw LLM log files for ch 1.
+2025-05-19 22:42:51 - INFO - [novel_agent:269] - Core finalization complete for ch 1.
+2025-05-19 22:42:51 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 1 (Source from flawed draft: True)...
+2025-05-19 22:42:51 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 1...
+2025-05-19 22:42:51 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 1).
+2025-05-19 22:42:58 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:43:58 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 6659 tk, Comp: 2541 tk, Total: 9200 tk
+2025-05-19 22:43:58 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 1 on 1st attempt.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 1 complete. Char updates: 7, World updates categories: 5, KG Triples: 33.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 1. Characters in update: ['Elara Vance', 'High Justicar Theron', 'Kaelen', 'Mistress Evangeline', 'The Shop Owner', 'The Masked Figure', "The Dealer at the Serpent's Coil Bazaar"]
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Determined', 'Guilt-ridden', 'Haunted', 'Intelligent', 'Resourceful', 'realizes the Obsidian Heart is real and tied to a prophecy']
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:121] - Applied modification to 'motivations' for 'High Justicar Theron'. New value: 'ADD 'To activate the Obsidian Heart and wield its power...'
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Kaelen'. New traits: ['Cynical', 'Loyal', 'Pragmatic', 'Skilled Fighter', 'Wary']
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:121] - Applied modification to 'role_in_story' for 'Mistress Evangeline'. New value: 'ADD 'Seems to know more about the artifact than she reveals...'
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Shop Owner'.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Masked Figure'.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Dealer at the Serpent's Coil Bazaar'.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 1. Updated: 4, New: 3.
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 1. Categories in update: ['locations', 'lore', 'systems', 'history', 'society']
+2025-05-19 22:43:58 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 1. Approximately 7 items affected/added.
+2025-05-19 22:43:59 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 1: Attempted to add 33 triples, skipped 0.
+2025-05-19 22:43:59 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 1.
+2025-05-19 22:43:59 - INFO - [state_manager:149] - Saved plot outline to ORM.
+2025-05-19 22:43:59 - INFO - [state_manager:173] - Saved character profiles to ORM.
+2025-05-19 22:43:59 - INFO - [state_manager:197] - Saved world building to ORM.
+2025-05-19 22:43:59 - INFO - [novel_agent:94] - All (3) state objects saved to ORM successfully.
+2025-05-19 22:43:59 - INFO - [novel_agent:233] - === Finished Ch 1 With Flaws (Marked as flawed due to evaluation or length issues) ===
+2025-05-19 22:43:59 - INFO - [novel_agent:131] - === Starting Chapter 2 Generation ===
+2025-05-19 22:43:59 - INFO - [chapter_planning_logic:23] - Planning Chapter 2 with detailed scenes...
+2025-05-19 22:43:59 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 2 (target scenes: 10-18)...
+2025-05-19 22:44:05 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:46:19 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1627 tk, Comp: 3445 tk, Total: 5072 tk
+2025-05-19 22:46:19 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 2 on 1st attempt.
+2025-05-19 22:46:19 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 2 with 18 scenes.
+2025-05-19 22:46:19 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 2...
+2025-05-19 22:46:19 - INFO - [context_generation_logic:32] - Semantic context query for ch 2 based on Plot Point 2: 'Rising Action 1: Elara, with Kaelen's reluctant help, seeks information from Mistress Evangeline and...'
+2025-05-19 22:46:19 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:46:19 - INFO - [state_manager:299] - Async ORM: Retrieved 1 past embeddings.
+2025-05-19 22:46:19 - INFO - [context_generation_logic:86] - Top 1 relevant chapters for SEMANTIC context (semantic search): [1] (Scores: ['0.458'])
+2025-05-19 22:46:19 - INFO - [context_generation_logic:129] - Constructed final SEMANTIC context: 564 chars from chapters [1].
+2025-05-19 22:46:19 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 2, Length: 859 chars.
+2025-05-19 22:46:19 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 2 was truncated for the prompt.
+2025-05-19 22:46:19 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 2 draft generation.
+2025-05-19 22:46:19 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 2 draft. Target minimum length: 15000 chars.
+2025-05-19 22:46:22 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:48:25 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 6870 tk, Comp: 2581 tk, Total: 9451 tk
+2025-05-19 22:48:26 - WARNING - [chapter_drafting_logic:120] - Ch 2 draft is short (11571 chars) after cleaning, but will be passed for evaluation/revision. Min required: 15000. Snippet: 'The night air in Aethelburg was thick with a silence that pressed upon Elara like a weight she could not shake. She moved through the cobbled streets with measured steps, her cloak billowing slightly ...'
+2025-05-19 22:48:26 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 2 (Length: 11571 chars).
+2025-05-19 22:48:26 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 2 draft (length: 11571 chars)...
+2025-05-19 22:48:26 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:48:26 - INFO - [chapter_evaluation_logic:273] - Coherence score with previous chapter (1): 0.6639
+2025-05-19 22:48:26 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 2...
+2025-05-19 22:49:06 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:06 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 8153 tk, Comp: 645 tk, Total: 8798 tk
+2025-05-19 22:49:06 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 2 on 1st attempt.
+2025-05-19 22:49:06 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 2 complete. Problems found: 5 (consistency: 1, plot_arc: 1, thematic: 1, narrative_depth: 2).
+2025-05-19 22:49:06 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 2 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Draft is too short (11571 chars). Minimum required: 15000.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.. Detailed problems: 6
+2025-05-19 22:49:06 - WARNING - [novel_agent:170] - Ch 2 initial draft (11571 chars) flagged for revision. Reasons: Consistency issues identified by LLM.; Draft is too short (11571 chars). Minimum required: 15000.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.
+2025-05-19 22:49:06 - WARNING - [chapter_revision_logic:302] - Attempting revision for chapter 2. Reason(s) summary:
+- Consistency issues identified by LLM.
+- Draft is too short (11571 chars). Minimum required: 15000.
+- Narrative Depth/Length issues identified by LLM.
+- Plot Arc deviation identified by LLM.
+- Thematic issues identified by LLM.
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:308] - Patch-based revision enabled. Attempting to generate and apply patches for Ch 2 (6 problems identified).
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:187] - Skipping patch generation for 'N/A - General Issue' problem in Ch 2: 'Draft is too short (11571 chars). Minimum required: 15000.'. This type of issue is hard to target with specific quote-based patches and will be assessed by overall chapter length evaluation after other patches.
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 2. Problem: The chapter introduces the 'Obsidian Veil' as Theron's agent... Quote: two figures emerged from the shadows, cloaked in black with ...
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 2. Problem: The chapter does not clearly advance the 'Rising Action 1' p... Quote: They’re not just chasing me—they’re hunting me...
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 2. Problem: The theme of the 'corrupting influence of ancient power and ... Quote: A fragment of your memory must be given in return...
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 2. Problem: The chapter lacks sufficient descriptive detail and emotiona... Quote: The air in the study thickened, crackling with an energy tha...
+2025-05-19 22:49:06 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 2. Problem: The chapter is slightly under the target length (15000 chara... Quote: Kaelen looked away, but Elara saw the flicker of something i...
+2025-05-19 22:49:17 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:17 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2625 tk, Comp: 164 tk, Total: 2789 tk
+2025-05-19 22:49:19 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:19 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2608 tk, Comp: 225 tk, Total: 2833 tk
+2025-05-19 22:49:30 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:30 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2592 tk, Comp: 414 tk, Total: 3006 tk
+2025-05-19 22:49:40 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:40 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2741 tk, Comp: 865 tk, Total: 3606 tk
+2025-05-19 22:49:54 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:49:54 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2816 tk, Comp: 1017 tk, Total: 3833 tk
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:212] - Generated 5 patch instructions for Ch 2.
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 10633-10679 (len 46) with new text (len 1911). Snippet: 'The air around her grew heavier, thick with an unn...'
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 9432-9519 (len 87) with new text (len 737). Snippet: 'Two figures emerged from the shadows, cloaked in b...'
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 7519-7656 (len 137) with new text (len 4441). Snippet: 'Kaelen looked away, but Elara saw the flicker of s...'
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 6570-6660 (len 90) with new text (len 3962). Snippet: 'The air in the study thickened, crackling with an ...'
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 5945-5994 (len 49) with new text (len 997). Snippet: 'Evangeline’s fingers hovered over the map, her knu...'
+2025-05-19 22:49:54 - INFO - [chapter_revision_logic:319] - Successfully applied 5 patches to Ch 2. Original len: 11571, Patched len: 23210.
+2025-05-19 22:49:55 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:49:55 - INFO - [chapter_revision_logic:348] - Patched text similarity score with original draft: 0.8978
+2025-05-19 22:49:55 - INFO - [chapter_revision_logic:477] - Revision process for ch 2 produced a candidate text (Length: 23210 chars).
+2025-05-19 22:49:55 - INFO - [novel_agent:184] - Revision attempted for ch 2. Re-evaluating revised draft (23210 chars)...
+2025-05-19 22:49:55 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 2 draft (length: 23210 chars)...
+2025-05-19 22:49:55 - INFO - [chapter_evaluation_logic:273] - Coherence score with previous chapter (1): 0.6597
+2025-05-19 22:49:55 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 2...
+2025-05-19 22:50:38 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:50:38 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 10714 tk, Comp: 700 tk, Total: 11414 tk
+2025-05-19 22:50:38 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 2 on 1st attempt.
+2025-05-19 22:50:38 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 2 complete. Problems found: 5 (consistency: 1, plot_arc: 1).
+2025-05-19 22:50:38 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 2 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.. Detailed problems: 5
+2025-05-19 22:50:38 - ERROR - [novel_agent:190] - Revised draft for ch 2 STILL FAILED evaluation. Reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.
+2025-05-19 22:50:38 - WARNING - [novel_agent:201] - Proceeding with revised draft (23210 chars) despite failing re-evaluation, as it's preferred over original (11571 chars) or original was too short.
+2025-05-19 22:50:38 - INFO - [novel_agent:237] - Finalizing chapter 2 (From flawed draft: True). Text length: 23210.
+2025-05-19 22:50:46 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:50:46 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 5230 tk, Comp: 97 tk, Total: 5327 tk
+2025-05-19 22:50:46 - INFO - [knowledge_management_logic:64] - Generated summary for ch 2: 'Elara and Kaelen enter the Grand Library of Aethelburg, where they confront Mistress Evangeline, who...'
+2025-05-19 22:50:46 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 2.
+2025-05-19 22:50:46 - INFO - [novel_agent:265] - Saved chapter text and raw LLM log files for ch 2.
+2025-05-19 22:50:46 - INFO - [novel_agent:269] - Core finalization complete for ch 2.
+2025-05-19 22:50:46 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 2 (Source from flawed draft: True)...
+2025-05-19 22:50:46 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 2...
+2025-05-19 22:50:46 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 2).
+2025-05-19 22:50:54 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:51:55 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 9940 tk, Comp: 2484 tk, Total: 12424 tk
+2025-05-19 22:51:55 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 2 on 1st attempt.
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 2 complete. Char updates: 6, World updates categories: 4, KG Triples: 31.
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 2. Characters in update: ['Elara Vance', 'Kaelen', 'Mistress Evangeline', 'The Masked Figure', "The Dealer at the Serpent's Coil Bazaar", 'The Shop Owner']
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Determined', 'Guilt-ridden', 'Haunted', 'Intelligent', 'Resourceful', 'Transformed', 'realizes the Obsidian Heart is real and tied to a prophecy']
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Kaelen'. New traits: ['Cynical', 'Loyal', 'Pragmatic', 'Reluctant Admiration', 'Skilled Fighter']
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Mistress Evangeline'. New traits: ['Ancient', 'Guardian', 'Knowledgeable', 'Mysterious']
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:121] - Applied modification to 'status' for 'The Masked Figure'. New value: 'Active pursuer of Elara, representing the growing threat from Theron’s...'
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 2. Updated: 6, New: 0.
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 2. Categories in update: ['locations', 'lore', 'systems', 'history']
+2025-05-19 22:51:55 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 2. Approximately 6 items affected/added.
+2025-05-19 22:51:57 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 2: Attempted to add 31 triples, skipped 0.
+2025-05-19 22:51:57 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 2.
+2025-05-19 22:51:57 - INFO - [state_manager:149] - Saved plot outline to ORM.
+2025-05-19 22:51:57 - INFO - [state_manager:197] - Saved world building to ORM.
+2025-05-19 22:51:57 - INFO - [state_manager:173] - Saved character profiles to ORM.
+2025-05-19 22:51:57 - INFO - [novel_agent:94] - All (3) state objects saved to ORM successfully.
+2025-05-19 22:51:57 - INFO - [novel_agent:233] - === Finished Ch 2 With Flaws (Marked as flawed due to evaluation or length issues) ===
+2025-05-19 22:51:57 - INFO - [novel_agent:131] - === Starting Chapter 3 Generation ===
+2025-05-19 22:51:57 - INFO - [chapter_planning_logic:23] - Planning Chapter 3 with detailed scenes...
+2025-05-19 22:51:57 - INFO - [chapter_planning_logic:127] - Calling LLM (Qwen3-14B) for detailed scene plan for chapter 3 (target scenes: 10-18)...
+2025-05-19 22:52:03 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:54:21 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 1721 tk, Comp: 3558 tk, Total: 5279 tk
+2025-05-19 22:54:21 - INFO - [llm_interface:466] - Successfully parsed JSON list for detailed scene plan for chapter 3 on 1st attempt.
+2025-05-19 22:54:21 - INFO - [chapter_planning_logic:182] - Generated valid detailed scene plan for chapter 3 with 18 scenes.
+2025-05-19 22:54:21 - INFO - [context_generation_logic:144] - Generating HYBRID context for Chapter 3...
+2025-05-19 22:54:21 - INFO - [context_generation_logic:32] - Semantic context query for ch 3 based on Plot Point 3: 'Rising Action 2: Elara and Kaelen navigate the Serpent's Coil Bazaar to find a map or key to the Obs...'
+2025-05-19 22:54:21 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:54:21 - INFO - [state_manager:299] - Async ORM: Retrieved 2 past embeddings.
+2025-05-19 22:54:21 - INFO - [context_generation_logic:86] - Top 2 relevant chapters for SEMANTIC context (semantic search): [2, 1] (Scores: ['0.657', '0.454'])
+2025-05-19 22:54:21 - INFO - [context_generation_logic:129] - Constructed final SEMANTIC context: 1036 chars from chapters [2, 1].
+2025-05-19 22:54:21 - INFO - [context_generation_logic:185] - Generated HYBRID context for Chapter 3, Length: 1331 chars.
+2025-05-19 22:54:21 - WARNING - [chapter_drafting_logic:41] - Chapter plan for Ch 3 was truncated for the prompt.
+2025-05-19 22:54:21 - INFO - [chapter_drafting_logic:44] - Using detailed scene plan for Ch 3 draft generation.
+2025-05-19 22:54:21 - INFO - [chapter_drafting_logic:97] - Calling LLM (Qwen3-14B) for Ch 3 draft. Target minimum length: 15000 chars.
+2025-05-19 22:54:26 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:57:31 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-14B') Usage - Prompt: 8348 tk, Comp: 3706 tk, Total: 12054 tk
+2025-05-19 22:57:31 - INFO - [chapter_drafting_logic:128] - Generated initial draft for ch 3 (Length: 16352 chars).
+2025-05-19 22:57:31 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 3 draft (length: 16352 chars)...
+2025-05-19 22:57:31 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:57:31 - INFO - [chapter_evaluation_logic:273] - Coherence score with previous chapter (2): 0.7298
+2025-05-19 22:57:31 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 3...
+2025-05-19 22:58:15 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:15 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 10838 tk, Comp: 624 tk, Total: 11462 tk
+2025-05-19 22:58:15 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 3 on 1st attempt.
+2025-05-19 22:58:15 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 3 complete. Problems found: 5 (consistency: 1, plot_arc: 1).
+2025-05-19 22:58:15 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 3 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.. Detailed problems: 5
+2025-05-19 22:58:15 - WARNING - [novel_agent:170] - Ch 3 initial draft (16352 chars) flagged for revision. Reasons: Consistency issues identified by LLM.; Plot Arc deviation identified by LLM.
+2025-05-19 22:58:15 - WARNING - [chapter_revision_logic:302] - Attempting revision for chapter 3. Reason(s) summary:
+- Consistency issues identified by LLM.
+- Plot Arc deviation identified by LLM.
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:308] - Patch-based revision enabled. Attempting to generate and apply patches for Ch 3 (5 problems identified).
+2025-05-19 22:58:15 - WARNING - [chapter_revision_logic:36] - Quote for context window not found in text: 'Elara’s pulse quickened. ‘You know who I am.’...' Returning full text snippet as fallback.
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 3. Problem: The 'Forgotten Order' is introduced as a real entity, but th... Quote: You’ll need the sigil of the Forgotten Order to get past the...
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 3. Problem: The chapter does not clearly advance the plot point of findi... Quote: They left the stall with more questions than answers, the de...
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 3. Problem: The theme of the corrupting influence of ancient power is to... Quote: She had once believed knowledge was power, but now she under...
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 3. Problem: The chapter lacks sufficient descriptive detail and emotiona... Quote: But before they could respond, the sound of approaching foot...
+2025-05-19 22:58:15 - INFO - [chapter_revision_logic:114] - Calling LLM (Qwen3-8B) for single patch in Ch 3. Problem: The chapter is somewhat underdeveloped in terms of pacing an... Quote: Elara’s pulse quickened. ‘You know who I am.’...
+2025-05-19 22:58:27 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:27 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2716 tk, Comp: 189 tk, Total: 2905 tk
+2025-05-19 22:58:30 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:30 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2631 tk, Comp: 301 tk, Total: 2932 tk
+2025-05-19 22:58:34 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:34 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2702 tk, Comp: 137 tk, Total: 2839 tk
+2025-05-19 22:58:35 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:35 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2706 tk, Comp: 305 tk, Total: 3011 tk
+2025-05-19 22:58:48 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:58:48 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-8B') Usage - Prompt: 2654 tk, Comp: 576 tk, Total: 3230 tk
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:212] - Generated 5 patch instructions for Ch 3.
+2025-05-19 22:58:48 - WARNING - [chapter_revision_logic:235] - Patching: `search_text` not found in original text. Skipping patch. Search: 'Elara’s pulse quickened. ‘You know who I am.’...'
+2025-05-19 22:58:48 - WARNING - [chapter_revision_logic:249] - 1/5 patches could not be applied because their search_text was not found in the original chapter.
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 16047-16142 (len 95) with new text (len 1326). Snippet: 'The air in the guildhall thickened, pressing again...'
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 6597-6702 (len 105) with new text (len 1287). Snippet: 'They left the stall with more questions than answe...'
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 5064-5154 (len 90) with new text (len 867). Snippet: 'You’ll need more than a map to reach the Obsidian ...'
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:265] - Applied patch: Replaced original text from 2391-2478 (len 87) with new text (len 633). Snippet: 'She had once believed knowledge was power, but now...'
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:319] - Successfully applied 5 patches to Ch 3. Original len: 16352, Patched len: 20088.
+2025-05-19 22:58:48 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:11434/api/embeddings "HTTP/1.1 200 OK"
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:348] - Patched text similarity score with original draft: 0.5912
+2025-05-19 22:58:48 - INFO - [chapter_revision_logic:477] - Revision process for ch 3 produced a candidate text (Length: 20088 chars).
+2025-05-19 22:58:48 - INFO - [novel_agent:184] - Revision attempted for ch 3. Re-evaluating revised draft (20088 chars)...
+2025-05-19 22:58:48 - INFO - [chapter_evaluation_logic:236] - Evaluating chapter 3 draft (length: 20088 chars)...
+2025-05-19 22:58:48 - INFO - [chapter_evaluation_logic:273] - Coherence score with previous chapter (2): 0.6331
+2025-05-19 22:58:48 - INFO - [chapter_evaluation_logic:154] - Calling LLM (Qwen3-14B) for comprehensive (detailed quote-based) evaluation of chapter 3...
+2025-05-19 22:59:27 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:59:27 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-14B') Usage - Prompt: 11673 tk, Comp: 606 tk, Total: 12279 tk
+2025-05-19 22:59:27 - INFO - [llm_interface:466] - Successfully parsed JSON dict for comprehensive quote-based evaluation for ch 3 on 1st attempt.
+2025-05-19 22:59:27 - INFO - [chapter_evaluation_logic:222] - Comprehensive (quote-based) evaluation for Ch 3 complete. Problems found: 5 (consistency: 1, plot_arc: 1, thematic: 1, narrative_depth: 2).
+2025-05-19 22:59:27 - INFO - [chapter_evaluation_logic:307] - Evaluation for Ch 3 complete. Needs revision: True. Summary reasons: Consistency issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.. Detailed problems: 5
+2025-05-19 22:59:27 - ERROR - [novel_agent:190] - Revised draft for ch 3 STILL FAILED evaluation. Reasons: Consistency issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.
+2025-05-19 22:59:27 - WARNING - [novel_agent:201] - Proceeding with revised draft (20088 chars) despite failing re-evaluation, as it's preferred over original (16352 chars) or original was too short.
+2025-05-19 22:59:27 - INFO - [novel_agent:237] - Finalizing chapter 3 (From flawed draft: True). Text length: 20088.
+2025-05-19 22:59:35 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 22:59:35 - INFO - [llm_interface:142] - Async: LLM ('Qwen3-4B') Usage - Prompt: 4629 tk, Comp: 116 tk, Total: 4745 tk
+2025-05-19 22:59:35 - INFO - [knowledge_management_logic:64] - Generated summary for ch 3: 'Elara and Kaelen enter the dangerous Serpent’s Coil Bazaar, where they encounter a dealer who knows...'
+2025-05-19 22:59:35 - INFO - [state_manager:256] - Async ORM: Successfully saved chapter data for chapter 3.
+2025-05-19 22:59:35 - INFO - [novel_agent:265] - Saved chapter text and raw LLM log files for ch 3.
+2025-05-19 22:59:35 - INFO - [novel_agent:269] - Core finalization complete for ch 3.
+2025-05-19 22:59:35 - INFO - [knowledge_management_logic:683] - Updating all knowledge bases for ch 3 (Source from flawed draft: True)...
+2025-05-19 22:59:35 - INFO - [knowledge_management_logic:317] - Performing unified knowledge extraction for Chapter 3...
+2025-05-19 22:59:35 - INFO - [knowledge_management_logic:436] - Calling LLM (Qwen3-8B) for unified knowledge extraction (Ch 3).
+2025-05-19 22:59:44 - INFO - [httpx:1740] - HTTP Request: POST http://127.0.0.1:8080/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-19 23:01:19 - INFO - [llm_interface:142] - Async: Streamed LLM ('Qwen3-8B') Usage - Prompt: 10837 tk, Comp: 3700 tk, Total: 14537 tk
+2025-05-19 23:01:19 - INFO - [llm_interface:466] - Successfully parsed JSON dict for unified knowledge extraction for ch 3 on 1st attempt.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:474] - Unified knowledge extraction for Ch 3 complete. Char updates: 5, World updates categories: 4, KG Triples: 38.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:182] - Merging character profile JSON updates for ch 3. Characters in update: ['Elara Vance', 'Kaelen', "The Dealer at the Serpent's Coil Bazaar", 'The Informant (Masked Figure)', 'The Obsidian Veil']
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Elara Vance'. New traits: ['Determined', 'Guilt-ridden', 'Haunted', 'Intelligent', 'Resilient', 'Resourceful', 'Transformed', 'realizes the Obsidian Heart is real and tied to a prophecy']
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:116] - Applied trait modifications for 'Kaelen'. New traits: ['Cynical', 'Emotionally Invested', 'Loyal', 'Pragmatic', 'Reluctant Admiration', 'Skilled Fighter', 'Wary']
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'The Dealer at the Serpent's Coil Bazaar'. New value: 'A wiry man with eyes like smoldering coals, who recognizes the manuscr...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Informant (Masked Figure)'.
+2025-05-19 23:01:19 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'The Informant (Masked Figure)'. Proposal: 'ADD description: 'A cloaked figure with a mask of polished bone, serving as an informant and member of an underground network that deals in forbidden knowledge. He is associated with the Forgotten Order and warns Elara of the cult’s pursuit.'; MODIFIED status: 'An informant who recognizes Elara as a target of Theron’s forces and offers her a path forward through the Obsidian Archives, but at a cost.''. Expected 'MODIFY key: value'.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:147] - Prepared new character profile for 'The Obsidian Veil'.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'The Obsidian Veil'. New value: 'A faction associated with High Justicar Theron, composed of masked fig...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:209] - Character profile JSON merge complete for ch 3. Updated: 3, New: 2.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:268] - Merging world-building JSON updates for ch 3. Categories in update: ['locations', 'lore', 'systems', 'history']
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'locations.Obsidian Archives'. New value: 'A forbidden section of the Grand Library, rumored to house texts detai...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'locations.The Forgotten Order'. New value: 'A sect that vanished during the Great Silencing but whose influence st...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'atmosphere' for 'locations.The Undercroft'. New value: 'Damp, thick with the weight of centuries.'; MODIFIED description: 'A l...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'description' for 'lore.The Legend of the Obsidian Heart'. New value: 'An ancient artifact of immense power, said to be the crystallized hear...'
+2025-05-19 23:01:19 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'lore.The Sigil of the Forgotten Order'. Proposal: 'ADD description: 'A key fragment required to access the Obsidian Archives, symbolizing the ancient pact made to contain the power of the Obsidian Heart.'; ADD elaboration_in_chapter_3: 'The sigil is introduced as a crucial item that Elara must acquire or prove her worth for. It represents a dangerous threshold in her quest and the cost of knowledge.''. Expected 'MODIFY key: value'.
+2025-05-19 23:01:19 - WARNING - [knowledge_management_logic:100] - Invalid modification proposal format for 'systems.Primary Magic System'. Proposal: 'ADD elaboration_in_chapter_3: 'The system is shown to have real-world consequences through Elara’s use of an incantation from her mother’s journal, which allows her to evade capture. This demonstrates that knowledge of the Heart comes at a steep personal cost and that its power is tied to ancient magic and forgotten deities.''. Expected 'MODIFY key: value'.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:121] - Applied modification to 'elaboration_in_chapter_3' for 'history.The Great Silencing'. New value: 'Elara reflects on the Great Silencing as a pivotal moment that forced ...'
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:300] - World-building JSON merge complete for ch 3. Approximately 7 items affected/added.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:728] - KG update from unified_extraction for ch 3: Attempted to add 38 triples, skipped 0.
+2025-05-19 23:01:19 - INFO - [knowledge_management_logic:732] - All knowledge base updates from unified extraction completed for ch 3.
+2025-05-19 23:01:19 - INFO - [state_manager:149] - Saved plot outline to ORM.
+2025-05-19 23:01:19 - INFO - [state_manager:197] - Saved world building to ORM.
+2025-05-19 23:01:19 - INFO - [state_manager:173] - Saved character profiles to ORM.
+2025-05-19 23:01:19 - INFO - [novel_agent:94] - All (3) state objects saved to ORM successfully.
+2025-05-19 23:01:19 - INFO - [novel_agent:233] - === Finished Ch 3 With Flaws (Marked as flawed due to evaluation or length issues) ===
+2025-05-19 23:01:19 - INFO - [state_manager:215] - Async ORM loaded chapter count: 3
+2025-05-19 23:01:19 - INFO - [__main__:193] - --- Saga Novel Generation Run Finished. Final DB chapter count: 3 ---
