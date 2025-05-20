@@ -10,57 +10,67 @@ import re
 from typing import Tuple, Optional, List, Dict, Any
 
 import config
-import llm_interface
-import utils 
-from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult # Added ProblemDetail, PatchInstruction
+import llm_interface # For token counting and truncation
+import utils
+from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
 
 logger = logging.getLogger(__name__)
 
-def _get_context_window(text: str, quote: str, window_size: int) -> str:
-    """Extracts a window of text around a quote."""
-    if quote == "N/A - General Issue": # For general issues, context window is less relevant or could be start/end of chapter
-        return text[:window_size//2] + "\n...\n" + text[-window_size//2:]
+def _get_context_window(text: str, quote: str, window_size_chars: int) -> str: # window_size is char based for this helper
+    """Extracts a window of text around a quote based on characters."""
+    if quote == "N/A - General Issue":
+        # For general issues, context window is less relevant or could be start/end of chapter
+        # Using char count here as it's about finding a text snippet, not LLM context window.
+        return text[:window_size_chars//2] + "\n...\n" + text[-window_size_chars//2:]
 
     try:
         start_index = text.index(quote)
         end_index = start_index + len(quote)
-        
-        context_start = max(0, start_index - window_size // 2)
-        context_end = min(len(text), end_index + window_size // 2)
-        
+
+        context_start = max(0, start_index - window_size_chars // 2)
+        context_end = min(len(text), end_index + window_size_chars // 2)
+
         prefix = "..." if context_start > 0 else ""
         suffix = "..." if context_end < len(text) else ""
-        
+
         return f"{prefix}{text[context_start:context_end]}{suffix}"
-    except ValueError: # Quote not found
+    except ValueError:
         logger.warning(f"Quote for context window not found in text: '{quote[:50]}...' Returning full text snippet as fallback.")
-        # Fallback to a generic snippet if quote isn't found (shouldn't happen if eval is good)
-        return text[:window_size] + "..." if len(text) > window_size else text
+        return text[:window_size_chars] + "..." if len(text) > window_size_chars else text
 
 
 async def _generate_single_patch_instruction_llm(
     agent,
-    original_chapter_text_snippet: str, # The context window around the problem
+    original_chapter_text_snippet: str, # The character-based context window around the problem
     problem: ProblemDetail,
     chapter_number: int,
-    hybrid_context_for_revision: str,
+    hybrid_context_for_revision: str, # This context is already token-managed
     chapter_plan: Optional[List[SceneDetail]]
 ) -> Optional[PatchInstruction]:
     """Generates a single patch instruction using an LLM."""
-    
+
     plan_focus_section = ""
-    plot_point_focus, _ = agent._get_plot_point_info(chapter_number) 
+    plot_point_focus, _ = agent._get_plot_point_info(chapter_number)
+
+    # For plan snippet in patch prompt, use a smaller token budget portion
+    # e.g., 1/6th of MAX_CONTEXT_TOKENS for the plan part of this specific patch prompt
+    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 4
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         try:
             plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
-            plan_snippet_for_prompt = plan_json_str[:(config.MAX_CONTEXT_LENGTH // 6)] # Smaller snippet for patch prompt
-            if len(plan_json_str) > len(plan_snippet_for_prompt):
-                plan_snippet_for_prompt += "\n... (plan truncated in prompt)"
-            plan_focus_section = f"**Original Detailed Scene Plan (Reference for context):**\n```json\n{plan_snippet_for_prompt}\n```\n"
-        except TypeError: 
+            num_plan_tokens = llm_interface.count_tokens(plan_json_str, config.PATCH_GENERATION_MODEL)
+            if num_plan_tokens > max_plan_tokens_for_patch_prompt:
+                plan_json_str = llm_interface.truncate_text_by_tokens(
+                    plan_json_str,
+                    config.PATCH_GENERATION_MODEL,
+                    max_plan_tokens_for_patch_prompt,
+                    truncation_marker="\n... (plan truncated in patch prompt)"
+                )
+            plan_focus_section = f"**Original Detailed Scene Plan (Reference for context):**\n```json\n{plan_json_str}\n```\n"
+        except TypeError:
              plan_focus_section = f"**Original Chapter Focus (Reference for context):**\n{plot_point_focus or 'Not specified.'}\n"
-    else: 
+    else:
         plan_focus_section = f"**Original Chapter Focus (Reference for context):**\n{plot_point_focus or 'Not specified.'}\n"
 
     length_expansion_instruction = ""
@@ -69,7 +79,7 @@ async def _generate_single_patch_instruction_llm(
         "length" in problem['problem_description'].lower() or \
         "expand" in problem['suggested_fix_focus'].lower() or \
         "depth" in problem['problem_description'].lower() or \
-        problem['quote_from_original'] == "N/A - General Issue"): # General length issues also need expansion focus
+        problem['quote_from_original'] == "N/A - General Issue"):
         length_expansion_instruction = (
             f"\n**Critical for this Patch: SUBSTANTIAL EXPANSION REQUIRED.** "
             f"The 'replace_with' text MUST be significantly longer and more detailed than the original quote ('{problem['quote_from_original'] if problem['quote_from_original'] != 'N/A - General Issue' else 'relevant section'}'). "
@@ -92,7 +102,7 @@ You are a surgical revision expert. You are tasked with generating a replacement
 **Specific Problem to Address:**
   - Issue Category: {problem['issue_category']}
   - Problem Description: {problem['problem_description']}
-  - Original Quote Illustrating Problem: "{problem['quote_from_original']}" 
+  - Original Quote Illustrating Problem: "{problem['quote_from_original']}"
   - Suggested Fix Focus: {problem['suggested_fix_focus']}
 
 **Text Snippet from Original Chapter (around the problem quote):**
@@ -110,41 +120,41 @@ You are a surgical revision expert. You are tasked with generating a replacement
 
 --- BEGIN REPLACE_WITH TEXT (for "{problem['quote_from_original']}") ---
 """
-    
+
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for single patch in Ch {chapter_number}. Problem: {problem['problem_description'][:60]}... Quote: {problem['quote_from_original'][:60]}...")
-    
+
+    # Max output tokens for a patch should be generous if expansion is needed, but not full chapter length.
+    # config.MAX_GENERATION_TOKENS is likely the LLM's absolute max output.
+    # A fraction of that should be sufficient for a patch.
+    max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 4
+
     replace_with_text_raw = await llm_interface.async_call_llm(
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
-        temperature=0.6, 
-        # max_tokens can be higher if expansion is expected, but patch output itself is usually smaller than full chapter.
-        # The LLM should dynamically adjust length based on length_expansion_instruction.
-        max_tokens=config.MAX_GENERATION_TOKENS // 4, # Allow generous space for expanded patches
-        allow_fallback=True, # Patches are important
-        stream_to_disk=False # Patch output is usually small
+        temperature=0.6,
+        max_tokens=max_patch_output_tokens,
+        allow_fallback=True,
+        stream_to_disk=False
     )
 
     if not replace_with_text_raw:
         logger.error(f"Patch generation LLM returned no content for problem in Ch {chapter_number}: {problem['problem_description']}")
         return None
-        
+
     replace_with_text_cleaned = llm_interface.clean_model_response(replace_with_text_raw)
 
     if not replace_with_text_cleaned.strip():
         logger.warning(f"Patch generation LLM returned empty or whitespace-only content after cleaning for Ch {chapter_number}: {problem['problem_description']}")
         return None
 
-    # Validate expansion if it was required
     if length_expansion_instruction and problem['quote_from_original'] != "N/A - General Issue":
-        if len(replace_with_text_cleaned) < len(problem['quote_from_original']) * 1.3: # Require at least 30% expansion
-            logger.warning(f"Patch for Ch {chapter_number} problem '{problem['problem_description'][:50]}...' did not sufficiently expand text as instructed. Original len: {len(problem['quote_from_original'])}, New len: {len(replace_with_text_cleaned)}. May still use if other criteria met.")
-            # Not returning None here, as it might still be a useful (though not sufficiently expanded) fix.
-            # The overall chapter length check will catch persistent shortness.
+        if len(replace_with_text_cleaned) < len(problem['quote_from_original']) * 1.3: # Character length check as proxy for expansion
+            logger.warning(f"Patch for Ch {chapter_number} problem '{problem['problem_description'][:50]}...' did not sufficiently expand text (char length). Original len: {len(problem['quote_from_original'])}, New len: {len(replace_with_text_cleaned)}. May still use.")
 
     return {
         "search_text": problem['quote_from_original'],
         "replace_with": replace_with_text_cleaned,
-        "original_quote_ref": problem['quote_from_original'], # For traceability
+        "original_quote_ref": problem['quote_from_original'],
         "reason_for_change": f"Fixing '{problem['issue_category']}' issue: {problem['problem_description']}"
     }
 
@@ -154,40 +164,27 @@ async def _generate_patch_instructions_logic(
     original_text: str,
     problems_to_fix: List[ProblemDetail],
     chapter_number: int,
-    hybrid_context_for_revision: str,
+    hybrid_context_for_revision: str, # Assumed to be already token-managed
     chapter_plan: Optional[List[SceneDetail]]
 ) -> List[PatchInstruction]:
     """Generates a list of PatchInstruction objects by calling LLM for each problem."""
     patch_instructions: List[PatchInstruction] = []
-    
-    # Limit the number of patches to attempt in one cycle
+
     problems_to_process = problems_to_fix[:config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
     if len(problems_to_fix) > config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE:
         logger.warning(f"Found {len(problems_to_fix)} problems for Ch {chapter_number}, but will only attempt to patch the first {config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE}.")
 
-    # Create tasks for generating each patch
     patch_generation_tasks = []
     for problem in problems_to_process:
         if problem["quote_from_original"] == "N/A - General Issue" and problem["issue_category"] != "narrative_depth":
             logger.info(f"Skipping patch generation for Ch {chapter_number} problem with 'N/A - General Issue' quote and category '{problem['issue_category']}' as it's not a narrative depth/length issue requiring general expansion focus.")
             continue
-        
-        # For "N/A - General Issue" related to narrative_depth, the LLM is expected to pick a relevant section based on suggested_fix_focus
-        # However, the current _generate_single_patch_instruction_llm needs a specific quote to replace.
-        # This path needs refinement or such "general" issues should be handled by full rewrite if patches can't target them.
-        # For now, if quote is "N/A - General Issue", the patch LLM will be less effective if it can't find that literal string.
-        # The prompt to _generate_single_patch_instruction_llm tells it to focus on the original quote.
-        # This will likely fail for "N/A - General Issue".
-        #
-        # Workaround for "N/A - General Issue" length problems:
-        # We will not generate a patch for these general issues here.
-        # They will be addressed by the overall length check after specific patches are applied.
-        # If the chapter is still too short after specific patches, a full rewrite might be triggered or the chapter accepted with flaws.
+
         if problem["quote_from_original"] == "N/A - General Issue":
             logger.info(f"Skipping patch generation for 'N/A - General Issue' problem in Ch {chapter_number}: '{problem['problem_description']}'. This type of issue is hard to target with specific quote-based patches and will be assessed by overall chapter length evaluation after other patches.")
             continue
 
-
+        # _get_context_window uses character count for its window_size
         context_snippet = _get_context_window(original_text, problem["quote_from_original"], config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW)
         task = _generate_single_patch_instruction_llm(
             agent, context_snippet, problem, chapter_number, hybrid_context_for_revision, chapter_plan
@@ -199,90 +196,69 @@ async def _generate_patch_instructions_logic(
         return []
 
     results = await asyncio.gather(*patch_generation_tasks, return_exceptions=True)
-    
+
     for i, res_or_exc in enumerate(results):
-        problem_ref = problems_to_process[i] # Assuming order is maintained
+        problem_ref = problems_to_process[i]
         if isinstance(res_or_exc, Exception):
             logger.error(f"Error generating patch for Ch {chapter_number} problem '{problem_ref['problem_description'][:50]}...': {res_or_exc}", exc_info=res_or_exc)
         elif res_or_exc is not None:
             patch_instructions.append(res_or_exc)
         else:
             logger.warning(f"Patch generation returned None for Ch {chapter_number} problem: {problem_ref['problem_description'][:50]}...")
-            
+
     logger.info(f"Generated {len(patch_instructions)} patch instructions for Ch {chapter_number}.")
     return patch_instructions
 
 def _apply_patches_to_text(original_text: str, patch_instructions: List[PatchInstruction]) -> str:
-    """Applies a list of patch instructions to the original text.
-    Patches are applied based on searching for `search_text` in the original text,
-    and replacements are constructed carefully to handle non-overlapping changes.
-    """
+    """Applies a list of patch instructions to the original text."""
     if not patch_instructions:
         return original_text
 
-    # Create a list of (start_index, end_index, replace_with_text) tuples
-    # These indices are relative to the *original_text*.
     replacements: List[Tuple[int, int, str]] = []
     failed_patches_search_text_not_found = 0
 
     for patch in patch_instructions:
         try:
-            # Find all occurrences to handle potential developer errors in quote uniqueness.
-            # We'll only use the first one for this simple patcher.
-            # A more robust system might require unique identifiers or allow user to pick.
             match_indices = [m.start() for m in re.finditer(re.escape(patch["search_text"]), original_text)]
             if not match_indices:
                 logger.warning(f"Patching: `search_text` not found in original text. Skipping patch. Search: '{patch['search_text'][:100]}...'")
                 failed_patches_search_text_not_found += 1
                 continue
-            
-            start_index = match_indices[0] # Use the first match
+
+            start_index = match_indices[0]
             end_index = start_index + len(patch["search_text"])
             replacements.append((start_index, end_index, patch["replace_with"]))
             logger.debug(f"Prepared patch: Replace original text from {start_index} to {end_index} with '{patch['replace_with'][:50]}...'")
 
-        except Exception as e: # Broad exception for safety during regex or indexing
+        except Exception as e:
             logger.error(f"Error preparing patch for search_text '{patch['search_text'][:50]}...': {e}", exc_info=True)
-            failed_patches_search_text_not_found +=1 # Count as not found for simplicity
+            failed_patches_search_text_not_found +=1
 
     if failed_patches_search_text_not_found > 0:
          logger.warning(f"{failed_patches_search_text_not_found}/{len(patch_instructions)} patches could not be applied because their search_text was not found in the original chapter.")
 
-
-    # Sort replacements by start_index in reverse order to apply them without messing up subsequent indices.
     replacements.sort(key=lambda x: x[0], reverse=True)
 
-    # Build the new text
     current_text_list = list(original_text)
     for start_index, end_index, replace_with_text in replacements:
-        # Check for overlapping patches (simple check, more sophisticated needed for complex cases)
-        # This check is imperfect because `replacements` is already sorted. A patch applied earlier
-        # could have been inside a later patch (which has smaller start_index due to reverse sort).
-        # However, this basic strategy is common for non-overlapping replacements.
-        # For now, we assume LLM provides mostly non-overlapping or well-behaved quotes.
-        
         current_text_list[start_index:end_index] = list(replace_with_text)
         logger.info(f"Applied patch: Replaced original text from {start_index}-{end_index} (len {end_index-start_index}) with new text (len {len(replace_with_text)}). Snippet: '{replace_with_text[:50]}...'")
 
     return "".join(current_text_list)
 
 
-async def revise_chapter_draft_logic( # Renamed from orchestrate_... to match existing call sites
-    agent, 
-    original_text: str, 
-    chapter_number: int, 
-    # revision_reason: str, # This will now be derived from problems_found
-    evaluation_result: EvaluationResult, # NEW: Pass the full EvaluationResult
-    hybrid_context_for_revision: str, 
+async def revise_chapter_draft_logic(
+    agent,
+    original_text: str,
+    chapter_number: int,
+    evaluation_result: EvaluationResult,
+    hybrid_context_for_revision: str, # Assumed to be already token-managed
     chapter_plan: Optional[List[SceneDetail]]
 ) -> Optional[Tuple[str, str]]:
     """
     Attempts to revise a chapter.
     If ENABLE_PATCH_BASED_REVISION is True and actionable problems are found, uses targeted patches.
-    Otherwise, (or if patching fails substantially), falls back to a full LLM rewrite (current behavior).
-    'agent' is an instance of NovelWriterAgent.
-    'hybrid_context_for_revision' contains semantic context and KG facts.
-    Returns (revised_cleaned_text, revised_raw_llm_output) or None if revision fails.
+    Otherwise, (or if patching fails substantially), falls back to a full LLM rewrite.
     """
     if not original_text:
         logger.error(f"Revision for ch {chapter_number} cannot proceed: missing original text.")
@@ -290,10 +266,8 @@ async def revise_chapter_draft_logic( # Renamed from orchestrate_... to match ex
 
     problems_to_fix: List[ProblemDetail] = evaluation_result.get("problems_found", [])
     if not problems_to_fix:
-        logger.warning(f"Revision requested for ch {chapter_number}, but no specific problems_found in evaluation_result. This may indicate a general issue like length not captured as a ProblemDetail. Proceeding with full rewrite if necessary based on needs_revision flag.")
-        # If needs_revision is true but no problems, full rewrite is the only option.
-    
-    # Construct a summary revision_reason_str for logging and for the full rewrite prompt if needed
+        logger.warning(f"Revision requested for ch {chapter_number}, but no specific problems_found in evaluation_result. Proceeding with full rewrite if necessary based on needs_revision flag.")
+
     revision_reason_str = "\n- ".join(evaluation_result["reasons"])
     if not revision_reason_str.strip():
          revision_reason_str = "General unspecified issues based on evaluation."
@@ -302,43 +276,30 @@ async def revise_chapter_draft_logic( # Renamed from orchestrate_... to match ex
     logger.warning(f"Attempting revision for chapter {chapter_number}. Reason(s) summary:\n- {revision_reason_str}")
 
     patched_text: Optional[str] = None
-    raw_patch_llm_outputs_combined: str = "" # For logging if patching is used
+    raw_patch_llm_outputs_combined: str = ""
 
     if config.ENABLE_PATCH_BASED_REVISION and problems_to_fix:
         logger.info(f"Patch-based revision enabled. Attempting to generate and apply patches for Ch {chapter_number} ({len(problems_to_fix)} problems identified).")
-        
+
         patch_instructions = await _generate_patch_instructions_logic(
             agent, original_text, problems_to_fix, chapter_number, hybrid_context_for_revision, chapter_plan
         )
-        
+
         if patch_instructions:
             patched_text = _apply_patches_to_text(original_text, patch_instructions)
-            # For raw_llm_output, we'd ideally log all individual patch generation LLM calls.
-            # For simplicity, we can just indicate patching occurred.
             raw_patch_llm_outputs_combined = f"Chapter was revised using {len(patch_instructions)} generated patches. Individual LLM calls for patches are not combined here.\n"
             logger.info(f"Successfully applied {len(patch_instructions)} patches to Ch {chapter_number}. Original len: {len(original_text)}, Patched len: {len(patched_text)}.")
         else:
             logger.warning(f"Patch-based revision for Ch {chapter_number}: No valid patch instructions were generated. Will fallback to full rewrite if configured or fail.")
-            # Patched_text remains None
-    
+
     final_revised_text: Optional[str] = None
     final_raw_llm_output: Optional[str] = None
 
     if patched_text is not None:
-        # Evaluate the patched text (length and similarity mainly)
-        if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-            logger.warning(f"Patched draft for ch {chapter_number} is too short ({len(patched_text)} chars). Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. May fall back to full rewrite.")
-            # Fallback condition: if patches make it too short.
-            # For now, we'll let it proceed and if it's still bad, the agent's main loop might use the original or fail.
-            # Or, we can trigger full rewrite here. Let's mark for fallback.
-            # Setting patched_text to None will trigger fallback if enabled.
-            # However, the problem might be that the *original* was short and patches didn't make it long enough.
-            # This logic needs to be in the main agent loop that decides based on re-evaluation.
-            # Here, we just return the patched text.
-            pass # Keep patched_text, it will be re-evaluated by the caller.
+        if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH: # Character-based check
+            logger.warning(f"Patched draft for ch {chapter_number} is too short ({len(patched_text)} chars). Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
+            # Decision to fallback is handled by the agent's main loop after re-evaluation.
 
-        # Similarity check: if patched text is too similar to original, patches were not effective.
-        # This check is crucial for patch-based revision.
         sim_original_embedding_task = llm_interface.async_get_embedding(original_text)
         sim_patched_embedding_task = llm_interface.async_get_embedding(patched_text)
         sim_original_embedding, sim_patched_embedding = await asyncio.gather(sim_original_embedding_task, sim_patched_embedding_task)
@@ -346,43 +307,52 @@ async def revise_chapter_draft_logic( # Renamed from orchestrate_... to match ex
         if sim_original_embedding is not None and sim_patched_embedding is not None:
             similarity_score = utils.numpy_cosine_similarity(sim_original_embedding, sim_patched_embedding)
             logger.info(f"Patched text similarity score with original draft: {similarity_score:.4f}")
-            if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE: # Using the same threshold
-                logger.warning(f"Patched text for ch {chapter_number} is too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}). Patches may have been ineffective. Fallback to full rewrite might be considered by caller.")
-                # Again, the decision to fallback is higher up. We return the (potentially flawed) patched text.
+            if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE:
+                logger.warning(f"Patched text for ch {chapter_number} is too similar to original (Score: {similarity_score:.4f} >= Threshold: {config.REVISION_SIMILARITY_ACCEPTANCE}). Patches may have been ineffective.")
         else:
             logger.warning(f"Could not get embeddings for patched text similarity check of ch {chapter_number}.")
-        
-        final_revised_text = patched_text
-        final_raw_llm_output = raw_patch_llm_outputs_combined # Store combined patch info
 
-    # Fallback to full rewrite if patching was not enabled, not attempted, or produced no result
-    if final_revised_text is None: # Only if patching wasn't done or failed to produce text
+        final_revised_text = patched_text
+        final_raw_llm_output = raw_patch_llm_outputs_combined
+    else: # Fallback to full rewrite if patching was not enabled, not attempted, or produced no result
         if config.ENABLE_PATCH_BASED_REVISION:
              logger.warning(f"Patch-based revision did not produce a result for Ch {chapter_number}. Falling back to full chapter rewrite.")
         else:
              logger.info(f"Patch-based revision disabled. Proceeding with full chapter rewrite for Ch {chapter_number}.")
 
-        # --- Existing Full Rewrite Logic (adapted) ---
-        original_text_limit = config.MAX_CONTEXT_LENGTH // 3 
-        original_snippet = original_text[:original_text_limit].strip() + ("..." if len(original_text) > original_text_limit else "")
-        
+        # Max tokens for the original_snippet in the full rewrite prompt.
+        # e.g., 1/3 of MAX_CONTEXT_TOKENS
+        max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
+        original_snippet = llm_interface.truncate_text_by_tokens(
+            original_text,
+            config.REVISION_MODEL,
+            max_original_snippet_tokens,
+            truncation_marker="\n... (original draft snippet truncated due to token limit)"
+        )
+
         plan_focus_section_full_rewrite = ""
-        plot_point_focus_full_rewrite, _ = agent._get_plot_point_info(chapter_number) 
+        plot_point_focus_full_rewrite, _ = agent._get_plot_point_info(chapter_number)
+        # Max tokens for the plan in the full rewrite prompt. e.g., 1/3 of MAX_CONTEXT_TOKENS
+        max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 3
 
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
             try:
                 plan_json_str_full = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
-                plan_snippet_full = plan_json_str_full[:(config.MAX_CONTEXT_LENGTH // 4)] 
-                if len(plan_json_str_full) > len(plan_snippet_full):
-                    plan_snippet_full += "\n... (plan truncated in prompt)"
-                plan_focus_section_full_rewrite = f"**Original Detailed Scene Plan (Target - align with this while fixing issues):**\n```json\n{plan_snippet_full}\n```\n"
-            except TypeError: 
+                num_plan_tokens = llm_interface.count_tokens(plan_json_str_full, config.REVISION_MODEL)
+                if num_plan_tokens > max_plan_tokens_for_full_rewrite:
+                    plan_json_str_full = llm_interface.truncate_text_by_tokens(
+                        plan_json_str_full,
+                        config.REVISION_MODEL,
+                        max_plan_tokens_for_full_rewrite,
+                        truncation_marker="\n... (plan truncated in full rewrite prompt)"
+                    )
+                plan_focus_section_full_rewrite = f"**Original Detailed Scene Plan (Target - align with this while fixing issues):**\n```json\n{plan_json_str_full}\n```\n"
+            except TypeError:
                  plan_focus_section_full_rewrite = f"**Original Chapter Focus (Target):**\n{plot_point_focus_full_rewrite or 'Not specified.'}\n"
-        else: 
+        else:
             plan_focus_section_full_rewrite = f"**Original Chapter Focus (Target):**\n{plot_point_focus_full_rewrite or 'Not specified.'}\n"
 
         length_issue_explicit_instruction_full_rewrite = ""
-        # Check for keywords related to length or depth issues in the summarized revision reason string
         if any(kw in revision_reason_str.lower() for kw in ["too short", "lacking in depth", "brief", "expand", "length", "narrative depth", "detail"]):
             length_issue_explicit_instruction_full_rewrite = (
                 "\n**Specific Focus on Expansion:** A key critique involves insufficient length or narrative depth. "
@@ -393,7 +363,7 @@ async def revise_chapter_draft_logic( # Renamed from orchestrate_... to match ex
                 "- Exploring the sensory details and emotional impact of events more thoroughly.\n"
                 f"Do not just rephrase; aim to significantly increase the volume of narrative content to at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters, guided by the original scene plan and critique."
             )
-            
+
         protagonist_name_full_rewrite = agent.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         prompt_full_rewrite = f"""/no_think
 You are a skilled revising author tasked with rewriting Chapter {chapter_number} of a novel featuring protagonist {protagonist_name_full_rewrite}.
@@ -428,38 +398,33 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
 """
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
         revised_raw_llm_output_full = await llm_interface.async_call_llm(
-            model_name=config.REVISION_MODEL, # Use the main revision model for full rewrites
-            prompt=prompt_full_rewrite, 
+            model_name=config.REVISION_MODEL,
+            prompt=prompt_full_rewrite,
             temperature=0.6,
             allow_fallback=True,
-            stream_to_disk=True 
-        ) 
+            stream_to_disk=True
+        )
         if not revised_raw_llm_output_full:
             logger.error(f"Full rewrite LLM call failed for ch {chapter_number} (returned empty).")
-            return None # Full rewrite failed critically
-            
+            return None
+
         revised_cleaned_text_full = llm_interface.clean_model_response(revised_raw_llm_output_full)
-        
+
         final_revised_text = revised_cleaned_text_full
         final_raw_llm_output = revised_raw_llm_output_full
-        # End of full rewrite block
 
-    # Post-revision checks (applies to text from patching OR full rewrite)
-    if not final_revised_text or len(final_revised_text) < 50 : # Arbitrary small number to indicate true failure
+
+    if not final_revised_text or len(final_revised_text) < 50 :
         logger.error(f"Revision for ch {chapter_number} resulted in virtually no content after processing. Original content length: {len(original_text)}")
         await agent._save_debug_output(chapter_number, "revision_fail_empty_final_raw_llm", final_raw_llm_output or "No LLM output was generated/captured.")
-        return None # Indicates a true generation failure for the revision.
+        return None
 
-    # Length check (now more of a strong warning, as the agent loop makes final decision)
-    if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+    if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH: # Character-based check
         logger.warning(
              f"Revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars) after processing. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}. "
              f"This text will be returned for further evaluation by the agent."
         )
-        # Don't return None solely on length here. The caller (NovelWriterAgent) will re-evaluate and decide.
-        
-    # Similarity check (if it wasn't a patched text that already did this, or if we want to re-check)
-    # This applies if we did a full rewrite. Patched text similarity is handled above.
+
     if final_revised_text is not patched_text: # i.e., if we did a full rewrite
         original_embedding_task_full = llm_interface.async_get_embedding(original_text)
         revised_embedding_task_full = llm_interface.async_get_embedding(final_revised_text)
@@ -470,9 +435,8 @@ You are a skilled revising author tasked with rewriting Chapter {chapter_number}
             logger.info(f"Full rewrite similarity score with original draft: {similarity_score_full:.4f}")
             if similarity_score_full >= config.REVISION_SIMILARITY_ACCEPTANCE:
                 logger.warning(f"Full rewrite for ch {chapter_number} is too similar to original (Score: {similarity_score_full:.4f}). This may indicate the LLM did not make sufficient changes.")
-                # Again, don't return None here solely on similarity. Let the agent decide.
         else:
             logger.warning(f"Could not get embeddings for full rewrite similarity check of ch {chapter_number}.")
-            
+
     logger.info(f"Revision process for ch {chapter_number} produced a candidate text (Length: {len(final_revised_text)} chars).")
     return final_revised_text, final_raw_llm_output
