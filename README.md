@@ -56,7 +56,7 @@ cd saga
 pip install -r requirements.txt
 ```
 
-3. Start up neo4j instance via provided docker-compose.yml file:
+3. Start/stop/manage neo4j instance via provided manage_neo4j.sh file (docker-compose):
 ```bash
 docker-compose up -d
 ```
