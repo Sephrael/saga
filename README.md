@@ -44,6 +44,7 @@ SAGA (Semantic And Graph-enhanced Authoring) is a sophisticated AI-powered creat
 - Python 3.10+
 - OpenAI-compatible API endpoint (local LLM server recommended)
 - Sufficient disk space for SQLite database and generated content
+- neo4j instance to point at
 
 ### Installation
 
@@ -58,6 +59,11 @@ cd saga
 pip install -r requirements.txt
 ```
 
+3. Start up neo4j instance via provided docker-compose.yml file:
+```bash
+docker-compose up -d
+```
+
 ### Quick Start
 
 1. Configure your models in `config.py` or via environment variables
@@ -68,6 +74,9 @@ python main.py
 
 3. The system will:
    - Generate or load a plot outline
+   - Check for user-supplied story info
+   - If found, processed as source of truth
+   - If not found, uses defaults
    - Create initial world-building
    - Pre-populate the knowledge graph
    - Begin writing chapters iteratively
@@ -89,6 +98,11 @@ REVISION_MODEL = "narrator-model-name"
 # API endpoints
 OPENAI_API_BASE = "http://localhost:8080/v1"
 EMBEDDING_MODEL = "nomic-embed-text:latest"
+
+# Neo4j Connection Settings
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "saga_password")
 ```
 
 ### Generation Parameters
@@ -98,11 +112,9 @@ Control output quality and length:
 ```python
 # Target chapter length (characters)
 MIN_ACCEPTABLE_DRAFT_LENGTH = 16000
-TARGET_DRAFT_LENGTH_UPPER_BOUND = 22000
 
 # Scene planning targets
 TARGET_SCENES_MIN = 10
-TARGET_SCENES_MAX = 18
 
 # Context and generation limits
 MAX_CONTEXT_LENGTH = 40960
