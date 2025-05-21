@@ -93,14 +93,14 @@ PATCH_GENERATION_MODEL: str = MEDIUM_MODEL # Model for generating targeted fixes
 # --- Output and File Paths ---
 BASE_OUTPUT_DIR: str = "novel_output"
 # DATABASE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "novel_data.db") # Removed, as we're moving to Neo4j
-PLOT_OUTLINE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "plot_outline.json")
-CHARACTER_PROFILES_FILE: str = os.path.join(BASE_OUTPUT_DIR, "character_profiles.json")
-WORLD_BUILDER_FILE: str = os.path.join(BASE_OUTPUT_DIR, "world_building.json")
+PLOT_OUTLINE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "plot_outline.json") # Retained for user convenience/backup, but Neo4j is source of truth
+CHARACTER_PROFILES_FILE: str = os.path.join(BASE_OUTPUT_DIR, "character_profiles.json") # Retained for user convenience/backup
+WORLD_BUILDER_FILE: str = os.path.join(BASE_OUTPUT_DIR, "world_building.json") # Retained for user convenience/backup
 CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
 DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
-USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.json" # NEW: Path for user-supplied file
+USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.json" 
 
 UNHINGED_DATA_DIR: str = "unhinged_data"
 os.makedirs(UNHINGED_DATA_DIR, exist_ok=True)
@@ -151,8 +151,8 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-ENABLE_PATCH_BASED_REVISION: bool = True # NEW: Enable patch-based revisions
-MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 7 # NEW: Max patches to generate in one revision cycle
+ENABLE_PATCH_BASED_REVISION: bool = True 
+MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 7 
 # MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW is character-based for identifying snippet *around* a quote.
 MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 8192
 REVISION_COHERENCE_THRESHOLD: float = 0.60
@@ -160,11 +160,11 @@ REVISION_SIMILARITY_ACCEPTANCE: float = 0.985
 # MAX_SUMMARY_TOKENS, MAX_KG_TRIPLE_TOKENS, MAX_PREPOP_KG_TOKENS are *output* limits for specific LLM tasks.
 MAX_SUMMARY_TOKENS: int = 4096
 MAX_KG_TRIPLE_TOKENS: int = 8192
-MAX_PREPOP_KG_TOKENS: int = 10240
+MAX_PREPOP_KG_TOKENS: int = 10240 # Increased for potentially more verbose pre-population data
 
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = 15000
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True
-KG_PREPOPULATION_CHAPTER_NUM: int = 0
+KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number used for facts derived from initial setup
 
 
 # --- Embedding Configuration ---
@@ -187,6 +187,12 @@ CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
+
+# Unique ID for main novel context nodes in Neo4j
+MAIN_NOVEL_INFO_NODE_ID: str = "saga_main_novel_info"
+MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container"
+MAIN_WORLD_CONTAINER_NODE_ID: str = "saga_main_world_container"
+
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
 _DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"]

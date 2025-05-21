@@ -41,6 +41,7 @@ class NovelWriterAgent:
         self.chapter_count = await state_manager.async_load_chapter_count()
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
 
+        # Load decomposed structures. state_manager now handles reassembly into dicts.
         load_tasks = {
             "plot": state_manager.get_plot_outline(),
             "chars": state_manager.get_character_profiles(),
@@ -71,8 +72,8 @@ class NovelWriterAgent:
         logger.info("NovelWriterAgent async_init complete.")
 
     async def _save_all_json_state(self):
-        logger.debug("Saving agent state (plot, characters, world) to Neo4j...")
-        
+        logger.info("Saving agent state (plot, characters, world) to Neo4j (decomposed)...")
+        # state_manager.save_* methods now handle decomposition.
         tasks = [
             state_manager.save_plot_outline(self.plot_outline),
             state_manager.save_character_profiles(self.character_profiles),
@@ -85,27 +86,41 @@ class NovelWriterAgent:
         for i, res in enumerate(results):
             item_name = ["plot_outline", "character_profiles", "world_building"][i]
             if isinstance(res, Exception):
-                logger.error(f"Failed to save {item_name} to Neo4j: {res}", exc_info=res)
-            elif res is True: # state_manager.save_* methods return True on success
+                logger.error(f"Failed to save {item_name} to Neo4j (decomposed): {res}", exc_info=res)
+            elif res is True: 
                 success_count += 1
+                logger.info(f"Successfully saved {item_name} to Neo4j (decomposed).")
             else: 
-                logger.warning(f"Unexpected return value from save_{item_name}: {res}")
+                logger.warning(f"Unexpected return value from save_{item_name} (decomposed): {res}")
 
         if success_count == len(tasks):
-            logger.info(f"All ({success_count}) state objects saved to Neo4j successfully.")
+            logger.info(f"All ({success_count}) state objects saved to Neo4j (decomposed) successfully.")
         else:
-            logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to Neo4j successfully.")
+            logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to Neo4j (decomposed) successfully.")
 
     async def generate_plot_outline(self, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Dict[str, Any]:
-        return await generate_plot_outline_logic(self, default_protagonist_name, unhinged_mode, **kwargs)
+        # Logic to generate self.plot_outline as a Python dict remains the same.
+        # The change is in how _save_all_json_state (called within or after) persists it.
+        generated_outline = await generate_plot_outline_logic(self, default_protagonist_name, unhinged_mode, **kwargs)
+        # self.plot_outline is updated by generate_plot_outline_logic
+        # It will also call _save_all_json_state internally if it modifies the agent's state.
+        return generated_outline
+
 
     async def generate_world_building(self) -> Dict[str, Any]:
-        return await generate_world_building_logic(self)
+        # Logic to generate self.world_building as a Python dict remains the same.
+        generated_world_data = await generate_world_building_logic(self)
+        # self.world_building is updated by generate_world_building_logic
+        # It will also call _save_all_json_state internally.
+        return generated_world_data
 
     async def _prepopulate_knowledge_graph(self):
+        # This will now call the updated prepopulate_kg_from_initial_data_logic,
+        # which takes the agent's Python dicts and creates fine-grained Neo4j data.
         await prepopulate_kg_from_initial_data_logic(self)
 
     def _get_plot_point_info(self, chapter_number: int) -> Tuple[Optional[str], int]:
+        # This method still reads from self.plot_outline (Python dict)
         plot_points = self.plot_outline.get("plot_points", [])
         if not isinstance(plot_points, list) or not plot_points:
             logger.warning(f"No plot points defined in plot outline for chapter {chapter_number}.")
@@ -170,13 +185,12 @@ class NovelWriterAgent:
         if evaluation["needs_revision"]:
             logger.warning(f"Ch {chapter_number} initial draft ({len(current_text_to_process)} chars) flagged for revision. Reasons: {'; '.join(evaluation['reasons'])}")
             
-            # Pass the full evaluation result to revision logic
             revised_text_tuple = await revise_chapter_draft_logic(
                 agent=self, 
                 original_text=current_text_to_process, 
                 chapter_number=chapter_number, 
-                evaluation_result=evaluation, # Pass full EvaluationResult
-                hybrid_context_for_revision=hybrid_context_for_draft, # Can be the same as for draft
+                evaluation_result=evaluation, 
+                hybrid_context_for_revision=hybrid_context_for_draft, 
                 chapter_plan=chapter_plan
             )
 
@@ -184,38 +198,30 @@ class NovelWriterAgent:
                 revised_text, raw_revision_llm_output = revised_text_tuple
                 logger.info(f"Revision attempted for ch {chapter_number}. Re-evaluating revised draft ({len(revised_text)} chars)...")
                 
-                # Re-evaluate the revised draft
                 revised_evaluation = await evaluate_chapter_draft_logic(self, revised_text, chapter_number, hybrid_context_for_draft)
                 
                 if revised_evaluation["needs_revision"]:
                     logger.error(f"Revised draft for ch {chapter_number} STILL FAILED evaluation. Reasons: {'; '.join(revised_evaluation['reasons'])}")
-                    
-                    # Decision: If revised is still bad, do we prefer original (if it was better on some metric like length)?
-                    # This simplistic choice prefers the longer text if both are flawed.
-                    # More sophisticated logic could compare number/severity of issues.
-                    if len(current_text_to_process) >= len(revised_text) and len(current_text_to_process) >= config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2: # Prefer original if it's longer and somewhat substantial
+                    if len(current_text_to_process) >= len(revised_text) and len(current_text_to_process) >= config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2:
                         logger.warning(f"Reverting to original draft ({len(current_text_to_process)} chars) as revised draft ({len(revised_text)} chars) also failed evaluation and original is longer/better.")
-                        # current_text_to_process remains initial_draft_text
-                        # current_raw_llm_output remains initial_raw_llm_text
-                        is_from_flawed_source = True # Original was flawed
+                        is_from_flawed_source = True 
                     else:
                         logger.warning(f"Proceeding with revised draft ({len(revised_text)} chars) despite failing re-evaluation, as it's preferred over original ({len(current_text_to_process)} chars) or original was too short.")
                         current_text_to_process = revised_text
                         current_raw_llm_output = raw_revision_llm_output
-                        is_from_flawed_source = True # Revised is also flawed
-                else: # Revised draft passed re-evaluation
+                        is_from_flawed_source = True 
+                else: 
                     current_text_to_process = revised_text
                     current_raw_llm_output = raw_revision_llm_output
                     logger.info(f"Revised draft for ch {chapter_number} passed re-evaluation.")
-                    is_from_flawed_source = False # Revision was successful
+                    is_from_flawed_source = False 
             else: 
                 logger.error(f"Revision attempt failed for ch {chapter_number} (no text produced by revision logic). Proceeding with the original (flawed) draft.")
-                is_from_flawed_source = True # Original was flawed, revision failed to produce text
+                is_from_flawed_source = True 
         else:
             logger.info(f"Initial draft for ch {chapter_number} passed evaluation.")
             is_from_flawed_source = False
 
-        # Final check on the chosen text before saving
         if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
              logger.warning(f"Final chosen text for Ch {chapter_number} is too short ({len(current_text_to_process)} chars). Will be marked as 'from_flawed_draft' for knowledge updates.")
              is_from_flawed_source = True
@@ -225,10 +231,12 @@ class NovelWriterAgent:
              logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (Neo4j/File save or embedding) ===")
              return None 
 
+        # Knowledge base updates will operate on the agent's Python dicts,
+        # which are then saved (decomposed) by _save_all_json_state.
         await update_all_knowledge_bases_logic(self, chapter_number, current_text_to_process, is_from_flawed_source)
         
         self.chapter_count = max(self.chapter_count, chapter_number) 
-        await self._save_all_json_state() 
+        await self._save_all_json_state() # Persist the (potentially updated) dicts as decomposed graph data
         
         status_message = "Successfully" if not is_from_flawed_source else "With Flaws (Marked as flawed due to evaluation or length issues)"
         logger.info(f"=== Finished Ch {chapter_number} {status_message} ===")
@@ -242,7 +250,6 @@ class NovelWriterAgent:
         
         effective_raw_llm_log = raw_llm_log_for_db if raw_llm_log_for_db is not None else "Raw LLM output was not available for this version."
 
-
         summary_task = summarize_chapter_text_logic(final_text, chapter_number)
         embedding_task = asyncio.create_task(llm_interface.async_get_embedding(final_text))
         
@@ -253,7 +260,6 @@ class NovelWriterAgent:
             return False
 
         try:
-            # Now saving to Neo4j via state_manager
             await state_manager.async_save_chapter_data(
                 chapter_number, final_text, effective_raw_llm_log, summary, final_embedding, from_flawed_draft
             )
@@ -272,17 +278,19 @@ class NovelWriterAgent:
         return True
 
     def _save_chapter_text_files_sync(self, chapter_number: int, final_text: str, raw_llm_log: str):
-        # These are local file system saves, still relevant for debugging/local copies
         chapter_file_path = os.path.join(config.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt") 
         log_file_path = os.path.join(config.CHAPTER_LOGS_DIR, f"chapter_{chapter_number:04d}_raw_llm_log.txt")
 
         os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
-        with open(chapter_file_path, 'w', encoding='utf-8') as f:
-            f.write(final_text)
-        with open(log_file_path, 'w', encoding='utf-8') as f:
-            f.write(raw_llm_log if raw_llm_log is not None else "Raw LLM log content was None.")
+        try:
+            with open(chapter_file_path, 'w', encoding='utf-8') as f:
+                f.write(final_text)
+            with open(log_file_path, 'w', encoding='utf-8') as f:
+                f.write(raw_llm_log if raw_llm_log is not None else "Raw LLM log content was None.")
+        except IOError as e:
+            logger.error(f"IOError saving chapter text/log files for ch {chapter_number}: {e}", exc_info=True)
 
 
     async def _save_debug_output(self, chapter_number: int, stage_description: str, content: Any):

@@ -9,7 +9,7 @@ from typing import Dict, Any
 
 from novel_agent import NovelWriterAgent
 import config 
-from state_manager import state_manager # Import the global instance
+from state_manager import state_manager 
 
 RUN_WITH_ASYNCIO_RUN = True 
 
@@ -39,131 +39,117 @@ def setup_logging():
 
 async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
     logger = logging.getLogger(__name__)
-    logger.info("Performing initial setup...")
+    logger.info("Performing initial setup (populating agent's Python dicts)...")
 
-    # generate_plot_outline_logic now handles user file, LLM gen, or default.
-    # It populates agent.plot_outline, agent.character_profiles, and potentially agent.world_building.
-    print("\n--- Initializing Plot, Characters, and World ---")
+    print("\n--- Initializing Plot, Characters, and World (in-memory dicts) ---")
     generation_params: Dict[str, Any] = {}
-    if config.UNHINGED_PLOT_MODE and not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH): # Unhinged only if no user file
+    if config.UNHINGED_PLOT_MODE and not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH):
         generation_params.update({
             "genre": random.choice(config.UNHINGED_GENRES), "theme": random.choice(config.UNHINGED_THEMES),
             "setting_archetype": random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
             "protagonist_archetype": random.choice(config.UNHINGED_PROTAGONIST_ARCHETYPES),
             "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES)
         })
-    elif not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH): # Configured mode if no user file and not unhinged
+    elif not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH):
         generation_params.update({
             "genre": config.CONFIGURED_GENRE, "theme": config.CONFIGURED_THEME,
             "setting_description": config.CONFIGURED_SETTING_DESCRIPTION
         })
     
     try:
-        # This call will populate plot_outline, character_profiles, and potentially world_building
-        # if a user file is found and processed.
+        # These calls populate agent's Python dicts (self.plot_outline, etc.)
         await agent.generate_plot_outline(
             default_protagonist_name=config.DEFAULT_PROTAGONIST_NAME,
             unhinged_mode=config.UNHINGED_PLOT_MODE if not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH) else False,
             **generation_params
         )
-        
-        # Log how the plot outline was sourced
         plot_source = agent.plot_outline.get("source", "unknown")
-        if plot_source == "user_supplied":
-            print(f"Loaded story elements from user file: '{config.USER_STORY_ELEMENTS_FILE_PATH}'")
-            print(f"   Novel Title: '{agent.plot_outline.get('title', 'N/A')}'")
-        elif plot_source.startswith("llm_generated"):
-            print(f"Generated Plot Outline via LLM for: '{agent.plot_outline.get('title', 'N/A')}'")
-        elif plot_source == "default_fallback":
-            print(f"Plot Outline defaulted for: '{agent.plot_outline.get('title', 'N/A')}'")
-        else:
-            print(f"Plot Outline initialized for: '{agent.plot_outline.get('title', 'N/A')}' (source: {plot_source})")
+        print(f"   Plot Outline Python dict initialized/loaded (source: {plot_source}). Title: '{agent.plot_outline.get('title', 'N/A')}'")
 
-        # Now call generate_world_building. It will skip LLM generation if
-        # world_building was already populated from a user file.
         await agent.generate_world_building()
-        world_source = agent.world_building.get("source", agent.world_building.get("user_supplied_data"))
-        if world_source == "user_supplied_data" or agent.world_building.get("user_supplied_data"): # Redundant check for clarity
-            print("   World-building data also loaded from user file.")
-        elif world_source == "llm_generated":
-            print("   Generated initial world-building data via LLM.")
-        elif world_source == "default_fallback":
-            print("   World-building data defaulted.")
-        else:
-             logger.info("   World-building data seems pre-existing or source unclear, using as-is.")
+        world_source = agent.world_building.get("source", "unknown")
+        is_user_supplied_world = agent.world_building.get("user_supplied_data", False)
+        print(f"   World Building Python dict initialized/loaded (source: {world_source}, user_supplied: {is_user_supplied_world}).")
 
+        # Now, explicitly save the populated Python dicts to Neo4j in decomposed form
+        await agent._save_all_json_state()
+        print("   Initial plot, character, and world Python dicts saved to Neo4j (decomposed).")
 
     except Exception as e:
-        logger.critical(f"Critical error during initial setup (plot/character/world generation): {e}", exc_info=True)
+        logger.critical(f"Critical error during initial setup (Python dict population or save to Neo4j): {e}", exc_info=True)
         return False 
     
     if not agent.plot_outline or agent.plot_outline.get("is_default"):
-        logger.warning("Initial setup resulted in a default or empty plot outline. This might impact generation quality.")
-        # Not returning False, as system might still run with defaults.
+        logger.warning("Initial setup resulted in a default or empty plot outline dict. This might impact generation quality.")
     
     return True 
 
 async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
     logger = logging.getLogger(__name__)
     
-    # Check if initial setup was from user file or resulted in default, which might affect KG pre-population decision
     plot_source = agent.plot_outline.get("source", "")
     is_user_or_llm_plot = plot_source == "user_supplied" or plot_source.startswith("llm_generated")
 
     if not is_user_or_llm_plot:
-        logger.info(f"Skipping KG pre-population: Plot outline is default or source is unclear ('{plot_source}').")
+        logger.info(f"Skipping KG pre-population: Plot outline is default or source is unclear ('{plot_source}'). Pre-population relies on detailed initial data.")
         return
 
-    # Check if the Neo4j connection is established before querying
     if state_manager.driver is None:
-        logger.warning("Neo4j driver not connected. Attempting to connect for KG pre-population check.")
-        try:
-            await state_manager.connect()
+        logger.warning("Neo4j driver not connected. Attempting connect for KG pre-population check.")
+        try: await state_manager.connect()
         except Exception as e:
             logger.error(f"Failed to connect to Neo4j, cannot check for existing KG pre-population: {e}")
             return
 
-    existing_prepop_facts = await state_manager.async_query_kg(
-        chapter_limit=config.KG_PREPOPULATION_CHAPTER_NUM, 
-        include_provisional=True 
-    )
-    prepop_facts_at_zero = [f for f in existing_prepop_facts if f.get('chapter_added') == config.KG_PREPOPULATION_CHAPTER_NUM]
-
-    if prepop_facts_at_zero:
-        logger.info(f"Found {len(prepop_facts_at_zero)} existing KG triples at chapter {config.KG_PREPOPULATION_CHAPTER_NUM}. Assuming KG pre-populated.")
-        return
-        
-    print("\n--- Pre-populating Knowledge Graph from Initial Data ---")
+    # Check if any :NovelInfo node exists, as a proxy for prepopulation
+    # A more robust check would count specific types of prepopulated nodes/rels.
+    check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}}) RETURN count(ni) as count"
     try:
-        await agent._prepopulate_knowledge_graph()
-        print("Knowledge Graph pre-population step complete.")
+        result = await state_manager._execute_read_query(check_query)
+        if result and result[0] and result[0]['count'] > 0:
+            logger.info(f"Found existing NovelInfo node. Assuming KG already pre-populated or managed. Skipping explicit pre-population step.")
+            # If we want to ensure plot_points are there from a previous save:
+            # plot_points_count_query = f"MATCH (:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}})-[:HAS_PLOT_POINT]->(:PlotPoint) RETURN count(*) as pp_count"
+            # pp_res = await state_manager._execute_read_query(plot_points_count_query)
+            # if pp_res and pp_res[0]['pp_count'] > 0:
+            #     logger.info(f"Found {pp_res[0]['pp_count']} plot points. KG seems pre-populated.")
+            #     return
+            # else:
+            #     logger.info("NovelInfo node exists, but no plot points. Proceeding with pre-population.")
+            return # Simplified: if NovelInfo exists, assume prepopulated for now
     except Exception as e:
-        logger.error(f"Error during Knowledge Graph pre-population: {e}", exc_info=True)
+        logger.error(f"Error checking for existing KG pre-population: {e}. Will attempt pre-population.", exc_info=True)
+        
+    print("\n--- Pre-populating Knowledge Graph from Initial Agent Data (Python Dicts) ---")
+    try:
+        await agent._prepopulate_knowledge_graph() # This now uses the direct Cypher generation method
+        print("Knowledge Graph pre-population step from agent's Python dicts complete.")
+    except Exception as e:
+        logger.error(f"Error during Knowledge Graph pre-population from agent dicts: {e}", exc_info=True)
 
 async def run_novel_generation_async():
     logger = logging.getLogger(__name__) 
-    logger.info(f"--- Starting Saga Novel Generation (Execution Mode: Async) ---")
+    logger.info(f"--- Starting Saga Novel Generation (Execution Mode: Async, Neo4j Decomposed) ---")
 
     try:
-        # Initialize state_manager and connect to Neo4j
         await state_manager.connect()
-        await state_manager.create_db_and_tables() # This will now create Neo4j constraints/indexes
-        logger.info("state_manager initialized and Neo4j connection/constraints verified.")
+        await state_manager.create_db_and_tables() 
+        logger.info("state_manager initialized and Neo4j connection/schema verified.")
 
         agent = NovelWriterAgent()
-        await agent.async_init() # Load agent's state from Neo4j
-        logger.info("NovelWriterAgent initialized and state loaded successfully.")
+        await agent.async_init() # Loads state from Neo4j into agent's Python dicts
+        logger.info("NovelWriterAgent initialized and state loaded (Python dicts from Neo4j).")
     except Exception as e:
         logger.critical(f"Failed to initialize state_manager or NovelWriterAgent: {e}", exc_info=True)
         print(f"\nFATAL: Could not initialize. Check logs. Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     try:
-        if not await perform_initial_setup(agent):
-            logger.critical("Initial setup (plot/world) failed. Halting generation.")
+        if not await perform_initial_setup(agent): # Populates agent dicts, then saves to Neo4j decomposed
+            logger.critical("Initial setup (Python dict population or save to Neo4j) failed. Halting.")
             sys.exit(1)
 
-        await prepopulate_kg_if_needed(agent)
+        await prepopulate_kg_if_needed(agent) # Prepopulates KG directly from agent's Python dicts
 
         print("\n--- Starting Novel Writing Process ---")
         start_chapter = agent.chapter_count + 1
@@ -181,6 +167,9 @@ async def run_novel_generation_async():
         for i in range(start_chapter, end_chapter):
             print(f"\n--- Attempting Chapter {i} ---")
             try:
+                # agent.write_chapter internally uses agent's Python dicts for its logic,
+                # then saves the final chapter text and updates to knowledge bases (Python dicts + KG triples).
+                # Finally, it calls _save_all_json_state to persist the updated Python dicts to Neo4j (decomposed).
                 chapter_text = await agent.write_chapter(i)
                 if chapter_text:
                     chapters_successfully_written += 1
@@ -188,7 +177,6 @@ async def run_novel_generation_async():
                     print(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
                 else:
                     print(f"Chapter {i}: Failed to generate or save. Check logs.")
-                    # break # Optionally stop on first failure
             except Exception as e:
                 logger.critical(f"Critical error during chapter {i} writing process: {e}", exc_info=True)
                 break 
@@ -200,7 +188,7 @@ async def run_novel_generation_async():
         logger.info(f"--- Saga Novel Generation Run Finished. Final Neo4j chapter count: {final_chapter_count_from_db} ---")
 
     finally:
-        await state_manager.close() # Ensure Neo4j driver is closed
+        await state_manager.close() 
         logger.info("Neo4j driver successfully closed on application exit.")
 
 
@@ -213,10 +201,10 @@ if __name__ == "__main__":
             logging.getLogger(__name__).info("Shutting down gracefully...")
         except Exception as main_err: 
             logging.getLogger(__name__).critical(f"Unhandled main exception: {main_err}", exc_info=True)
-    else:
+            sys.exit(1) # Ensure exit on unhandled error in main async run
+    else: # Fallback for environments where asyncio.run() is not suitable
         logger = logging.getLogger(__name__)
         logger.warning("RUN_WITH_ASYNCIO_RUN is False. "
                        "This script expects 'run_novel_generation_async()' to be called from an existing event loop if not run directly.")
-        print("Script not run with asyncio.run(). If you intended to run the novel generation, "
-              "ensure RUN_WITH_ASYNCIO_RUN is True or call run_novel_generation_async() from an event loop.")
-        pass
+        # Consider either exiting or providing a clear message if this path is not intended for production
+        # sys.exit(1)
