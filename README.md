@@ -1,6 +1,6 @@
 # SAGA - Semantic And Graph-Enhanced Authoring
 
->  ⚠️ WARNING
+> ⚠️ WARNING 
 > SAGA has recently begnu undergoing a migration from using SQLite exclusively, to a fully native neo4j + Cypher implementation. Because of this, SAGA might be a bit more verbose in the console logging or have some quirks.
 
 SAGA (Semantic And Graph-enhanced Authoring) is a sophisticated AI-powered creative writing system designed to generate full-length novels with consistent characters, coherent world-building, and compelling narratives. Unlike simple prompt-based writing tools, SAGA employs a multi-stage pipeline that mirrors professional writing processes: planning, drafting, evaluation, and revision.
