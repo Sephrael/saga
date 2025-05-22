@@ -162,7 +162,7 @@ class state_managerSingleton:
 
         # Clear existing plot outline data for this novel_id first
         statements.append((
-            f"MATCH (ni:NovelInfo {Pid: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
+            f"MATCH (ni:NovelInfo {{Pid: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
             {"novel_id_param": novel_id}
         ))
         
