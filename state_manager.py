@@ -162,7 +162,7 @@ class state_managerSingleton:
 
         # Clear existing plot outline data for this novel_id first
         statements.append((
-            f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
+            f"MATCH (ni:NovelInfo {id: $novel_id_param}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
             {"novel_id_param": novel_id}
         ))
         
@@ -420,7 +420,7 @@ class state_managerSingleton:
         # Clear existing WorldElement-related data. Similar to characters, this is a full refresh.
         statements.append(("MATCH (we:WorldElement) OPTIONAL MATCH (we)-[r]-() DETACH DELETE we, r", {}))
         statements.append(("MATCH (wev:WorldElaborationEvent) DETACH DELETE wev", {}))
-        statements.append((f"MATCH (wc:WorldContainer {{id: $wc_id_param}}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
+        statements.append((f"MATCH (wc:WorldContainer {id: $wc_id_param}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
         statements.append(("MATCH (vn:ValueNode) DETACH DELETE vn", {})) # ValueNodes are tied to specific WorldElements
 
         for category_str, items_dict_value_from_world_data in world_data.items(): 
@@ -492,8 +492,8 @@ class state_managerSingleton:
                                 
                                 statements.append((
                                     f"""
-                                    MATCH (we:WorldElement {{id: $we_id_val}})
-                                    MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
+                                    MATCH (we:WorldElement {id: $we_id_val})
+                                    MERGE (v:ValueNode {value: $val_item_value, type: $value_node_type})
                                     MERGE (we)-[:{rel_name_internal_str}]->(v)
                                     """,
                                     {"we_id_val": we_id_str, "val_item_value": val_item_from_list, "value_node_type": list_prop_key_str}
@@ -514,7 +514,7 @@ class state_managerSingleton:
 
                             statements.append((
                                 """
-                                MATCH (we:WorldElement {{id: $we_id_val}})
+                                MATCH (we:WorldElement {id: $we_id_val})
                                 CREATE (we_elab:WorldElaborationEvent)
                                 SET we_elab = $props
                                 CREATE (we)-[:ELABORATED_IN_CHAPTER]->(we_elab)
@@ -579,7 +579,7 @@ class state_managerSingleton:
                 elif list_prop_key == "traits": rel_name_query = "HAS_TRAIT_ASPECT"
 
                 list_values_query = f"""
-                MATCH (:WorldElement {{id: $we_id_param}})-[:{rel_name_query}]->(v:ValueNode {{type: $value_node_type_param}})
+                MATCH (:WorldElement {id: $we_id_param})-[:{rel_name_query}]->(v:ValueNode {type: $value_node_type_param})
                 RETURN v.value AS item_value
                 """
                 list_val_res = await self._execute_read_query(list_values_query, {"we_id_param": we_id, "value_node_type_param": list_prop_key})
