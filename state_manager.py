@@ -162,7 +162,7 @@ class state_managerSingleton:
 
         # Clear existing plot outline data for this novel_id first
         statements.append((
-            f"MATCH (ni:NovelInfo {{Pid: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
+            f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
             {"novel_id_param": novel_id}
         ))
         
@@ -492,8 +492,8 @@ class state_managerSingleton:
                                 
                                 statements.append((
                                     f"""
-                                    MATCH (we:WorldElement {id: $we_id_val})
-                                    MERGE (v:ValueNode {value: $val_item_value, type: $value_node_type})
+                                    MATCH (we:WorldElement {{id: $we_id_val}})
+                                    MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
                                     MERGE (we)-[:{rel_name_internal_str}]->(v)
                                     """,
                                     {"we_id_val": we_id_str, "val_item_value": val_item_from_list, "value_node_type": list_prop_key_str}
@@ -579,7 +579,7 @@ class state_managerSingleton:
                 elif list_prop_key == "traits": rel_name_query = "HAS_TRAIT_ASPECT"
 
                 list_values_query = f"""
-                MATCH (:WorldElement {id: $we_id_param})-[:{rel_name_query}]->(v:ValueNode {type: $value_node_type_param})
+                MATCH (:WorldElement {{id: $we_id_param}})-[:{rel_name_query}]->(v:ValueNode {{type: $value_node_type_param}})
                 RETURN v.value AS item_value
                 """
                 list_val_res = await self._execute_read_query(list_values_query, {"we_id_param": we_id, "value_node_type_param": list_prop_key})
@@ -587,7 +587,7 @@ class state_managerSingleton:
 
 
             elab_query = """
-            MATCH (:WorldElement {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
+            MATCH (:WorldElement {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
             RETURN elab.summary AS summary, elab.chapter_updated AS chapter, elab.is_provisional AS is_provisional
             """
             elab_results = await self._execute_read_query(elab_query, {"we_id_param": we_id})

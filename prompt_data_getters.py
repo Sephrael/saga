@@ -505,17 +505,15 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         if len(facts_for_prompt) >= max_total_facts: break
         facts_for_this_char = 0
         
-        # Get status from Character node property if reliable, else KG
-        # Assuming status is on Character node, and `is_provisional` on node if applicable
+        # Get status from Character node property if reliable
         char_node_status_query = """
         MATCH (c:Character:Entity {name: $char_name_param})
-        WHERE (NOT EXISTS(c.is_provisional) OR c.is_provisional = FALSE) 
-          AND (NOT EXISTS(c.source_quality_chapter_0) OR c.source_quality_chapter_0 <> 'provisional_from_unrevised_draft' OR $chapter_limit_param > 0) // More robust provisional check for chapter 0
+        WHERE (c.is_provisional IS NULL OR c.is_provisional = FALSE)
         RETURN c.status AS status_value
         LIMIT 1
         """
         try:
-            status_res = await state_manager._execute_read_query(char_node_status_query, {"char_name_param": char_name, "chapter_limit_param": kg_chapter_limit})
+            status_res = await state_manager._execute_read_query(char_node_status_query, {"char_name_param": char_name})
             if status_res and status_res[0] and status_res[0].get('status_value') and facts_for_this_char < max_facts_per_char:
                 facts_for_prompt.append(f"- {char_name}'s status is: {status_res[0]['status_value']}.")
                 facts_for_this_char += 1
