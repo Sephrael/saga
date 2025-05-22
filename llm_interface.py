@@ -484,9 +484,12 @@ def clean_model_response(text: str) -> str:
     # Remove common markdown code blocks 
     cleaned_text = re.sub(r'```(?:json|python|text|yaml|markdown|)\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
 
-    # Remove "Chapter X" or similar headers
+    # Remove "Chapter X" or similar headers if they are the primary content of a line.
+    # This is less aggressive than removing any line starting with "Title:".
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-—]?\s*(.*?)\s*$', r'\1', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
-    cleaned_text = re.sub(r'^\s*Title:\s*.*?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
+    # The following line was too aggressive and removed "Title:" data fields needed for initial setup.
+    # cleaned_text = re.sub(r'^\s*Title:\s*.*?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
+
 
     # Remove common preamble/postamble
     common_phrases_patterns = [

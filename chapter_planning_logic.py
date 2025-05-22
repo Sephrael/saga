@@ -1,6 +1,6 @@
 # chapter_planning_logic.py
 import logging
-import json # Retained for dumping context to prompt, if complex structures are still easier this way for LLM to consume
+# Removed: import json # Retained for dumping context to prompt, if complex structures are still easier this way for LLM to consume
 import re
 import asyncio
 from typing import List, Optional, Any, Dict 
