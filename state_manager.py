@@ -162,7 +162,7 @@ class state_managerSingleton:
 
         # Clear existing plot outline data for this novel_id first
         statements.append((
-            f"MATCH (ni:NovelInfo {id: $novel_id_param}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
+            f"MATCH (ni:NovelInfo {Pid: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
             {"novel_id_param": novel_id}
         ))
         
@@ -420,7 +420,7 @@ class state_managerSingleton:
         # Clear existing WorldElement-related data. Similar to characters, this is a full refresh.
         statements.append(("MATCH (we:WorldElement) OPTIONAL MATCH (we)-[r]-() DETACH DELETE we, r", {}))
         statements.append(("MATCH (wev:WorldElaborationEvent) DETACH DELETE wev", {}))
-        statements.append((f"MATCH (wc:WorldContainer {id: $wc_id_param}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
+        statements.append((f"MATCH (wc:WorldContainer {{id: $wc_id_param}}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
         statements.append(("MATCH (vn:ValueNode) DETACH DELETE vn", {})) # ValueNodes are tied to specific WorldElements
 
         for category_str, items_dict_value_from_world_data in world_data.items(): 
