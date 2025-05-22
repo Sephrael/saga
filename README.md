@@ -90,7 +90,7 @@ For each chapter:
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/yourusername/saga.git
+git clone https://github.com/Lanerra/saga.git
 cd saga
 ```
 
