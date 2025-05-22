@@ -132,17 +132,27 @@ def truncate_text_by_tokens(text: str, model_name: str, max_tokens: int, truncat
     truncated_tokens = tokens[:max_tokens]
     marker_tokens_len = len(encoder.encode(truncation_marker, allowed_special="all"))
     
-    if len(truncated_tokens) + marker_tokens_len > max_tokens and max_tokens > marker_tokens_len :
+    # Ensure space for the truncation marker
+    if max_tokens > marker_tokens_len and len(truncated_tokens) + marker_tokens_len > max_tokens :
         truncated_tokens = tokens[:max_tokens - marker_tokens_len]
+    elif max_tokens <= marker_tokens_len: # Not enough space for marker, just truncate hard
+        truncated_tokens = tokens[:max_tokens]
+        if not truncated_tokens: return "" # Cannot even fit one token
+        try: return encoder.decode(truncated_tokens) # No marker if no space
+        except: pass # Fallthrough to simpler truncation if decode fails
+
 
     try:
         decoded_text = encoder.decode(truncated_tokens)
         return decoded_text + truncation_marker
     except Exception as e:
         logger.error(f"Error decoding truncated tokens for model '{model_name}': {e}. Falling back to simpler truncation.", exc_info=True)
+        # Fallback to character-based estimation for truncation point
+        # This is a rough estimate
         avg_chars_per_token = len(text) / len(tokens) if len(tokens) > 0 else config.FALLBACK_CHARS_PER_TOKEN
-        estimated_char_limit = int((max_tokens - marker_tokens_len) * avg_chars_per_token)
-        return text[:estimated_char_limit] + truncation_marker
+        estimated_char_limit_for_content = int((max_tokens - marker_tokens_len) * avg_chars_per_token)
+        if estimated_char_limit_for_content < 0 : estimated_char_limit_for_content = 0
+        return text[:estimated_char_limit_for_content] + truncation_marker
 
 
 def _validate_embedding(embedding_list: List[Union[float, int]], expected_dim: int, dtype: np.dtype) -> Optional[np.ndarray]:
@@ -276,7 +286,7 @@ async def async_call_llm(
                 return ""
             current_model_to_try = config.FALLBACK_GENERATION_MODEL
             logger.info(f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'.")
-            prompt_token_count = count_tokens(prompt, current_model_to_try)
+            prompt_token_count = count_tokens(prompt, current_model_to_try) # Recalculate for fallback model
 
 
         payload = {
@@ -295,19 +305,20 @@ async def async_call_llm(
                 f"Async Calling LLM '{current_model_to_try}' (Attempt {retry_attempt+1}/{config.LLM_RETRY_ATTEMPTS}, Fallback: {is_fallback_attempt}). "
                 f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}"
             )
-            api_response_obj: Optional[httpx.Response] = None # Renamed to avoid conflict
+            api_response_obj: Optional[httpx.Response] = None 
 
             try:
                 if stream_to_disk:
                     payload["stream"] = True
+                    # Create a temporary file to stream the response to disk
                     with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8", suffix=".llmstream.txt") as tmp_f:
                         temp_file_path_for_stream = tmp_f.name
-
+                    
                     usage_info_from_stream: Optional[Dict[str, int]] = None
 
-                    async with httpx.AsyncClient(timeout=600) as client:
-                        async with client.stream("POST", f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers) as response_stream: # Renamed
-                            response_stream.raise_for_status()
+                    async with httpx.AsyncClient(timeout=600) as client: # Increased timeout for streaming
+                        async with client.stream("POST", f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers) as response_stream:
+                            response_stream.raise_for_status() # Check for initial HTTP errors
 
                             with open(temp_file_path_for_stream, "w", encoding="utf-8") as f_out:
                                 async for line in response_stream.aiter_lines():
@@ -316,25 +327,27 @@ async def async_call_llm(
                                         if data_json_str == "[DONE]":
                                             break
                                         try:
-                                            chunk_data = json.loads(data_json_str) # This JSON is from the API stream itself, not LLM content
+                                            chunk_data = json.loads(data_json_str) 
                                             if chunk_data.get("choices"):
                                                 delta = chunk_data["choices"][0].get("delta", {})
                                                 content_piece = delta.get("content")
                                                 if content_piece:
                                                     f_out.write(content_piece)
                                                 
+                                                # Check for finish_reason and usage (some models send it with the last content chunk)
                                                 if chunk_data["choices"][0].get("finish_reason") is not None:
                                                     potential_usage = chunk_data.get("usage")
                                                     if potential_usage and isinstance(potential_usage, dict):
                                                         usage_info_from_stream = potential_usage
-                                                    elif chunk_data.get("x_groq") and chunk_data["x_groq"].get("usage"):
+                                                    elif chunk_data.get("x_groq") and chunk_data["x_groq"].get("usage"): # Specific to Groq
                                                         usage_info_from_stream = chunk_data["x_groq"]["usage"]
-                                                    break
-                                        except json.JSONDecodeError: # For stream data chunks
+                                                    # Don't break here if content might still be coming, only on [DONE]
+                                        except json.JSONDecodeError:
                                             logger.warning(f"Async LLM Stream: Could not decode JSON from line: {line}")
                     
                     _log_llm_usage(current_model_to_try, usage_info_from_stream, async_mode=True, streamed=True)
 
+                    # Read the complete content from the temporary file
                     with open(temp_file_path_for_stream, "r", encoding="utf-8") as f_in:
                         final_content = f_in.read()
                     
@@ -345,10 +358,10 @@ async def async_call_llm(
 
                 else: # Not streaming to disk
                     payload["stream"] = False
-                    async with httpx.AsyncClient(timeout=600) as client:
+                    async with httpx.AsyncClient(timeout=600) as client: # Increased timeout
                         api_response_obj = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
                         api_response_obj.raise_for_status()
-                        response_data = api_response_obj.json() # This JSON is the API response structure
+                        response_data = api_response_obj.json()
 
                         raw_text = ""
                         if response_data.get("choices") and len(response_data["choices"]) > 0:
@@ -376,19 +389,16 @@ async def async_call_llm(
                              f"Async LLM ('{current_model_to_try}'): Context length exceeded. Prompt tokens (est.): {prompt_token_count}. "
                              f"Model's limit might be smaller than estimated or prompt construction needs review."
                          )
-                    else:
+                    else: # Other client-side errors
                         logger.error(f"Async LLM ('{current_model_to_try}'): Client-side error {e_status.response.status_code}. Aborting retries for this model.")
-                    break 
+                    break # Break retry loop for this model on client errors
             except httpx.RequestError as e_req:
                 last_exception_for_current_model = e_req
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API request error: {e_req}")
-            except json.JSONDecodeError as e_json: # For parsing the API's own JSON response structure
+            except json.JSONDecodeError as e_json: 
                 last_exception_for_current_model = e_json
                 response_text_snippet = ""
                 if api_response_obj and hasattr(api_response_obj, 'text'): response_text_snippet = api_response_obj.text[:200]
-                # 'response_stream' is not the object here, it's 'response_stream'
-                # The response object in stream mode is `response_stream`. We read `line` from it.
-                # This path is for non-streamed JSON decode errors for the main API response.
                 
                 logger.warning(
                     f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Failed to decode API JSON: {e_json}. "
@@ -398,6 +408,7 @@ async def async_call_llm(
                 last_exception_for_current_model = e_exc
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Unexpected error: {e_exc}", exc_info=True)
 
+            # Clean up temp file if stream_to_disk was used and an error occurred
             if temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
                 try: os.remove(temp_file_path_for_stream)
                 except Exception as e_clean: logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} after failed attempt: {e_clean}")
@@ -407,15 +418,19 @@ async def async_call_llm(
                 delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** retry_attempt)
                 logger.info(f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds...")
                 await asyncio.sleep(delay)
-            else:
+            else: # All retries for the current model failed
                 logger.error(f"Async LLM ('{current_model_to_try}'): All {config.LLM_RETRY_ATTEMPTS} retries failed. Last error: {last_exception_for_current_model}")
         
+        # Logic to trigger fallback or break from overall attempts
         if last_exception_for_current_model and not (isinstance(last_exception_for_current_model, httpx.HTTPStatusError) and 400 <= last_exception_for_current_model.response.status_code < 500):
+            # If the failure was not a non-retryable client error, set up for fallback
             is_fallback_attempt = True 
         else:
+            # If successful, or a non-retryable client error occurred, break the outer loop
             break 
 
     logger.error(f"Async LLM: Call failed for '{model_name}' after all primary and potential fallback attempts.")
+    # Final cleanup for temp file if it somehow persisted
     if temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
         try: os.remove(temp_file_path_for_stream)
         except Exception as e_final_clean: logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} after all attempts failed: {e_final_clean}")
@@ -423,7 +438,7 @@ async def async_call_llm(
 
 
 def clean_model_response(text: str) -> str:
-    """Cleans common artifacts from LLM text responses."""
+    """Cleans common artifacts from LLM text responses, including stray <think> tags."""
     if not isinstance(text, str):
         logger.warning(f"clean_model_response received non-string input: {type(text)}. Returning empty string.")
         return ""
@@ -431,72 +446,72 @@ def clean_model_response(text: str) -> str:
     original_length = len(text)
     cleaned_text = text
 
-    # Remove <think>...</think> blocks and leading/trailing artifacts more robustly
-    leading_think_artifact_regex = r'^\s*<\s*(think|thought|thinking)\s*>[^<]*?(?:<\s*/\s*(?:think|thought|thinking)\s*>)?\s*'
-    trailing_think_artifact_regex = r'\s*(?:<\s*(think|thought|thinking)\s*>[^<]*?)?<\s*/\s*(think|thought|thinking)\s*>\s*$'
-    
-    # Iteratively remove leading/trailing think blocks
-    # This handles cases where the entire response might be wrapped, or multiple nested/sequential ones at start/end
-    for _ in range(5): # Limit iterations to prevent infinite loops on weird inputs
-        prev_len = len(cleaned_text)
-        cleaned_text = re.sub(leading_think_artifact_regex, '', cleaned_text, count=1, flags=re.IGNORECASE | re.DOTALL)
-        cleaned_text = re.sub(trailing_think_artifact_regex, '', cleaned_text, count=1, flags=re.IGNORECASE | re.DOTALL)
-        if len(cleaned_text) == prev_len:
-            break
-            
-    # Remove any remaining internal <think>...</think> blocks
+    # 1. Remove any complete <think>...</think> blocks anywhere in the text first.
     think_block_pattern = re.compile(
         r'<\s*(think|thought|thinking)\s*>.*?<\s*/\s*\1\s*>',
         flags=re.DOTALL | re.IGNORECASE
     )
     cleaned_text = think_block_pattern.sub('', cleaned_text)
 
-    # Remove common markdown code blocks (JSON, Python, etc.) if they are not the primary output type
-    # This is tricky because if the *entire* output is supposed to be code, we don't want to remove it.
-    # For now, this assumes code blocks are usually meta-commentary if the primary output is prose.
-    # If a function *expects* code, it should handle this itself or this clean_model_response should be used carefully.
-    # For now, this regex is broad.
+    # 2. Iteratively remove leading/trailing artifacts including unmatched/lone tags.
+    leading_stray_closing_tag = re.compile(r"^\s*<\s*/\s*(think|thought|thinking)\s*>\s*", flags=re.IGNORECASE)
+    leading_stray_opening_tag = re.compile(r"^\s*<\s*(think|thought|thinking)\s*>\s*", flags=re.IGNORECASE)
+    
+    trailing_stray_opening_tag = re.compile(r"\s*<\s*(think|thought|thinking)\s*>\s*$", flags=re.IGNORECASE)
+    trailing_stray_closing_tag = re.compile(r"\s*<\s*/\s*(think|thought|thinking)\s*>\s*$", flags=re.IGNORECASE)
+    
+    for _ in range(5): # Limit iterations
+        prev_len = len(cleaned_text)
+        
+        # Apply leading patterns
+        cleaned_text = leading_stray_closing_tag.sub('', cleaned_text, count=1)
+        cleaned_text = leading_stray_opening_tag.sub('', cleaned_text, count=1)
+            
+        # Apply trailing patterns
+        cleaned_text = trailing_stray_opening_tag.sub('', cleaned_text, count=1)
+        cleaned_text = trailing_stray_closing_tag.sub('', cleaned_text, count=1)
+            
+        if len(cleaned_text) == prev_len: # No change in this iteration, break
+            break
+            
+    # 3. Remove any remaining internal stray tags as a final cleanup.
+    # These are unanchored and will remove any occurrence.
+    stray_opening_tag_pattern_anywhere = re.compile(r"<\s*(think|thought|thinking)\s*>", flags=re.IGNORECASE)
+    stray_closing_tag_pattern_anywhere = re.compile(r"<\s*/\s*(think|thought|thinking)\s*>", flags=re.IGNORECASE)
+    cleaned_text = stray_opening_tag_pattern_anywhere.sub('', cleaned_text)
+    cleaned_text = stray_closing_tag_pattern_anywhere.sub('', cleaned_text)
+
+    # Remove common markdown code blocks 
     cleaned_text = re.sub(r'```(?:json|python|text|yaml|markdown|)\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
 
-    # Remove "Chapter X" or similar headers if they are on their own lines
+    # Remove "Chapter X" or similar headers
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-—]?\s*(.*?)\s*$', r'\1', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
     cleaned_text = re.sub(r'^\s*Title:\s*.*?\s*$', '', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
 
-
-    # Remove common preamble/postamble like "Here's the chapter text:" or "Let me know what you think."
+    # Remove common preamble/postamble
     common_phrases_patterns = [
-        r"^\s*Here's the.*?:\s*",
-        r"^\s*Okay, here is the.*?:\s*",
-        r"^\s*Sure, here's the.*?:\s*",
+        r"^\s*Here's the.*?:\s*", r"^\s*Okay, here is the.*?:\s*", r"^\s*Sure, here's the.*?:\s*",
         r"^\s*I've written the.*?as requested:\s*",
-        r"\s*Let me know if you have any other questions or need further revisions\.$",
-        r"\s*I hope this meets your expectations\.$",
-        r"\s*Feel free to ask for adjustments\.$",
-        r"^\s*Output:\s*",
-        r"^\s*Result:\s*",
-        r"^\s*Response:\s*",
+        r"\s*Let me know if you have any other questions or need further revisions\.[^\w\n]*$", # Ensure it's at the end
+        r"\s*I hope this meets your expectations\.[^\w\n]*$",
+        r"\s*Feel free to ask for adjustments\.[^\w\n]*$",
+        r"^\s*Output:\s*", r"^\s*Result:\s*", r"^\s*Response:\s*",
     ]
     for pattern_str in common_phrases_patterns:
         cleaned_text = re.sub(pattern_str, "", cleaned_text, flags=re.IGNORECASE | re.MULTILINE).strip()
-
 
     # Normalize multiple newlines to a maximum of two
     cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
     
     # Trim leading/trailing whitespace from the whole text and from each line
     lines = cleaned_text.splitlines()
-    processed_lines = []
-    for line in lines:
-        stripped_line = line.strip()
-        # Optional: Replace multiple spaces within a line with a single space
-        # processed_lines.append(re.sub(r'[ \t]+', ' ', stripped_line) if stripped_line else '')
-        processed_lines.append(stripped_line) # Keep original spacing within lines for prose
+    processed_lines = [line.strip() for line in lines] 
 
     final_text = '\n'.join(processed_lines).strip()
 
-
-    if original_length > 0 and len(final_text) < original_length * 0.95 : # Heuristic: if significantly shorter
+    if original_length > 0 and len(final_text) < original_length: 
         reduction_percentage = ((original_length - len(final_text)) / original_length) * 100
-        logger.debug(f"Cleaning reduced text length from {original_length} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
+        if reduction_percentage > 1.0: # Log only if reduction is somewhat significant
+            logger.debug(f"Cleaning reduced text length from {original_length} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
 
     return final_text
