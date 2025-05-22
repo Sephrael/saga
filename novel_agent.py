@@ -1,6 +1,6 @@
 # novel_agent.py
 import os
-import json
+import json # Retained for potential debug dumps, not core logic
 import logging
 import asyncio
 from typing import Dict, List, Optional, Tuple, Any 
@@ -8,13 +8,13 @@ from typing import Dict, List, Optional, Tuple, Any
 import config
 import llm_interface
 from state_manager import state_manager 
-from type import JsonStateData, EvaluationResult, SceneDetail, ProblemDetail 
+from type import AgentStateData, EvaluationResult, SceneDetail, ProblemDetail 
 
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
 from chapter_planning_logic import plan_chapter_scenes_logic 
 from chapter_drafting_logic import generate_chapter_draft_logic
 from chapter_evaluation_logic import evaluate_chapter_draft_logic 
-from chapter_revision_logic import revise_chapter_draft_logic # Updated name to revise_chapter_draft_logic
+from chapter_revision_logic import revise_chapter_draft_logic
 from knowledge_management_logic import ( 
     update_all_knowledge_bases_logic,
     summarize_chapter_text_logic,
@@ -35,13 +35,11 @@ class NovelWriterAgent:
         logger.info("NovelWriterAgent instance created. Call async_init() to load/prepare state.")
 
     async def async_init(self):
-        """Asynchronously initializes agent state by loading from Neo4j."""
         logger.info("NovelWriterAgent async_init started...")
         
         self.chapter_count = await state_manager.async_load_chapter_count()
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
 
-        # Load decomposed structures. state_manager now handles reassembly into dicts.
         load_tasks = {
             "plot": state_manager.get_plot_outline(),
             "chars": state_manager.get_character_profiles(),
@@ -53,7 +51,6 @@ class NovelWriterAgent:
         for key, value in loaded_data.items():
             if isinstance(value, Exception):
                 logger.error(f"Error loading {key} during async_init: {value}", exc_info=value)
-                # Ensure defaults are set if loading fails
                 if key == "plot": self.plot_outline = {}
                 elif key == "chars": self.character_profiles = {}
                 elif key == "world": self.world_building = {}
@@ -71,9 +68,8 @@ class NovelWriterAgent:
         
         logger.info("NovelWriterAgent async_init complete.")
 
-    async def _save_all_json_state(self):
+    async def _save_all_agent_state_to_neo4j(self): 
         logger.info("Saving agent state (plot, characters, world) to Neo4j (decomposed)...")
-        # state_manager.save_* methods now handle decomposition.
         tasks = [
             state_manager.save_plot_outline(self.plot_outline),
             state_manager.save_character_profiles(self.character_profiles),
@@ -99,28 +95,20 @@ class NovelWriterAgent:
             logger.warning(f"Only {success_count}/{len(tasks)} state objects saved to Neo4j (decomposed) successfully.")
 
     async def generate_plot_outline(self, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Dict[str, Any]:
-        # Logic to generate self.plot_outline as a Python dict remains the same.
-        # The change is in how _save_all_json_state (called within or after) persists it.
         generated_outline = await generate_plot_outline_logic(self, default_protagonist_name, unhinged_mode, **kwargs)
         # self.plot_outline is updated by generate_plot_outline_logic
-        # It will also call _save_all_json_state internally if it modifies the agent's state.
         return generated_outline
 
 
     async def generate_world_building(self) -> Dict[str, Any]:
-        # Logic to generate self.world_building as a Python dict remains the same.
         generated_world_data = await generate_world_building_logic(self)
         # self.world_building is updated by generate_world_building_logic
-        # It will also call _save_all_json_state internally.
         return generated_world_data
 
     async def _prepopulate_knowledge_graph(self):
-        # This will now call the updated prepopulate_kg_from_initial_data_logic,
-        # which takes the agent's Python dicts and creates fine-grained Neo4j data.
         await prepopulate_kg_from_initial_data_logic(self)
 
     def _get_plot_point_info(self, chapter_number: int) -> Tuple[Optional[str], int]:
-        # This method still reads from self.plot_outline (Python dict)
         plot_points = self.plot_outline.get("plot_points", [])
         if not isinstance(plot_points, list) or not plot_points:
             logger.warning(f"No plot points defined in plot outline for chapter {chapter_number}.")
@@ -179,7 +167,6 @@ class NovelWriterAgent:
         current_raw_llm_output = initial_raw_llm_text
         is_from_flawed_source = False 
 
-        # Initial evaluation
         evaluation = await evaluate_chapter_draft_logic(self, current_text_to_process, chapter_number, hybrid_context_for_draft)
 
         if evaluation["needs_revision"]:
@@ -202,17 +189,18 @@ class NovelWriterAgent:
                 
                 if revised_evaluation["needs_revision"]:
                     logger.error(f"Revised draft for ch {chapter_number} STILL FAILED evaluation. Reasons: {'; '.join(revised_evaluation['reasons'])}")
+                    # Prefer original if it's longer and not disastrously short, otherwise take revised if it's an improvement or original was too bad
                     if len(current_text_to_process) >= len(revised_text) and len(current_text_to_process) >= config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2:
                         logger.warning(f"Reverting to original draft ({len(current_text_to_process)} chars) as revised draft ({len(revised_text)} chars) also failed evaluation and original is longer/better.")
                         is_from_flawed_source = True 
                     else:
                         logger.warning(f"Proceeding with revised draft ({len(revised_text)} chars) despite failing re-evaluation, as it's preferred over original ({len(current_text_to_process)} chars) or original was too short.")
                         current_text_to_process = revised_text
-                        current_raw_llm_output = raw_revision_llm_output
+                        current_raw_llm_output = raw_revision_llm_output if raw_revision_llm_output else current_raw_llm_output # Ensure we have a raw output
                         is_from_flawed_source = True 
                 else: 
                     current_text_to_process = revised_text
-                    current_raw_llm_output = raw_revision_llm_output
+                    current_raw_llm_output = raw_revision_llm_output if raw_revision_llm_output else current_raw_llm_output
                     logger.info(f"Revised draft for ch {chapter_number} passed re-evaluation.")
                     is_from_flawed_source = False 
             else: 
@@ -231,12 +219,10 @@ class NovelWriterAgent:
              logger.error(f"=== Finished Ch {chapter_number} WITH ERRORS during core finalization (Neo4j/File save or embedding) ===")
              return None 
 
-        # Knowledge base updates will operate on the agent's Python dicts,
-        # which are then saved (decomposed) by _save_all_json_state.
         await update_all_knowledge_bases_logic(self, chapter_number, current_text_to_process, is_from_flawed_source)
         
         self.chapter_count = max(self.chapter_count, chapter_number) 
-        await self._save_all_json_state() # Persist the (potentially updated) dicts as decomposed graph data
+        await self._save_all_agent_state_to_neo4j() 
         
         status_message = "Successfully" if not is_from_flawed_source else "With Flaws (Marked as flawed due to evaluation or length issues)"
         logger.info(f"=== Finished Ch {chapter_number} {status_message} ===")

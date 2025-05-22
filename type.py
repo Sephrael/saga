@@ -20,25 +20,29 @@ class ProblemDetail(TypedDict):
 class EvaluationResult(TypedDict):
     needs_revision: bool
     reasons: List[str] # High-level summary of reasons for revision
-    problems_found: List[ProblemDetail] # NEW: Detailed list of specific problems with quotes
+    problems_found: List[ProblemDetail] 
     coherence_score: Optional[float] 
-    consistency_issues: Optional[str] # Summary string, still useful for overall logging
-    plot_deviation_reason: Optional[str] # Summary string
-    thematic_issues: Optional[str] # Summary string
-    narrative_depth_issues: Optional[str] # Summary string
+    consistency_issues: Optional[str] 
+    plot_deviation_reason: Optional[str] 
+    thematic_issues: Optional[str] 
+    narrative_depth_issues: Optional[str] 
 
 class PatchInstruction(TypedDict):
     """Instruction for applying a single patch to the chapter text."""
-    search_text: str # The exact text to find (from ProblemDetail.quote_from_original)
-    replace_with: str # The new text to substitute
-    original_quote_ref: str # Reference to the original quote for traceability
-    reason_for_change: str # Brief explanation linked to the ProblemDetail
+    search_text: str 
+    replace_with: str 
+    original_quote_ref: str 
+    reason_for_change: str 
 
-class JsonStateData(TypedDict): 
+# Renamed JsonStateData to reflect that it's the agent's internal Python dict state,
+# not necessarily derived from JSON LLM output anymore.
+class AgentStateData(TypedDict): 
     plot_outline: dict
     character_profiles: dict
     world_building: dict
 
 ChapterPlan = List[SceneDetail]
 
+# JsonType is less relevant if we are not parsing generic JSON from LLMs.
+# It might still be used for API payloads or user-supplied JSON files.
 JsonType = Union[Dict[str, Any], List[Any], str, int, float, bool, None]

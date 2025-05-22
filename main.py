@@ -72,7 +72,7 @@ async def perform_initial_setup(agent: NovelWriterAgent) -> bool:
         print(f"   World Building Python dict initialized/loaded (source: {world_source}, user_supplied: {is_user_supplied_world}).")
 
         # Now, explicitly save the populated Python dicts to Neo4j in decomposed form
-        await agent._save_all_json_state()
+        await agent._save_all_agent_state_to_neo4j() 
         print("   Initial plot, character, and world Python dicts saved to Neo4j (decomposed).")
 
     except Exception as e:
@@ -101,28 +101,27 @@ async def prepopulate_kg_if_needed(agent: NovelWriterAgent):
             logger.error(f"Failed to connect to Neo4j, cannot check for existing KG pre-population: {e}")
             return
 
-    # Check if any :NovelInfo node exists, as a proxy for prepopulation
-    # A more robust check would count specific types of prepopulated nodes/rels.
     check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}}) RETURN count(ni) as count"
     try:
         result = await state_manager._execute_read_query(check_query)
         if result and result[0] and result[0]['count'] > 0:
-            logger.info(f"Found existing NovelInfo node. Assuming KG already pre-populated or managed. Skipping explicit pre-population step.")
-            # If we want to ensure plot_points are there from a previous save:
-            # plot_points_count_query = f"MATCH (:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}})-[:HAS_PLOT_POINT]->(:PlotPoint) RETURN count(*) as pp_count"
-            # pp_res = await state_manager._execute_read_query(plot_points_count_query)
-            # if pp_res and pp_res[0]['pp_count'] > 0:
-            #     logger.info(f"Found {pp_res[0]['pp_count']} plot points. KG seems pre-populated.")
-            #     return
-            # else:
-            #     logger.info("NovelInfo node exists, but no plot points. Proceeding with pre-population.")
-            return # Simplified: if NovelInfo exists, assume prepopulated for now
+            # Check if PlotPoints exist for this NovelInfo, which would indicate prior pre-population.
+            pp_check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}})-[:HAS_PLOT_POINT]->(:PlotPoint) RETURN count(*) AS pp_count"
+            pp_result = await state_manager._execute_read_query(pp_check_query)
+            if pp_result and pp_result[0] and pp_result[0]['pp_count'] > 0:
+                logger.info(f"Found existing NovelInfo node with plot points. Assuming KG already pre-populated or managed. Skipping explicit pre-population step.")
+                return
+            else:
+                logger.info(f"Found existing NovelInfo node, but no plot points. Proceeding with KG pre-population to ensure completeness.")
+        else: # NovelInfo node doesn't exist, definitely need to pre-populate
+             logger.info(f"No existing NovelInfo node found. Proceeding with KG pre-population.")
+
     except Exception as e:
         logger.error(f"Error checking for existing KG pre-population: {e}. Will attempt pre-population.", exc_info=True)
         
     print("\n--- Pre-populating Knowledge Graph from Initial Agent Data (Python Dicts) ---")
     try:
-        await agent._prepopulate_knowledge_graph() # This now uses the direct Cypher generation method
+        await agent._prepopulate_knowledge_graph() 
         print("Knowledge Graph pre-population step from agent's Python dicts complete.")
     except Exception as e:
         logger.error(f"Error during Knowledge Graph pre-population from agent dicts: {e}", exc_info=True)
@@ -137,7 +136,7 @@ async def run_novel_generation_async():
         logger.info("state_manager initialized and Neo4j connection/schema verified.")
 
         agent = NovelWriterAgent()
-        await agent.async_init() # Loads state from Neo4j into agent's Python dicts
+        await agent.async_init() 
         logger.info("NovelWriterAgent initialized and state loaded (Python dicts from Neo4j).")
     except Exception as e:
         logger.critical(f"Failed to initialize state_manager or NovelWriterAgent: {e}", exc_info=True)
@@ -145,11 +144,11 @@ async def run_novel_generation_async():
         sys.exit(1)
 
     try:
-        if not await perform_initial_setup(agent): # Populates agent dicts, then saves to Neo4j decomposed
+        if not await perform_initial_setup(agent): 
             logger.critical("Initial setup (Python dict population or save to Neo4j) failed. Halting.")
             sys.exit(1)
 
-        await prepopulate_kg_if_needed(agent) # Prepopulates KG directly from agent's Python dicts
+        await prepopulate_kg_if_needed(agent) 
 
         print("\n--- Starting Novel Writing Process ---")
         start_chapter = agent.chapter_count + 1
@@ -167,9 +166,6 @@ async def run_novel_generation_async():
         for i in range(start_chapter, end_chapter):
             print(f"\n--- Attempting Chapter {i} ---")
             try:
-                # agent.write_chapter internally uses agent's Python dicts for its logic,
-                # then saves the final chapter text and updates to knowledge bases (Python dicts + KG triples).
-                # Finally, it calls _save_all_json_state to persist the updated Python dicts to Neo4j (decomposed).
                 chapter_text = await agent.write_chapter(i)
                 if chapter_text:
                     chapters_successfully_written += 1
@@ -201,10 +197,8 @@ if __name__ == "__main__":
             logging.getLogger(__name__).info("Shutting down gracefully...")
         except Exception as main_err: 
             logging.getLogger(__name__).critical(f"Unhandled main exception: {main_err}", exc_info=True)
-            sys.exit(1) # Ensure exit on unhandled error in main async run
-    else: # Fallback for environments where asyncio.run() is not suitable
+            sys.exit(1) 
+    else: 
         logger = logging.getLogger(__name__)
         logger.warning("RUN_WITH_ASYNCIO_RUN is False. "
                        "This script expects 'run_novel_generation_async()' to be called from an existing event loop if not run directly.")
-        # Consider either exiting or providing a clear message if this path is not intended for production
-        # sys.exit(1)

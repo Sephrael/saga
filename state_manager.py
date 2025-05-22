@@ -54,19 +54,20 @@ class state_managerSingleton:
             self.logger.info("Neo4j driver closed.")
 
     async def _execute_query_tx(self, tx: AsyncManagedTransaction, query: str, parameters: Optional[Dict] = None):
+        self.logger.debug(f"Executing Cypher query: {query} with params: {parameters}")
         result = await tx.run(query, parameters)
         return await result.data() # Fetches all records
 
     async def _execute_read_query(self, query: str, parameters: Optional[Dict] = None):
         if self.driver is None: await self.connect()
         if self.driver is None: raise ConnectionError("Neo4j driver not initialized.")
-        async with self.driver.session() as session:
+        async with self.driver.session(database=config.NEO4J_DATABASE if hasattr(config, "NEO4J_DATABASE") else None) as session: # type: ignore
             return await session.execute_read(self._execute_query_tx, query, parameters)
 
     async def _execute_write_query(self, query: str, parameters: Optional[Dict] = None):
         if self.driver is None: await self.connect()
         if self.driver is None: raise ConnectionError("Neo4j driver not initialized.")
-        async with self.driver.session() as session:
+        async with self.driver.session(database=config.NEO4J_DATABASE if hasattr(config, "NEO4J_DATABASE") else None) as session: # type: ignore
             return await session.execute_write(self._execute_query_tx, query, parameters)
             
     async def execute_cypher_batch(self, cypher_statements_with_params: List[Tuple[str, Dict[str, Any]]]):
@@ -78,8 +79,8 @@ class state_managerSingleton:
         if self.driver is None: await self.connect()
         if self.driver is None: raise ConnectionError("Neo4j driver not initialized.")
 
-        async with self.driver.session() as session: # type: AsyncSession
-            tx = await session.begin_transaction() # type: AsyncManagedTransaction # FIX: await here
+        async with self.driver.session(database=config.NEO4J_DATABASE if hasattr(config, "NEO4J_DATABASE") else None) as session: # type: AsyncSession # type: ignore
+            tx: AsyncManagedTransaction = await session.begin_transaction() 
             try:
                 for query, params in cypher_statements_with_params:
                     self.logger.debug(f"Batch Cypher: {query} with params {params}")
@@ -88,7 +89,7 @@ class state_managerSingleton:
                 self.logger.info(f"Successfully executed batch of {len(cypher_statements_with_params)} Cypher statements.")
             except Exception as e:
                 self.logger.error(f"Error in Cypher batch execution: {e}. Rolling back.", exc_info=True)
-                if tx.closed() is False: # Check if transaction is still open before attempting rollback
+                if tx.closed() is False: 
                     await tx.rollback()
                 raise
 
@@ -97,27 +98,29 @@ class state_managerSingleton:
         self.logger.info("Creating/verifying Neo4j indexes and constraints...")
         # Core Node Types
         core_constraints = [
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Chapter) REQUIRE c.number IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE", # General entities for KG
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE", # Using unique ID for world elements
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE", # Added for WorldContainer
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE", # Added for Trait
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE", # Added for PlotPoint
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (vn:ValueNode) REQUIRE vn.value IS UNIQUE", # If ValueNodes should be unique by value
+            "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
+            "CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:Chapter) REQUIRE c.number IS UNIQUE",
+            "CREATE CONSTRAINT entity_name_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE",
+            "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE", # Character is also an Entity
+            "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
+            "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
+            "CREATE CONSTRAINT trait_name_unique IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE",
+            "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
+            "CREATE CONSTRAINT valueNode_value_type_unique IF NOT EXISTS FOR (vn:ValueNode) REQUIRE (vn.value, vn.type) IS UNIQUE",
         ]
         # Indexes for faster lookups
         indexes = [
-            "CREATE INDEX IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
-            "CREATE INDEX IF NOT EXISTS FOR (s:StatusEvent) ON (s.chapter_updated)",
-            "CREATE INDEX IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
-            "CREATE INDEX IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
-            "CREATE INDEX IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
-            "CREATE INDEX IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)", # Index on DYNAMIC_REL type
-            "CREATE INDEX IF NOT EXISTS FOR ()-[r:HAS_TRAIT]-() ON (r.name)", 
-            "CREATE INDEX IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
-            "CREATE INDEX IF NOT EXISTS FOR (we:WorldElement) ON (we.name)" 
+            "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
+            "CREATE INDEX statusEvent_chapter_updated IF NOT EXISTS FOR (s:StatusEvent) ON (s.chapter_updated)", # Assuming StatusEvent label exists
+            "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
+            "CREATE INDEX worldElaborationEvent_chapter_updated IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
+            "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
+            "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
+            # HAS_TRAIT is specific, index on name of Trait node is already covered by constraint.
+            "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
+            "CREATE INDEX worldElement_name IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
+            "CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:Chapter) ON (c.is_provisional)", # For filtering chapters
+            "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)", # For KG queries
         ]
         
         all_schema_ops = core_constraints + indexes
@@ -125,7 +128,7 @@ class state_managerSingleton:
             try:
                 await self._execute_write_query(query)
             except Exception as e: 
-                self.logger.warning(f"Failed to apply schema operation '{query}': {e} (This might be okay if it already exists in a slightly different form or due to concurrent setup).")
+                self.logger.warning(f"Failed to apply schema operation '{query}': {e} (This might be okay if it already exists or due to concurrent setup).")
         self.logger.info("Neo4j indexes and constraints verification process complete.")
 
     def _serialize_embedding(self, embedding: np.ndarray) -> Tuple[str, str, str]:
@@ -157,15 +160,15 @@ class state_managerSingleton:
         novel_id = config.MAIN_NOVEL_INFO_NODE_ID
         statements = []
 
-        # Clear existing plot outline data first
-        statements.append((f"MATCH (ni:NovelInfo {{id: '{novel_id}'}})-[r:HAS_PLOT_POINT]->(pp:PlotPoint) DETACH DELETE pp, r", {}))
-        statements.append((f"MATCH (ni:NovelInfo {{id: '{novel_id}'}}) DETACH DELETE ni", {}))
-
-        # Prepare NovelInfo properties
+        # Clear existing plot outline data for this novel_id first
+        statements.append((
+            f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) OPTIONAL MATCH (ni)-[r_pp:HAS_PLOT_POINT]->(pp:PlotPoint) OPTIONAL MATCH (pp)-[r_next:NEXT_PLOT_POINT]->() DETACH DELETE pp, r_pp, r_next, ni",
+            {"novel_id_param": novel_id}
+        ))
+        
         novel_props_for_set = {k: v for k, v in plot_data.items() if not isinstance(v, (list, dict)) and v is not None}
-        novel_props_for_set['id'] = novel_id # Ensure 'id' is in the properties for SET
+        novel_props_for_set['id'] = novel_id 
 
-        # MERGE NovelInfo node
         statements.append((
             "MERGE (ni:NovelInfo {id: $id_val}) SET ni = $props",
             {"id_val": novel_id, "props": novel_props_for_set}
@@ -181,30 +184,27 @@ class state_managerSingleton:
                         "sequence": i + 1,
                         "description": point_desc_str
                     }
-                    # MERGE PlotPoint node
                     statements.append((
                         "MERGE (pp:PlotPoint {id: $id_val}) SET pp = $props",
                         {"id_val": pp_id, "props": pp_props_for_set}
                     ))
-                    # MERGE relationship from NovelInfo to PlotPoint
                     statements.append((
-                        f"""
-                        MATCH (ni:NovelInfo {{id: '{novel_id}'}})
-                        MATCH (pp:PlotPoint {{id: $pp_id_val}})
+                        """
+                        MATCH (ni:NovelInfo {id: $novel_id_param})
+                        MATCH (pp:PlotPoint {id: $pp_id_val})
                         MERGE (ni)-[:HAS_PLOT_POINT]->(pp)
                         """,
-                        {"pp_id_val": pp_id} # Use a different param name to avoid conflict if novel_id was $id_val
+                        {"novel_id_param": novel_id, "pp_id_val": pp_id} 
                     ))
                     if i > 0:
                         prev_pp_id = f"{novel_id}_pp_{i}"
-                        # MERGE relationship from previous PlotPoint to current
                         statements.append((
-                            f"""
-                            MATCH (prev_pp:PlotPoint {{id: '{prev_pp_id}'}})
-                            MATCH (curr_pp:PlotPoint {{id: $pp_id_val}})
+                            """
+                            MATCH (prev_pp:PlotPoint {id: $prev_pp_id_val})
+                            MATCH (curr_pp:PlotPoint {id: $pp_id_val})
                             MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)
                             """,
-                            {"pp_id_val": pp_id} # Use a different param name
+                            {"prev_pp_id_val": prev_pp_id, "pp_id_val": pp_id} 
                         ))
         try:
             await self.execute_cypher_batch(statements)
@@ -219,28 +219,22 @@ class state_managerSingleton:
         novel_id = config.MAIN_NOVEL_INFO_NODE_ID
         plot_data: Dict[str, Any] = {}
 
-        novel_info_query = f"MATCH (ni:NovelInfo {{id: '{novel_id}'}}) RETURN ni"
-        result = await self._execute_read_query(novel_info_query)
-        if not result or not result[0] or not result[0]['ni']:
+        novel_info_query = "MATCH (ni:NovelInfo {id: $novel_id_param}) RETURN ni"
+        result = await self._execute_read_query(novel_info_query, {"novel_id_param": novel_id})
+        if not result or not result[0] or not result[0].get('ni'):
             self.logger.warning(f"No NovelInfo node found with id '{novel_id}'. Returning empty plot outline.")
             return {}
         
         plot_data.update(result[0]['ni']) 
-        plot_data_id = plot_data.pop('id', None) # Remove the 'id' property we set if it was NovelInfo node's id
-        if plot_data_id != novel_id and plot_data_id is not None: # If a different 'id' was a property
-            plot_data['id_prop_original'] = plot_data_id # Keep it under a different name
+        plot_data.pop('id', None) # Remove internal 'id' if it's the same as novel_id
 
-        plot_points_query = f"""
-        MATCH (ni:NovelInfo {{id: '{novel_id}'}})-[:HAS_PLOT_POINT]->(pp:PlotPoint)
-        RETURN pp.sequence AS sequence, pp.description AS description
-        ORDER BY pp.sequence
+        plot_points_query = """
+        MATCH (ni:NovelInfo {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint)
+        RETURN pp.description AS description
+        ORDER BY pp.sequence ASC
         """
-        pp_results = await self._execute_read_query(plot_points_query)
-        plot_points_list = []
-        if pp_results:
-            for record in pp_results:
-                plot_points_list.append(record['description'])
-        plot_data['plot_points'] = plot_points_list
+        pp_results = await self._execute_read_query(plot_points_query, {"novel_id_param": novel_id})
+        plot_data['plot_points'] = [record['description'] for record in pp_results] if pp_results else []
         
         self.logger.info("Successfully loaded and recomposed plot outline from Neo4j.")
         return plot_data
@@ -254,26 +248,26 @@ class state_managerSingleton:
             return False
 
         statements = []
-        # Clear existing character-related data first
-        statements.append(("MATCH (c:Character)-[r]->() DETACH DELETE r", {})) # Delete outgoing relationships
-        statements.append(("MATCH ()-[r]->(c:Character) DETACH DELETE r", {})) # Delete incoming relationships
-        statements.append(("MATCH (c:Character) DETACH DELETE c", {}))
-        statements.append(("MATCH (t:Trait) DETACH DELETE t", {}))
+        # Clear existing Character-related data. Consider if this is too broad or if targeted deletion is better.
+        # This approach simplifies ensuring the graph reflects exactly the current agent state.
+        statements.append(("MATCH (c:Character) OPTIONAL MATCH (c)-[r]-() DETACH DELETE c, r", {}))
+        statements.append(("MATCH (t:Trait) DETACH DELETE t", {})) # Traits might be shared, careful here. If traits are global, don't delete.
+                                                                # Assuming traits are specific to this novel's context for now.
         statements.append(("MATCH (dev:DevelopmentEvent) DETACH DELETE dev", {}))
+
 
         for char_name, profile in profiles_data.items():
             if not isinstance(profile, dict): continue
 
             char_props_for_set = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
-            char_props_for_set['name'] = char_name # Ensure 'name' is in properties for SET
-
-            # MERGE the Character node
+            # 'name' is part of MERGE pattern, not SET here, unless it's part of $props
+            
+            # Ensure Character is also an Entity for KG integration
             statements.append((
-                "MERGE (c:Character {name: $char_name_val}) SET c = $props",
+                "MERGE (c:Character:Entity {name: $char_name_val}) SET c = $props, c.name = $char_name_val", # Explicitly set name in props too
                 {"char_name_val": char_name, "props": char_props_for_set}
             ))
 
-            # Handle traits
             if isinstance(profile.get("traits"), list):
                 for trait_str in profile["traits"]:
                     if isinstance(trait_str, str):
@@ -286,46 +280,61 @@ class state_managerSingleton:
                             {"char_name_val": char_name, "trait_name_val": trait_str}
                         ))
 
-            # Handle relationships (already uses MERGE for c2, which is good)
             if isinstance(profile.get("relationships"), dict):
                 for target_char_name, rel_detail in profile["relationships"].items():
-                    rel_type_str = "RELATED_TO"
-                    # Default props for the relationship itself
-                    rel_props_for_set = {"description": str(rel_detail), "chapter_added": config.KG_PREPOPULATION_CHAPTER_NUM, "is_provisional": False}
-                    if isinstance(rel_detail, dict) and "type" in rel_detail:
-                        rel_type_str = rel_detail.pop("type", rel_type_str).upper().replace(" ", "_")
-                        rel_props_for_set.update(rel_detail) # Add any other props from rel_detail to relationship
+                    rel_type_str = "RELATED_TO" # Default
+                    # Ensure rel_props_for_set does not contain complex objects, only primitives
+                    rel_props_for_set = {"description": str(rel_detail)}
+                    if isinstance(rel_detail, dict):
+                        rel_type_str = str(rel_detail.get("type", rel_type_str)).upper().replace(" ", "_")
+                        rel_props_for_set = {k:v for k,v in rel_detail.items() if isinstance(v, (str, int, float, bool))}
+                        rel_props_for_set.setdefault("description", f"{rel_type_str} {target_char_name}") # Ensure description
+                    elif isinstance(rel_detail, str):
+                        rel_type_str = rel_detail.upper().replace(" ", "_") # If only type is given as string
+                        rel_props_for_set = {"description": rel_detail}
+
+
+                    # Add default chapter_added and is_provisional if not present
+                    rel_props_for_set.setdefault("chapter_added", profile.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}", config.KG_PREPOPULATION_CHAPTER_NUM))
+                    rel_props_for_set.setdefault("is_provisional", profile.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft" if f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}" in profile else False)
+
 
                     statements.append((
                         """
-                        MATCH (c1:Character {name: $char_name1_val})
-                        MERGE (c2:Character {name: $char_name2_val})
-                            ON CREATE SET c2.description = 'Placeholder description - created via relationship link from ' + $char_name1_val, c2.name = $char_name2_val
+                        MATCH (c1:Character:Entity {name: $char_name1_val})
+                        MERGE (c2:Character:Entity {name: $char_name2_val})
+                            ON CREATE SET c2.description = 'Placeholder desc - created via rel from ' + $char_name1_val, c2.name = $char_name2_val
+                        // MERGE on key properties of the relationship to allow updates if it already exists
                         MERGE (c1)-[r:DYNAMIC_REL {type: $rel_type_val}]->(c2)
-                        SET r += $rel_props_val, r.chapter_added = COALESCE($rel_props_val.chapter_added, r.chapter_added, $default_chap_add), r.is_provisional = COALESCE($rel_props_val.is_provisional, r.is_provisional, false)
+                        SET r += $rel_props_val
                         """,
                         {
                             "char_name1_val": char_name,
                             "char_name2_val": target_char_name,
                             "rel_type_val": rel_type_str,
-                            "rel_props_val": rel_props_for_set, # Pass the whole dict
-                            "default_chap_add": config.KG_PREPOPULATION_CHAPTER_NUM
+                            "rel_props_val": rel_props_for_set
                         }
                     ))
             
-            # Handle development events (these are new events, so CREATE is fine after character MERGE)
             for key, value_str in profile.items():
                 if key.startswith("development_in_chapter_") and isinstance(value_str, str):
                     try:
                         chap_num_int = int(key.split("_")[-1])
                         dev_event_props = {
                             "summary": value_str,
-                            "chapter": chap_num_int # Store as integer
+                            "chapter_updated": chap_num_int # Renamed for consistency
                         }
+                        # Check for provisional status for this development
+                        provisional_dev = profile.get(f"source_quality_chapter_{chap_num_int}") == "provisional_from_unrevised_draft"
+                        if provisional_dev:
+                            dev_event_props["is_provisional"] = True
+                            
                         statements.append((
                             """
                             MATCH (c:Character {name: $char_name_val})
-                            CREATE (dev:DevelopmentEvent $props)
+                            // Create a new DevelopmentEvent for each chapter's development
+                            CREATE (dev:DevelopmentEvent)
+                            SET dev = $props
                             CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
                             """,
                             {"char_name_val": char_name, "props": dev_event_props}
@@ -344,7 +353,8 @@ class state_managerSingleton:
         self.logger.info("Loading decomposed character profiles from Neo4j...")
         profiles_data: Dict[str, Any] = {}
 
-        char_query = "MATCH (c:Character) RETURN c"
+        # Fetch all base Character nodes (which are also Entities)
+        char_query = "MATCH (c:Character:Entity) RETURN c"
         char_results = await self._execute_read_query(char_query)
         if not char_results:
             return {}
@@ -354,53 +364,46 @@ class state_managerSingleton:
             char_name = char_node.get('name')
             if not char_name:
                 continue
-            profiles_data[char_name] = dict(char_node)
-            profiles_data[char_name].pop('name', None)  # Name is the key
+            
+            profile = dict(char_node)
+            profile.pop('name', None) # Name is the key in profiles_data
 
-            traits_query = "MATCH (c:Character {name: $char_name})-[:HAS_TRAIT]->(t:Trait) RETURN t.name AS trait_name"
+            # Fetch traits
+            traits_query = "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait) RETURN t.name AS trait_name"
             trait_results = await self._execute_read_query(traits_query, {"char_name": char_name})
-            profiles_data[char_name]["traits"] = [tr['trait_name'] for tr in trait_results] if trait_results else []
+            profile["traits"] = [tr['trait_name'] for tr in trait_results] if trait_results else []
 
+            # Fetch relationships
             rels_query = """
-            MATCH (c1:Character {name: $char_name})-[r:DYNAMIC_REL]->(c2:Character)
-            RETURN c2.name AS target_name, r
+            MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Character:Entity)
+            RETURN target.name AS target_name, r.type AS relationship_type, properties(r) AS rel_props
             """
             rel_results = await self._execute_read_query(rels_query, {"char_name": char_name})
             relationships = {}
             if rel_results:
                 for rel_rec in rel_results:
                     target_name = rel_rec['target_name']
-                    rel_node_obj = rel_rec['r'] # This is the relationship object itself
+                    rel_type = rel_rec['relationship_type']
+                    rel_props = rel_rec['rel_props']
+                    # Store relationship details; might simplify if only type and description are common
+                    relationships[target_name] = {**rel_props, "type": rel_type} if rel_props else {"type": rel_type}
+            profile["relationships"] = relationships
 
-                    if rel_node_obj:
-                        rel_node_props = {k: v for k, v in rel_node_obj.items()}
-                        # The 'type' is a property on DYNAMIC_REL, not its Cypher type.
-                        # So it should already be in rel_node_props if it was set correctly.
-                        # If 'type' is not in rel_node_props, it means it was missing during save or
-                        # the relationship was created without it.
-                        rel_type = rel_node_props.get("type", "RELATED_TO") # Default if somehow missing
-
-                        # Logic to simplify representation if only description and type are present
-                        if len(rel_node_props) == 2 and 'description' in rel_node_props and 'type' in rel_node_props:
-                             relationships[target_name] = {"type": rel_type, "description": rel_node_props['description']}
-                        elif len(rel_node_props) == 1 and 'type' in rel_node_props: # only type
-                            relationships[target_name] = rel_type # Store just the type string
-                        else: # multiple props, store the whole dict
-                            relationships[target_name] = rel_node_props
-                    else:
-                        self.logger.warning(f"Encountered a null relationship object for target {target_name} from {char_name}")
-
-
-            profiles_data[char_name]["relationships"] = relationships
-
+            # Fetch development events
             dev_query = """
-            MATCH (c:Character {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent)
-            RETURN dev.summary AS summary, dev.chapter AS chapter
+            MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent)
+            RETURN dev.summary AS summary, dev.chapter_updated AS chapter, dev.is_provisional AS is_provisional
             """
             dev_results = await self._execute_read_query(dev_query, {"char_name": char_name})
             if dev_results:
                 for dev_rec in dev_results:
-                    profiles_data[char_name][f"development_in_chapter_{dev_rec['chapter']}"] = dev_rec['summary']
+                    dev_key = f"development_in_chapter_{dev_rec['chapter']}"
+                    profile[dev_key] = dev_rec['summary']
+                    if dev_rec.get('is_provisional'): # Store provisional status alongside development text
+                        profile[f"source_quality_chapter_{dev_rec['chapter']}"] = "provisional_from_unrevised_draft"
+
+
+            profiles_data[char_name] = profile
 
         self.logger.info(f"Successfully loaded and recomposed {len(profiles_data)} character profiles from Neo4j.")
         return profiles_data
@@ -414,108 +417,106 @@ class state_managerSingleton:
             return False
 
         statements = []
-        # Clear existing world-related data first
-        # Note: Be cautious with broad DETACH DELETE statements on a live/large graph.
-        # For this system's current lifecycle (often full recreate/update), it's acceptable.
-        statements.append(("MATCH (we:WorldElement)-[r]->() DETACH DELETE r", {}))
-        statements.append(("MATCH ()-[r]->(we:WorldElement) DETACH DELETE r", {}))
-        statements.append(("MATCH (we:WorldElement) DETACH DELETE we", {}))
+        # Clear existing WorldElement-related data. Similar to characters, this is a full refresh.
+        statements.append(("MATCH (we:WorldElement) OPTIONAL MATCH (we)-[r]-() DETACH DELETE we, r", {}))
         statements.append(("MATCH (wev:WorldElaborationEvent) DETACH DELETE wev", {}))
-        statements.append((f"MATCH (wc:WorldContainer {{id: '{config.MAIN_WORLD_CONTAINER_NODE_ID}'}}) DETACH DELETE wc", {}))
-        statements.append((f"MATCH (vn:ValueNode) DETACH DELETE vn", {})) # Clear ValueNodes
+        statements.append((f"MATCH (wc:WorldContainer {{id: $wc_id_param}}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
+        statements.append(("MATCH (vn:ValueNode) DETACH DELETE vn", {})) # ValueNodes are tied to specific WorldElements
 
-        for category_str, items_dict_value_from_world_data in world_data.items(): # Renamed for clarity
-            # First, handle special top-level keys explicitly
+        for category_str, items_dict_value_from_world_data in world_data.items(): 
             if category_str == "_overview_":
                 if isinstance(items_dict_value_from_world_data, dict) and "description" in items_dict_value_from_world_data:
                     wc_id = config.MAIN_WORLD_CONTAINER_NODE_ID
-                    desc_to_set = str(items_dict_value_from_world_data.get("description", "")) # Ensure string, default empty
+                    desc_to_set = str(items_dict_value_from_world_data.get("description", "")) 
                     wc_props = {
                         "id": wc_id,
                         "overview_description": desc_to_set
                     }
+                    # Handle potential provisional status for overview
+                    if items_dict_value_from_world_data.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft":
+                         wc_props["is_provisional"] = True
                     statements.append((
-                        f"MERGE (wc:WorldContainer {{id: $id_val}}) SET wc = $props",
+                        "MERGE (wc:WorldContainer {id: $id_val}) SET wc = $props",
                         {"id_val": wc_id, "props": wc_props }
                     ))
-                else:
-                    # Log if _overview_ exists but is not in the expected format, or if it's missing a description
-                    if category_str in world_data: # Check if _overview_ key actually exists
-                        self.logger.warning(f"World data for '_overview_' category is not a dict with 'description' or is missing the description. Skipping save for overview details. Data: {items_dict_value_from_world_data}")
-                    # If _overview_ key itself is missing, it's fine, nothing to save for it.
-                continue # Move to the next category_str
+                continue 
 
-            # Skip other known meta keys or if the value is not a dictionary (which would be an items category)
             if category_str in ["is_default", "source", "user_supplied_data"] or \
                not isinstance(items_dict_value_from_world_data, dict):
-                if not isinstance(items_dict_value_from_world_data, dict):
-                    self.logger.warning(f"Skipping world category '{category_str}' because its value is not a dictionary (type: {type(items_dict_value_from_world_data)}). Value: {items_dict_value_from_world_data}")
-                else: # It's a dict, but it's one of the meta keys like "is_default"
-                    self.logger.debug(f"Skipping meta world category '{category_str}'.")
-                continue # Move to the next category_str
+                continue 
 
-            # At this point, items_dict_value_from_world_data MUST be a dictionary representing a category of items
             items_category_dict = items_dict_value_from_world_data
 
             for item_name_str, details_dict in items_category_dict.items():
-                # Skip items whose names indicate they are meta-properties within a category dict,
-                # or if their details_dict is not actually a dictionary.
                 if not isinstance(details_dict, dict) or \
                    item_name_str.startswith(("_", "source_quality_chapter_", "category_updated_in_chapter_")):
-                    if not isinstance(details_dict, dict):
-                        self.logger.warning(f"Skipping item '{item_name_str}' in world category '{category_str}' because its details_dict is not a dictionary (type: {type(details_dict)}). Value: {details_dict}")
-                    # else: (it's a meta-key starting with _ or other recognized prefixes for items)
-                    # self.logger.debug(f"Skipping meta-item '{item_name_str}' in category '{category_str}'.")
-                    continue # Skip this specific item and go to the next item in the category
+                    continue 
 
                 we_id_str = f"{category_str}_{item_name_str}".replace(" ", "_").replace("'", "").lower()
-                # Prepare properties for the WorldElement node itself
                 item_props_for_set = {k: v for k, v in details_dict.items() if isinstance(v, (str, int, float, bool)) and v is not None}
                 item_props_for_set['id'] = we_id_str
                 item_props_for_set['name'] = item_name_str
                 item_props_for_set['category'] = category_str
-                # Ensure created_chapter is present, defaulting if necessary
-                item_props_for_set['created_chapter'] = details_dict.get('created_chapter', details_dict.get('added_in_chapter_0', config.KG_PREPOPULATION_CHAPTER_NUM))
+                
+                # Determine created_chapter and is_provisional status
+                created_chap_num = config.KG_PREPOPULATION_CHAPTER_NUM
+                is_item_provisional = False
+                # Look for explicit added_in_chapter key first
+                added_key = next((k for k in details_dict if k.startswith("added_in_chapter_")), None)
+                if added_key:
+                    try: created_chap_num = int(added_key.split("_")[-1])
+                    except ValueError: pass
+                
+                source_quality_key_for_creation = f"source_quality_chapter_{created_chap_num}"
+                if details_dict.get(source_quality_key_for_creation) == "provisional_from_unrevised_draft":
+                    is_item_provisional = True
+                
+                item_props_for_set['created_chapter'] = created_chap_num
+                if is_item_provisional:
+                    item_props_for_set['is_provisional'] = True
 
 
-                # MERGE WorldElement node
                 statements.append((
                     "MERGE (we:WorldElement {id: $id_val}) SET we = $props",
                     {"id_val": we_id_str, "props": item_props_for_set}
                 ))
 
-                # Handle list properties (goals, rules, key_elements) by MERGING ValueNodes and relationships
-                for list_prop_key_str in ["goals", "rules", "key_elements"]: 
+                for list_prop_key_str in ["goals", "rules", "key_elements", "traits"]: # Added traits for world items
                     list_value = details_dict.get(list_prop_key_str)
                     if isinstance(list_value, list):
                         for val_item_from_list in list_value: 
                             if isinstance(val_item_from_list, str):
                                 rel_name_internal_str = f"HAS_{list_prop_key_str.upper().rstrip('S')}"
-                                if list_prop_key_str == "key_elements": 
-                                    rel_name_internal_str = "HAS_KEY_ELEMENT"
+                                if list_prop_key_str == "key_elements": rel_name_internal_str = "HAS_KEY_ELEMENT"
+                                elif list_prop_key_str == "traits": rel_name_internal_str = "HAS_TRAIT_ASPECT" # Differentiate from Character traits
                                 
                                 statements.append((
                                     f"""
                                     MATCH (we:WorldElement {{id: $we_id_val}})
-                                    MERGE (v:ValueNode {{value: $val_item_value, type: '{list_prop_key_str}'}})
+                                    MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
                                     MERGE (we)-[:{rel_name_internal_str}]->(v)
                                     """,
-                                    {"we_id_val": we_id_str, "val_item_value": val_item_from_list}
+                                    {"we_id_val": we_id_str, "val_item_value": val_item_from_list, "value_node_type": list_prop_key_str}
                                 ))
 
-                # Handle elaboration events (CREATE is fine here as they are new per chapter, after WorldElement MERGE)
                 for key_str, value_val in details_dict.items():
                     if key_str.startswith("elaboration_in_chapter_") and isinstance(value_val, str):
                         try:
                             chap_num_val = int(key_str.split("_")[-1])
                             elab_props = {
                                 "summary": value_val,
-                                "chapter": chap_num_val
+                                "chapter_updated": chap_num_val # Renamed for consistency
                             }
+                            # Check for provisional status for this elaboration
+                            provisional_elab = details_dict.get(f"source_quality_chapter_{chap_num_val}") == "provisional_from_unrevised_draft"
+                            if provisional_elab:
+                                elab_props["is_provisional"] = True
+
                             statements.append((
                                 """
                                 MATCH (we:WorldElement {{id: $we_id_val}})
-                                CREATE (we_elab:WorldElaborationEvent $props)
+                                CREATE (we_elab:WorldElaborationEvent)
+                                SET we_elab = $props
                                 CREATE (we)-[:ELABORATED_IN_CHAPTER]->(we_elab)
                                 """,
                                 {"we_id_val": we_id_str, "props": elab_props}
@@ -527,7 +528,7 @@ class state_managerSingleton:
                 await self.execute_cypher_batch(statements)
                 self.logger.info("Successfully saved decomposed world building data to Neo4j using MERGE.")
             else:
-                self.logger.info("No statements generated for saving world building data (world_data might be empty or only contain meta-keys).")
+                self.logger.info("No statements generated for saving world building data.")
             return True
         except Exception as e:
             self.logger.error(f"Error saving decomposed world building data with MERGE: {e}", exc_info=True)
@@ -535,22 +536,24 @@ class state_managerSingleton:
 
     async def get_world_building(self) -> Dict[str, Any]:
         self.logger.info("Loading decomposed world building data from Neo4j...")
-        world_data: Dict[str, Any] = {}
+        world_data: Dict[str, Any] = {"_overview_": {}}
 
-        overview_query = f"MATCH (wc:WorldContainer {{id: '{config.MAIN_WORLD_CONTAINER_NODE_ID}'}}) RETURN wc.overview_description AS desc"
-        overview_res = await self._execute_read_query(overview_query)
-        if overview_res and overview_res[0] and overview_res[0].get('desc'):
-            world_data["_overview_"] = {"description": overview_res[0]['desc']}
-        else:
-            world_data["_overview_"] = {}
+        overview_query = "MATCH (wc:WorldContainer {id: $wc_id_param}) RETURN wc.overview_description AS desc, wc.is_provisional AS is_provisional"
+        overview_res = await self._execute_read_query(overview_query, {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID})
+        if overview_res and overview_res[0] and overview_res[0].get('desc') is not None: # Check for not None
+            world_data["_overview_"]["description"] = overview_res[0]['desc']
+            if overview_res[0].get('is_provisional'):
+                 world_data["_overview_"][f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"] = "provisional_from_unrevised_draft"
 
 
         we_query = "MATCH (we:WorldElement) RETURN we"
         we_results = await self._execute_read_query(we_query)
+        
+        standard_categories = ["locations", "society", "systems", "lore", "history", "factions"]
+        for cat_key in standard_categories:
+            world_data.setdefault(cat_key, {}) # Ensure all standard categories exist
+
         if not we_results: 
-            # Ensure all standard categories exist even if empty
-            for cat_key in ["locations", "society", "systems", "lore", "history", "factions"]:
-                if cat_key not in world_data: world_data[cat_key] = {}
             return world_data
 
         for record in we_results:
@@ -560,46 +563,44 @@ class state_managerSingleton:
             we_id = we_node.get('id')
 
             if not category or not item_name or not we_id: continue
-
-            if category not in world_data:
-                world_data[category] = {}
+            if category not in world_data: world_data[category] = {} # Should be redundant due to setdefault
             
             item_detail = dict(we_node) 
+            # Remove internal graph properties not needed in the agent's dict (or re-map them)
             item_detail.pop('id', None); item_detail.pop('name', None); item_detail.pop('category', None)
-            item_detail.pop('created_chapter', None) # Internal tracking
-            
-            # Corrected loop for list properties
-            for list_prop_key in ["goals", "rules", "key_elements"]:
+            created_chapter_num = item_detail.pop('created_chapter', config.KG_PREPOPULATION_CHAPTER_NUM)
+            item_detail[f"added_in_chapter_{created_chapter_num}"] = True # Indicate when it was added
+            if item_detail.pop('is_provisional', False):
+                item_detail[f"source_quality_chapter_{created_chapter_num}"] = "provisional_from_unrevised_draft"
+
+            for list_prop_key in ["goals", "rules", "key_elements", "traits"]:
                 rel_name_query = f"HAS_{list_prop_key.upper().rstrip('S')}"
-                if list_prop_key == "key_elements":
-                    rel_name_query = "HAS_KEY_ELEMENT"
+                if list_prop_key == "key_elements": rel_name_query = "HAS_KEY_ELEMENT"
+                elif list_prop_key == "traits": rel_name_query = "HAS_TRAIT_ASPECT"
 
                 list_values_query = f"""
-                MATCH (we:WorldElement {{id: $we_id}})-[:{rel_name_query}]->(v:ValueNode {{type: '{list_prop_key}'}})
+                MATCH (:WorldElement {{id: $we_id_param}})-[:{rel_name_query}]->(v:ValueNode {{type: $value_node_type_param}})
                 RETURN v.value AS item_value
                 """
-                list_val_res = await self._execute_read_query(list_values_query, {"we_id": we_id})
-                if list_val_res:
-                    item_detail[list_prop_key] = [res_item['item_value'] for res_item in list_val_res]
-                else: 
-                    item_detail[list_prop_key] = []
+                list_val_res = await self._execute_read_query(list_values_query, {"we_id_param": we_id, "value_node_type_param": list_prop_key})
+                item_detail[list_prop_key] = [res_item['item_value'] for res_item in list_val_res] if list_val_res else []
 
 
             elab_query = """
-            MATCH (we:WorldElement {id: $we_id})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
-            RETURN elab.summary AS summary, elab.chapter AS chapter
+            MATCH (:WorldElement {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
+            RETURN elab.summary AS summary, elab.chapter_updated AS chapter, elab.is_provisional AS is_provisional
             """
-            elab_results = await self._execute_read_query(elab_query, {"we_id": we_id})
+            elab_results = await self._execute_read_query(elab_query, {"we_id_param": we_id})
             if elab_results:
                 for elab_rec in elab_results:
-                    item_detail[f"elaboration_in_chapter_{elab_rec['chapter']}"] = elab_rec['summary']
+                    elab_key = f"elaboration_in_chapter_{elab_rec['chapter']}"
+                    item_detail[elab_key] = elab_rec['summary']
+                    if elab_rec.get('is_provisional'):
+                        item_detail[f"source_quality_chapter_{elab_rec['chapter']}"] = "provisional_from_unrevised_draft"
+
             
             world_data[category][item_name] = item_detail
         
-        # Ensure all standard categories exist even if empty after processing
-        for cat_key in ["locations", "society", "systems", "lore", "history", "factions"]:
-            if cat_key not in world_data: world_data[cat_key] = {}
-
         self.logger.info(f"Successfully loaded and recomposed world building data from Neo4j.")
         return world_data
 
@@ -624,24 +625,25 @@ class state_managerSingleton:
             embedding_b64, embedding_dtype, embedding_shape = self._serialize_embedding(embedding_array)
 
         query = """
-        MERGE (c:Chapter {number: $chapter_number})
-        SET c.text = $text,
-            c.raw_llm_output = $raw_llm_output,
-            c.summary = $summary,
-            c.is_provisional = $is_provisional,
-            c.embedding_b64 = $embedding_b64,
-            c.embedding_dtype = $embedding_dtype,
-            c.embedding_shape = $embedding_shape 
+        MERGE (c:Chapter {number: $chapter_number_param})
+        SET c.text = $text_param,
+            c.raw_llm_output = $raw_llm_output_param,
+            c.summary = $summary_param,
+            c.is_provisional = $is_provisional_param,
+            c.embedding_b64 = $embedding_b64_param,
+            c.embedding_dtype = $embedding_dtype_param,
+            c.embedding_shape = $embedding_shape_param,
+            c.last_updated = timestamp()
         """ 
         parameters = {
-            "chapter_number": chapter_number,
-            "text": text,
-            "raw_llm_output": raw_llm_output,
-            "summary": summary if summary is not None else "",
-            "is_provisional": is_provisional,
-            "embedding_b64": embedding_b64,
-            "embedding_dtype": embedding_dtype,
-            "embedding_shape": embedding_shape
+            "chapter_number_param": chapter_number,
+            "text_param": text,
+            "raw_llm_output_param": raw_llm_output,
+            "summary_param": summary if summary is not None else "",
+            "is_provisional_param": is_provisional,
+            "embedding_b64_param": embedding_b64,
+            "embedding_dtype_param": embedding_dtype,
+            "embedding_shape_param": embedding_shape
         }
         try:
             await self._execute_write_query(query, parameters)
@@ -652,17 +654,17 @@ class state_managerSingleton:
     async def async_get_chapter_data_from_db(self, chapter_number: int) -> Optional[Dict[str, Any]]:
         if chapter_number <= 0: return None
         query = """
-        MATCH (c:Chapter {number: $chapter_number})
+        MATCH (c:Chapter {number: $chapter_number_param})
         RETURN c.text AS text, c.raw_llm_output AS raw_llm_output, c.summary AS summary, c.is_provisional AS is_provisional
         """
         try:
-            result = await self._execute_read_query(query, {"chapter_number": chapter_number})
+            result = await self._execute_read_query(query, {"chapter_number_param": chapter_number})
             if result and result[0]:
                 self.logger.debug(f"Neo4j: Data found for chapter {chapter_number}.")
                 return {
                     "text": result[0].get("text"),
                     "summary": result[0].get("summary"),
-                    "is_provisional": result[0].get("is_provisional", False),
+                    "is_provisional": result[0].get("is_provisional", False), # Default to False if missing
                     "raw_llm_output": result[0].get("raw_llm_output") 
                 }
             self.logger.debug(f"Neo4j: No data found for chapter {chapter_number}.")
@@ -674,13 +676,13 @@ class state_managerSingleton:
     async def async_get_embedding_from_db(self, chapter_number: int) -> Optional[np.ndarray]:
         if chapter_number <= 0: return None
         query = """
-        MATCH (c:Chapter {number: $chapter_number})
+        MATCH (c:Chapter {number: $chapter_number_param})
         WHERE c.embedding_b64 IS NOT NULL AND c.embedding_dtype IS NOT NULL AND c.embedding_shape IS NOT NULL
         RETURN c.embedding_b64 AS embedding_b64, c.embedding_dtype AS dtype, c.embedding_shape AS shape
         """
         try:
-            result = await self._execute_read_query(query, {"chapter_number": chapter_number})
-            if result and result[0] and result[0].get("embedding_b64"): # Check if embedding_b64 is not None
+            result = await self._execute_read_query(query, {"chapter_number_param": chapter_number})
+            if result and result[0] and result[0].get("embedding_b64"): 
                 return self._deserialize_embedding(result[0]["embedding_b64"], result[0]["dtype"], result[0]["shape"])
             self.logger.debug(f"Neo4j: No embedding found directly on chapter node {chapter_number}.")
             return None
@@ -690,22 +692,24 @@ class state_managerSingleton:
 
     async def async_get_all_past_embeddings(self, current_chapter_number: int) -> List[Tuple[int, np.ndarray]]:
         embeddings_list: List[Tuple[int, np.ndarray]] = []
+        # Includes chapters strictly less than current_chapter_number and greater than 0
+        # KG_PREPOPULATION_CHAPTER_NUM (0) is not a "past chapter" for context.
         query = """
         MATCH (c:Chapter)
-        WHERE c.number < $current_chapter_number AND c.number > 0
+        WHERE c.number < $current_chapter_number_param AND c.number > 0 
           AND c.embedding_b64 IS NOT NULL AND c.embedding_dtype IS NOT NULL AND c.embedding_shape IS NOT NULL
         RETURN c.number AS chapter_number, c.embedding_b64 AS embedding_b64, c.embedding_dtype AS dtype, c.embedding_shape AS shape
         ORDER BY c.number DESC
         """
         try:
-            results = await self._execute_read_query(query, {"current_chapter_number": current_chapter_number})
+            results = await self._execute_read_query(query, {"current_chapter_number_param": current_chapter_number})
             if results:
                 for record in results:
-                    if record.get("embedding_b64"): # Ensure embedding data exists
+                    if record.get("embedding_b64"): 
                         deserialized_emb = self._deserialize_embedding(record["embedding_b64"], record["dtype"], record["shape"])
                         if deserialized_emb is not None:
                             embeddings_list.append((record["chapter_number"], deserialized_emb))
-            self.logger.info(f"Neo4j: Retrieved {len(embeddings_list)} past embeddings.")
+            self.logger.info(f"Neo4j: Retrieved {len(embeddings_list)} past embeddings for context before chapter {current_chapter_number}.")
             return embeddings_list
         except Exception as e:
             self.logger.error(f"Neo4j: Error getting all past embeddings: {e}", exc_info=True)
@@ -713,28 +717,44 @@ class state_managerSingleton:
         
     async def async_add_kg_triple(self, subject: str, predicate: str, obj_val: str, chapter_added: int, confidence: float = 1.0, is_provisional: bool = False):
         subj_s, pred_s, obj_s = subject.strip(), predicate.strip(), obj_val.strip()
-        if not all([subj_s, pred_s, obj_s]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM:
+        if not all([subj_s, pred_s, obj_s]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM: # Allow 0 for initial setup
             self.logger.warning(f"Neo4j: Invalid KG triple for add: S='{subj_s}', P='{pred_s}', O='{obj_s}', Chap={chapter_added}")
             return
 
+        # Merge Entity nodes for subject and object
+        # Merge DYNAMIC_REL based on type, and update properties if it already exists for that type
+        # This creates one relationship of a given type between s and o, and updates its properties.
         query = """
-        MERGE (s:Entity {name: $subject})
-        MERGE (o:Entity {name: $object})
-        MERGE (s)-[r:DYNAMIC_REL {type: $predicate, chapter_added: $chapter_added, is_provisional: $is_provisional}]->(o)
-        SET r.confidence = $confidence 
-        RETURN s.name, r.type, o.name
+        MERGE (s:Entity {name: $subject_param})
+        MERGE (o:Entity {name: $object_param})
+        // Try to match an existing relationship of this type from this chapter
+        OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_param}]->(o)
+        // If it exists, update it. Otherwise, create a new one.
+        FOREACH (r IN CASE WHEN existing_r IS NOT NULL THEN [existing_r] ELSE [] END |
+          SET r.is_provisional = $is_provisional_param, r.confidence = $confidence_param, r.last_updated = timestamp()
+        )
+        FOREACH (ignoreMe IN CASE WHEN existing_r IS NULL THEN [1] ELSE [] END |
+          CREATE (s)-[new_r:DYNAMIC_REL {
+            type: $predicate_param, 
+            chapter_added: $chapter_added_param, 
+            is_provisional: $is_provisional_param, 
+            confidence: $confidence_param,
+            created_at: timestamp(),
+            last_updated: timestamp()
+          }]->(o)
+        )
         """
         parameters = {
-            "subject": subj_s,
-            "predicate": pred_s, 
-            "object": obj_s,
-            "chapter_added": chapter_added,
-            "confidence": confidence,
-            "is_provisional": is_provisional
+            "subject_param": subj_s,
+            "predicate_param": pred_s, 
+            "object_param": obj_s,
+            "chapter_added_param": chapter_added,
+            "confidence_param": confidence,
+            "is_provisional_param": is_provisional
         }
         try:
             await self._execute_write_query(query, parameters)
-            self.logger.debug(f"Neo4j: Added/Updated KG triple for Ch {chapter_added}: ({subj_s}, {pred_s}, {obj_s}). Prov: {is_provisional}")
+            self.logger.debug(f"Neo4j: Added/Updated KG triple for Ch {chapter_added}: ({subj_s}, {pred_s}, {obj_s}). Prov: {is_provisional}, Conf: {confidence}")
         except Exception as e:
             self.logger.error(f"Neo4j: Error adding KG triple: ({subj_s}, {pred_s}, {obj_s}). Error: {e}", exc_info=True)
 
@@ -742,20 +762,25 @@ class state_managerSingleton:
         conditions = []
         parameters = {}
         
+        # Match on :Entity label for S and O, as DYNAMIC_REL is generic.
+        # Characters will be :Character:Entity, so they'll be caught.
         match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)"
 
         if subject is not None:
-            conditions.append("s.name = $subject")
-            parameters["subject"] = subject.strip()
+            conditions.append("s.name = $subject_param")
+            parameters["subject_param"] = subject.strip()
         if predicate is not None:
-            conditions.append("r.type = $predicate") 
-            parameters["predicate"] = predicate.strip()
+            conditions.append("r.type = $predicate_param") 
+            parameters["predicate_param"] = predicate.strip()
         if obj_val is not None:
-            conditions.append("o.name = $object")
-            parameters["object"] = obj_val.strip()
+            conditions.append("o.name = $object_param")
+            parameters["object_param"] = obj_val.strip()
+        
+        # Filter by chapter_limit: relationship must have been added AT or BEFORE this chapter
         if chapter_limit is not None:
-            conditions.append("r.chapter_added <= $chapter_limit")
-            parameters["chapter_limit"] = chapter_limit
+            conditions.append("r.chapter_added <= $chapter_limit_param")
+            parameters["chapter_limit_param"] = chapter_limit
+        
         if not include_provisional:
             conditions.append("r.is_provisional = FALSE")
         
@@ -763,20 +788,22 @@ class state_managerSingleton:
         if conditions:
             where_clause = " WHERE " + " AND ".join(conditions)
         
-        return_clause = " RETURN s.name AS subject, r.type AS predicate, o.name AS object, r.chapter_added AS chapter_added, r.confidence AS confidence, r.is_provisional AS is_provisional"
+        # Return key properties of the relationship and entities
+        return_clause = """
+        RETURN s.name AS subject, r.type AS predicate, o.name AS object, 
+               r.chapter_added AS chapter_added, r.confidence AS confidence, r.is_provisional AS is_provisional
+        """
+        # Order by chapter DESC (most recent first), then confidence DESC
         order_clause = " ORDER BY r.chapter_added DESC, r.confidence DESC"
         limit_clause = ""
         if limit_results is not None and limit_results > 0:
-            limit_clause = f" LIMIT {limit_results}"
+            limit_clause = f" LIMIT {int(limit_results)}" # Ensure integer
 
         full_query = match_clause + where_clause + return_clause + order_clause + limit_clause
 
         try:
             results = await self._execute_read_query(full_query, parameters)
-            triples_list: List[Dict[str, Any]] = []
-            if results:
-                for record in results:
-                    triples_list.append(dict(record)) 
+            triples_list: List[Dict[str, Any]] = [dict(record) for record in results] if results else []
             self.logger.debug(f"Neo4j: KG query returned {len(triples_list)} results for query: {full_query} with params {parameters}")
             return triples_list
         except Exception as e:
@@ -793,11 +820,11 @@ class state_managerSingleton:
             predicate=predicate, 
             chapter_limit=chapter_limit, 
             include_provisional=include_provisional,
-            limit_results=1 
+            limit_results=1 # We only need the top one after sorting
         )
-        if results and results[0]:
+        if results and results[0] and 'object' in results[0]:
             value = str(results[0]["object"]) 
-            self.logger.debug(f"Neo4j: Found most recent value for ('{subject}', '{predicate}'): '{value}' from Ch {results[0]['chapter_added']}")
+            self.logger.debug(f"Neo4j: Found most recent value for ('{subject}', '{predicate}'): '{value}' from Ch {results[0].get('chapter_added','N/A')}")
             return value
         self.logger.debug(f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, provisional={include_provisional}")
         return None
@@ -805,33 +832,43 @@ class state_managerSingleton:
     # --- Getters for prompt_data_getters (NEW/REVISED) ---
     async def get_character_info_for_snippet(self, char_name: str, chapter_limit: int) -> Optional[Dict[str, Any]]:
         """Gets description, latest status, and latest development note for a character from Neo4j."""
+        # This query aims to get the base description and status from the Character node,
+        # then finds the most recent non-provisional development summary.
+        # It also checks if ANY provisional data related to this character exists up to chapter_limit.
         query = """
-        MATCH (c:Character {name: $char_name})
+        MATCH (c:Character:Entity {name: $char_name_param})
+        
+        // Get the most recent development summary up to chapter_limit
         OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent)
-        WHERE dev.chapter <= $chapter_limit OR dev IS NULL
-        WITH c, dev ORDER BY dev.chapter DESC
-        // Collect all development summaries up to the chapter_limit
-        WITH c, COLLECT(CASE WHEN dev IS NOT NULL THEN dev.summary ELSE NULL END)[0] AS recent_dev_summary_val
-        // Determine provisional status based on any DYNAMIC_REL marked provisional for this character as subject or object
-        // or if the character node itself has a provisional marker (if schema supports that)
-        OPTIONAL MATCH (c)-[rel_s:DYNAMIC_REL {is_provisional: true}]->() WHERE rel_s.chapter_added <= $chapter_limit
-        OPTIONAL MATCH ()-[rel_o:DYNAMIC_REL {is_provisional: true}]->(c) WHERE rel_o.chapter_added <= $chapter_limit
-        RETURN c.description AS description, 
-               c.status AS current_status, // Assuming status is a direct property
-               recent_dev_summary_val AS most_recent_development_note,
-               (COUNT(rel_s) > 0 OR COUNT(rel_o) > 0) AS is_provisional_overall 
-               // Simplified: if any relevant KG fact is provisional, mark char as having some provisional info
+        WHERE dev.chapter_updated <= $chapter_limit_param
+        WITH c, dev ORDER BY dev.chapter_updated DESC
+        WITH c, HEAD(COLLECT(dev)) AS latest_dev_event // latest_dev_event can be null
+
+        // Check for any provisional data related to this character up to chapter_limit
+        // 1. Provisional development events for this character
+        OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(prov_dev:DevelopmentEvent)
+        WHERE prov_dev.chapter_updated <= $chapter_limit_param AND prov_dev.is_provisional = TRUE
+        // 2. Provisional dynamic relationships involving this character
+        OPTIONAL MATCH (c)-[prov_rel:DYNAMIC_REL]-(:Entity)
+        WHERE prov_rel.chapter_added <= $chapter_limit_param AND prov_rel.is_provisional = TRUE
+        
+        RETURN c.description AS description,
+               c.status AS current_status, // Assumes status is a direct property on Character node
+               latest_dev_event.summary AS most_recent_development_note,
+               (prov_dev IS NOT NULL OR prov_rel IS NOT NULL) AS is_provisional_overall
         LIMIT 1
         """
-        params = {"char_name": char_name, "chapter_limit": chapter_limit}
+        params = {"char_name_param": char_name, "chapter_limit_param": chapter_limit}
         try:
             result = await self._execute_read_query(query, params)
             if result and result[0]:
                 record = result[0]
+                # Default for most_recent_development_note if latest_dev_event was null
+                dev_note = record.get("most_recent_development_note") if record.get("most_recent_development_note") is not None else "N/A"
                 return {
                     "description": record.get("description"),
                     "current_status": record.get("current_status"),
-                    "most_recent_development_note": record.get("most_recent_development_note") if record.get("most_recent_development_note") else "N/A",
+                    "most_recent_development_note": dev_note,
                     "is_provisional_overall": record.get("is_provisional_overall", False)
                 }
             self.logger.debug(f"No detailed snippet info found for character '{char_name}' in Neo4j up to chapter {chapter_limit}.")
@@ -840,31 +877,33 @@ class state_managerSingleton:
         return None
 
     async def get_world_elements_for_snippet(self, category: str, chapter_limit: int, item_limit: int) -> List[Dict[str, Any]]:
-        """Gets key world elements for a category from Neo4j."""
+        """Gets key world elements for a category from Neo4j, checking for provisional status."""
         query = """
-        MATCH (we:WorldElement {category: $category})
-        // OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent) // If needed
-        // WHERE (elab.chapter <= $chapter_limit OR elab IS NULL)
-        WITH we //, elab ORDER BY elab.chapter DESC
-        LIMIT $item_limit // Apply limit early if possible based on category elements
-        // Determine provisional status based on DYNAMIC_RELs involving this WorldElement
-        OPTIONAL MATCH (we)-[rel_s:DYNAMIC_REL {is_provisional: true}]->() WHERE rel_s.chapter_added <= $chapter_limit
-        OPTIONAL MATCH ()-[rel_o:DYNAMIC_REL {is_provisional: true}]->(we) WHERE rel_o.chapter_added <= $chapter_limit
-        RETURN we.name AS name, 
-               we.description AS description, 
-               // HEAD(COLLECT(elab.summary)) as last_elaboration, // If elaborations are used for snippet
-               (COUNT(rel_s) > 0 OR COUNT(rel_o) > 0) AS is_provisional
-        ORDER BY we.name 
-        """ # Removed last_elaboration for simplicity, description snippet is primary
-        params = {"category": category, "chapter_limit": chapter_limit, "item_limit": item_limit}
+        MATCH (we:WorldElement {category: $category_param})
+        // Check for provisional status of the element itself or its recent elaborations
+        OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
+        WHERE elab.chapter_updated <= $chapter_limit_param AND elab.is_provisional = TRUE
+        
+        WITH we, COLLECT(DISTINCT elab) AS provisional_elaborations // Collect distinct provisional elaborations
+        // An item is provisional if its base node is provisional OR it has recent provisional elaborations
+        WITH we, (we.is_provisional = TRUE OR size(provisional_elaborations) > 0) AS is_item_provisional
+        
+        RETURN we.name AS name,
+               we.description AS description, // Full description, snippet handled in Python
+               is_item_provisional AS is_provisional
+        ORDER BY we.name ASC // Consistent ordering
+        LIMIT $item_limit_param
+        """
+        params = {"category_param": category, "chapter_limit_param": chapter_limit, "item_limit_param": item_limit}
         items = []
         try:
             results = await self._execute_read_query(query, params)
             if results:
                 for record in results:
+                    desc = record.get("description") or ""
                     items.append({
                         "name": record.get("name"),
-                        "description_snippet": (record.get("description") or "")[:50] + "...", # Snippet from description
+                        "description_snippet": (desc[:50].strip() + "..." if len(desc) > 50 else desc.strip()), 
                         "is_provisional": record.get("is_provisional", False)
                     })
         except Exception as e:

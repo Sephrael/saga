@@ -1,29 +1,75 @@
 # chapter_drafting_logic.py
 """
 Handles the generation of the initial chapter draft for the SAGA system.
+Context data for prompts is now formatted as plain text.
 """
 import logging
-import json
+import json # Retained for SceneDetail if it remains a complex dict internally for plan
 from typing import Tuple, Optional, List
 
 import config
-import llm_interface # Now needed for token counting/truncation
+import llm_interface 
 from type import SceneDetail
 from state_manager import state_manager
 from prompt_data_getters import (
-    get_filtered_character_profiles_for_prompt,
-    get_filtered_world_data_for_prompt
+    get_filtered_character_profiles_for_prompt_plain_text, 
+    get_filtered_world_data_for_prompt_plain_text,       
+    # Hybrid context already provides KG facts in plain text format
 )
 from context_generation_logic import generate_hybrid_chapter_context_logic
 
 logger = logging.getLogger(__name__)
 
+def _format_scene_plan_for_prompt(chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
+    """ Formats the chapter plan (list of SceneDetail dicts) into plain text for the LLM prompt, respecting token limits. """
+    if not chapter_plan:
+        return "No detailed scene plan available."
+
+    plan_text_lines = ["**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**"]
+    total_plan_text = ""
+
+    for scene in chapter_plan:
+        scene_lines = [
+            f"Scene Number: {scene.get('scene_number', 'N/A')}",
+            f"  Summary: {scene.get('summary', 'N/A')}",
+            f"  Characters Involved: {', '.join(scene.get('characters_involved', [])) if scene.get('characters_involved') else 'None'}",
+            f"  Key Dialogue Points:"
+        ]
+        for point in scene.get('key_dialogue_points', []):
+            scene_lines.append(f"    - {point}")
+        scene_lines.append(f"  Setting Details: {scene.get('setting_details', 'N/A')}")
+        scene_lines.append(f"  Scene Focus Elements:")
+        for focus_el in scene.get('scene_focus_elements', []):
+            scene_lines.append(f"    - {focus_el}")
+        scene_lines.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
+        scene_lines.append("-" * 20) # Separator
+        
+        current_scene_text = "\n".join(scene_lines) + "\n"
+        
+        # Check token count before adding
+        # This is a simplification; ideally, we'd check tokens for the *cumulative* plan text
+        # and then truncate the *overall* plan if it exceeds budget.
+        # For now, just check individual scenes to avoid one very long scene blowing the budget for the whole plan in prompt.
+        # A more robust approach would build the full plan string then truncate.
+
+        temp_cumulative_plan = total_plan_text + current_scene_text
+        if llm_interface.count_tokens(temp_cumulative_plan, model_name_for_tokens) > max_tokens_budget:
+            plan_text_lines.append("... (plan truncated in prompt due to token limit)")
+            logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}")
+            break 
+        
+        plan_text_lines.extend(scene_lines)
+        total_plan_text = temp_cumulative_plan
+        
+    if not plan_text_lines or len(plan_text_lines) == 1 : # Only header
+        return "No detailed scene plan available or plan was too long."
+        
+    return "\n".join(plan_text_lines)
+
+
 async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_focus: Optional[str], hybrid_context: str, chapter_plan: Optional[List[SceneDetail]]) -> Tuple[Optional[str], Optional[str]]:
     """Generates the initial draft text for a chapter using HYBRID CONTEXT.
-    'agent' is an instance of NovelWriterAgent.
-    'hybrid_context' contains both semantic context and KG facts.
-    Returns (cleaned_text, raw_llm_text).
-    Cleaned_text can be short, to be caught by evaluation, or None if LLM truly failed.
+    Context data and scene plan are now formatted as plain text.
     """
     if not plot_point_focus:
         plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
@@ -32,37 +78,18 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     plan_section_for_prompt = ""
     if config.ENABLE_AGENTIC_PLANNING:
         if chapter_plan and isinstance(chapter_plan, list):
-            try:
-                plan_json_str = json.dumps(chapter_plan, indent=2, ensure_ascii=False)
-                # Truncate plan based on tokens if too long for the prompt
-                # Allocate a fraction of MAX_CONTEXT_TOKENS for the plan
-                max_plan_tokens_for_prompt = config.MAX_CONTEXT_TOKENS // 3 # e.g., 33% of total token budget
-
-                num_plan_tokens = llm_interface.count_tokens(plan_json_str, config.DRAFTING_MODEL)
-
-                if num_plan_tokens > max_plan_tokens_for_prompt:
-                    plan_json_str = llm_interface.truncate_text_by_tokens(
-                        plan_json_str,
-                        config.DRAFTING_MODEL,
-                        max_plan_tokens_for_prompt,
-                        truncation_marker="\n... (plan truncated in prompt due to token limit)"
-                    )
-                    logger.warning(f"Chapter plan for Ch {chapter_number} was token-truncated for the prompt ({num_plan_tokens} tokens -> ~{max_plan_tokens_for_prompt} tokens).")
-
-                plan_section_for_prompt = f"**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**\n```json\n{plan_json_str}\n```\n"
-                logger.info(f"Using detailed scene plan for Ch {chapter_number} draft generation.")
-            except TypeError as e:
-                logger.error(f"Could not serialize chapter plan to JSON for prompt: {e}. Plan: {chapter_plan}")
-                plan_section_for_prompt = f"**Chapter Plan Note:** Error formatting plan. Rely on Plot Point Focus.\n**Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
+            max_plan_tokens_for_prompt = config.MAX_CONTEXT_TOKENS // 3
+            plan_section_for_prompt = _format_scene_plan_for_prompt(chapter_plan, config.DRAFTING_MODEL, max_plan_tokens_for_prompt)
+            logger.info(f"Using detailed scene plan (plain text) for Ch {chapter_number} draft generation.")
         else:
             plan_section_for_prompt = f"**Chapter Plan Note:** No detailed scene plan available. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
     else:
         plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
 
-    char_profiles_data = await get_filtered_character_profiles_for_prompt(agent, chapter_number - 1)
-    char_profiles_json = json.dumps(char_profiles_data, indent=2, ensure_ascii=False, default=str)
-    world_building_data = await get_filtered_world_data_for_prompt(agent, chapter_number - 1)
-    world_building_json = json.dumps(world_building_data, indent=2, ensure_ascii=False, default=str)
+    # Get plain text formatted context
+    # For Chapter 1, chapter_number - 1 will be 0. The prompt data getters should handle this (e.g., return empty or base state).
+    char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(agent, chapter_number - 1)
+    world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(agent, chapter_number - 1)
 
 
     prompt = f"""/no_think
@@ -75,13 +102,13 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
 {plan_section_for_prompt}
 
-**World Building Notes (JSON format - pay attention to any 'prompt_notes' indicating provisional data from previous unrevised chapters):**
-```json
-{world_building_json}
+**World Building Notes (Plain Text - pay attention to any 'prompt_notes' indicating provisional data):**
+```text
+{world_building_plain_text}
 ```
-**Character Profiles (JSON format - pay attention to any 'prompt_notes' indicating provisional status):**
-```json
-{char_profiles_json}
+**Character Profiles (Plain Text - pay attention to any 'prompt_notes' indicating provisional status):**
+```text
+{char_profiles_plain_text}
 ```
 **Hybrid Context (Semantic Context for Flow & KG Facts for Canon):**
 --- BEGIN HYBRID CONTEXT ---
@@ -90,7 +117,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
 **Writing Instructions:**
 1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.
-2. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'summary', 'key_dialogue_points', 'setting_details', and **especially its 'scene_focus_elements'**. Use the 'scene_focus_elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.
+2. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'Summary', 'Key Dialogue Points', 'Setting Details', and **especially its 'Scene Focus Elements'**. Use the 'Scene Focus Elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.
 3. If no detailed plan is available, focus on achieving the **Overall Plot Point Focus** for this chapter.
 4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).
    - **Crucially, the `KEY RELIABLE KG FACTS` section within the `HYBRID CONTEXT` provides established canon that MUST be respected.**
@@ -109,7 +136,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
         prompt=prompt,
         temperature=0.6,
         allow_fallback=True,
-        stream_to_disk=True # Enable streaming for large draft outputs
+        stream_to_disk=True 
     )
     if not raw_llm_text:
         logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
@@ -117,14 +144,10 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
     cleaned_text = llm_interface.clean_model_response(raw_llm_text)
 
-    # If LLM truly failed and cleaning resulted in virtually no content, treat as failure.
-    # A very small threshold (e.g., 50 chars) distinguishes this from "short but has substance".
     if not cleaned_text or len(cleaned_text) < 50:
         logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
-        return None, raw_llm_text # Indicates a true generation failure.
+        return None, raw_llm_text 
 
-    # If it has some content but is below the *acceptable* minimum, log it as a warning.
-    # The text will still be returned to be evaluated and potentially revised for length.
     if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
          logger.warning(
              f"Ch {chapter_number} draft is short ({len(cleaned_text)} chars) after cleaning, but will be passed for evaluation/revision. "
