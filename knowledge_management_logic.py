@@ -1,11 +1,6 @@
 # knowledge_management_logic.py
-"""
-Handles updates to knowledge bases (Python profiles, Knowledge Graph)
-and summarization for the SAGA system.
-LLM outputs for knowledge extraction are now plain text.
-"""
 import logging
-import json # Retained for debug dumps, not for LLM prompt formatting/parsing
+import json 
 import re
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
@@ -21,8 +16,44 @@ from prompt_data_getters import (
     get_filtered_world_data_for_prompt_plain_text 
 )
 from state_manager import state_manager
+from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text, parse_kg_triples_from_text # MODIFIED
 
 logger = logging.getLogger(__name__)
+
+# --- Character Update Parsing Config ---
+CHAR_UPDATE_KEY_MAP = { # Normalized LLM key -> Internal key
+    "description": "description",
+    "traits": "traits",
+    "status": "status",
+    "relationships": "relationships",
+    # Dynamic key like "development_in_chapter_X" will be handled by checking prefix
+    "modification_proposal": "modification_proposal"
+}
+CHAR_UPDATE_LIST_INTERNAL_KEYS = ["traits"] 
+# Relationships can be complex: "Target: Type" or list of "- Target: Type"
+# parse_key_value_block can handle simple comma-separated if configured, or list items.
+# For now, LLM is prompted for "- Target: Type" under a Relationships header.
+CHAR_UPDATE_RELATIONSHIP_HANDLING = {
+    # If relationships are a single comma-separated string:
+    # "relationships": {"separator": ","} 
+    # If they are list items: standard list parsing by parse_key_value_block
+}
+
+
+# --- World Update Parsing Config ---
+# Category detection will be based on "Category: <Name>"
+WORLD_UPDATE_CATEGORY_PATTERN = re.compile(r"^\s*Category:\s*([A-Za-z\s_]+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# Item detection based on "Item: <Name>"
+WORLD_UPDATE_ITEM_PATTERN = re.compile(r"^\s*Item:\s*([A-Za-z0-9\s'\-]+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+WORLD_UPDATE_DETAIL_KEY_MAP = { # Normalized LLM key -> Internal key (for item details)
+    "description": "description", "atmosphere": "atmosphere",
+    "goals": "goals", "rules": "rules", "key_elements": "key_elements", "traits": "traits",
+    # Dynamic key like "elaboration_in_chapter_X" handled by prefix
+    "modification_proposal": "modification_proposal"
+}
+WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits"]
+
 
 # --- Summarization ---
 
@@ -63,10 +94,7 @@ async def summarize_chapter_text_logic(chapter_text: Optional[str], chapter_numb
     logger.warning(f"Failed to generate a valid summary for ch {chapter_number} via LLM.")
     return None
 
-# --- JSON State Modification Proposal Logic (Operates on in-memory Python dicts) ---
-# This logic remains as it applies proposals to Python dicts, which are still used internally.
-# The `proposal_str` itself could come from LLM plain text parsing, not directly from LLM JSON.
-
+# --- JSON State Modification Proposal Logic ---
 def _apply_trait_modification(current_traits_list: List[str], modification_details_str: str) -> List[str]:
     traits_set = set(current_traits_list)
     for add_match in re.finditer(r"ADD\s+['\"]([^'\"]+)['\"]", modification_details_str, re.IGNORECASE):
@@ -128,10 +156,15 @@ def _initialize_new_character_profile(
     new_profile: Dict[str, Any] = {
         "description": char_update_data.get("description", f"A character newly introduced in Chapter {chapter_number}."),
         "traits": sorted(list(set(t for t in char_update_data.get("traits", []) if isinstance(t, str) and t.strip()))),
-        "relationships": char_update_data.get("relationships", {}),
+        "relationships": char_update_data.get("relationships", {}), # Should be dict from parser
         "status": char_update_data.get("status", "Newly introduced")
     }
-    if dev_key in char_update_data: new_profile[dev_key] = char_update_data[dev_key]
+    # Development key might be explicitly provided by LLM or added if character appeared
+    if dev_key in char_update_data and char_update_data[dev_key]:
+        new_profile[dev_key] = char_update_data[dev_key]
+    elif dev_key not in char_update_data : # Add a generic one if not present
+         new_profile[dev_key] = f"Character '{char_name}' introduced or significantly involved in Chapter {chapter_number}."
+
     if provisional_marker_key in char_update_data: new_profile[provisional_marker_key] = char_update_data[provisional_marker_key]
     logger.info(f"Prepared new character profile for '{char_name}'.")
     return new_profile
@@ -143,25 +176,40 @@ def _update_existing_character_profile_fields(
     provisional_marker_key: str
 ):
     if provisional_marker_key in char_update_data: existing_profile[provisional_marker_key] = char_update_data[provisional_marker_key]
+    
     for key, value in char_update_data.items():
-        if key in ["modification_proposal", provisional_marker_key, dev_key]: continue
+        if key in ["modification_proposal", provisional_marker_key] or key.startswith("development_in_chapter_"):
+            # Development keys are handled by the presence of dev_key if value is non-empty
+            if key.startswith("development_in_chapter_") and value and isinstance(value, str) and value.strip():
+                 existing_profile[key] = value # Allow overwriting specific chapter dev notes
+            continue
+
         if key == "traits" and isinstance(value, list):
             if "traits" not in existing_profile or not isinstance(existing_profile["traits"], list): existing_profile["traits"] = []
             valid_new_traits = {t for t in value if isinstance(t, str) and t.strip()}
             existing_profile["traits"] = sorted(list(set(existing_profile["traits"]).union(valid_new_traits)))
-        elif key == "relationships" and isinstance(value, dict):
+        elif key == "relationships" and isinstance(value, dict): # Parser should produce dict for relationships
             if not isinstance(existing_profile.get("relationships"), dict): existing_profile["relationships"] = {}
             existing_profile["relationships"].update(value)
         elif key == "description" and isinstance(value, str) and value.strip(): existing_profile["description"] = value
         elif key == "status" and isinstance(value, str) and value.strip(): existing_profile["status"] = value
-        elif key not in existing_profile and value is not None: existing_profile[key] = value 
+        elif key not in existing_profile and value is not None: # Add new fields if not present
+            existing_profile[key] = value
+        elif value is not None and existing_profile.get(key) != value : # Update existing field if changed
+            existing_profile[key] = value
+            
+    # Ensure dev_key is present if any update occurred other than just proposal/provisional status
     if dev_key in char_update_data and isinstance(char_update_data[dev_key], str) and char_update_data[dev_key].strip():
         existing_profile[dev_key] = char_update_data[dev_key]
+    elif any(k not in ["modification_proposal", provisional_marker_key] and v is not None for k,v in char_update_data.items()):
+        if dev_key not in existing_profile or not existing_profile[dev_key]: # Only add generic if no specific one or empty
+             char_name = next((k for k, v in agent.character_profiles.items() if v is existing_profile), "UnknownCharacter") # Find char_name from profile
+             existing_profile[dev_key] = f"Character '{char_name}' updated or significantly involved in Chapter {existing_profile.get(provisional_marker_key, 'N').split('_')[-1]}."
+
 
 def merge_character_profile_updates_logic(
     agent, updates_from_llm: Dict[str, Any], chapter_number: int, from_flawed_draft: bool
 ):
-    """ Merges LLM updates (now parsed from plain text into dicts) into the agent's in-memory character_profiles dict. """
     if not updates_from_llm:
         logger.info(f"No character profile updates from LLM to merge for ch {chapter_number}.")
         return
@@ -176,7 +224,7 @@ def merge_character_profile_updates_logic(
         char_update_data = char_update_data_original.copy()
         if from_flawed_draft: char_update_data[provisional_marker_key] = "provisional_from_unrevised_draft"
         
-        dev_key = f"development_in_chapter_{chapter_number}"
+        dev_key = f"development_in_chapter_{chapter_number}" # Primary dev key for this chapter
         
         modification_proposal = char_update_data.get("modification_proposal") 
         
@@ -192,7 +240,9 @@ def merge_character_profile_updates_logic(
             if config.ENABLE_DYNAMIC_STATE_ADAPTATION and modification_proposal:
                 apply_state_modification_proposal_logic(existing_profile, modification_proposal, char_name, "existing character profile")
             _update_existing_character_profile_fields(existing_profile, char_update_data, dev_key, provisional_marker_key)
-            if from_flawed_draft: existing_profile[provisional_marker_key] = "provisional_from_unrevised_draft"
+            # Ensure provisional marker is set if from flawed draft, even if no other change
+            if from_flawed_draft and existing_profile.get(provisional_marker_key) != "provisional_from_unrevised_draft":
+                 existing_profile[provisional_marker_key] = "provisional_from_unrevised_draft"
 
 
     if updated_chars_count > 0 or new_chars_count > 0:
@@ -208,48 +258,52 @@ def robust_merge_world_item_data_logic(
         logger.warning(f"World item '{item_name_for_log}' target_dict was not a dict. Initializing as new. Old: '{str(target_dict)[:100]}'")
         current_item_data = {}
     else:
-        current_item_data = target_dict
+        current_item_data = target_dict # Operate on the actual dict
     
     item_was_modified_this_call = False
     provisional_marker_key = f"source_quality_chapter_{chapter_num}"
     
-    if from_flawed_draft_source:
+    if from_flawed_draft_source and current_item_data.get(provisional_marker_key) != "provisional_from_unrevised_draft":
         current_item_data[provisional_marker_key] = "provisional_from_unrevised_draft"
         item_was_modified_this_call = True
         
     if config.ENABLE_DYNAMIC_STATE_ADAPTATION and "modification_proposal" in update_dict: 
-        proposal = update_dict.pop("modification_proposal")
+        proposal = update_dict.pop("modification_proposal") # Remove after getting
         if isinstance(proposal, str) and proposal.strip():
             apply_state_modification_proposal_logic(current_item_data, proposal, item_name_for_log, "world item")
             item_was_modified_this_call = True
             
     for key, value_from_update in update_dict.items():
-        # Skip internal tracking keys or keys that are handled specifically (like elaboration)
         if key in [provisional_marker_key, "modification_proposal"] or \
            key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")):
+            # Handle elaborations specifically
             if key.startswith("elaboration_in_chapter_") and isinstance(value_from_update, str) and value_from_update.strip():
-                 current_item_data[key] = value_from_update 
+                 current_item_data[key] = value_from_update # Allow overwriting/adding specific chapter elaborations
                  item_was_modified_this_call = True
             continue
         
         current_value_in_target = current_item_data.get(key)
         if isinstance(value_from_update, dict): 
-            merged_sub_dict = robust_merge_world_item_data_logic(
-                current_value_in_target if isinstance(current_value_in_target, dict) else {},
-                value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source=False 
-            )
-            if merged_sub_dict != current_value_in_target: # Check if actual change occurred
-                current_item_data[key] = merged_sub_dict
-                item_was_modified_this_call = True
-        elif isinstance(value_from_update, list): 
-            if not isinstance(current_value_in_target, list):
-                current_item_data[key] = [] # Initialize if not list
+            # For sub-dictionaries, recurse if current value is also a dict, otherwise overwrite
+            if not isinstance(current_value_in_target, dict):
+                current_item_data[key] = {} # Initialize if not a dict
+                current_value_in_target = current_item_data[key]
                 item_was_modified_this_call = True # This is a modification
             
-            # Ensure current_item_data[key] is a list before extending
-            if not isinstance(current_item_data.get(key), list):
-                current_item_data[key] = []
+            merged_sub_dict = robust_merge_world_item_data_logic(
+                current_value_in_target, # Pass the sub-dict
+                value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source=False 
+            )
+            # If recursion caused changes in sub_dict, it's reflected.
+            # Check if the dict itself changed (e.g. new keys added)
+            if merged_sub_dict != current_value_in_target or any(k not in current_value_in_target for k in merged_sub_dict):
+                 item_was_modified_this_call = True
 
+        elif isinstance(value_from_update, list): 
+            if not isinstance(current_value_in_target, list):
+                current_item_data[key] = [] 
+                item_was_modified_this_call = True 
+            
             initial_list_len = len(current_item_data[key])
             for item_in_list_update in value_from_update:
                 if item_in_list_update not in current_item_data[key]: 
@@ -259,17 +313,17 @@ def robust_merge_world_item_data_logic(
             current_item_data[key] = value_from_update
             item_was_modified_this_call = True
             
-    if item_was_modified_this_call and not current_item_data.get(f"added_in_chapter_{chapter_num}"):
-        # Only mark as updated if it wasn't just added in this chapter and an actual modification occurred
-        # The `item_was_modified_this_call` flag already tracks if any field was changed or proposal applied.
-        current_item_data[f"updated_in_chapter_{chapter_num}"] = True
+    if item_was_modified_this_call:
+        added_key = f"added_in_chapter_{chapter_num}"
+        # Mark as updated only if it wasn't just added in this chapter
+        if not current_item_data.get(added_key):
+            current_item_data[f"updated_in_chapter_{chapter_num}"] = True
         
     return current_item_data
 
 def merge_world_item_updates_logic(
     agent, updates_from_llm: Dict[str, Any], chapter_number: int, from_flawed_draft: bool
 ):
-    """ Merges LLM updates (now parsed from plain text into dicts) into the agent's in-memory world_building dict. """
     if not updates_from_llm:
         logger.info(f"No world-building updates from LLM to merge for ch {chapter_number}.")
         return
@@ -280,6 +334,7 @@ def merge_world_item_updates_logic(
             logger.debug(f"Skipping empty or invalid update for world category '{category_key}' in ch {chapter_number}.")
             continue
         
+        # Ensure category exists in agent's world_building
         if category_key not in agent.world_building: agent.world_building[category_key] = {}
         elif not isinstance(agent.world_building[category_key], dict): 
             logger.warning(f"Overwriting non-dictionary world category '{category_key}' with new dictionary structure for ch {chapter_number}.")
@@ -295,26 +350,25 @@ def merge_world_item_updates_logic(
             item_log_name = f"{category_key}.{item_name}"
             existing_item_data = target_category_dict.get(item_name)
             
-            merged_item_data = robust_merge_world_item_data_logic(
-                existing_item_data if existing_item_data is not None else {},
+            # If item is new, initialize its dict before merging
+            if existing_item_data is None:
+                target_category_dict[item_name] = {}
+                existing_item_data = target_category_dict[item_name]
+                existing_item_data[f"added_in_chapter_{chapter_number}"] = True
+                items_affected_count += 1
+            
+            merged_item_data = robust_merge_world_item_data_logic( # Operates on existing_item_data in-place
+                existing_item_data, # Pass the actual sub-dictionary
                 item_update_details, item_log_name, chapter_number, from_flawed_draft
             )
-            target_category_dict[item_name] = merged_item_data
+            # target_category_dict[item_name] = merged_item_data # No need to reassign if modified in-place
             
-            if existing_item_data is None: 
-                # Mark as added only if it was genuinely new
-                if not merged_item_data.get(f"added_in_chapter_{chapter_number}"): # Check to avoid double-marking
-                    merged_item_data[f"added_in_chapter_{chapter_number}"] = True 
-                items_affected_count += 1
-            # Check if it was updated (either by direct field change or by being marked provisional)
-            elif merged_item_data.get(f"updated_in_chapter_{chapter_number}") or \
-                 (from_flawed_draft and merged_item_data.get(f"source_quality_chapter_{chapter_number}")):
-                items_affected_count += 1 
+            # Count as affected if it was updated (which robust_merge sets) or marked provisional
+            if merged_item_data.get(f"updated_in_chapter_{chapter_number}") or \
+               (from_flawed_draft and merged_item_data.get(f"source_quality_chapter_{chapter_number}")):
+                if not existing_item_data.get(f"added_in_chapter_{chapter_number}"): # Don't double-count if just added
+                     items_affected_count += 1
 
-        # REMOVED: The vestigial category_updated_in_chapter_N key
-        # if any(isinstance(v,dict) and (v.get(f"updated_in_chapter_{chapter_number}") or v.get(f"added_in_chapter_{chapter_number}")) 
-        #        for v in target_category_dict.values()):
-        #      target_category_dict[f"category_updated_in_chapter_{chapter_number}"] = True 
 
     if items_affected_count > 0:
         logger.info(f"World-building Python dict merge complete for ch {chapter_number}. Approx {items_affected_count} items affected/added.")
@@ -322,260 +376,95 @@ def merge_world_item_updates_logic(
         logger.info(f"No world-building Python dict items were effectively updated or added for ch {chapter_number} after LLM analysis.")
 
 # --- Unified Knowledge Extraction (Plain Text Parsing) ---
-
-def _parse_plain_text_character_updates(text_block: str, chapter_number: int) -> Dict[str, Any]:
+def _parse_unified_character_updates(text_block: str, chapter_number: int) -> Dict[str, Any]:
     char_updates: Dict[str, Any] = {}
-    current_char_name: Optional[str] = None
-    current_char_data: Dict[str, Any] = {}
+    # Regex to find "Character: <Name>" lines
+    character_block_starts = list(re.finditer(r"^\s*Character:\s*(.+)$", text_block, re.IGNORECASE | re.MULTILINE))
     
-    char_name_re = re.compile(r"^\s*Character:\s*(.+)$", re.IGNORECASE)
-    key_value_re = re.compile(r"^\s*([A-Za-z0-9\s_()]+(?:\s*in\s*Chapter\s*\d+)?):\s*(.*)$", re.IGNORECASE) 
-    list_item_re = re.compile(r"^\s*-\s*(.+)$")
+    for i, start_match in enumerate(character_block_starts):
+        char_name = start_match.group(1).strip()
+        if not char_name: continue
 
-    active_list_key: Optional[str] = None
-    active_list_values: List[str] = []
+        block_start_index = start_match.end()
+        block_end_index = character_block_starts[i+1].start() if i + 1 < len(character_block_starts) else len(text_block)
+        
+        individual_char_block_text = text_block[block_start_index:block_end_index].strip()
 
-    def finalize_char():
-        nonlocal current_char_name, current_char_data, active_list_key, active_list_values
-        if active_list_key and active_list_values:
-            if active_list_key == "relationships" and all([':' in v for v in active_list_values]):
-                rels_dict = {}
-                for rel_str in active_list_values:
-                    parts = rel_str.split(":", 1)
-                    if len(parts) == 2:
-                        rels_dict[parts[0].strip()] = parts[1].strip()
-                current_char_data[active_list_key] = rels_dict
-            else:
-                current_char_data[active_list_key] = active_list_values
-            active_list_key = None
-            active_list_values = []
-        if current_char_name and current_char_data:
-            dev_key = f"development_in_chapter_{chapter_number}"
-            if dev_key not in current_char_data and any(k != "modification_proposal" for k in current_char_data):
-                current_char_data[dev_key] = "Character appeared or was mentioned in this chapter."
-            char_updates[current_char_name] = current_char_data
-        current_char_name = None # type: ignore
-        current_char_data = {}
-
-    for line in text_block.splitlines():
-        line = line.strip()
-        if not line: continue
-
-        char_match = char_name_re.match(line)
-        if char_match:
-            finalize_char()
-            current_char_name = char_match.group(1).strip()
-            current_char_data = {}
-            active_list_key = None
-            active_list_values = []
-            continue
-
-        if not current_char_name: continue
-
-        list_item_match = list_item_re.match(line)
-        if active_list_key and list_item_match:
-            active_list_values.append(list_item_match.group(1).strip())
-            continue
-        elif active_list_key and not list_item_match: 
-            if active_list_key == "relationships" and all([':' in v for v in active_list_values]):
-                rels_dict = {}
-                for rel_str in active_list_values:
-                    parts = rel_str.split(":", 1)
-                    if len(parts) == 2: rels_dict[parts[0].strip()] = parts[1].strip()
-                current_char_data[active_list_key] = rels_dict
-            else:
-                current_char_data[active_list_key] = active_list_values
-            active_list_key = None
-            active_list_values = []
-
-        kv_match = key_value_re.match(line)
-        if kv_match:
-            key_raw = kv_match.group(1).strip()
-            value = kv_match.group(2).strip()
+        if individual_char_block_text:
+            parsed_char_data = parse_key_value_block(
+                individual_char_block_text,
+                key_map=CHAR_UPDATE_KEY_MAP, # Use specific key_map for characters
+                list_internal_keys=CHAR_UPDATE_LIST_INTERNAL_KEYS,
+                special_list_handling=CHAR_UPDATE_RELATIONSHIP_HANDLING,
+                # Handle dynamic dev keys by checking prefix in merge logic, not parser config
+            )
             
-            key = key_raw.lower().replace(" ", "_").replace("(", "").replace(")", "") 
-            if key.startswith("development_in_chapter_"): 
-                 key = key_raw.strip().replace(" ", "_")
+            # Post-process relationships if they were parsed as simple list items
+            # "Relationships: - Target: Type" -> {"Target": "Type"}
+            if "relationships" in parsed_char_data and isinstance(parsed_char_data["relationships"], list):
+                rels_dict = {}
+                for rel_str in parsed_char_data["relationships"]:
+                    if isinstance(rel_str, str) and ':' in rel_str:
+                        parts = rel_str.split(":", 1)
+                        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                            rels_dict[parts[0].strip()] = parts[1].strip()
+                        else: logger.warning(f"Malformed relationship string for {char_name}: '{rel_str}'")
+                    elif isinstance(rel_str, str) and rel_str.strip(): # If no colon, assume it's just a name related somehow
+                        rels_dict[rel_str.strip()] = "related" 
+                parsed_char_data["relationships"] = rels_dict
+            
+            # Ensure dev key is present if character had any updates
+            dev_key = f"development_in_chapter_{chapter_number}"
+            specific_dev_key_from_llm = next((k for k in parsed_char_data if k.startswith(f"development_in_chapter_{chapter_number}")), None)
+            
+            if not specific_dev_key_from_llm and any(k != "modification_proposal" for k in parsed_char_data):
+                 parsed_char_data[dev_key] = f"Character '{char_name}' appeared or was mentioned in Chapter {chapter_number}."
+            elif specific_dev_key_from_llm and parsed_char_data.get(specific_dev_key_from_llm): # Use the specific one if provided
+                if specific_dev_key_from_llm != dev_key: # Normalize if LLM used a different suffix but for same chapter
+                    parsed_char_data[dev_key] = parsed_char_data.pop(specific_dev_key_from_llm)
 
-
-            if key in ["traits", "relationships"]: 
-                if value: 
-                    if key == "traits":
-                        current_char_data[key] = [v.strip() for v in value.split(',') if v.strip()]
-                    elif key == "relationships":
-                        rels = {}
-                        pairs = value.split(',')
-                        for pair_str in pairs:
-                            target_name_part, rel_type_part = pair_str.strip(), "related" 
-                            if ':' in pair_str:
-                                target_name_part, rel_type_part = [p.strip() for p in pair_str.split(':', 1)]
-                            elif '(' in pair_str and ')' in pair_str:
-                                t_match = re.match(r"(.+?)\s*\((.+?)\)", pair_str)
-                                if t_match:
-                                    target_name_part, rel_type_part = t_match.group(1).strip(), t_match.group(2).strip()
-                            if target_name_part:
-                                rels[target_name_part] = rel_type_part
-                        current_char_data[key] = rels
-                else: 
-                    active_list_key = key 
-                    active_list_values = []
-                    current_char_data[key] = {} if key == "relationships" else [] 
-            else:
-                current_char_data[key] = value
-    
-    finalize_char()
+            char_updates[char_name] = parsed_char_data
     return char_updates
 
-def _parse_plain_text_world_updates(text_block: str, chapter_number: int) -> Dict[str, Any]:
-    world_updates: Dict[str, Any] = {}
-    current_category: Optional[str] = None
-    current_item_name: Optional[str] = None
-    current_item_data: Dict[str, Any] = {}
+def _parse_unified_world_updates(text_block: str, chapter_number: int) -> Dict[str, Any]:
+    # Reusing the hierarchical parser for world updates.
+    # Category names come from WORLD_UPDATE_CATEGORY_PATTERN.
+    # Item names from WORLD_UPDATE_ITEM_PATTERN.
+    # Details use WORLD_UPDATE_DETAIL_KEY_MAP.
     
-    category_re = re.compile(r"^\s*Category:\s*(.+)$", re.IGNORECASE)
-    item_re = re.compile(r"^\s*Item:\s*(.+)$", re.IGNORECASE)
-    key_value_re = re.compile(r"^\s*([A-Za-z0-9\s_]+(?:\s*in\s*Chapter\s*\d+)?):\s*(.*)$", re.IGNORECASE)
-    list_item_re = re.compile(r"^\s*-\s*(.+)$")
-
-    active_list_key: Optional[str] = None
-    active_list_values: List[str] = []
+    # The parse_hierarchical_structured_text expects category names to be keys in its main dict.
+    # The current pattern extracts "Locations" from "Category: Locations".
+    # Need to map this to internal keys like "locations".
     
-    valid_world_categories = ["locations", "society", "systems", "lore", "history", "factions", "_overview_"]
+    parsed_data = parse_hierarchical_structured_text(
+        text_block,
+        category_pattern=WORLD_UPDATE_CATEGORY_PATTERN, 
+        item_pattern=WORLD_UPDATE_ITEM_PATTERN,
+        detail_key_map=WORLD_UPDATE_DETAIL_KEY_MAP,
+        detail_list_internal_keys=WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
+        overview_category_internal_key="_overview_" # Use internal key for overview
+    )
 
-    def finalize_item():
-        nonlocal current_category, current_item_name, current_item_data, active_list_key, active_list_values
-        if active_list_key and active_list_values:
-            current_item_data[active_list_key] = active_list_values
-            active_list_key = None
-            active_list_values = []
-        if current_category and current_item_name and current_item_data:
-            if current_category not in world_updates:
-                world_updates[current_category] = {}
-            dev_key = f"elaboration_in_chapter_{chapter_number}"
-            if dev_key not in current_item_data and any(k != "modification_proposal" for k in current_item_data) :
-                current_item_data[dev_key] = f"Item '{current_item_name}' in category '{current_category}' was mentioned or interacted with."
-            world_updates[current_category][current_item_name] = current_item_data
-        elif current_category == "_overview_" and current_item_data: 
-            world_updates["_overview_"] = current_item_data
-
-        current_item_name = None # type: ignore
-        current_item_data = {}
-
-    for line in text_block.splitlines():
-        line = line.strip()
-        if not line: continue
-
-        cat_match = category_re.match(line)
-        if cat_match:
-            finalize_item() 
-            potential_category = cat_match.group(1).strip().lower().replace(" ", "_")
-            if potential_category in valid_world_categories:
-                current_category = potential_category
-                if current_category == "_overview_": 
-                    current_item_name = "_overview_item_" 
-                    current_item_data = {} 
-                else:
-                    current_item_name = None 
-            else:
-                logger.warning(f"Unknown world category '{potential_category}' in unified extraction. Skipping.")
-                current_category = None 
-            active_list_key = None
-            active_list_values = []
-            continue
-
-        if not current_category: continue 
-
-        if current_category != "_overview_":
-            item_match = item_re.match(line)
-            if item_match:
-                finalize_item() 
-                current_item_name = item_match.group(1).strip()
-                current_item_data = {}
-                active_list_key = None
-                active_list_values = []
-                continue
-        
-        target_data_dict = current_item_data 
-        if not current_item_name and current_category != "_overview_": continue 
+    # Add elaboration key if not present but item was updated
+    for category_name, items in parsed_data.items():
+        if category_name == "_overview_": # Overview is a single dict of details
+            if any(k != "modification_proposal" for k in items): # If any actual data fields
+                elab_key = f"elaboration_in_chapter_{chapter_number}"
+                if elab_key not in items:
+                    items[elab_key] = f"Overall world overview mentioned or updated in Chapter {chapter_number}."
+        elif isinstance(items, dict): # Regular category with multiple items
+            for item_name, item_details in items.items():
+                if isinstance(item_details, dict):
+                    if any(k != "modification_proposal" for k in item_details):
+                        elab_key = f"elaboration_in_chapter_{chapter_number}"
+                        specific_elab_key = next((k for k in item_details if k.startswith(f"elaboration_in_chapter_{chapter_number}")), None)
+                        if not specific_elab_key:
+                             item_details[elab_key] = f"Item '{item_name}' in category '{category_name}' was mentioned or interacted with in Chapter {chapter_number}."
+                        elif specific_elab_key != elab_key and item_details.get(specific_elab_key):
+                             item_details[elab_key] = item_details.pop(specific_elab_key)
 
 
-        list_item_match = list_item_re.match(line)
-        if active_list_key and list_item_match:
-            active_list_values.append(list_item_match.group(1).strip())
-            continue
-        elif active_list_key and not list_item_match: 
-            target_data_dict[active_list_key] = active_list_values
-            active_list_key = None
-            active_list_values = []
-        
-        kv_match = key_value_re.match(line)
-        if kv_match:
-            key_raw = kv_match.group(1).strip()
-            value = kv_match.group(2).strip()
-            key = key_raw.lower().replace(" ", "_")
-            if key.startswith("elaboration_in_chapter_"):
-                 key = key_raw.strip().replace(" ", "_")
-
-            if key in ["goals", "rules", "key_elements", "traits"]: 
-                active_list_key = key
-                active_list_values = []
-                target_data_dict[key] = [] 
-                if value and not (value.startswith("- ") or value.startswith("* ")):
-                     active_list_values.append(value)
-                elif value and (value.startswith("- ") or value.startswith("* ")):
-                     active_list_values.append(value[2:].strip())
-            else:
-                target_data_dict[key] = value
-                
-    finalize_item() 
-    return world_updates
-
-def _parse_plain_text_kg_triples(text_block: str) -> List[List[str]]:
-    triples: List[List[str]] = []
-    
-    list_format_match = re.findall(r"^\s*-\s*\[\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*\]", text_block, re.MULTILINE)
-    for s, p, o in list_format_match:
-        if s.strip() and p.strip() and o.strip():
-            triples.append([s.strip(), p.strip(), o.strip()])
-    if triples: 
-        return triples
-
-    triple_re_sp_o = re.compile(r"^\s*(?:Subject:\s*(.+?)\s*,\s*Predicate:\s*(.+?)\s*,\s*Object:\s*(.+?)|Subject:\s*(.+?)\s*;\s*Predicate:\s*(.+?)\s*;\s*Object:\s*(.+?))\s*$", re.IGNORECASE | re.MULTILINE)
-    pipe_re = re.compile(r"^\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*$", re.MULTILINE)
-
-    for line in text_block.splitlines():
-        line = line.strip()
-        if not line: continue
-        
-        s, p, o = None, None, None
-        match_spo = triple_re_sp_o.match(line)
-        if match_spo:
-            if match_spo.group(1) is not None: 
-                s, p, o = match_spo.group(1).strip(), match_spo.group(2).strip(), match_spo.group(3).strip()
-            elif match_spo.group(4) is not None: 
-                s, p, o = match_spo.group(4).strip(), match_spo.group(5).strip(), match_spo.group(6).strip()
-        else:
-            match_pipe = pipe_re.match(line)
-            if match_pipe:
-                s, p, o = match_pipe.group(1).strip(), match_pipe.group(2).strip(), match_pipe.group(3).strip()
-        
-        if s and p and o:
-            triples.append([s, p, o])
-        elif line.count(',') == 2: 
-            parts = [part.strip() for part in line.split(',')]
-            if len(parts) == 3 and all(parts):
-                triples.append(parts)
-            else: logger.warning(f"Could not parse line as KG triple: '{line}'")
-        elif line.startswith("- ") and line.count(',') == 2 : 
-             parts = [part.strip() for part in line[2:].split(',')]
-             if len(parts) == 3 and all(parts):
-                triples.append(parts)
-             else: logger.warning(f"Could not parse line as KG triple: '{line}'")
-        else:
-             logger.warning(f"Could not parse line as KG triple: '{line}'")
-
-
-    return triples
+    return parsed_data
 
 
 async def unified_knowledge_extraction(
@@ -650,12 +539,12 @@ Use the following section headers EXACTLY:
 
 **1. Under `### CHARACTER UPDATES ###`:**
    List each character on a new line: `Character: [Character Name]`
-   Followed by indented key-value pairs for their profile data:
+   Followed by indented key-value pairs for their profile data (use Title Case for keys like "Description", "Traits", "Status"):
      `Description: [Full description if new or significantly changed]`
-     `Traits: [Comma-separated list, e.g., Brave, Cautious]`
+     `Traits: [Comma-separated list, e.g., Brave, Cautious OR list with '-' prefix on new lines]`
      `Status: [Current status]`
-     `Relationships:` (Optional, if any)
-       `- [Target Character Name]: [Relationship Type, e.g., ally, enemy, mentor]`
+     `Relationships:` (Optional, if any. List each as "- Target Name: Relationship Type")
+       `- Gorok: uneasy ally`
      `Development in Chapter {chapter_number}: [Summary of their role/changes in THIS chapter]`
      `Modification Proposal: [Optional: MODIFY key: value_change]` (if ENABLE_DYNAMIC_STATE_ADAPTATION is true)
    {dynamic_instr_char}
@@ -670,10 +559,10 @@ Use the following section headers EXACTLY:
    Modification Proposal: MODIFY traits: ADD 'Resourceful'
 
 **2. Under `### WORLD UPDATES ###`:**
-   Start each category with: `Category: [locations | society | systems | lore | history | factions | _overview_]`
+   Start each category with: `Category: [locations | society | systems | lore | history | factions | _overview_]` (ensure key name is lowercase internal style if possible, or Title Case is fine)
    For `_overview_`, provide: `Description: [Overall world feel change]`
    For other categories, list items: `Item: [Item Name]`
-   Followed by indented key-value pairs for item details:
+   Followed by indented key-value pairs for item details (use Title Case for keys like "Description", "Atmosphere"):
      `Description: [Full description if new or changed]`
      `Atmosphere: [For locations]`
      `Goals:` (For factions, list each goal on a new line starting with "- ")
@@ -715,22 +604,31 @@ Begin your output now:
     
     char_updates_text = ""
     world_updates_text = ""
-    kg_triples_text = ""
+    kg_triples_text_block = ""
 
-    char_updates_match = re.search(r"###\s*CHARACTER UPDATES\s*###\s*(.*?)(?=\s*###\s*(?:WORLD UPDATES|KG TRIPLES)\s*###|$)", cleaned_extraction_text, re.IGNORECASE | re.DOTALL)
-    world_updates_match = re.search(r"###\s*WORLD UPDATES\s*###\s*(.*?)(?=\s*###\s*KG TRIPLES\s*###|$)", cleaned_extraction_text, re.IGNORECASE | re.DOTALL)
-    kg_triples_match = re.search(r"###\s*KG TRIPLES\s*###\s*(.*)$", cleaned_extraction_text, re.IGNORECASE | re.DOTALL)
+    # More robust section splitting
+    sections = re.split(r"^\s*###\s*([\w\s]+?)\s*###\s*$", cleaned_extraction_text, flags=re.IGNORECASE | re.MULTILINE)
+    # sections will be [text_before_first_header, header1_name, text_for_header1, header2_name, text_for_header2, ...]
+    
+    parsed_sections: Dict[str, str] = {}
+    for i in range(1, len(sections), 2): # Start from 1 to get header name, step by 2
+        header_name_raw = sections[i].strip().lower()
+        content_text = sections[i+1].strip() if i+1 < len(sections) else ""
+        if "character" in header_name_raw:
+            parsed_sections["character_updates"] = content_text
+        elif "world" in header_name_raw:
+            parsed_sections["world_updates"] = content_text
+        elif "kg triples" in header_name_raw:
+            parsed_sections["kg_triples"] = content_text
+            
+    char_updates_text = parsed_sections.get("character_updates", "")
+    world_updates_text = parsed_sections.get("world_updates", "")
+    kg_triples_text_block = parsed_sections.get("kg_triples", "")
 
-    if char_updates_match:
-        char_updates_text = char_updates_match.group(1).strip()
-    if world_updates_match:
-        world_updates_text = world_updates_match.group(1).strip()
-    if kg_triples_match:
-        kg_triples_text = kg_triples_match.group(1).strip()
-
-    char_updates_dict = _parse_plain_text_character_updates(char_updates_text, chapter_number)
-    world_updates_dict = _parse_plain_text_world_updates(world_updates_text, chapter_number)
-    kg_triples_list = _parse_plain_text_kg_triples(kg_triples_text)
+    # MODIFIED: Use new parsing utilities
+    char_updates_dict = _parse_unified_character_updates(char_updates_text, chapter_number)
+    world_updates_dict = _parse_unified_world_updates(world_updates_text, chapter_number)
+    kg_triples_list = parse_kg_triples_from_text(kg_triples_text_block)
 
     final_extraction = {
         "character_updates": char_updates_dict,
@@ -746,23 +644,18 @@ Begin your output now:
         logger.warning(f"Unified knowledge extraction for Ch {chapter_number} produced text, but parsing yielded no data. Raw cleaned text: '{cleaned_extraction_text[:500]}...'")
         await agent._save_debug_output(chapter_number, "unified_extraction_plain_text_parse_empty", cleaned_extraction_text)
 
-
     return final_extraction
 
-
 # --- Knowledge Graph Pre-population ---
-async def prepopulate_kg_from_initial_data_logic(agent):
+async def prepopulate_kg_from_initial_data_logic(agent): # Logic remains the same, it generates Cypher, not parses LLM
     logger.info("Starting Knowledge Graph pre-population directly from agent's initial data dicts...")
-    
     cypher_statements: List[Tuple[str, Dict[str, Any]]] = []
-
     plot = agent.plot_outline
     novel_id = config.MAIN_NOVEL_INFO_NODE_ID
     if plot:
         novel_props = {k: v for k, v in plot.items() if not isinstance(v, (list, dict)) and v is not None}
         novel_props['id'] = novel_id
         cypher_statements.append((f"MERGE (ni:NovelInfo {{id: $id}}) SET ni = $props", {"id": novel_id, "props": novel_props}))
-
         plot_points = plot.get('plot_points', [])
         if isinstance(plot_points, list):
             for i, desc in enumerate(plot_points):
@@ -786,16 +679,10 @@ async def prepopulate_kg_from_initial_data_logic(agent):
                             MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)
                             """, {}
                         ))
-    
     for char_name, profile in agent.character_profiles.items():
         if not isinstance(profile, dict): continue
-        # Ensure character is also an Entity
         char_props = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
-        # 'name' is part of MERGE pattern
-        
         cypher_statements.append(("MERGE (c:Character:Entity {name: $name}) SET c += $props", {"name": char_name, "props": char_props}))
-
-
         if isinstance(profile.get("traits"), list):
             for trait in profile["traits"]:
                 if isinstance(trait, str):
@@ -806,29 +693,20 @@ async def prepopulate_kg_from_initial_data_logic(agent):
                         MERGE (c)-[:HAS_TRAIT]->(t)
                         """, {"char_name": char_name, "trait_name": trait}
                     ))
-        
         if isinstance(profile.get("relationships"), dict):
             for target_name, rel_detail in profile["relationships"].items():
                 rel_type = "RELATED_TO"
-                # Ensure rel_props_dict contains only primitive types for Neo4j
                 rel_props_dict = {"description": str(rel_detail)} 
                 if isinstance(rel_detail, dict):
                     rel_type = str(rel_detail.get("type", rel_type)).upper().replace(" ", "_")
-                    # Filter rel_detail to include only primitive types for properties
                     rel_props_dict = {k:v for k,v in rel_detail.items() if isinstance(v, (str, int, float, bool))}
-                    rel_props_dict.setdefault("description", f"{rel_type} {target_name}") # Default description
-                elif isinstance(rel_detail, str): # If rel_detail is just a string, assume it's the type or description
-                    rel_type = rel_detail.upper().replace(" ", "_") # Or derive type differently if needed
+                    rel_props_dict.setdefault("description", f"{rel_type} {target_name}")
+                elif isinstance(rel_detail, str): 
+                    rel_type = rel_detail.upper().replace(" ", "_")
                     rel_props_dict = {"description": rel_detail}
-
-                # Add default chapter_added and is_provisional from profile if not in rel_props_dict
-                # KG_PREPOPULATION_CHAPTER_NUM (0) is the chapter for these initial facts
                 rel_props_dict.setdefault("chapter_added", config.KG_PREPOPULATION_CHAPTER_NUM)
-                # Determine provisional status for initial setup based on if the source quality key exists for chapter 0
                 is_prov_initial = profile.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft"
                 rel_props_dict.setdefault("is_provisional", is_prov_initial)
-
-
                 cypher_statements.append((
                     """
                     MATCH (c1:Character:Entity {name: $char_name1})
@@ -840,7 +718,6 @@ async def prepopulate_kg_from_initial_data_logic(agent):
                     {"char_name1": char_name, "char_name2": target_name, 
                      "rel_type_val": rel_type, "rel_props_val": rel_props_dict}
                 ))
-
     for category, items in agent.world_building.items():
         if not isinstance(items, dict) or category in ["is_default", "source", "user_supplied_data", "_overview_"]:
             if category == "_overview_" and isinstance(items, dict) and "description" in items:
@@ -855,31 +732,23 @@ async def prepopulate_kg_from_initial_data_logic(agent):
                     {"id": config.MAIN_WORLD_CONTAINER_NODE_ID, "props": overview_props}
                 ))
             continue
-
         for item_name, details in items.items():
-            # Skip internal meta-keys that might be at the item level
             if not isinstance(details, dict) or item_name.startswith(("_", "source_quality_chapter_")): continue
-            
             we_id = f"{category}_{item_name}".replace(" ", "_").replace("'", "").lower()
             item_props = {k: v for k, v in details.items() if isinstance(v, (str, int, float, bool)) and v is not None}
             item_props.update({'id': we_id, 'name': item_name, 'category': category})
-            
-            # Determine created_chapter and is_provisional for initial setup
             created_chapter_num_initial = details.get(f"added_in_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}", config.KG_PREPOPULATION_CHAPTER_NUM)
             item_props['created_chapter'] = created_chapter_num_initial
             if details.get(f"source_quality_chapter_{created_chapter_num_initial}") == "provisional_from_unrevised_draft":
                 item_props['is_provisional'] = True
-            
             cypher_statements.append(("MERGE (we:WorldElement {id: $id}) SET we += $props", {"id": we_id, "props": item_props}))
-
-            for list_prop_name in ["goals", "rules", "key_elements", "traits"]: # Added traits
+            for list_prop_name in ["goals", "rules", "key_elements", "traits"]:
                 if isinstance(details.get(list_prop_name), list):
                     for val_item in details[list_prop_name]:
                         if isinstance(val_item, str):
                             rel_name = f"HAS_{list_prop_name.upper().rstrip('S')}"
                             if list_prop_name == "key_elements": rel_name = "HAS_KEY_ELEMENT"
                             elif list_prop_name == "traits": rel_name = "HAS_TRAIT_ASPECT"
-
                             cypher_statements.append((
                                 f"""
                                 MATCH (we:WorldElement {{id: $we_id}})
@@ -896,9 +765,7 @@ async def prepopulate_kg_from_initial_data_logic(agent):
     else:
         logger.info("No Cypher statements generated for KG pre-population from initial data.")
 
-
 # --- Overall Knowledge Base Update Orchestration ---
-
 async def update_all_knowledge_bases_logic(
     agent, 
     chapter_number: int,

@@ -1,12 +1,6 @@
 # initial_setup_logic.py
-"""
-Handles generation of initial plot outlines and world-building data for the SAGA system.
-These functions are called by the NovelWriterAgent during its setup phase.
-The generated Python dicts are then persisted to Neo4j by the agent.
-LLM outputs are now expected in plain text, not JSON.
-"""
 import logging
-import json # Retained for USER_STORY_ELEMENTS_FILE_PATH parsing
+import json 
 import random
 import os 
 import re
@@ -15,11 +9,52 @@ from typing import Dict, Any, Optional, List
 import config
 import llm_interface
 from state_manager import state_manager 
+from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text # MODIFIED
 
 logger = logging.getLogger(__name__)
 
 PlotOutlineData = Dict[str, Any]
 WorldBuildingData = Dict[str, Any]
+
+# --- Plot Outline ---
+PLOT_OUTLINE_KEY_MAP = {
+    "title": "title",
+    "protagonist_name": "protagonist_name",
+    "protagonist_description": "protagonist_description",
+    "plot_points": "plot_points", 
+    "character_arc": "character_arc",
+    "conflict_summary": "conflict_summary",
+    "logline": "logline",
+    "setting_description": "setting_description",
+    "inciting_incident": "inciting_incident",
+    "climax_event_preview": "climax_event_preview",
+    "antagonist_name": "antagonist_name",
+    "antagonist_description": "antagonist_description",
+    "antagonist_motivations": "antagonist_motivations"
+}
+PLOT_OUTLINE_LIST_INTERNAL_KEYS = ["plot_points"]
+
+# --- World Building ---
+# Maps normalized LLM category names to internal keys
+WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL = { 
+    "overview": "_overview_", "locations": "locations", "society": "society",
+    "systems": "systems", "lore": "lore", "history": "history", "factions": "factions"
+}
+# Pattern to detect category headers like "Category: Locations" or "Locations:"
+WORLD_CATEGORY_HEADER_PATTERN = re.compile(r"^\s*(?:Category\s*:\s*)?([A-Za-z\s_]+?):\s*$", re.IGNORECASE | re.MULTILINE)
+# Pattern to detect item names, e.g., "Item Name:" or just "Item Name" on its own line if not indented
+# This might need to be more robust; for now, assume item name is followed by a colon or is on a line by itself not looking like a detail.
+WORLD_ITEM_HEADER_PATTERN = re.compile(r"^\s*([A-Za-z0-9\s'\-]+?)(?::\s*$|$)", re.MULTILINE) # Simpler: item name then optional colon
+
+# For details within each world item (parsed by parse_key_value_block)
+WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL = {
+    "description": "description", "atmosphere": "atmosphere", 
+    "modification_proposal": "modification_proposal", # For dynamic updates
+    "goals": "goals", "rules": "rules", "key_elements": "key_elements", "traits": "traits"
+    # Add any other detail keys the LLM might use, normalized
+}
+WORLD_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits"]
+
 
 def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str, Any], unhinged: bool) -> PlotOutlineData:
     default_plot: PlotOutlineData = {
@@ -45,7 +80,6 @@ def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str,
     return default_plot
 
 def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
-    """Loads and validates data from the user-supplied story elements file (which is still JSON)."""
     file_path = config.USER_STORY_ELEMENTS_FILE_PATH
     if os.path.exists(file_path):
         try:
@@ -65,11 +99,10 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
     return None
 
 def _populate_agent_state_from_user_data(agent, user_data: Dict[str, Any]):
-    """Populates agent's Python dicts from user data (which is JSON). This function's core logic remains."""
     plot_outline: PlotOutlineData = {}
     character_profiles: Dict[str, Any] = {}
     world_building: WorldBuildingData = {
-        "locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {},
+        "locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {}, "factions": {}, # Added factions
         "user_supplied_data": True, 
         "is_default": False,
         "source": "user_supplied"
@@ -140,13 +173,10 @@ def _populate_agent_state_from_user_data(agent, user_data: Dict[str, Any]):
             "description": wd_details["magic_system_summary"], "rules": ["As described in summary"], "source": "user_supplied"
         }
     
-    if "society" not in world_building: world_building["society"] = {}
-    if "_factions_" not in world_building["society"]: world_building["society"]["_factions_"] = {} # DEPRECATED, use top-level "factions"
-
-    if "factions" not in world_building: world_building["factions"] = {} # Top level key for factions
+    if "factions" not in world_building: world_building["factions"] = {} 
     for faction in wd_details.get("key_factions", []):
         if faction.get("name"):
-            world_building["factions"][faction["name"]] = { # Ensure it goes into the top-level "factions"
+            world_building["factions"][faction["name"]] = { 
                 "description": faction.get("description", ""), "goals": faction.get("goals", []), "source": "user_supplied"
             }
     
@@ -158,109 +188,6 @@ def _populate_agent_state_from_user_data(agent, user_data: Dict[str, Any]):
             }
     agent.world_building = world_building
     logger.info("Agent's Python dicts populated from user-supplied data.")
-
-def _parse_plain_text_key_value_list(text: str, keys_map: Dict[str, str], list_keys: Optional[List[str]] = None) -> Dict[str, Any]:
-    """
-    Parses plain text with 'Key: Value' pairs and 'List Key:' followed by '- Item' lines.
-    `keys_map` maps display keys (from LLM) to internal dict keys.
-    `list_keys` specifies internal keys that should result in a list of strings.
-    This version attempts to be more robust to leading non-key-value lines.
-    """
-    parsed_data: Dict[str, Any] = {}
-    if list_keys is None: list_keys = []
-
-    current_list_key: Optional[str] = None
-    current_list_values: List[str] = []
-    
-    lines = text.splitlines()
-    first_valid_line_found = False
-
-    for line_num, line_content in enumerate(lines):
-        line = line_content.strip()
-        if not line:
-            if first_valid_line_found: # Preserve blank lines once parsing started
-                if current_list_key: # If in a list, a blank line might end it
-                    parsed_data[current_list_key] = current_list_values
-                    current_list_key = None
-                    current_list_values = []
-            continue # Skip empty lines or leading empty lines
-
-        # Attempt to match key:value or list header
-        # If not first_valid_line_found, we are looking for the first parsable line
-        
-        is_list_item = (line.startswith("- ") or line.startswith("* "))
-        
-        if current_list_key and is_list_item:
-            current_list_values.append(line[2:].strip())
-            first_valid_line_found = True
-            continue
-        
-        # If we were collecting a list and this line is not a list item, finalize the list
-        if current_list_key:
-            parsed_data[current_list_key] = current_list_values
-            current_list_key = None
-            current_list_values = []
-            # The current line might be a new key or list header, so it will be processed next.
-
-        # Try to match "Key: Value"
-        match = re.match(r"^\s*([^:]+?):\s*(.*)$", line) # Made key matching non-greedy
-        
-        if match:
-            first_valid_line_found = True
-            key_from_llm = match.group(1).strip()
-            value_from_llm = match.group(2).strip()
-            
-            internal_key = None
-            # Prioritize exact match from keys_map first
-            if key_from_llm in keys_map:
-                internal_key = keys_map[key_from_llm]
-            else: # Fallback to case-insensitive
-                for display_k, internal_k_candidate in keys_map.items():
-                    if key_from_llm.lower() == display_k.lower():
-                        internal_key = internal_k_candidate
-                        break
-            
-            if internal_key:
-                if internal_key in list_keys:
-                    current_list_key = internal_key
-                    current_list_values = []
-                    if value_from_llm: 
-                        # If value_from_llm itself looks like a list item, add its content
-                        if value_from_llm.startswith("- ") or value_from_llm.startswith("* "):
-                            current_list_values.append(value_from_llm[2:].strip())
-                        else: # Treat as a single item if not formatted as list item
-                            current_list_values.append(value_from_llm)
-                else:
-                    parsed_data[internal_key] = value_from_llm
-            else:
-                if first_valid_line_found: # Only log warning if we've already started parsing valid lines
-                    logger.warning(f"Unknown key '{key_from_llm}' in LLM plain text output (line {line_num+1}): {line}")
-        
-        # Check if the line itself is a key for a list (e.g., "Plot Points:")
-        # This is typically for when a list starts on the next line with "- " items
-        elif not is_list_item: # and not match (already checked)
-            key_from_llm_as_list_header = line.replace(":", "").strip()
-            internal_key = None
-            if key_from_llm_as_list_header in keys_map: # Exact match for list header
-                internal_key = keys_map[key_from_llm_as_list_header]
-            else: # Case-insensitive for list header
-                for display_k, internal_k_candidate in keys_map.items():
-                    if key_from_llm_as_list_header.lower() == display_k.lower():
-                        internal_key = internal_k_candidate
-                        break
-            
-            if internal_key and internal_key in list_keys:
-                first_valid_line_found = True
-                current_list_key = internal_key
-                current_list_values = []
-            elif first_valid_line_found: # If it's not a known key or list start, and we've started parsing
-                 logger.debug(f"Line not parsed as key-value or list start (line {line_num+1}): '{line}'")
-
-    # Finalize any pending list
-    if current_list_key:
-        parsed_data[current_list_key] = current_list_values
-        
-    return parsed_data
 
 
 async def generate_plot_outline_logic(agent, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> PlotOutlineData:
@@ -275,23 +202,10 @@ async def generate_plot_outline_logic(agent, default_protagonist_name: str, unhi
     logger.info("No valid user-supplied file. Proceeding with LLM/default generation for Python dicts.")
     base_elements_for_outline: Dict[str, Any] = {}
     
-    plot_outline_keys_map = {
-        "Title": "title",
-        "Protagonist Name": "protagonist_name",
-        "Protagonist Description": "protagonist_description",
-        "Plot Points": "plot_points", 
-        "Character Arc": "character_arc",
-        "Conflict Summary": "conflict_summary",
-        "Logline": "logline",
-        "Setting Description": "setting_description",
-        "Inciting Incident": "inciting_incident",
-        "Climax Event Preview": "climax_event_preview",
-        "Antagonist Name": "antagonist_name",
-        "Antagonist Description": "antagonist_description",
-        "Antagonist Motivations": "antagonist_motivations"
-    }
-    list_type_keys_internal = ["plot_points"] 
-    llm_fields_to_generate_text = "\n".join([f"- {k}" for k in plot_outline_keys_map.keys()])
+    # Key map keys are normalized LLM display keys
+    current_plot_outline_key_map = {k.lower().replace(" ", "_"): v for k, v in PLOT_OUTLINE_KEY_MAP.items()}
+    
+    llm_fields_to_generate_text = "\n".join([f"- {k.replace('_', ' ').title()}" for k in current_plot_outline_key_map.keys()])
     required_string_keys_internal = ["title", "protagonist_name", "protagonist_description", "character_arc", "conflict_summary", "setting_description"]
 
     if unhinged_mode:
@@ -364,9 +278,13 @@ Begin your output now:
     logger.info("Calling LLM for plot outline generation (to plain text)...")
     raw_outline_text = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.7, stream_to_disk=True)
     
-    # Clean the response *before* parsing
     cleaned_outline_text = llm_interface.clean_model_response(raw_outline_text)
-    parsed_llm_response = _parse_plain_text_key_value_list(cleaned_outline_text, plot_outline_keys_map, list_type_keys_internal)
+    # MODIFIED: Use new parsing utility
+    parsed_llm_response = parse_key_value_block(
+        cleaned_outline_text,
+        key_map=current_plot_outline_key_map,
+        list_internal_keys=PLOT_OUTLINE_LIST_INTERNAL_KEYS
+    )
 
     is_valid = False 
     final_outline_data: PlotOutlineData = {} 
@@ -432,174 +350,9 @@ Begin your output now:
         logger.info(f"Created initial profile for protagonist '{final_protagonist_name}' in agent.character_profiles.")
 
     if not agent.world_building: 
-        agent.world_building = {"locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {}}
+        agent.world_building = {"locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {}, "factions": {}}
 
     return agent.plot_outline
-
-
-def _parse_plain_text_world_building(text: str) -> Dict[str, Any]:
-    world_data: Dict[str, Any] = {"_overview_": {}}
-    lines = text.splitlines()
-    
-    current_category_internal: Optional[str] = None
-    current_item_name: Optional[str] = None
-    current_item_details: Dict[str, Any] = {}
-    
-    category_map_display_to_internal = { # Maps display names (case-insensitive) to internal keys
-        "overview": "_overview_", "locations": "locations", "society": "society",
-        "systems": "systems", "lore": "lore", "history": "history", "factions": "factions"
-    }
-    list_detail_keys_internal = ["goals", "rules", "key_elements", "traits"] 
-
-    active_list_key_internal: Optional[str] = None
-    active_list_values: List[str] = []
-
-    first_meaningful_line_found = False
-
-    for line_num, line_content in enumerate(lines):
-        line = line_content.strip()
-        if not line: 
-            if first_meaningful_line_found and active_list_key_internal: # Blank line might terminate a list
-                if current_item_name and current_category_internal and current_category_internal != "_overview_":
-                    current_item_details[active_list_key_internal] = active_list_values
-                elif current_category_internal == "_overview_" and active_list_key_internal in world_data["_overview_"]:
-                     world_data["_overview_"][active_list_key_internal] = active_list_values
-                active_list_key_internal = None
-                active_list_values = []
-            continue # Skip empty lines
-
-        first_meaningful_line_found = True
-
-        # Finalize active list if current line doesn't continue it (e.g. new key, new item, new category)
-        is_list_item_line = line.startswith("- ") or line.startswith("* ")
-        if active_list_key_internal and not is_list_item_line:
-            if current_item_name and current_category_internal and current_category_internal != "_overview_": # Item specific list
-                 current_item_details[active_list_key_internal] = active_list_values
-            elif current_category_internal == "_overview_": # Overview list (not typical but possible)
-                 if active_list_key_internal in world_data["_overview_"]: # Check if key was initialized
-                     world_data["_overview_"][active_list_key_internal].extend(active_list_values) # Extend if exists
-                 else:
-                      world_data["_overview_"][active_list_key_internal] = active_list_values # Assign if new
-            active_list_key_internal = None
-            active_list_values = []
-        
-        # Check for new Category
-        # Category lines are typically like "Locations:" or "Overview:"
-        cat_match = re.match(r"^\s*([A-Za-z\s_]+?):\s*$", line) # Ends with colon
-        potential_cat_display_name = ""
-        if cat_match:
-            potential_cat_display_name = cat_match.group(1).strip()
-        elif not re.search(r":\s*\S", line) and not is_list_item_line : # Doesn't have "Key: Value" and not a list item
-            potential_cat_display_name = line.strip() # Could be a category name on its own
-
-        if potential_cat_display_name:
-            normalized_potential_cat = potential_cat_display_name.lower().replace(" ", "_")
-            found_cat_internal = None
-            for disp_cat, int_cat in category_map_display_to_internal.items():
-                if disp_cat == normalized_potential_cat:
-                    found_cat_internal = int_cat
-                    break
-            
-            if found_cat_internal:
-                if current_item_name and current_category_internal and current_category_internal != "_overview_": # Finalize previous item
-                    if current_category_internal not in world_data: world_data[current_category_internal] = {}
-                    world_data[current_category_internal][current_item_name] = current_item_details
-                
-                current_category_internal = found_cat_internal
-                current_item_name = None # Reset item for new category
-                current_item_details = {}
-                if current_category_internal != "_overview_": # Ensure category dict exists
-                    if current_category_internal not in world_data:
-                        world_data[current_category_internal] = {}
-                logger.debug(f"Switched to world category: {current_category_internal}")
-                continue # Processed as category header
-
-        if not current_category_internal: # Still waiting for the first valid category
-            logger.debug(f"World parsing: Skipping line, no active category: '{line}'")
-            continue
-
-        # Check for new Item Name (if not in Overview)
-        # Item names are typically followed by indented details, or are on their own line then details.
-        if current_category_internal != "_overview_":
-            item_name_colon_match = re.match(r"^\s*([A-Za-z0-9\s'\-]+?):\s*$", line)
-            is_likely_detail_key_value = re.match(r"^\s\s+.*:\s*.", line) 
-            
-            if item_name_colon_match and not line.startswith("  "): 
-                potential_item_name = item_name_colon_match.group(1).strip()
-                # Avoid mistaking a detail key (like "Description:") as an item name
-                normalized_potential_item_key = potential_item_name.lower().replace(" ","_")
-                common_detail_keys = ["description", "atmosphere", "modification_proposal", "goals", "rules", "key_elements", "traits"]
-                if normalized_potential_item_key not in common_detail_keys:
-                    if current_item_name and current_category_internal: 
-                        world_data[current_category_internal][current_item_name] = current_item_details
-                    current_item_name = potential_item_name
-                    current_item_details = {}
-                    logger.debug(f"New world item (colon): {current_item_name} under {current_category_internal}")
-                    continue
-            elif not line.startswith("  ") and not re.match(r".*:\s*\S+", line) and not is_list_item_line:
-                potential_item_name = line.strip()
-                if potential_item_name: 
-                    if current_item_name and current_category_internal:
-                        world_data[current_category_internal][current_item_name] = current_item_details
-                    current_item_name = potential_item_name
-                    current_item_details = {}
-                    logger.debug(f"New world item (standalone line): {current_item_name} under {current_category_internal}")
-                    continue
-
-        # Process Item Details (or Overview details)
-        target_details_dict = current_item_details if current_category_internal != "_overview_" else world_data["_overview_"]
-        
-        if not current_item_name and current_category_internal != "_overview_": 
-            logger.debug(f"World parsing: Skipping detail line, no active item name for category {current_category_internal}: '{line}'")
-            continue
-
-        if is_list_item_line: 
-            if active_list_key_internal:
-                active_list_values.append(line[2:].strip())
-            else: logger.warning(f"World parsing: Orphaned list item '{line}' for item '{current_item_name or '_overview_'}'. No active list key.")
-            continue
-
-        detail_match = re.match(r"^\s*([A-Za-z0-9\s_()]+?):\s*(.*)$", line) 
-        if detail_match:
-            detail_key_raw = detail_match.group(1).strip()
-            detail_value = detail_match.group(2).strip()
-            detail_key_internal = detail_key_raw.lower().replace(" ", "_").replace("(", "").replace(")", "")
-
-            if detail_key_internal in list_detail_keys_internal:
-                active_list_key_internal = detail_key_internal
-                active_list_values = []
-                
-                if detail_value:
-                    if detail_value.startswith("- ") or detail_value.startswith("* "):
-                        active_list_values.append(detail_value[2:].strip())
-                    else: 
-                        active_list_values.append(detail_value)
-                if active_list_key_internal not in target_details_dict: # Initialize list in dict
-                    target_details_dict[active_list_key_internal] = []
-
-            else: 
-                target_details_dict[detail_key_internal] = detail_value
-        # Handle list header on its own line (e.g., "Goals:")
-        elif line.strip().replace(":", "").lower().replace(" ", "_") in list_detail_keys_internal:
-            active_list_key_internal = line.strip().replace(":", "").lower().replace(" ", "_")
-            active_list_values = []
-            if active_list_key_internal not in target_details_dict:
-                 target_details_dict[active_list_key_internal] = []
-
-
-    # Finalize last item and list
-    if active_list_key_internal:
-        target_dict_final = current_item_details if current_item_name and current_category_internal != "_overview_" else world_data["_overview_"]
-        if active_list_key_internal in target_dict_final and isinstance(target_dict_final[active_list_key_internal], list):
-             target_dict_final[active_list_key_internal].extend(active_list_values)
-        else:
-             target_dict_final[active_list_key_internal] = active_list_values
-
-    if current_item_name and current_category_internal and current_category_internal != "_overview_":
-        if current_category_internal not in world_data: world_data[current_category_internal] = {}
-        world_data[current_category_internal][current_item_name] = current_item_details
-        
-    return world_data
 
 
 async def generate_world_building_logic(agent) -> WorldBuildingData:
@@ -643,8 +396,8 @@ Protagonist: {agent.plot_outline.get('protagonist_name', 'N/A')}
 
 Instructions:
 1. Create detailed world-building. Focus on tangible details.
-2. Use top-level category headers EXACTLY like these: `Overview:`, `Locations:`, `Society:`, `Systems:`, `Lore:`, `History:`, `Factions:`. Each on its own line.
-3. Under each category (except Overview), list item names. Item names should be on their own line, typically followed by a colon or indented details below.
+2. Use top-level category headers EXACTLY like these: `Overview:`, `Locations:`, `Society:`, `Systems:`, `Lore:`, `History:`, `Factions:`. Each on its own line, ending with a colon.
+3. Under each category (except Overview), list item names. Item names should be on their own line, typically followed by a colon.
 4. For each item, provide details as indented "key: value" pairs. Example keys: "Description", "Atmosphere" (for locations), "Goals" (list for factions), "Rules" (list for systems), "Key Elements" (list of notable sub-features). Use Title Case for these keys.
 5. For list-based details (like "Goals", "Rules", "Key Elements", "Traits"), list each entry on a new line, indented further and prefixed with "- ".
 6. "Overview:" should just have a "Description:" of the overall world feel.
@@ -716,27 +469,42 @@ Begin your output now:
     raw_world_data_text = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
     
     cleaned_world_text = llm_interface.clean_model_response(raw_world_data_text)
-    parsed_llm_response = _parse_plain_text_world_building(cleaned_world_text)
+    
+    # MODIFIED: Use new parsing utility
+    # Normalize keys from WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL for use in parse_hierarchical_structured_text
+    detail_key_map_normalized = {k.lower().replace(" ", "_"): v for k, v in WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL.items()}
+
+    parsed_llm_response = parse_hierarchical_structured_text(
+        cleaned_world_text,
+        category_pattern=WORLD_CATEGORY_HEADER_PATTERN, # Regex for "CategoryName:"
+        item_pattern=WORLD_ITEM_HEADER_PATTERN,         # Regex for "Item Name:" (or just "Item Name")
+        detail_key_map=detail_key_map_normalized,
+        detail_list_internal_keys=WORLD_DETAIL_LIST_INTERNAL_KEYS,
+        overview_category_internal_key="_overview_" # Internal key for the overview section
+    )
     
     is_valid = False 
     final_world_data: WorldBuildingData = {}
 
     if parsed_llm_response:
-        if (parsed_llm_response.get("_overview_", {}).get("description") or
-            any(isinstance(items, dict) and items for cat, items in parsed_llm_response.items() if cat != "_overview_")):
+        # Check if _overview_ has content or any other category has items
+        overview_content = parsed_llm_response.get("_overview_", {}).get("description")
+        other_categories_have_items = any(
+            isinstance(items, dict) and items 
+            for cat, items in parsed_llm_response.items() if cat != "_overview_"
+        )
+        if overview_content or other_categories_have_items:
             final_world_data = parsed_llm_response
             is_valid = True
         else:
             logger.warning(f"Generated world-building (plain text parsing) lacks expected structure/content. Parsed: {parsed_llm_response}. Cleaned text for parsing: '{cleaned_world_text[:300]}...'")
     
     if is_valid and final_world_data:
-        # Ensure all standard categories exist in the final dict, even if empty
         for std_cat in ["locations", "society", "systems", "lore", "history", "factions", "_overview_"]:
             if std_cat not in final_world_data:
                 final_world_data[std_cat] = {} if std_cat != "_overview_" else {"description": ""}
-            elif std_cat == "_overview_" and not isinstance(final_world_data[std_cat], dict): # Ensure _overview_ is dict
+            elif std_cat == "_overview_" and not isinstance(final_world_data[std_cat], dict):
                 final_world_data[std_cat] = {"description": str(final_world_data[std_cat]) if final_world_data[std_cat] else ""}
-
 
         agent.world_building = final_world_data
         agent.world_building.pop("is_default", None)

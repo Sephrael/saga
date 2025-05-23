@@ -61,10 +61,10 @@ NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "saga_password")
 
 # Model Aliases
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B" # 4-ish bpw for decent speed with quality
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B" # 8.0 bpw for quality
-SMALL_MODEL_DEFAULT: str = "Qwen3-4B" # 8.0 bpw for quality
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B" # 8.0 bpw for quality and coherence
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
+SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
+NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B"
 
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
@@ -181,7 +181,7 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 
 # --- Novel Configuration ---
-UNHINGED_PLOT_MODE: bool = False
+UNHINGED_PLOT_MODE: bool = True
 CONFIGURED_GENRE: str = "dystopian horror"
 CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
