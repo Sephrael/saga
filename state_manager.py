@@ -727,6 +727,7 @@ class state_managerSingleton:
         query = """
         MERGE (s:Entity {name: $subject_param})
         MERGE (o:Entity {name: $object_param})
+        WITH s, o
         // Try to match an existing relationship of this type from this chapter
         OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_param}]->(o)
         // If it exists, update it. Otherwise, create a new one.
