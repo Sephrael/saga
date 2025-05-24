@@ -115,7 +115,7 @@ class NANA_Orchestrator:
     async def perform_initial_setup(self):
         """Handles the initial generation of plot, world, and characters if not already present."""
         logger.info("NANA performing initial setup...")
-        print("\n--- NANA: Initializing Plot, Characters, and World ---")
+        logger.info("\n--- NANA: Initializing Plot, Characters, and World ---")
 
         generation_params: Dict[str, Any] = {}
         if config.UNHINGED_PLOT_MODE and not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH):
@@ -138,15 +138,15 @@ class NANA_Orchestrator:
                                           config.UNHINGED_PLOT_MODE if not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH) else False,
                                           **generation_params)
         plot_source = self.plot_outline.get("source", "unknown")
-        print(f"   Plot Outline initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'")
+        logger.info(f"   Plot Outline initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'")
 
         await generate_world_building_logic(self)
         world_source = self.world_building.get("source", "unknown")
-        print(f"   World Building initialized/loaded (source: {world_source}).")
+        logger.info(f"   World Building initialized/loaded (source: {world_source}).")
 
         self._update_novel_props_cache() # Update cache after initial setup
         await self._save_core_novel_state_to_neo4j()
-        print("   Initial plot, character, and world data saved to Neo4j.")
+        logger.info("   Initial plot, character, and world data saved to Neo4j.")
 
         if not self.plot_outline or self.plot_outline.get("is_default"):
             logger.warning("Initial setup resulted in a default or empty plot outline. This might impact generation quality.")
@@ -168,11 +168,11 @@ class NANA_Orchestrator:
             logger.info("Found existing NovelInfo with plot points. Assuming KG already pre-populated. Skipping explicit pre-population.")
             return
 
-        print("\n--- NANA: Pre-populating Knowledge Graph from Initial Data ---")
+        logger.info("\n--- NANA: Pre-populating Knowledge Graph from Initial Data ---")
         await self.kg_maintainer_agent.prepopulate_kg_from_initial_data(
             self.plot_outline, self.character_profiles, self.world_building
         )
-        print("   Knowledge Graph pre-population step complete.")
+        logger.info("   Knowledge Graph pre-population step complete.")
 
     def _get_plot_point_info_for_chapter(self, chapter_number: int) -> Tuple[Optional[str], int]:
         """Helper to get plot point focus and index for a chapter."""
@@ -370,37 +370,37 @@ class NANA_Orchestrator:
             await self._prepopulate_kg_if_needed()
             self._update_novel_props_cache() # Ensure cache is up-to-date after setup/load
 
-            print("\n--- NANA: Starting Novel Writing Process ---")
+            logger.info("\n--- NANA: Starting Novel Writing Process ---")
             start_chapter = self.chapter_count + 1
             end_chapter = start_chapter + config.CHAPTERS_PER_RUN if config.CHAPTERS_PER_RUN > 0 else start_chapter
 
-            print(f"NANA: Current Chapter Count (at start of run): {self.chapter_count}")
+            logger.info(f"NANA: Current Chapter Count (at start of run): {self.chapter_count}")
             if start_chapter < end_chapter:
-                print(f"NANA: Targeting Chapters: {start_chapter} to {end_chapter - 1} in this run.")
+                logger.info(f"NANA: Targeting Chapters: {start_chapter} to {end_chapter - 1} in this run.")
             else:
-                print(f"NANA: CHAPTERS_PER_RUN ({config.CHAPTERS_PER_RUN}) results in no new chapters. Current: {self.chapter_count}.")
+                logger.info(f"NANA: CHAPTERS_PER_RUN ({config.CHAPTERS_PER_RUN}) results in no new chapters. Current: {self.chapter_count}.")
 
             chapters_successfully_written = 0
             for i in range(start_chapter, end_chapter):
-                print(f"\n--- NANA: Attempting Chapter {i} ---")
+                logger.info(f"\n--- NANA: Attempting Chapter {i} ---")
                 try:
                     chapter_text = await self.run_chapter_generation_process(i)
                     if chapter_text:
                         chapters_successfully_written += 1
-                        print(f"NANA: Chapter {i}: Successfully generated (Length: {len(chapter_text)} chars).")
-                        print(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
+                        logger.info(f"NANA: Chapter {i}: Successfully generated (Length: {len(chapter_text)} chars).")
+                        logger.info(f"   Snippet: {chapter_text[:200].replace(chr(10), ' ')}...")
                     else:
-                        print(f"NANA: Chapter {i}: Failed to generate or save. Check logs.")
+                        logger.info(f"NANA: Chapter {i}: Failed to generate or save. Check logs.")
                         # Decide if to break or continue on chapter failure
                         # break
                 except Exception as e:
                     logger.critical(f"NANA: Critical error during chapter {i} writing process: {e}", exc_info=True)
                     break
 
-            print(f"\n--- NANA: Novel writing process finished for this run ---")
+            logger.info(f"\n--- NANA: Novel writing process finished for this run ---")
             final_chapter_count_from_db = await state_manager.async_load_chapter_count()
-            print(f"NANA: Successfully wrote {chapters_successfully_written} chapter(s).")
-            print(f"NANA: Current total chapters in database: {final_chapter_count_from_db}")
+            logger.info(f"NANA: Successfully wrote {chapters_successfully_written} chapter(s).")
+            logger.info(f"NANA: Current total chapters in database: {final_chapter_count_from_db}")
             logger.info(f"--- NANA: Saga Novel Generation Run Finished. Final Neo4j chapter count: {final_chapter_count_from_db} ---")
 
         except Exception as e:
