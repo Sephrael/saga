@@ -2,7 +2,7 @@
 import logging
 import re
 import asyncio
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Tuple
 
 import config
 import llm_interface
@@ -115,19 +115,19 @@ class PlannerAgent:
         chapter_number: int,
         plot_point_focus: Optional[str],
         plot_point_index: int
-    ) -> Optional[List[SceneDetail]]:
+    ) -> Tuple[Optional[List[SceneDetail]], Optional[Dict[str, int]]]:
         """
         Generates a detailed scene plan for the chapter.
-        (Logic from chapter_planning_logic.py - plan_chapter_scenes_logic function)
+        Returns the plan and LLM usage data.
         """
         if not config.ENABLE_AGENTIC_PLANNING:
             logger.info(f"Agentic planning disabled. Skipping detailed planning for Chapter {chapter_number}.")
-            return None
+            return None, None
 
         logger.info(f"PlannerAgent planning Chapter {chapter_number} with detailed scenes...")
         if plot_point_focus is None:
             logger.error(f"Cannot plan chapter {chapter_number}: No plot point focus available.")
-            return None
+            return None, None
 
         context_summary = ""
         if chapter_number > 1:
@@ -145,8 +145,6 @@ class PlannerAgent:
                         context_summary += f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
 
         protagonist_name = novel_props.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        # Assuming novel_props is passed by the orchestrator, which holds character_profiles and world_building
-        # These getters need access to that state.
         kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(novel_props, chapter_number, None)
         character_state_snippet_plain_text = await get_character_state_snippet_for_prompt(novel_props, chapter_number)
         world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(novel_props, chapter_number)
@@ -196,7 +194,7 @@ Separate each complete scene block with a line containing only "---". If you don
 Output ONLY the scene plan text as described.
 """
         logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX})...")
-        plan_raw_text = await llm_interface.async_call_llm(
+        plan_raw_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=0.6,
@@ -235,12 +233,10 @@ Output ONLY the scene plan text as described.
 
             if final_scenes_typed:
                 logger.info(f"Generated valid detailed scene plan for chapter {chapter_number} with {len(final_scenes_typed)} scenes from plain text.")
-                return final_scenes_typed
+                return final_scenes_typed, usage_data
             else:
                 logger.error(f"Parsed list was empty or all scenes were invalid after parsing plain text for chapter {chapter_number}. Raw LLM output: '{plan_raw_text[:500]}...'")
-                # await agent._save_debug_output(chapter_number, "detailed_plan_invalid_or_empty_scenes_plain_text", plan_raw_text) # Orchestrator should handle debug saves
-                return None
+                return None, usage_data 
         else:
             logger.error(f"Failed to parse a valid list of scenes from plain text for chapter {chapter_number}. Raw LLM output: '{plan_raw_text[:500]}...'")
-            # await agent._save_debug_output(chapter_number, "detailed_plan_parse_fail_plain_text", plan_raw_text) # Orchestrator should handle debug saves
-            return None
+            return None, usage_data

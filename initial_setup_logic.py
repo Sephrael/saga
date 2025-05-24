@@ -6,7 +6,7 @@ import json
 import random
 import os
 import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 import config
 import llm_interface
@@ -192,16 +192,17 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     logger.info("Agent state populated from user-supplied data.")
 
 
-async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> PlotOutlineData:
+async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Tuple[PlotOutlineData, Optional[Dict[str, int]]]:
     """ Generates or loads plot outline. Modifies agent.plot_outline and potentially agent.character_profiles.
         'agent' is the NANA_Orchestrator instance.
+        Returns the plot outline and LLM usage data.
     """
     logger.info(f"Generating plot outline. Unhinged mode: {unhinged_mode}")
     user_supplied_data = _load_user_supplied_data()
     if user_supplied_data:
         logger.info("Processing user-supplied data for initial setup.")
         _populate_agent_state_from_user_data(agent, user_supplied_data) # This sets agent.plot_outline etc.
-        return agent.plot_outline # Return the plot_outline populated from user data
+        return agent.plot_outline, None # No LLM usage if from user data
 
     # If no user data, proceed with LLM/default generation
     logger.info("No valid user-supplied file found or processed. Proceeding with LLM/default generation for plot outline.")
@@ -283,7 +284,7 @@ Antagonist Motivations: Believes the Labyrinth's power belongs to him and will s
 Begin your output now using the requested field names:
 """
     logger.info("Calling LLM for plot outline generation (to plain text)...")
-    raw_outline_text = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.7, stream_to_disk=True)
+    raw_outline_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.7, stream_to_disk=True)
     cleaned_outline_text = llm_interface.clean_model_response(raw_outline_text)
 
     parsed_llm_response = parse_key_value_block(
@@ -321,6 +322,9 @@ Begin your output now using the requested field names:
     else:
         logger.error("Failed to generate a valid plot outline via LLM. Applying default plot outline.")
         agent.plot_outline = _create_default_plot(default_protagonist_name, base_elements_for_outline, unhinged_mode)
+        # If LLM failed, usage_data might still be relevant if the call was made, but quality is low.
+        # If we fell back to default *before* an LLM call, usage_data would be None.
+        # The current logic calls LLM then validates.
 
     # Ensure protagonist name from outline is valid and update/create profile
     prot_name_from_outline = agent.plot_outline.get('protagonist_name')
@@ -349,18 +353,19 @@ Begin your output now using the requested field names:
     if not hasattr(agent, 'world_building') or agent.world_building is None:
         agent.world_building = {"locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {}, "factions": {}}
 
-    return agent.plot_outline
+    return agent.plot_outline, usage_data
 
 
-async def generate_world_building_logic(agent: Any) -> WorldBuildingData:
+async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, Optional[Dict[str, int]]]:
     """ Generates initial world-building data. Modifies agent.world_building.
         'agent' is the NANA_Orchestrator instance.
+        Returns the world building data and LLM usage data.
     """
     # Check if world_building already exists and is non-default (e.g., from user data or previous run)
     if hasattr(agent, 'world_building') and agent.world_building:
         if agent.world_building.get("user_supplied_data", False):
             logger.info("Skipping LLM world-building generation: Data was user-supplied.")
-            return agent.world_building
+            return agent.world_building, None
         # Check if it's substantially populated beyond default/metadata keys
         meaningful_categories_count = sum(1 for cat, items in agent.world_building.items()
                                           if cat not in ["is_default", "user_supplied_data", "source", "_overview_"] and isinstance(items, dict) and items)
@@ -368,7 +373,7 @@ async def generate_world_building_logic(agent: Any) -> WorldBuildingData:
         
         if meaningful_categories_count > 1 or (overview_has_content and meaningful_categories_count >=1):
             logger.info("Skipping initial world-building generation: Existing world_building data appears non-default and populated.")
-            return agent.world_building
+            return agent.world_building, None
 
     if not hasattr(agent, 'plot_outline') or not agent.plot_outline or not agent.plot_outline.get("setting_description"):
         logger.error("Cannot generate world-building details: Plot outline or its setting_description is missing. Defaulting world_building.")
@@ -380,7 +385,7 @@ async def generate_world_building_logic(agent: Any) -> WorldBuildingData:
             "is_default": True, "source": "default_fallback"
         }
         agent.world_building = default_wb # Modifies orchestrator's attribute
-        return agent.world_building
+        return agent.world_building, None
 
     plot_title = agent.plot_outline.get('title', 'Untitled Novel')
     plot_genre = agent.plot_outline.get('genre', 'N/A')
@@ -441,7 +446,7 @@ Systems:
 Begin your detailed world-building output now:
 """
     logger.info("Generating initial world-building data (to plain text) via LLM...")
-    raw_world_data_text = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
+    raw_world_data_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
     cleaned_world_text = llm_interface.clean_model_response(raw_world_data_text)
 
     # Normalize keys for parsing (LLM might use "Description", "description", "DESCRIPTION")
@@ -493,4 +498,4 @@ Begin your detailed world-building output now:
             "is_default": True, "source": "default_fallback"
         }
         agent.world_building = default_wb
-    return agent.world_building
+    return agent.world_building, usage_data

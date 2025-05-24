@@ -69,12 +69,10 @@ class DraftingAgent:
         plot_point_focus: Optional[str],
         hybrid_context: str,
         chapter_plan: Optional[List[SceneDetail]]
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, int]]]:
         """
         Generates the initial draft text for a chapter.
-        (Logic from chapter_drafting_logic.py - generate_chapter_draft_logic function)
-        'novel_props' is passed by the orchestrator and contains decomposed state.
-        It also serves as the 'agent-like' object for prompt_data_getters.
+        Returns the draft, raw LLM output, and LLM usage data.
         """
         if not plot_point_focus:
             plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
@@ -91,7 +89,6 @@ class DraftingAgent:
         else:
             plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
 
-        # These getters now take novel_props directly, which acts as the 'agent-like' state holder
         char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
 
@@ -134,23 +131,23 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 --- BEGIN CHAPTER {chapter_number} TEXT ---
 """
         logger.info(f"Calling LLM ({self.model_name}) for Ch {chapter_number} draft. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-        raw_llm_text = await llm_interface.async_call_llm(
+        raw_llm_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=0.6,
-            max_tokens=None, # Allow LLM to use its full capacity for draft
+            max_tokens=None, 
             allow_fallback=True,
             stream_to_disk=True
         )
         if not raw_llm_text:
             logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
-            return None, None
+            return None, None, usage_data
 
         cleaned_text = llm_interface.clean_model_response(raw_llm_text)
 
         if not cleaned_text or len(cleaned_text) < 50:
             logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
-            return None, raw_llm_text
+            return None, raw_llm_text, usage_data
 
         if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
              logger.warning(
@@ -160,4 +157,4 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
              )
 
         logger.info(f"Generated initial draft for ch {chapter_number} (Length: {len(cleaned_text)} chars).")
-        return cleaned_text, raw_llm_text
+        return cleaned_text, raw_llm_text, usage_data

@@ -1,7 +1,7 @@
 # world_continuity_agent.py
 import logging
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 import config
 import llm_interface
@@ -86,25 +86,20 @@ class WorldContinuityAgent:
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str # This is the HYBRID context from orchestrator
-    ) -> List[ProblemDetail]:
+    ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
         """
         Checks the draft text for consistency with world-building, character profiles,
-        plot outline, and KG facts.
+        plot outline, and KG facts. Returns problems and LLM usage data.
         """
         if not draft_text:
             logger.warning(f"WorldContinuityAgent: Consistency check skipped for Ch {chapter_number}: empty draft text.")
-            return []
+            return [], None
 
         logger.info(f"WorldContinuityAgent performing focused consistency check for Chapter {chapter_number}...")
 
         protagonist_name_str = novel_props.get('protagonist_name', 'The Protagonist')
-        # These context getters are already used by ComprehensiveEvaluator, reuse them
         char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
-        # The KG facts within previous_chapters_context might be sufficient, or we can call the getter again for clarity
-        # Let's assume previous_chapters_context (hybrid context) already contains relevant KG facts.
-        # If more specific KG facts are needed for *just* consistency, this prompt could be adjusted.
-        # For now, the hybrid context includes KG facts section.
 
         prompt = f"""/no_think
 You are a World & Continuity Expert Editor for Chapter {chapter_number} of the novel "{novel_props.get('title', 'Untitled Novel')}" (Protagonist: {protagonist_name_str}).
@@ -168,18 +163,17 @@ QUOTE FROM ORIGINAL: She admired the brilliant blue glow of the Sunstone.
 SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for the Sunstone.
 """
         logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number}...")
-        raw_consistency_text = await llm_interface.async_call_llm(
+        raw_consistency_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=0.2, # Lower temp for factual consistency checks
+            temperature=0.2, 
             allow_fallback=True,
-            stream_to_disk=False # Consistency checks usually smaller output
+            stream_to_disk=False 
         )
 
         cleaned_consistency_text = llm_interface.clean_model_response(raw_consistency_text)
         consistency_problems = self._parse_llm_consistency_output(cleaned_consistency_text, chapter_number)
 
-        # Validate quotes from parsed problems
         validated_problems: List[ProblemDetail] = []
         for prob_item in consistency_problems:
             quote = prob_item["quote_from_original"]
@@ -190,12 +184,10 @@ SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for
                         f"WorldContinuityAgent: Problem quote for Ch {chapter_number} NOT VERBATIM in chapter text: '{quote[:50]}...'. "
                         f"Problem: {prob_item['problem_description']}"
                     )
-                    # Optionally, change quote to "N/A - Quote Not Verbatim" or handle as needed
             validated_problems.append(prob_item)
 
-
         logger.info(f"World/Continuity consistency check for Ch {chapter_number} found {len(validated_problems)} problems.")
-        return validated_problems
+        return validated_problems, usage_data
 
     async def suggest_canon_corrections(self, problems: List[ProblemDetail]) -> List[str]:
         """
@@ -216,14 +208,12 @@ SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for
         """
         logger.info(f"WorldContinuityAgent: Querying KG regarding potential contradiction around '{entity1}'...")
         facts = []
-        # Example: Get all relations for entity1 up to chapter_limit, excluding provisional facts
         facts.extend(await state_manager.async_query_kg(subject=entity1, chapter_limit=chapter_limit, include_provisional=False))
         facts.extend(await state_manager.async_query_kg(obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False))
 
         if entity2 and relation:
             facts.extend(await state_manager.async_query_kg(subject=entity1, predicate=relation, obj_val=entity2, chapter_limit=chapter_limit, include_provisional=False))
 
-        # Deduplicate and format (simplified for example)
         unique_facts_strs = set()
         formatted_facts = []
         for fact_dict in facts:

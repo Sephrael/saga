@@ -1,12 +1,12 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.817, Type: Provisional Summary)]:
-Elira Voss, exiled and shunned by the Order of the Pure Flame, infiltrates their archives to uncover suppressed truths, discovering a mysterious symbol linked to a forgotten history. She finds a hidden manuscript that challenges the Order's narrative, reigniting her resolve to expose their lies. Despite being watched and threatened, she commits to reclaiming her past and the truth buried by the Order.
+[Semantic Context from Chapter 1 (Similarity: 0.822, Type: Provisional Summary)]:
+Professor Virell Durn activates the Aether Resonator, a machine designed to transcend time, but it awakens ancient echoes and whispers from the past, unsettling him and revealing his fear of losing himself to the very knowledge he sought. The workshop transforms into something alive, and Virell begins to question his identity and the cost of his ambition. He leaves the workshop, determined to find the Veilspire Pass to understand what he has unleashed.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-- Elira Voss's status is: Introduced.
-- The main conflict is: Elira must navigate the rigid hierarchy and fanatical dogma of the Order of the Pure Flame, working to prevent a controlled dark age while reclaiming her identity and purpose..
-- The novel's theme is: the consequences of religious extremism.
+- Professor Virell Durn's status is: Introduced.
+- The main conflict is: Virell struggles to maintain his identity as his mind becomes entangled with the echoes of the dead, racing against a growing entity that seeks to use him as a vessel for eternal existence..
+- The novel's theme is: the burden of immortality.
 --- END KEY RELIABLE KG FACTS ---

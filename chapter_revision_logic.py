@@ -14,20 +14,17 @@ from typing import Tuple, Optional, List, Dict, Any
 
 import config
 import llm_interface
-import drafting_agent # For _format_scene_plan_for_prompt if needed
+import drafting_agent 
 import utils
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
 
 logger = logging.getLogger(__name__)
 
-# Import the plain text formatter for scene plan
-# Temporary: Borrow from DraftingAgent instance.
 try:
     _temp_drafting_agent_for_format = drafting_agent.DraftingAgent()
     _format_scene_plan_for_prompt_func = _temp_drafting_agent_for_format._format_scene_plan_for_prompt
 except ImportError:
     logger.error("Could not import _format_scene_plan_for_prompt from drafting_agent for chapter_revision_logic. Revision planning might be affected.")
-    # Fallback stub if drafting_agent or its method is unavailable
     def _format_scene_plan_for_prompt_func(chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
         logger.warning("_format_scene_plan_for_prompt_func is a fallback stub!")
         plan_text_parts = []
@@ -44,18 +41,15 @@ except ImportError:
 
 
 def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:
-    """Helper to get a property from an agent-like object (orchestrator)."""
     return getattr(agent, key, default)
 
 def _get_nested_prop_from_agent(agent: Any, primary_key: str, secondary_key: str, default: Any = None) -> Any:
-    """Helper to get a nested property from an agent-like object."""
     primary_data = _get_prop_from_agent(agent, primary_key, {})
     if isinstance(primary_data, dict):
         return primary_data.get(secondary_key, default)
     return default
 
 def _get_plot_point_info_from_agent(agent: Any, chapter_number: int) -> Tuple[Optional[str], int]:
-    """Replicates the _get_plot_point_info from NovelWriterAgent/NANA_Orchestrator."""
     plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
     plot_points = plot_outline_data.get("plot_points", [])
     if not isinstance(plot_points, list) or not plot_points: return None, -1
@@ -68,17 +62,11 @@ def _get_plot_point_info_from_agent(agent: Any, chapter_number: int) -> Tuple[Op
 
 
 def _get_context_window(text: str, quote: str, window_size_chars: int) -> str:
-    """
-    Extracts a context window around a quote. If quote is "N/A - General Issue",
-    returns a snippet from the beginning and end of the text.
-    """
     if not text: return ""
     if quote == "N/A - General Issue":
-        # For general issues, provide a generic context window (e.g., start and end of chapter)
         if len(text) <= window_size_chars:
             return text
         half_window = window_size_chars // 2
-        # Ensure half_window doesn't exceed text length if text is very short
         start_snippet_len = min(half_window, len(text))
         end_snippet_len = min(half_window, len(text) - start_snippet_len)
         
@@ -87,7 +75,7 @@ def _get_context_window(text: str, quote: str, window_size_chars: int) -> str:
         
         if start_snippet_len + end_snippet_len < len(text):
              return f"{start_snippet}\n...\n{end_snippet}"
-        else: # text is short enough that start and end snippets would overlap or cover it
+        else: 
              return text
 
     try:
@@ -100,26 +88,24 @@ def _get_context_window(text: str, quote: str, window_size_chars: int) -> str:
         return f"{prefix}{text[context_start:context_end]}{suffix}"
     except ValueError:
         logger.warning(f"Quote for context window not found: '{quote[:50]}...'. Full text snippet fallback.")
-        # Fallback if quote is not found (should be rare if quote is verbatim)
         return text[:window_size_chars] + "..." if len(text) > window_size_chars else text
 
 
 async def _generate_single_patch_instruction_llm(
-    agent: Any, # NANA_Orchestrator instance
+    agent: Any, 
     original_chapter_text_snippet: str,
     problem: ProblemDetail,
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]]
-) -> Optional[PatchInstruction]:
+) -> Tuple[Optional[PatchInstruction], Optional[Dict[str, int]]]:
     """
     Generates a single patch instruction using an LLM.
-    If quote_from_original is "N/A - General Issue", the generated patch text
-    is intended for expansion and won't be auto-applied by search_text.
+    Returns patch instruction and LLM usage data.
     """
     plan_focus_section = ""
     plot_point_focus, _ = _get_plot_point_info_from_agent(agent, chapter_number)
-    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 4 # Quarter of total for plan in patch prompt
+    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 4 
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         plan_focus_section = _format_scene_plan_for_prompt_func(chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt)
@@ -135,7 +121,7 @@ async def _generate_single_patch_instruction_llm(
         "length" in problem['problem_description'].lower() or \
         "expand" in problem['suggested_fix_focus'].lower() or \
         "depth" in problem['problem_description'].lower() or \
-        problem['quote_from_original'] == "N/A - General Issue"): # If quote is N/A and it's depth, assume expansion
+        problem['quote_from_original'] == "N/A - General Issue"): 
         
         length_expansion_instruction = (
             f"\n**Critical: SUBSTANTIAL EXPANSION REQUIRED.** "
@@ -189,70 +175,68 @@ You are a surgical revision expert generating replacement text for Chapter {chap
 --- BEGIN REPLACE_WITH TEXT (for "{problem['quote_from_original']}") ---
 """
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: {problem['problem_description'][:60]}... Quote: '{problem['quote_from_original'][:50]}...'")
-    max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 4 # Allow generous output for expansion patches
-    if is_general_expansion_task: max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2 # Even more for general expansion
+    max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 4 
+    if is_general_expansion_task: max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2 
 
-    replace_with_text_raw = await llm_interface.async_call_llm(
+    replace_with_text_raw, usage_data = await llm_interface.async_call_llm(
         config.PATCH_GENERATION_MODEL, prompt, 0.6, max_patch_output_tokens, True, False
     )
 
     if not replace_with_text_raw:
         logger.error(f"Patch LLM returned no content for Ch {chapter_number}: {problem['problem_description']}")
-        return None
+        return None, usage_data
 
     replace_with_text_cleaned = llm_interface.clean_model_response(replace_with_text_raw)
     if not replace_with_text_cleaned.strip():
         logger.warning(f"Patch LLM returned empty after cleaning for Ch {chapter_number}: {problem['problem_description']}")
-        return None
+        return None, usage_data
 
-    # Check expansion for specific quotes only if expansion was instructed
     if length_expansion_instruction and problem['quote_from_original'] != "N/A - General Issue":
-        # A simple length check; more sophisticated checks could be semantic.
-        if len(replace_with_text_cleaned) < len(problem['quote_from_original']) * 1.3: # Aim for at least 30% longer
+        if len(replace_with_text_cleaned) < len(problem['quote_from_original']) * 1.3: 
             logger.warning(
                 f"Patch for Ch {chapter_number} (specific quote) did not sufficiently expand text as instructed. "
                 f"Original len: {len(problem['quote_from_original'])}, New len: {len(replace_with_text_cleaned)}."
             )
 
-    return {
-        "search_text": problem['quote_from_original'], # This will be "N/A - General Issue" for those cases
+    patch_instruction: PatchInstruction = {
+        "search_text": problem['quote_from_original'], 
         "replace_with": replace_with_text_cleaned,
-        "original_quote_ref": problem['quote_from_original'], # For reference
+        "original_quote_ref": problem['quote_from_original'], 
         "reason_for_change": f"Fixing '{problem['issue_category']}': {problem['problem_description']}"
     }
+    return patch_instruction, usage_data
 
 
 async def _generate_patch_instructions_logic(
-    agent: Any, # NANA_Orchestrator instance
+    agent: Any, 
     original_text: str,
     problems_to_fix: List[ProblemDetail],
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]]
-) -> List[PatchInstruction]:
+) -> Tuple[List[PatchInstruction], Optional[Dict[str, int]]]:
+    """Generates patch instructions. Returns list of instructions and summed LLM usage."""
     patch_instructions: List[PatchInstruction] = []
+    total_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     
-    # Limit the number of patches to generate in one go
     problems_to_process = problems_to_fix[:config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
     if len(problems_to_fix) > config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE:
         logger.warning(f"Found {len(problems_to_fix)} problems for Ch {chapter_number}, attempting to generate patches for the first {config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE}.")
 
     patch_generation_tasks = []
     for problem in problems_to_process:
-        # Skip patch generation for "N/A - General Issue" if not specifically about length/depth expansion
         if problem["quote_from_original"] == "N/A - General Issue":
             is_depth_issue = problem["issue_category"] == "narrative_depth"
             is_expansion_related = (
                 "short" in problem['problem_description'].lower() or
                 "length" in problem['problem_description'].lower() or
                 "expand" in problem['suggested_fix_focus'].lower() or
-                "depth" in problem['problem_description'].lower() # Broader "depth" can imply expansion
+                "depth" in problem['problem_description'].lower() 
             )
             if not (is_depth_issue and is_expansion_related):
                 logger.info(f"Skipping patch generation for Ch {chapter_number} problem '{problem['problem_description'][:60]}' (N/A quote, not an expansion-focused depth issue).")
                 continue
         
-        # Get context window. For "N/A - General Issue", this provides a general chapter snippet.
         context_snippet = _get_context_window(original_text, problem["quote_from_original"], config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW)
         
         task = _generate_single_patch_instruction_llm(
@@ -262,54 +246,54 @@ async def _generate_patch_instructions_logic(
 
     if not patch_generation_tasks:
         logger.info(f"No actionable problems for patch instruction generation in Ch {chapter_number}.")
-        return []
+        return [], None
 
     results = await asyncio.gather(*patch_generation_tasks, return_exceptions=True)
     
     for i, res_or_exc in enumerate(results):
-        problem_ref = problems_to_process[i] # Relies on order preservation by asyncio.gather
+        problem_ref = problems_to_process[i] 
         if isinstance(res_or_exc, Exception):
             logger.error(f"Error generating patch for Ch {chapter_number} problem '{problem_ref['problem_description'][:50]}': {res_or_exc}", exc_info=res_or_exc)
         elif res_or_exc is not None:
-            patch_instructions.append(res_or_exc)
+            patch_instr, usage = res_or_exc
+            if patch_instr:
+                patch_instructions.append(patch_instr)
+            if usage:
+                total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+                total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+                total_usage["total_tokens"] += usage.get("total_tokens", 0)
         else:
-            # _generate_single_patch_instruction_llm returning None means LLM call failed or no content
             logger.warning(f"Patch generation returned None for Ch {chapter_number} problem: {problem_ref['problem_description'][:50]}.")
             
     logger.info(f"Generated {len(patch_instructions)} patch instructions for Ch {chapter_number}.")
-    return patch_instructions
+    return patch_instructions, total_usage if total_usage["total_tokens"] > 0 else None
 
 def _apply_patches_to_text(original_text: str, patch_instructions: List[PatchInstruction]) -> str:
     if not patch_instructions:
         return original_text
 
-    # Filter out patches that cannot be automatically applied (e.g., "N/A - General Issue" search text)
     applicable_patches = [p for p in patch_instructions if p["search_text"] != "N/A - General Issue"]
     if not applicable_patches:
         logger.info("No applicable patches with specific search_text to apply.")
         return original_text
         
-    # Store replacements as (start_index, end_index, replacement_text)
     replacements: List[Tuple[int, int, str]] = []
     failed_patches_search_text_not_found = 0
 
     for patch in applicable_patches:
         try:
-            # Find all occurrences of the search_text
-            # For simplicity, we'll replace only the first one found.
-            # More sophisticated logic could allow choosing an occurrence or handling multiple.
             match_indices = [m.start() for m in re.finditer(re.escape(patch["search_text"]), original_text)]
             if not match_indices:
                 logger.warning(f"Patching: `search_text` not found in original text. Skipping this patch. Search: '{patch['search_text'][:100]}...'")
                 failed_patches_search_text_not_found += 1
                 continue
             
-            start_index = match_indices[0] # Apply to the first occurrence
+            start_index = match_indices[0] 
             end_index = start_index + len(patch["search_text"])
             replacements.append((start_index, end_index, patch["replace_with"]))
         except Exception as e:
             logger.error(f"Error preparing patch for '{patch['search_text'][:50]}': {e}", exc_info=True)
-            failed_patches_search_text_not_found +=1 # Count as failed if error during prep
+            failed_patches_search_text_not_found +=1 
 
     if failed_patches_search_text_not_found > 0 and applicable_patches:
          logger.warning(f"{failed_patches_search_text_not_found}/{len(applicable_patches)} applicable patches failed (search_text not found or error during prep).")
@@ -317,7 +301,6 @@ def _apply_patches_to_text(original_text: str, patch_instructions: List[PatchIns
     if not replacements:
         return original_text
 
-    # Sort replacements by start_index in reverse order to apply them without affecting subsequent indices
     replacements.sort(key=lambda x: x[0], reverse=True)
 
     current_text_list = list(original_text)
@@ -329,31 +312,35 @@ def _apply_patches_to_text(original_text: str, patch_instructions: List[PatchIns
 
 
 async def revise_chapter_draft_logic(
-    agent: Any, # NANA_Orchestrator instance
+    agent: Any, 
     original_text: str,
     chapter_number: int,
     evaluation_result: EvaluationResult,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]]
-) -> Optional[Tuple[str, str]]:
+) -> Tuple[Optional[Tuple[str, str]], Optional[Dict[str, int]]]:
     """
     Main logic for revising a chapter draft.
-    Attempts patch-based revision first, then falls back to full rewrite if needed.
+    Returns (revised_text, raw_llm_output_tuple) and summed LLM usage data.
     """
+    cumulative_usage_data: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    def _add_usage(usage: Optional[Dict[str, int]]):
+        if usage:
+            cumulative_usage_data["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            cumulative_usage_data["completion_tokens"] += usage.get("completion_tokens", 0)
+            cumulative_usage_data["total_tokens"] += usage.get("total_tokens", 0)
+
     if not original_text:
         logger.error(f"Revision for ch {chapter_number} aborted: missing original text.")
-        return None
+        return None, None
 
     problems_to_fix: List[ProblemDetail] = evaluation_result.get("problems_found", [])
     if not problems_to_fix and evaluation_result.get("needs_revision"):
-        # This case means revision is needed for general reasons not tied to specific problems
-        # (e.g., overall too short, but no specific quotes were given, or evaluator just said "rewrite")
         logger.warning(f"Revision for ch {chapter_number} explicitly requested, but no specific problems were itemized. Proceeding to full rewrite.")
     elif not problems_to_fix:
         logger.info(f"No specific problems found for ch {chapter_number}. No revision needed based on problem list.")
-        # If `needs_revision` is False and no problems, this is correct.
-        # If `needs_revision` is True but no problems, previous log handles it.
-        return None 
+        return None, None
 
     revision_reason_str_list = evaluation_result.get("reasons", [])
     revision_reason_str = "\n- ".join(revision_reason_str_list) if revision_reason_str_list else "General unspecified issues."
@@ -362,8 +349,6 @@ async def revise_chapter_draft_logic(
     patched_text: Optional[str] = None
     raw_patch_llm_outputs_combined: str = ""
 
-    # Determine which problems are actionable for patching attempts
-    # Actionable = has a specific quote OR is a narrative_depth issue potentially suitable for expansion generation
     actionable_problems_for_patching = [
         p for p in problems_to_fix if p["quote_from_original"] != "N/A - General Issue" or \
         (p["issue_category"] == "narrative_depth" and \
@@ -375,17 +360,16 @@ async def revise_chapter_draft_logic(
 
     if config.ENABLE_PATCH_BASED_REVISION and actionable_problems_for_patching:
         logger.info(f"Attempting patch-based revision for Ch {chapter_number} with {len(actionable_problems_for_patching)} actionable problem(s).")
-        patch_instructions = await _generate_patch_instructions_logic(
+        patch_instructions, patch_usage = await _generate_patch_instructions_logic(
             agent, original_text, actionable_problems_for_patching, chapter_number, hybrid_context_for_revision, chapter_plan
         )
+        _add_usage(patch_usage)
         
         if patch_instructions:
-            # Filter instructions again for those that are actually applicable by _apply_patches_to_text
             applicable_instructions_for_apply = [pi for pi in patch_instructions if pi["search_text"] != "N/A - General Issue"]
             if applicable_instructions_for_apply:
                 patched_text = _apply_patches_to_text(original_text, applicable_instructions_for_apply)
                 raw_patch_llm_outputs_combined = f"Chapter revised using {len(applicable_instructions_for_apply)} applied patches.\n"
-                # Log details about generated vs. applied patches
                 num_generated_patches = len(patch_instructions)
                 num_applied_patches = len(applicable_instructions_for_apply)
                 logger.info(
@@ -401,16 +385,12 @@ async def revise_chapter_draft_logic(
     
     final_revised_text: Optional[str] = None
     final_raw_llm_output: Optional[str] = None
-
-    # Condition for using patched text:
-    # 1. Patched text exists (i.e., patches were applicable and applied).
-    # 2. Patched text is significantly different from original OR meets other quality checks.
     use_patched_text = False
+
     if patched_text is not None:
-        if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH * 0.8: # Allow somewhat shorter if patches reduced, but not drastically
+        if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH * 0.8: 
             logger.warning(f"Patched draft for ch {chapter_number} is quite short ({len(patched_text)} chars). May still fall back to full rewrite.")
         
-        # Check similarity
         sim_original_embedding, sim_patched_embedding = await asyncio.gather(
             llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(patched_text)
         )
@@ -420,20 +400,16 @@ async def revise_chapter_draft_logic(
             if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE:
                 logger.warning(f"Patched text for ch {chapter_number} is very similar to original (Score: {similarity_score:.4f}). Patches might have been ineffective or minor. Considering full rewrite.")
             else:
-                # Patched text is sufficiently different and exists
                 use_patched_text = True
         else:
             logger.warning(f"Could not get embeddings for patched text similarity check of ch {chapter_number}. Assuming patched text is different enough if it exists.")
-            use_patched_text = True # If embeddings fail, and patched text exists, cautiously proceed with it.
+            use_patched_text = True 
         
         if use_patched_text:
             final_revised_text = patched_text
             final_raw_llm_output = raw_patch_llm_outputs_combined
             logger.info(f"Ch {chapter_number}: Using patched text as the revised version.")
 
-    # Fallback to full rewrite if:
-    # - Patched text was not used (e.g., too similar, too short after patching, or no applicable patches)
-    # - AND revision is still marked as needed by the evaluation result.
     if not use_patched_text and evaluation_result.get("needs_revision"):
         if config.ENABLE_PATCH_BASED_REVISION and actionable_problems_for_patching:
              logger.warning(f"Patching did not result in a usable revision for Ch {chapter_number}. Falling back to full rewrite.")
@@ -441,7 +417,6 @@ async def revise_chapter_draft_logic(
              logger.info(f"No actionable problems for patching in Ch {chapter_number}, but revision needed. Proceeding with full rewrite.")
         elif not config.ENABLE_PATCH_BASED_REVISION and evaluation_result.get("needs_revision"):
              logger.info(f"Patching disabled, and revision needed. Proceeding with full rewrite for Ch {chapter_number}.")
-        # If none of the above, it means no revision was needed in the first place or patching was attempted but failed to produce a usable output, AND needs_revision is true.
 
         max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
         original_snippet = llm_interface.truncate_text_by_tokens(
@@ -459,7 +434,6 @@ async def revise_chapter_draft_logic(
             plan_focus_section_full_rewrite = f"**Original Chapter Focus (Target):**\n{plot_point_focus_full_rewrite or 'Not specified.'}\n"
 
         length_issue_explicit_instruction_full_rewrite = ""
-        # Check for length/depth issues in problem descriptions or reasons for revision
         needs_expansion_from_problems = any(
             (p['issue_category'] == 'narrative_depth' and 
              ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
@@ -480,7 +454,6 @@ async def revise_chapter_draft_logic(
         plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
         protagonist_name_full_rewrite = _get_prop_from_agent(plot_outline_data, "protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
         
-        # Compile all problem descriptions for the full rewrite prompt
         all_problem_descriptions_str = ""
         if problems_to_fix:
             all_problem_descriptions_str = "**Detailed Issues to Address (from evaluation):**\n"
@@ -492,7 +465,6 @@ async def revise_chapter_draft_logic(
                     f"     Fix Focus: {prob_item['suggested_fix_focus']}\n"
                 )
             all_problem_descriptions_str += "---\n"
-
 
         prompt_full_rewrite = f"""/no_think
 You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.
@@ -524,34 +496,28 @@ You are an expert novelist rewriting Chapter {chapter_number} featuring protagon
 --- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
 """
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-        revised_raw_llm_output_full = await llm_interface.async_call_llm(
-            config.REVISION_MODEL, prompt_full_rewrite, 0.6, None, True, True # Allow full token generation, stream to disk
+        revised_raw_llm_output_full, full_rewrite_usage = await llm_interface.async_call_llm(
+            config.REVISION_MODEL, prompt_full_rewrite, 0.6, None, True, True 
         )
+        _add_usage(full_rewrite_usage)
+
         if not revised_raw_llm_output_full:
             logger.error(f"Full rewrite LLM failed for ch {chapter_number} (returned empty).")
-            # Orchestrator should handle debug saving if it passes `self` as `agent` to this function
-            # and this function then calls agent._save_debug_output(...)
-            return None
+            return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
         
         final_revised_text = llm_interface.clean_model_response(revised_raw_llm_output_full)
         final_raw_llm_output = revised_raw_llm_output_full
     elif not use_patched_text and not evaluation_result.get("needs_revision"):
-        # This case means: patching was attempted (or not), no usable patched text resulted,
-        # AND the evaluation said no revision is needed.
-        # This implies the original text was fine, or patching was not necessary/effective but the result is still acceptable.
         logger.info(f"No revision performed for Ch {chapter_number} (original deemed acceptable or patching ineffective but not critical).")
-        return None # Return None to indicate no *new* revision was made. Orchestrator will use original.
+        return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
 
-    # Post-revision checks for the final chosen text (either patched or full rewrite)
-    if not final_revised_text or len(final_revised_text) < 50 : # Arbitrary small number to catch effectively empty outputs
+    if not final_revised_text or len(final_revised_text) < 50 : 
         logger.error(f"Revision process for ch {chapter_number} resulted in no usable content. Original len: {len(original_text)}")
-        # Orchestrator can save debug: await agent._save_debug_output(chapter_number, "revision_empty_final_output", final_raw_llm_output or original_text)
-        return None
+        return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
 
     if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
 
-    # If a full rewrite was done (final_revised_text is not the patched_text we might have generated earlier)
     if final_revised_text is not patched_text:
         original_embedding_full, revised_embedding_full = await asyncio.gather(
             llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(final_revised_text)
@@ -568,4 +534,4 @@ You are an expert novelist rewriting Chapter {chapter_number} featuring protagon
             logger.warning(f"Could not get embeddings for full rewrite similarity check of ch {chapter_number}.")
 
     logger.info(f"Revision process for ch {chapter_number} produced a candidate text (Length: {len(final_revised_text)} chars).")
-    return final_revised_text, final_raw_llm_output
+    return (final_revised_text, final_raw_llm_output), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None

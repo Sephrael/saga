@@ -1,3 +1,4 @@
+      
 # config.py
 """
 Configuration settings for the Saga Novel Generation system.
@@ -204,3 +205,10 @@ if not UNHINGED_GENRES or UNHINGED_GENRES == _DEFAULT_GENRE_LIST:
 # --- Tokenizer Fallback Configuration ---
 TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"
 FALLBACK_CHARS_PER_TOKEN: float = 4.0
+
+# --- Rich Progress Display Configuration ---
+ENABLE_RICH_PROGRESS: bool = os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
+# How many times per second the Rich Live display should attempt to refresh.
+RICH_REFRESH_PER_SECOND: float = 4.0
+
+    

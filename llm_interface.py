@@ -279,114 +279,105 @@ async def async_call_llm(
     max_tokens: Optional[int] = None, # Max tokens for the *output/completion*
     allow_fallback: bool = False,
     stream_to_disk: bool = False # If True, streams response to a temp file
-) -> str:
+) -> Tuple[str, Optional[Dict[str, int]]]:
     """
     Asynchronously calls the LLM (OpenAI-compatible API) with retry and optional model fallback.
-    Returns the LLM's text response as a string.
+    Returns the LLM's text response as a string, and a dictionary containing token usage.
     """
     if not model_name:
         logger.error("async_call_llm: model_name is required.")
-        return ""
+        return "", None
     if not prompt or not isinstance(prompt, str) or not prompt.strip():
         logger.error("async_call_llm: empty or invalid prompt.")
-        return ""
+        return "", None
 
     prompt_token_count = count_tokens(prompt, model_name) # Estimate for logging/debugging
-    # Use config.MAX_GENERATION_TOKENS as default if max_tokens not specified.
-    # The API might have its own model-specific limits too.
     effective_max_output_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
     
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
     
     current_model_to_try = model_name
     is_fallback_attempt = False
+    current_usage_data: Optional[Dict[str, int]] = None
 
-    # Outer loop for primary model attempt and then fallback model attempt
-    for attempt_num_overall in range(2): # 0 for primary, 1 for fallback
+    for attempt_num_overall in range(2): 
         if is_fallback_attempt:
             if not allow_fallback or not config.FALLBACK_GENERATION_MODEL:
                 logger.warning(f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Aborting call.")
-                return "" # Abort if no fallback path
+                return "", None
             current_model_to_try = config.FALLBACK_GENERATION_MODEL
             logger.info(f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'.")
-            prompt_token_count = count_tokens(prompt, current_model_to_try) # Re-estimate for fallback model
-
+            prompt_token_count = count_tokens(prompt, current_model_to_try)
 
         payload = {
             "model": current_model_to_try,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
-            "top_p": config.LLM_TOP_P, # From config
+            "top_p": config.LLM_TOP_P,
             "max_tokens": effective_max_output_tokens 
-            # "stream": True/False will be set based on stream_to_disk
         }
 
         last_exception_for_current_model = None
         temp_file_path_for_stream: Optional[str] = None
 
-        # Inner loop for retries with the current model (primary or fallback)
         for retry_attempt in range(config.LLM_RETRY_ATTEMPTS):
             logger.debug(
                 f"Async Calling LLM '{current_model_to_try}' (Attempt {retry_attempt+1}/{config.LLM_RETRY_ATTEMPTS}, OverallAttempt: {attempt_num_overall+1}). "
                 f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}"
             )
-            api_response_obj: Optional[httpx.Response] = None # For non-streaming error context
+            api_response_obj: Optional[httpx.Response] = None
+            current_usage_data = None # Reset for each attempt
 
             try:
                 if stream_to_disk:
                     payload["stream"] = True
-                    # Create a named temporary file to stream into
                     with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8", suffix=".llmstream.txt") as tmp_f:
                         temp_file_path_for_stream = tmp_f.name
                     
-                    usage_info_from_stream: Optional[Dict[str, int]] = None
                     try:
-                        async with httpx.AsyncClient(timeout=600.0) as client: # Long timeout for streaming
+                        async with httpx.AsyncClient(timeout=600.0) as client: 
                             async with client.stream("POST", f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers) as response_stream:
-                                response_stream.raise_for_status() # Check for HTTP errors before streaming
+                                response_stream.raise_for_status()
 
                                 with open(temp_file_path_for_stream, "w", encoding="utf-8") as f_out:
                                     async for line in response_stream.aiter_lines():
                                         if line.startswith("data: "):
                                             data_json_str = line[len("data: "):].strip()
                                             if data_json_str == "[DONE]":
-                                                break # End of stream
+                                                break 
                                             try:
                                                 chunk_data = json.loads(data_json_str)
                                                 if chunk_data.get("choices"):
                                                     delta = chunk_data["choices"][0].get("delta", {})
                                                     content_piece = delta.get("content")
-                                                    if content_piece: # Append content to file
+                                                    if content_piece: 
                                                         f_out.write(content_piece)
                                                     
-                                                    # Check for usage info, often in the last chunk or a special chunk
                                                     if chunk_data["choices"][0].get("finish_reason") is not None:
-                                                        # Groq and some other APIs put usage in x_groq or other custom fields
-                                                        potential_usage = chunk_data.get("usage") # OpenAI standard
+                                                        potential_usage = chunk_data.get("usage") 
                                                         if not potential_usage and chunk_data.get("x_groq") and chunk_data["x_groq"].get("usage"):
-                                                            potential_usage = chunk_data["x_groq"]["usage"] # Groq specific
+                                                            potential_usage = chunk_data["x_groq"]["usage"] 
 
                                                         if potential_usage and isinstance(potential_usage, dict):
-                                                            usage_info_from_stream = potential_usage
+                                                            current_usage_data = potential_usage
                                             except json.JSONDecodeError:
                                                 logger.warning(f"Async LLM Stream: Could not decode JSON from line: {line}")
                         
-                        _log_llm_usage(current_model_to_try, usage_info_from_stream, async_mode=True, streamed=True)
+                        _log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=True)
 
-                        # Read the complete content from the temp file
                         with open(temp_file_path_for_stream, "r", encoding="utf-8") as f_in:
                             final_content = f_in.read()
-                        return final_content # Success for streaming
-                    finally: # Ensure temp file is cleaned up
+                        return final_content, current_usage_data
+                    finally: 
                         if temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
                             try:
                                 os.remove(temp_file_path_for_stream)
-                                temp_file_path_for_stream = None # Clear path after removal
-                            except Exception as e_clean: # Log error but don't crash
+                                temp_file_path_for_stream = None 
+                            except Exception as e_clean: 
                                 logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} in stream success/finally: {e_clean}")
-                else: # Non-streaming call
+                else: 
                     payload["stream"] = False
-                    async with httpx.AsyncClient(timeout=600.0) as client: # Long timeout for potentially large generation
+                    async with httpx.AsyncClient(timeout=600.0) as client: 
                         api_response_obj = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
                         api_response_obj.raise_for_status()
                         response_data = api_response_obj.json()
@@ -396,13 +387,13 @@ async def async_call_llm(
                             message = response_data["choices"][0].get("message")
                             if message and message.get("content"):
                                 raw_text = message["content"]
-                        else: # Should not happen with a 200 OK if API is standard
+                        else: 
                             logger.error(f"Async LLM ('{current_model_to_try}') Invalid response structure - missing choices/content despite 200 OK: {response_data}")
 
-                        _log_llm_usage(current_model_to_try, response_data.get("usage"), async_mode=True, streamed=False)
-                        return raw_text # Success for non-streaming
+                        current_usage_data = response_data.get("usage")
+                        _log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=False)
+                        return raw_text, current_usage_data
 
-            # --- Exception Handling for current retry_attempt ---
             except httpx.TimeoutException as e_timeout:
                 last_exception_for_current_model = e_timeout
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API request timed out: {e_timeout}")
@@ -421,70 +412,59 @@ async def async_call_llm(
                          )
                     else:
                         logger.error(f"Async LLM ('{current_model_to_try}'): Client-side error {e_status.response.status_code}. Aborting retries for this model.")
-                    break # Break retry loop for this model on client errors
+                    break 
             except httpx.RequestError as e_req: 
                 last_exception_for_current_model = e_req
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API request error (network/connection): {e_req}")
-            except json.JSONDecodeError as e_json: # If response is not valid JSON (for non-streaming)
+            except json.JSONDecodeError as e_json: 
                 last_exception_for_current_model = e_json
                 response_text_snippet = ""
                 if api_response_obj and hasattr(api_response_obj, 'text'): response_text_snippet = api_response_obj.text[:200]
-                elif stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream): # If error happened during stream finalization
+                elif stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream): 
                      try:
                          with open(temp_file_path_for_stream, "r", encoding="utf-8") as f_err_in: response_text_snippet = f_err_in.read(200)
-                     except Exception: pass # Best effort to get snippet
+                     except Exception: pass 
 
                 logger.warning(
                     f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Failed to decode API JSON response: {e_json}. "
                     f"Response text snippet: {response_text_snippet}"
                 )
-            except Exception as e_exc: # Catch-all for other unexpected errors
+            except Exception as e_exc: 
                 last_exception_for_current_model = e_exc
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Unexpected error: {e_exc}", exc_info=True)
-            finally: # Cleanup temp file if streaming and an error occurred in this attempt
+            finally: 
                 if stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
                     try:
                         os.remove(temp_file_path_for_stream)
-                        temp_file_path_for_stream = None # Clear path
+                        temp_file_path_for_stream = None 
                     except Exception as e_clean_err:
                         logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} after failed LLM attempt: {e_clean_err}")
 
 
-            # --- Retry Logic for current model ---
-            if retry_attempt < config.LLM_RETRY_ATTEMPTS - 1: # If not the last retry for this model
-                delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** retry_attempt) # Exponential backoff
+            if retry_attempt < config.LLM_RETRY_ATTEMPTS - 1: 
+                delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** retry_attempt) 
                 logger.info(f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds...")
                 await asyncio.sleep(delay)
-            else: # All retries for current_model_to_try failed
+            else: 
                 logger.error(f"Async LLM ('{current_model_to_try}'): All {config.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}")
-                # This break will exit the inner retry loop. The outer loop will then handle fallback.
                 break 
         
-        # After inner retry loop:
-        # If last_exception_for_current_model is None, it means success, so break outer loop.
         if last_exception_for_current_model is None:
-            # This case should ideally be caught by a `return` statement within the `try` block upon success.
-            # If we reach here without an exception, it implies an unexpected flow or a silent failure to return.
-            # However, if a `return` happened, this part of the outer loop won't be reached for the successful model.
-            break # Successful call, exit outer (primary/fallback) loop.
+            break 
 
-        # If there was an exception, prepare for fallback or end of all attempts.
-        is_fallback_attempt = True # Move to fallback on next iteration of outer loop
+        is_fallback_attempt = True 
 
-        # If the error for the primary model was a client-side error (4xx), don't attempt fallback.
         if attempt_num_overall == 0 and isinstance(last_exception_for_current_model, httpx.HTTPStatusError) and \
            last_exception_for_current_model.response and 400 <= last_exception_for_current_model.response.status_code < 500:
             logger.error(f"Async LLM: Primary model '{model_name}' failed with client error. Not attempting fallback.")
-            break # Exit outer loop, no fallback for client errors on primary.
+            break 
 
 
-    # If loop finishes (meaning both primary and fallback failed, or fallback was not allowed/configured)
     logger.error(f"Async LLM: Call failed for '{model_name}' after all primary and potential fallback attempts.")
-    # Final cleanup check for temp file, though it should be handled by inner finally
     if stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
         try: os.remove(temp_file_path_for_stream)
         except Exception as e_final_clean: logger.error(f"Error in final cleanup of temp file {temp_file_path_for_stream} after all attempts failed: {e_final_clean}")
-    return "" # Return empty string indicating failure
+    return "", None
 
 
 def clean_model_response(text: str) -> str:
