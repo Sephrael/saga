@@ -1,4 +1,3 @@
-# chapter_evaluation_logic.py
 import logging
 import json 
 import asyncio
@@ -26,7 +25,7 @@ PROBLEM_DETAIL_KEY_MAP = {
     "quote_from_original": "quote_from_original",
     "suggested_fix_focus": "suggested_fix_focus"
 }
-# No list keys for ProblemDetail by default, all are strings.
+# No list keys for ProblemDetail by default.
 
 
 def _parse_llm_evaluation_output(text: str, chapter_number: int) -> List[ProblemDetail]:
@@ -166,12 +165,10 @@ SUGGESTED FIX FOCUS: Rewrite X's action to show bravery or internal conflict lea
 ISSUE CATEGORY: narrative_depth
 PROBLEM DESCRIPTION: The chapter is too short overall for the events covered and the target length.
 QUOTE FROM ORIGINAL: N/A - General Issue
-SUGGESTED FIX FOCUS: Identify several key scenes or descriptive passages throughout the chapter and expand them significantly.
+SUGGESTED FIX FOCUS: Expand content significantly across multiple scenes/sections to meet the {config.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue.
 
 Example if no issues are found:
 No significant problems found.
-
-Output ONLY the evaluation text as described.
 """
     logger.info(f"Calling LLM ({config.EVALUATION_MODEL}) for comprehensive (plain text) evaluation of chapter {chapter_number}...")
     raw_evaluation_text = await llm_interface.async_call_llm(
@@ -188,7 +185,6 @@ Output ONLY the evaluation text as described.
         "no significant problems found", "no issues found", "no problems found", 
         "no revision needed", "no changes needed", "all clear", "looks good", 
         "is fine", "is acceptable", "passes evaluation", "meets criteria",
-        "no significant issues", "evaluation passed",
         "therefore, no revision is needed" 
     ]
     is_likely_no_issues_text = False
