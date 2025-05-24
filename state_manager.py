@@ -451,7 +451,7 @@ class state_managerSingleton:
                                 if list_prop_key_str == "key_elements": rel_name_internal_str = "HAS_KEY_ELEMENT"
                                 elif list_prop_key_str == "traits": rel_name_internal_str = "HAS_TRAIT_ASPECT" 
                                 statements.append((
-                                    f"""
+                                    """
                                     MATCH (we:WorldElement {id: $we_id_val})
                                     MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
                                     MERGE (we)-[:{rel_name_internal_str}]->(v)

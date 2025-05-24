@@ -33,13 +33,13 @@ class ComprehensiveEvaluatorAgent:
     def _parse_llm_evaluation_output(self, text: str, chapter_number: int) -> List[ProblemDetail]:
         """
         Parses LLM plain text output for chapter evaluation problems using generalized utilities.
-        (Logic from chapter_evaluation_logic.py)
         """
         problems_data: List[Dict[str, Any]] = []
         if not text or not text.strip() or "no significant problems found" in text.lower():
             logger.info(f"Plain text evaluation for Ch {chapter_number} is empty or indicates no problems. No problems parsed.")
             return []
 
+        # Split by "---" separator for individual problem blocks
         problem_blocks_text = split_text_into_blocks(text, separator_regex_str=r'\n\s*---\s*\n')
 
         for block_num, block_content in enumerate(problem_blocks_text):
@@ -54,26 +54,35 @@ class ComprehensiveEvaluatorAgent:
                 list_internal_keys=[] # No list keys in ProblemDetail
             )
 
+            # Validate required keys
             required_keys_internal = set(PROBLEM_DETAIL_KEY_MAP.values())
             missing_keys = required_keys_internal - set(parsed_problem_dict.keys())
 
             if missing_keys:
                 logger.warning(f"Could not parse all required fields from problem block {block_num+1} for Ch {chapter_number}. Missing: {missing_keys}. Block: '{block_content[:150]}...'")
+                # Create a meta-problem indicating parsing failure for this block
                 problems_data.append({
                     "issue_category": "meta",
                     "problem_description": f"Malformed problem block from LLM: {block_content}",
-                    "quote_from_original": "N/A - Malformed LLM Output",
-                    "suggested_fix_focus": "Review LLM output and prompt for evaluation."
+                    "quote_from_original": "N/A - Malformed LLM Output", # Critical for patching
+                    "suggested_fix_focus": "Review LLM output and prompt for evaluation to ensure correct formatting."
                 })
                 continue
+            
+            # Sanitize quote_from_original: if empty or whitespace after parsing, set to "N/A - General Issue"
+            if not parsed_problem_dict.get("quote_from_original", "").strip():
+                parsed_problem_dict["quote_from_original"] = "N/A - General Issue"
+                logger.debug(f"Problem block {block_num+1} for Ch {chapter_number} had empty quote, defaulted to 'N/A - General Issue'. Problem: {parsed_problem_dict['problem_description']}")
 
+
+            # Validate issue_category
             category = str(parsed_problem_dict.get("issue_category", "meta")).strip().lower()
             valid_categories = ["consistency", "plot_arc", "thematic", "narrative_depth", "meta"]
             if category not in valid_categories:
                 logger.warning(f"Parsed unknown issue category '{category}' in block {block_num+1} for Ch {chapter_number}. Defaulting to 'meta'.")
                 parsed_problem_dict["issue_category"] = "meta"
             else:
-                parsed_problem_dict["issue_category"] = category
+                parsed_problem_dict["issue_category"] = category # Use validated category
 
             problems_data.append(parsed_problem_dict)
 
@@ -91,7 +100,6 @@ class ComprehensiveEvaluatorAgent:
     ) -> Dict[str, Any]:
         """
         Performs the LLM-based comprehensive evaluation.
-        (Logic from chapter_evaluation_logic.py - comprehensive_chapter_evaluation function)
         """
         if not draft_text:
             logger.warning(f"Comprehensive evaluation skipped for Ch {chapter_number}: empty draft text.")
@@ -112,25 +120,6 @@ class ComprehensiveEvaluatorAgent:
         protagonist_arc_str = novel_props.get('character_arc', 'Not specified')
         protagonist_name_str = novel_props.get('protagonist_name', 'The Protagonist')
 
-        # These calls now need the 'agent' or equivalent state for character/world profiles
-        # For now, assuming these getters can work with state_manager or passed-in data
-        # The Orchestrator will need to pass an 'agent_like_state_access' object or ensure state_manager can serve this
-        # For simplicity, let's assume these getters will be adapted or the orchestrator provides the necessary context
-        # This agent might need direct access to state_manager or decomposed data from the orchestrator.
-        # Let's simulate by assuming novel_props contains enough for now, or these getters are refactored.
-
-        # Simplified: For this agent, we'll assume the orchestrator prepares these data strings.
-        # In a full refactor, these getters would be called by the orchestrator or the agent would use state_manager.
-        # For this iteration, let's assume these are passed or derived.
-        # These need to be called by the orchestrator and passed in, or this agent needs more direct state access.
-        # To avoid changing the function signature too much *right now*, I'll mock them as if they were accessible.
-        # This part needs careful handling in the orchestrator.
-
-        # Placeholder character and world profiles for the prompt
-        # These would ideally be fetched using state_manager or pre-prepared by the orchestrator
-        # based on the current state of novel_props.character_profiles and novel_props.world_building.
-        # The `agent` argument to these functions would be the orchestrator or a proxy.
-        # This is a temporary simplification:
         char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
         kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(novel_props, chapter_number, None)
@@ -180,8 +169,8 @@ Provide your evaluation as plain text. If problems are found, list each problem 
 
 ISSUE CATEGORY: [consistency | plot_arc | thematic | narrative_depth | meta]
 PROBLEM DESCRIPTION: [A concise description of the specific issue.]
-QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the "Complete Chapter Text" that clearly illustrates this specific problem.** If general (e.g., overall length), provide a representative short quote or "N/A - General Issue".]
-SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote should focus on (e.g., "Clarify character's motivation", "Expand description of setting").]
+QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the "Complete Chapter Text" that clearly illustrates this specific problem.** If the issue is general (e.g., overall length, pervasive tone issue) and no single quote captures it, or if a quote is truly inapplicable, use "N/A - General Issue".]
+SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote/issue should focus on (e.g., "Clarify character's motivation", "Expand description of setting to enhance atmosphere").]
 ---
 
 If multiple problems are found, separate each problem block with a line containing only "---".
@@ -193,11 +182,12 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
             prompt=prompt,
             temperature=0.3,
             allow_fallback=True,
-            stream_to_disk=False
+            stream_to_disk=False # Evaluation output is usually smaller
         )
 
         cleaned_evaluation_text = llm_interface.clean_model_response(raw_evaluation_text)
 
+        # Heuristic check for "no issues" - this helps catch LLMs that might just say "No problems."
         no_issues_keywords = [
             "no significant problems found", "no issues found", "no problems found",
             "no revision needed", "no changes needed", "all clear", "looks good",
@@ -205,37 +195,39 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
             "therefore, no revision is needed"
         ]
         is_likely_no_issues_text = False
-        if cleaned_evaluation_text.strip():
-            normalized_eval_text = cleaned_evaluation_text.lower().strip().replace('.', '')
+        if cleaned_evaluation_text.strip(): # Only proceed if there's actual text
+            normalized_eval_text = cleaned_evaluation_text.lower().strip().replace('.', '') # Normalize for robust matching
             for keyword in no_issues_keywords:
                 normalized_keyword = keyword.lower().strip().replace('.', '')
+                # Check if the entire response is just the keyword, or if it's a short response clearly indicating no issues
                 if normalized_keyword == normalized_eval_text or \
-                   (len(normalized_eval_text) < len(normalized_keyword) + 20 and normalized_keyword in normalized_eval_text):
+                   (len(normalized_eval_text) < len(normalized_keyword) + 20 and normalized_keyword in normalized_eval_text): # Allow some minor surrounding text
                      is_likely_no_issues_text = True
                      break
 
         if is_likely_no_issues_text:
-            logger.info(f"Heuristic: Evaluation for Ch {chapter_number} appears 'no issues': '{cleaned_evaluation_text[:100]}...'")
+            logger.info(f"Heuristic: Evaluation for Ch {chapter_number} appears to indicate 'no issues': '{cleaned_evaluation_text[:100]}...'")
             return {
-                "problems_found_text_output": cleaned_evaluation_text,
+                "problems_found_text_output": cleaned_evaluation_text, # Store the "no issues" text
                 "legacy_consistency_issues": None, "legacy_plot_arc_deviation": None,
                 "legacy_thematic_issues": None, "legacy_narrative_depth_issues": None
             }
 
+        # Fallback legacy issue detection (can be removed if parsing is robust enough)
         legacy_consistency = "Potential consistency issues." if "consistency" in cleaned_evaluation_text.lower() else None
         legacy_plot = "Potential plot arc issues." if "plot_arc" in cleaned_evaluation_text.lower() else None
         legacy_theme = "Potential thematic issues." if "thematic" in cleaned_evaluation_text.lower() else None
         legacy_depth = "Potential narrative depth/length issues." if "narrative_depth" in cleaned_evaluation_text.lower() else None
 
-        if not cleaned_evaluation_text.strip():
-            logger.error(f"Comprehensive evaluation LLM for Ch {chapter_number} returned empty text. Raw: '{raw_evaluation_text[:200]}...'")
+        if not cleaned_evaluation_text.strip(): # Check again after heuristic, in case it was just whitespace
+            logger.error(f"Comprehensive evaluation LLM for Ch {chapter_number} returned empty text after cleaning. Raw input: '{raw_evaluation_text[:200]}...'")
             return {
                 "problems_found_text_output": "Evaluation LLM call failed or returned empty.",
                 "legacy_consistency_issues": "LLM call failed.", "legacy_plot_arc_deviation": "LLM call failed.",
                 "legacy_thematic_issues": "LLM call failed.", "legacy_narrative_depth_issues": "LLM call failed."
             }
 
-        logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. LLM output: '{cleaned_evaluation_text[:200]}...'")
+        logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. LLM output (first 200 chars): '{cleaned_evaluation_text[:200]}...'")
         return {
             "problems_found_text_output": cleaned_evaluation_text,
             "legacy_consistency_issues": legacy_consistency,
@@ -256,7 +248,6 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
     ) -> EvaluationResult:
         """
         Evaluates a chapter draft, incorporating pre-LLM checks and LLM-based comprehensive evaluation.
-        (Logic from chapter_evaluation_logic.py - evaluate_chapter_draft_logic function)
         """
         logger.info(f"ComprehensiveEvaluatorAgent evaluating chapter {chapter_number} draft (length: {len(draft_text)} chars)...")
 
@@ -265,11 +256,12 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
         needs_revision = False
         coherence_score: Optional[float] = None
 
+        # --- Pre-LLM Checks ---
         if not draft_text:
             needs_revision = True
             problem_details_list.append({
                 "issue_category": "meta", "problem_description": "Draft is empty.",
-                "quote_from_original": "N/A - General Issue",
+                "quote_from_original": "N/A - General Issue", # Standard for general issues
                 "suggested_fix_focus": "Generate content for the chapter."
             })
             reasons_for_revision_summary.append("Draft is empty.")
@@ -277,23 +269,24 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
             needs_revision = True
             problem_details_list.append({
                 "issue_category": "narrative_depth",
-                "problem_description": f"Draft is too short ({len(draft_text)} chars). Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
-                "quote_from_original": "N/A - General Issue",
+                "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
+                "quote_from_original": "N/A - General Issue", # Standard for general issues
                 "suggested_fix_focus": f"Expand content significantly across multiple scenes/sections to meet the {config.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue."
             })
             reasons_for_revision_summary.append(f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
 
+        # Coherence check (remains the same)
         current_embedding_task = llm_interface.async_get_embedding(draft_text)
         if chapter_number > 1:
             prev_embedding = await state_manager.async_get_embedding_from_db(chapter_number - 1)
-            current_embedding = await current_embedding_task
+            current_embedding = await current_embedding_task # Ensure current embedding is awaited
             if current_embedding is not None and prev_embedding is not None:
                 coherence_score = utils.numpy_cosine_similarity(current_embedding, prev_embedding)
                 logger.info(f"Coherence score with previous chapter ({chapter_number-1}): {coherence_score:.4f}")
                 if coherence_score < config.REVISION_COHERENCE_THRESHOLD:
                     needs_revision = True
                     problem_details_list.append({
-                        "issue_category": "consistency",
+                        "issue_category": "consistency", # Coherence is a form of consistency
                         "problem_description": f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {config.REVISION_COHERENCE_THRESHOLD}). The narrative flow or tone may be disjointed.",
                         "quote_from_original": "N/A - General Issue",
                         "suggested_fix_focus": "Review the transition from the previous chapter. Ensure stylistic, tonal, and narrative continuity. This might involve adjusting opening scenes or overall pacing."
@@ -301,10 +294,11 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
                     reasons_for_revision_summary.append(f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {config.REVISION_COHERENCE_THRESHOLD}).")
             else:
                 logger.warning(f"Could not perform coherence check for ch {chapter_number} (missing current or previous embedding).")
-        else:
+        else: # Chapter 1
             logger.info("Skipping coherence check for Chapter 1.")
-            await current_embedding_task
+            await current_embedding_task # Still await if it's chapter 1, to ensure embedding is generated if text exists
 
+        # --- LLM-Based Evaluation ---
         llm_eval_output_dict = await self._perform_llm_comprehensive_evaluation(
             novel_props, draft_text, chapter_number, plot_point_focus, plot_point_index, previous_chapters_context
         )
@@ -314,49 +308,70 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
 
         if parsed_problems_from_llm:
             problem_details_list.extend(parsed_problems_from_llm)
-            needs_revision = True
+            needs_revision = True # Any problem found by LLM implies revision needed
+            # Add reasons based on categories of problems found
             category_map_to_reason = {
-                "consistency": "Consistency issues identified by LLM.", "plot_arc": "Plot Arc deviation identified by LLM.",
-                "thematic": "Thematic issues identified by LLM.", "narrative_depth": "Narrative Depth/Length issues by LLM.",
-                "meta": "Meta/Uncategorized issues by LLM."
+                "consistency": "Consistency issues identified by LLM.",
+                "plot_arc": "Plot Arc deviation identified by LLM.",
+                "thematic": "Thematic issues identified by LLM.",
+                "narrative_depth": "Narrative Depth/Length issues identified by LLM.",
+                "meta": "Meta/Uncategorized issues identified by LLM."
             }
             for prob in parsed_problems_from_llm:
                 reason = category_map_to_reason.get(prob["issue_category"])
-                if reason and reason not in reasons_for_revision_summary:
+                if reason and reason not in reasons_for_revision_summary: # Avoid duplicate reasons
                     reasons_for_revision_summary.append(reason)
+        # Handle case where LLM gives non-empty, non-"no issues" output but parsing fails to extract problems
         elif llm_eval_text_output.strip() and "no significant problems found" not in llm_eval_text_output.lower():
             logger.warning(f"LLM evaluation for Ch {chapter_number} provided text, but no problems were parsed. Text: '{llm_eval_text_output[:200]}...'")
             problem_details_list.append({
                 "issue_category": "meta",
                 "problem_description": "LLM evaluation output was non-empty but could not be parsed into specific problems.",
                 "quote_from_original": "N/A - LLM Output Parsing",
-                "suggested_fix_focus": "Review LLM evaluation output and parsing logic."
+                "suggested_fix_focus": "Review LLM evaluation output and parsing logic. The output might not conform to the expected problem format."
             })
             if "LLM evaluation output unparsable." not in reasons_for_revision_summary:
-                reasons_for_revision_summary.append("LLM evaluation output unparsable.")
-            needs_revision = True
+                 reasons_for_revision_summary.append("LLM evaluation output unparsable.")
+            needs_revision = True # If output is unparsable, assume revision is needed
 
+        # Deduplicate reasons (though logic above tries to prevent it) and sort for consistent logging
         unique_reasons_summary = sorted(list(set(reasons_for_revision_summary)))
+
+        # --- Post-processing Problem Details ---
         validated_problem_details_list: List[ProblemDetail] = []
         for prob_item in problem_details_list:
+            # Ensure quote is string
             quote = prob_item["quote_from_original"]
             if not isinstance(quote, str):
-                logger.warning(f"Problem quote for Ch {chapter_number} not string ({type(quote)}): '{str(quote)[:50]}...'. Converting. Problem: {prob_item['problem_description']}")
-                prob_item["quote_from_original"] = "N/A - Invalid Quote Type"
+                logger.warning(f"Problem quote for Ch {chapter_number} was not a string (type: {type(quote)}): '{str(quote)[:50]}...'. Converting. Problem desc: {prob_item['problem_description']}")
+                prob_item["quote_from_original"] = "N/A - Invalid Quote Type" # Standardize
                 quote = prob_item["quote_from_original"]
-            if quote not in ["N/A - General Issue", "N/A - LLM Output Parsing", "N/A - Parser Exception", "N/A - Invalid Quote Type"] and quote.strip() and draft_text:
-                if not (10 <= len(quote) <= 300):
-                     logger.warning(f"Problem quote for Ch {chapter_number} unusual length ({len(quote)}): '{quote[:50]}...'")
+
+            # Validate VERBATIM quote (if not a general issue marker)
+            non_general_quote_markers = ["N/A - General Issue", "N/A - LLM Output Parsing", "N/A - Parser Exception", "N/A - Invalid Quote Type"]
+            if quote not in non_general_quote_markers and quote.strip() and draft_text: # Only check if draft_text exists
+                # Basic length check for quotes (LLM might give overly long quotes)
+                if not (10 <= len(quote) <= 300): # Adjust bounds as needed
+                     logger.warning(f"Problem quote for Ch {chapter_number} has unusual length ({len(quote)}): '{quote[:50]}...'")
+                # Verbatim check
                 if quote not in draft_text:
-                    logger.warning(f"Problem quote for Ch {chapter_number} NOT VERBATIM in chapter text: '{quote[:50]}...'. Problem: {prob_item['problem_description']}")
+                    logger.warning(
+                        f"Problem quote for Ch {chapter_number} was NOT found VERBATIM in chapter text: '{quote[:50]}...'. "
+                        f"This will prevent direct patching for this issue. Problem desc: {prob_item['problem_description']}"
+                    )
+                    # Option: prob_item["quote_from_original"] = "N/A - Quote Not Verbatim"
+                    # For now, keep the quote as is but log the warning. Patching logic will fail to find it.
             validated_problem_details_list.append(prob_item)
 
-        logger.info(f"Evaluation for Ch {chapter_number} complete. Needs revision: {needs_revision}. Summary: {'; '.join(unique_reasons_summary) if unique_reasons_summary else 'None'}. Detailed problems: {len(validated_problem_details_list)}")
+
+        logger.info(f"Evaluation for Ch {chapter_number} complete. Needs revision: {needs_revision}. Summary of reasons: {'; '.join(unique_reasons_summary) if unique_reasons_summary else 'None'}. Detailed problems found: {len(validated_problem_details_list)}")
 
         return {
-            "needs_revision": needs_revision, "reasons": unique_reasons_summary,
-            "problems_found": validated_problem_details_list,
+            "needs_revision": needs_revision,
+            "reasons": unique_reasons_summary,
+            "problems_found": validated_problem_details_list, # Use validated list
             "coherence_score": coherence_score,
+            # Legacy fields (can be phased out if new system is robust)
             "consistency_issues": llm_eval_output_dict.get("legacy_consistency_issues"),
             "plot_deviation_reason": llm_eval_output_dict.get("legacy_plot_arc_deviation"),
             "thematic_issues": llm_eval_output_dict.get("legacy_thematic_issues"),

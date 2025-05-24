@@ -21,15 +21,15 @@ class DraftingAgent:
     def _format_scene_plan_for_prompt(self, chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
         """
         Formats the chapter plan (list of SceneDetail dicts) into plain text for the LLM prompt, respecting token limits.
-        (Logic from chapter_drafting_logic.py)
+        (Logic from chapter_drafting_logic.py _format_scene_plan_for_prompt function)
         """
         if not chapter_plan:
             return "No detailed scene plan available."
 
         plan_text_lines = ["**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**"]
-        total_plan_text = ""
+        total_plan_text_so_far = "\n".join(plan_text_lines) + "\n"
 
-        for scene in chapter_plan:
+        for scene_idx, scene in enumerate(chapter_plan):
             scene_lines = [
                 f"Scene Number: {scene.get('scene_number', 'N/A')}",
                 f"  Summary: {scene.get('summary', 'N/A')}",
@@ -43,19 +43,23 @@ class DraftingAgent:
             for focus_el in scene.get('scene_focus_elements', []):
                 scene_lines.append(f"    - {focus_el}")
             scene_lines.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
-            scene_lines.append("-" * 20)
-
-            current_scene_text = "\n".join(scene_lines) + "\n"
-            temp_cumulative_plan = total_plan_text + current_scene_text
-            if llm_interface.count_tokens(temp_cumulative_plan, model_name_for_tokens) > max_tokens_budget:
+            
+            if scene_idx < len(chapter_plan) -1 :
+                scene_lines.append("-" * 20)
+            
+            current_scene_text_segment = "\n".join(scene_lines) + "\n"
+            prospective_total_plan_text = total_plan_text_so_far + current_scene_text_segment
+            
+            if llm_interface.count_tokens(prospective_total_plan_text, model_name_for_tokens) > max_tokens_budget:
                 plan_text_lines.append("... (plan truncated in prompt due to token limit)")
-                logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}")
+                logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}. Stopped before scene {scene.get('scene_number', 'N/A')}.")
                 break
+            
             plan_text_lines.extend(scene_lines)
-            total_plan_text = temp_cumulative_plan
+            total_plan_text_so_far = prospective_total_plan_text
 
-        if not plan_text_lines or len(plan_text_lines) == 1:
-            return "No detailed scene plan available or plan was too long."
+        if len(plan_text_lines) <= 1:
+            return "No detailed scene plan available or plan was too long to include any scenes."
         return "\n".join(plan_text_lines)
 
     async def draft_chapter(
@@ -69,6 +73,8 @@ class DraftingAgent:
         """
         Generates the initial draft text for a chapter.
         (Logic from chapter_drafting_logic.py - generate_chapter_draft_logic function)
+        'novel_props' is passed by the orchestrator and contains decomposed state.
+        It also serves as the 'agent-like' object for prompt_data_getters.
         """
         if not plot_point_focus:
             plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
@@ -85,8 +91,7 @@ class DraftingAgent:
         else:
             plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
 
-        # Assume novel_props is passed by the orchestrator and contains decomposed state.
-        # These getters need access to that state.
+        # These getters now take novel_props directly, which acts as the 'agent-like' state holder
         char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
 
@@ -102,11 +107,11 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 
 **World Building Notes (Plain Text - pay attention to any 'prompt_notes' indicating provisional data):**
 ```text
-{world_building_plain_text}
+{world_building_plain_text if world_building_plain_text.strip() else "No specific world building notes provided for this chapter's context."}
 ```
 **Character Profiles (Plain Text - pay attention to any 'prompt_notes' indicating provisional status):**
 ```text
-{char_profiles_plain_text}
+{char_profiles_plain_text if char_profiles_plain_text.strip() else "No specific character profiles provided for this chapter's context."}
 ```
 **Hybrid Context (Semantic Context for Flow & KG Facts for Canon):**
 --- BEGIN HYBRID CONTEXT ---
@@ -133,6 +138,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
             model_name=self.model_name,
             prompt=prompt,
             temperature=0.6,
+            max_tokens=None, # Allow LLM to use its full capacity for draft
             allow_fallback=True,
             stream_to_disk=True
         )
