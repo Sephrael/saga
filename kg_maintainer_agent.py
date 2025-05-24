@@ -508,15 +508,23 @@ async def _prepopulate_kg_from_dicts_internal(
                 if isinstance(details.get(list_prop_name), list):
                     for val_item in details[list_prop_name]:
                         if isinstance(val_item, str):
-                            rel_name = f"HAS_{list_prop_name.upper().rstrip('S')}"
-                            if list_prop_name == "key_elements": rel_name = "HAS_KEY_ELEMENT"
-                            elif list_prop_name == "traits": rel_name = "HAS_TRAIT_ASPECT" # Differentiate from Character traits
+                            # Ensure rel_name is a valid Cypher relationship type (no spaces, etc.)
+                            # It should be all uppercase and use underscores if needed.
+                            rel_name_base = list_prop_name.upper().rstrip('S')
+                            if list_prop_name == "key_elements": rel_name_base = "KEY_ELEMENT"
+                            elif list_prop_name == "traits": rel_name_base = "TRAIT_ASPECT"
+                            rel_name_final = f"HAS_{rel_name_base}"
                             
-                            cypher_statements.append((f"""
+                            # CORRECTED QUERY CONSTRUCTION:
+                            # Dynamically build the query string for the relationship part.
+                            # The relationship type CANNOT be a parameter.
+                            query_str_for_list_prop = f"""
                                 MATCH (we:WorldElement {{id: $we_id}})
                                 MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
-                                MERGE (we)-[:{rel_name}]->(v)
-                                """, {"we_id": we_id, "val_item_value": val_item, "value_node_type": list_prop_name}))
+                                MERGE (we)-[:{{rel_name_final}}]->(v)
+                            """
+                            cypher_statements.append((query_str_for_list_prop, 
+                                                      {"we_id": we_id, "val_item_value": val_item, "value_node_type": list_prop_name}))
     
     # Execute batch
     if cypher_statements:

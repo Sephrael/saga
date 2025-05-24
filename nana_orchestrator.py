@@ -246,21 +246,19 @@ class NANA_Orchestrator:
         
         current_text_to_process = initial_draft_text
         current_raw_llm_output = initial_raw_llm_text
-        is_from_flawed_source = False # Initial draft is not yet confirmed flawed, evaluation will determine.
+        is_from_flawed_source = False 
 
         # 4. Evaluation Loop (Max 1 revision attempt for now, can be configured)
         max_revision_attempts = 1 
-        for attempt in range(max_revision_attempts + 1): # Loop 0 is initial eval, Loop 1 is eval after 1st revision
+        for attempt in range(max_revision_attempts + 1): 
             logger.info(f"NANA: Ch {chapter_number} - Evaluation Cycle, Attempt {attempt + 1}")
             
-            # 4a. Comprehensive Evaluator Agent
             evaluation_result: EvaluationResult = await self.evaluator_agent.evaluate_chapter_draft(
                 self.novel_props_cache, current_text_to_process, chapter_number,
-                plot_point_focus, plot_point_index, hybrid_context_for_draft # Use same context for eval
+                plot_point_focus, plot_point_index, hybrid_context_for_draft 
             )
             await self._save_debug_output(chapter_number, f"evaluation_result_attempt_{attempt+1}", evaluation_result)
 
-            # 4b. (Optional) World Continuity Agent check on current draft
             continuity_problems: List[ProblemDetail] = await self.world_continuity_agent.check_consistency(
                  self.novel_props_cache, current_text_to_process, chapter_number, hybrid_context_for_draft
             )
@@ -268,88 +266,76 @@ class NANA_Orchestrator:
 
             if continuity_problems:
                 logger.warning(f"NANA: Ch {chapter_number} (Attempt {attempt+1}) - World Continuity Agent found {len(continuity_problems)} issues.")
-                evaluation_result["problems_found"].extend(continuity_problems) # Add to overall problems
+                evaluation_result["problems_found"].extend(continuity_problems) 
                 if not evaluation_result["needs_revision"]: 
                     evaluation_result["needs_revision"] = True
                     evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.")
-                else: # Ensure reason is present if already needs revision
+                else: 
                     if "Continuity issues identified by WorldContinuityAgent." not in evaluation_result["reasons"]:
                         evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.")
             
             if not evaluation_result["needs_revision"]:
                 logger.info(f"NANA: Ch {chapter_number} draft passed evaluation (Attempt {attempt+1}). Text is considered good.")
-                is_from_flawed_source = False # Text is good
-                break # Exit revision loop, current_text_to_process is final
-            else: # Needs revision
+                is_from_flawed_source = False 
+                break 
+            else: 
                 logger.warning(f"NANA: Ch {chapter_number} draft (Attempt {attempt+1}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons',[]))}")
                 
                 if attempt >= max_revision_attempts:
                     logger.error(f"NANA: Ch {chapter_number} - Max revision attempts ({max_revision_attempts}) reached. Proceeding with current draft, marked as flawed.")
-                    is_from_flawed_source = True # Confirmed flawed after max attempts
-                    break # Exit revision loop
+                    is_from_flawed_source = True 
+                    break 
 
-                # 4c. Revision Attempt
-                # The 'agent' passed to revise_chapter_draft_logic is `self` (the orchestrator)
-                # to allow it to use helpers like _get_plot_point_info_from_agent.
                 revised_text_tuple = await revise_chapter_draft_logic(
                     self, 
                     current_text_to_process, 
                     chapter_number,
                     evaluation_result, 
-                    hybrid_context_for_draft, # Use the same hybrid context for revision consistency
-                    chapter_plan # Pass the original chapter plan for revision context
+                    hybrid_context_for_draft, 
+                    chapter_plan 
                 )
                 
-                if revised_text_tuple and revised_text_tuple[0] and len(revised_text_tuple[0]) > 50: # Check for usable text
+                if revised_text_tuple and revised_text_tuple[0] and len(revised_text_tuple[0]) > 50: 
                     current_text_to_process, rev_raw_output = revised_text_tuple
                     current_raw_llm_output = rev_raw_output if rev_raw_output else current_raw_llm_output 
                     logger.info(f"NANA: Ch {chapter_number} - Revision attempt {attempt+1} successful. New text length: {len(current_text_to_process)}. Re-evaluating in next loop iteration.")
                     await self._save_debug_output(chapter_number, f"revised_text_attempt_{attempt+1}", current_text_to_process)
-                    # is_from_flawed_source will be determined by the *next* evaluation pass on this new text.
                 else:
                     logger.error(f"NANA: Ch {chapter_number} - Revision attempt {attempt+1} failed to produce usable text. Proceeding with previous draft, marked as flawed.")
-                    is_from_flawed_source = True # Mark as flawed because revision failed
-                    break # Exit revision loop, use the draft that was input to this failed revision
-        # End of evaluation/revision loop
-
-        # Final check on text length
+                    is_from_flawed_source = True 
+                    break 
+        
         if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
              logger.warning(f"NANA: Final chosen text for Ch {chapter_number} is too short ({len(current_text_to_process)} chars). This might impact quality and will be marked as flawed.")
-             is_from_flawed_source = True # Override if too short, even if eval passed
+             is_from_flawed_source = True 
 
-        # 5. Finalize Chapter in Neo4j (text, summary, embedding)
         chapter_summary = await self.kg_maintainer_agent.summarize_chapter(current_text_to_process, chapter_number)
         await self._save_debug_output(chapter_number, "final_summary", chapter_summary)
         final_embedding = await llm_interface.async_get_embedding(current_text_to_process)
 
         if final_embedding is None:
             logger.error(f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {chapter_number}. Cannot save chapter to Neo4j state. Text saved to file system only.")
-            # Save to file system anyway for manual recovery if DB save fails due to embedding
             await self._save_chapter_text_and_log(chapter_number, current_text_to_process, current_raw_llm_output)
-            return None # Indicate failure to finalize in DB
+            return None 
 
         await state_manager.async_save_chapter_data(
             chapter_number, current_text_to_process, current_raw_llm_output or "N/A",
             chapter_summary, final_embedding, is_from_flawed_source
         )
-        # Also save to file system for human readability / backup
         await self._save_chapter_text_and_log(chapter_number, current_text_to_process, current_raw_llm_output)
 
-        # 6. KG Maintainer Agent: Extract and merge knowledge from the FINAL chapter text
         await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.novel_props_cache, # Pass the dict that holds mutable character_profiles and world_building
+            self.novel_props_cache, 
             chapter_number,
             current_text_to_process,
-            is_from_flawed_source # Pass the flag indicating if the source text was considered flawed
+            is_from_flawed_source 
         )
-        # Update orchestrator's direct attributes from the modified cache, as KGMaintainer works on the cache's dicts
         self.character_profiles = self.novel_props_cache['character_profiles']
         self.world_building = self.novel_props_cache['world_building']
-        self._update_novel_props_cache() # Refresh cache in case KG maintainer made other changes to novel_props_cache content
+        self._update_novel_props_cache() 
 
-        # 7. Save updated agent state (plot, characters, world) from orchestrator memory to Neo4j
-        self.chapter_count = max(self.chapter_count, chapter_number) # Update internal chapter count
-        await self._save_core_novel_state_to_neo4j() # Saves the now-updated self.character_profiles etc.
+        self.chapter_count = max(self.chapter_count, chapter_number) 
+        await self._save_core_novel_state_to_neo4j() 
 
         status_message = "Successfully Generated" if not is_from_flawed_source else "Generated (Marked with Flaws)"
         logger.info(f"=== NANA: Finished Chapter {chapter_number} - {status_message} ===")
@@ -361,23 +347,21 @@ class NANA_Orchestrator:
         logger.info("--- NANA: Starting Novel Generation Run ---")
         try:
             await state_manager.connect()
-            await state_manager.create_db_and_tables() # Includes vector index setup
+            await state_manager.create_db_and_tables() 
             logger.info("NANA: State_manager initialized and Neo4j connection/schema verified.")
 
-            await self.async_init_orchestrator() # Load existing state from Neo4j
+            await self.async_init_orchestrator() 
 
-            if not self.plot_outline: # If no plot outline loaded, perform initial setup
+            if not self.plot_outline: 
                 if not await self.perform_initial_setup():
                     logger.critical("NANA: Initial setup failed. Halting generation.")
                     return
             
-            # Pre-populate KG if it's based on user/LLM data and seems not yet done
             await self._prepopulate_kg_if_needed()
-            self._update_novel_props_cache() # Ensure cache is fresh after setup/load
+            self._update_novel_props_cache() 
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
             start_chapter = self.chapter_count + 1
-            # End chapter is exclusive for range, so add 1 to CHAPTERS_PER_RUN
             end_chapter_exclusive = start_chapter + config.CHAPTERS_PER_RUN if config.CHAPTERS_PER_RUN > 0 else start_chapter
 
             logger.info(f"NANA: Current Chapter Count (at start of run): {self.chapter_count}")
@@ -391,20 +375,18 @@ class NANA_Orchestrator:
                 logger.info(f"\n--- NANA: Attempting Chapter {i} ---")
                 try:
                     chapter_text_result = await self.run_chapter_generation_process(i)
-                    if chapter_text_result: # If successful (even if flawed)
+                    if chapter_text_result: 
                         chapters_successfully_written_this_run += 1
                         logger.info(f"NANA: Chapter {i}: Processed. Final text length: {len(chapter_text_result)} chars.")
                         logger.info(f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}...")
                     else:
                         logger.error(f"NANA: Chapter {i}: Failed to generate or save. Check logs for critical errors.")
-                        # Decide if to break or continue on chapter failure. For now, let's try to continue.
-                        # break 
                 except Exception as e:
                     logger.critical(f"NANA: Critical unhandled error during chapter {i} writing process: {e}", exc_info=True)
-                    break # Halt run on unhandled exception for a chapter
+                    break 
 
             logger.info(f"\n--- NANA: Novel writing process finished for this run ---")
-            final_chapter_count_from_db = await state_manager.async_load_chapter_count() # Re-fetch from DB
+            final_chapter_count_from_db = await state_manager.async_load_chapter_count() 
             logger.info(f"NANA: Successfully processed {chapters_successfully_written_this_run} chapter(s) in this run.")
             logger.info(f"NANA: Current total chapters in database: {final_chapter_count_from_db}")
             logger.info(f"--- NANA: Saga Novel Generation Run Finished. Final Neo4j chapter count: {final_chapter_count_from_db} ---")
@@ -417,27 +399,38 @@ class NANA_Orchestrator:
 
 
 def setup_logging_nana():
+    # Base configuration for the root logger
     logging.basicConfig(
-        level=config.LOG_LEVEL,
+        level=config.LOG_LEVEL, # Application's general log level
         format=config.LOG_FORMAT,
         datefmt=config.LOG_DATE_FORMAT
     )
+
+    # Specifically set the logging level for neo4j.notifications to WARNING
+    # to suppress INFO level "already exists" messages.
+    # This logger is part of the Neo4j driver.
+    logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
+    logging.getLogger("neo4j").setLevel(logging.WARNING) # Also good to set general neo4j driver to WARNING
+
+
     if config.LOG_FILE:
         try:
             log_dir = os.path.dirname(config.LOG_FILE)
             if log_dir: os.makedirs(log_dir, exist_ok=True)
-            # Use RotatingFileHandler for better log management
+            
             file_handler = logging.handlers.RotatingFileHandler(
-                config.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, mode='a', encoding='utf-8' # 10MB per file
+                config.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, mode='a', encoding='utf-8'
             )
-            file_handler.setLevel(config.LOG_LEVEL)
+            file_handler.setLevel(config.LOG_LEVEL) # File handler respects the app's general log level
             formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
             file_handler.setFormatter(formatter)
             logging.getLogger().addHandler(file_handler) # Add to root logger
             logging.info(f"File logging enabled. Log file: {config.LOG_FILE}")
         except Exception as e:
+            # Log this error to console, as file logging setup failed
             logging.error(f"Failed to configure file logging to {config.LOG_FILE}: {e}", exc_info=True)
-    logging.info(f"NANA Logging setup complete. Level: {logging.getLevelName(config.LOG_LEVEL)}")
+            
+    logging.info(f"NANA Logging setup complete. Application Log Level: {logging.getLevelName(config.LOG_LEVEL)}. Neo4j Notifications Log Level: WARNING.")
 
 
 if __name__ == "__main__":
@@ -450,14 +443,11 @@ if __name__ == "__main__":
     except Exception as main_err:
         logger.critical(f"NANA Orchestrator encountered an unhandled main exception: {main_err}", exc_info=True)
     finally:
-        # Ensure Neo4j connection is closed if asyncio.run finishes or is interrupted
-        # This might be redundant if run_novel_generation_loop's finally block already handles it,
-        # but it's a good safeguard.
-        if state_manager.driver is not None: # Check if driver was ever initialized
+        if state_manager.driver is not None: 
             logger.info("Ensuring Neo4j driver is closed from main entry point.")
-            async def _close_driver_main(): # Define async func for await
+            async def _close_driver_main():
                  await state_manager.close()
             try:
                 asyncio.run(_close_driver_main())
-            except RuntimeError as e: # Handle "Event loop is closed" if already shut down
-                 logger.debug(f"Could not explicitly close driver from main: {e}")
+            except RuntimeError as e: 
+                 logger.debug(f"Could not explicitly close driver from main (event loop might be closed): {e}")
