@@ -255,18 +255,34 @@ class state_managerSingleton:
             return False
 
         statements = []
-        statements.append(("MATCH (c:Character) OPTIONAL MATCH (c)-[r]-() DETACH DELETE c, r", {}))
+        # More targeted deletion: Remove character-specific relationships and labels,
+        # but try to preserve underlying :Entity nodes if they have other roles.
+        # This is a full refresh of character data, so old character-specific links are removed.
+        statements.append(("MATCH (c:Character)-[r:HAS_TRAIT]->() DELETE r", {}))
+        statements.append(("MATCH (c:Character)-[r:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent) DELETE r, dev", {}))
+        # Remove DYNAMIC_REL only if BOTH ends are Characters being refreshed.
+        # If an :Entity (non-Character) is involved, that DYNAMIC_REL might be from general KG.
+        statements.append(("MATCH (c1:Character)-[r:DYNAMIC_REL]-(c2:Character) DELETE r", {}))
+        # Remove the :Character label from all nodes that have it. Properties will be reset by subsequent MERGE/SET.
+        statements.append(("MATCH (c:Character) REMOVE c:Character", {}))
+        # Traits are specific to character profiles in this context so can be cleared.
         statements.append(("MATCH (t:Trait) DETACH DELETE t", {}))
-        statements.append(("MATCH (dev:DevelopmentEvent) DETACH DELETE dev", {}))
 
 
         for char_name, profile in profiles_data.items():
             if not isinstance(profile, dict): continue
 
+            # Properties for the character, excluding 'name' as it's used in MERGE pattern.
             char_props_for_set = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
             
+            # Corrected MERGE strategy for character nodes
+            character_node_query = """
+            MERGE (c:Entity {name: $char_name_val}) // Find or create the Entity
+            SET c:Character                         // Ensure it has the Character label
+            SET c += $props                         // Add/update character-specific properties
+            """
             statements.append((
-                "MERGE (c:Character:Entity {name: $char_name_val}) SET c = $props, c.name = $char_name_val", 
+                character_node_query, 
                 {"char_name_val": char_name, "props": char_props_for_set}
             ))
 
@@ -275,7 +291,7 @@ class state_managerSingleton:
                     if isinstance(trait_str, str):
                         statements.append((
                             """
-                            MATCH (c:Character {name: $char_name_val})
+                            MATCH (c:Character:Entity {name: $char_name_val}) // Ensure we link to the Character:Entity
                             MERGE (t:Trait {name: $trait_name_val})
                             MERGE (c)-[:HAS_TRAIT]->(t)
                             """,
@@ -300,8 +316,9 @@ class state_managerSingleton:
                     statements.append((
                         """
                         MATCH (c1:Character:Entity {name: $char_name1_val})
-                        MERGE (c2:Character:Entity {name: $char_name2_val})
-                            ON CREATE SET c2.description = 'Placeholder desc - created via rel from ' + $char_name1_val, c2.name = $char_name2_val
+                        MERGE (c2:Entity {name: $char_name2_val}) // MERGE target as Entity first
+                            ON CREATE SET c2:Character, c2.description = 'Placeholder desc - created via rel from ' + $char_name1_val 
+                            ON MATCH SET c2:Character // Ensure target is also Character if matched as Entity
                         MERGE (c1)-[r:DYNAMIC_REL {type: $rel_type_val}]->(c2)
                         SET r += $rel_props_val
                         """,
@@ -327,7 +344,7 @@ class state_managerSingleton:
                             
                         statements.append((
                             """
-                            MATCH (c:Character {name: $char_name_val})
+                            MATCH (c:Character:Entity {name: $char_name_val}) // Link to Character:Entity
                             CREATE (dev:DevelopmentEvent)
                             SET dev = $props
                             CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
@@ -348,7 +365,7 @@ class state_managerSingleton:
         self.logger.info("Loading decomposed character profiles from Neo4j...")
         profiles_data: Dict[str, Any] = {}
 
-        char_query = "MATCH (c:Character:Entity) RETURN c"
+        char_query = "MATCH (c:Character:Entity) RETURN c" # Ensure we get nodes that are both
         char_results = await self._execute_read_query(char_query)
         if not char_results:
             return {}
@@ -367,7 +384,7 @@ class state_managerSingleton:
             profile["traits"] = [tr['trait_name'] for tr in trait_results] if trait_results else []
 
             rels_query = """
-            MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Character:Entity)
+            MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Character:Entity) // Ensure target is also Character:Entity
             RETURN target.name AS target_name, r.type AS relationship_type, properties(r) AS rel_props
             """
             rel_results = await self._execute_read_query(rels_query, {"char_name": char_name})
@@ -705,23 +722,23 @@ class state_managerSingleton:
             self.logger.warning(f"Neo4j: Invalid KG triple for add: S='{subj_s}', P='{pred_s}', O='{obj_s}', Chap={chapter_added}")
             return
 
-        # Corrected query using WITH clause before OPTIONAL MATCH
         query = """
         MERGE (s:Entity {name: $subject_param})
         MERGE (o:Entity {name: $object_param})
-        WITH s, o // Pass s and o to the next part of the query
-        OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_param}]->(o)
+        WITH s, o, $predicate_param AS pred_param, $chapter_added_param AS chap_param, 
+             $is_provisional_param AS prov_param, $confidence_param AS conf_param // Pass parameters with s, o
+        OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: pred_param, chapter_added: chap_param}]->(o)
         FOREACH (r IN CASE WHEN existing_r IS NOT NULL THEN [existing_r] ELSE [] END |
-          SET r.is_provisional = $is_provisional_param, 
-              r.confidence = $confidence_param, 
+          SET r.is_provisional = prov_param, 
+              r.confidence = conf_param, 
               r.last_updated = timestamp()
         )
         FOREACH (ignoreMe IN CASE WHEN existing_r IS NULL THEN [1] ELSE [] END |
           CREATE (s)-[new_r:DYNAMIC_REL {
-            type: $predicate_param, 
-            chapter_added: $chapter_added_param, 
-            is_provisional: $is_provisional_param, 
-            confidence: $confidence_param,
+            type: pred_param, 
+            chapter_added: chap_param, 
+            is_provisional: prov_param, 
+            confidence: conf_param,
             created_at: timestamp(),
             last_updated: timestamp()
           }]->(o)
