@@ -1,0 +1,18 @@
+--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
+[Semantic Context from Chapter 1 (Similarity: 0.776, Type: Provisional Summary)]:
+Elira Voss, exiled and shunned by the Order of the Pure Flame, infiltrates their archives to uncover suppressed truths, discovering a mysterious symbol linked to a forgotten history. She finds a hidden manuscript that challenges the Order's narrative, reigniting her resolve to expose their lies. Despite being watched and threatened, she commits to reclaiming her past and the truth buried by the Order.
+---
+
+[Semantic Context from Chapter 2 (Similarity: 0.810, Type: Provisional Summary)]:
+Elira escapes the Archives with a dangerous manuscript, evades the Order, and flees to the hidden underground settlement of the Mid-Levels, where she confronts her fears and begins to understand her role in resisting the Order. She shares the manuscript’s truth with a group of exiles, revealing the arcology was a prison, not a sanctuary, and earns their trust by choosing to fight for the truth. Elira shifts from a fugitive seeking belonging to a determined resistor, finding hope and purpose among those who have long opposed the Order.
+---
+--- END SEMANTIC CONTEXT ---
+
+
+--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
+- Archivist Kael's status is: Active.
+- Elira Voss's status is: Active.
+- Tessa's status is: Active.
+- The main conflict is: Elira must navigate the rigid hierarchy and fanatical dogma of the Order of the Pure Flame, working to prevent a controlled dark age while reclaiming her identity and purpose..
+- The novel's theme is: the consequences of religious extremism.
+--- END KEY RELIABLE KG FACTS ---
