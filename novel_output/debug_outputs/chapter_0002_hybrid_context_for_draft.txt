@@ -1,0 +1,12 @@
+--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
+[Semantic Context from Chapter 1 (Similarity: 0.817, Type: Provisional Summary)]:
+Elira Voss, exiled and shunned by the Order of the Pure Flame, infiltrates their archives to uncover suppressed truths, discovering a mysterious symbol linked to a forgotten history. She finds a hidden manuscript that challenges the Order's narrative, reigniting her resolve to expose their lies. Despite being watched and threatened, she commits to reclaiming her past and the truth buried by the Order.
+---
+--- END SEMANTIC CONTEXT ---
+
+
+--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
+- Elira Voss's status is: Introduced.
+- The main conflict is: Elira must navigate the rigid hierarchy and fanatical dogma of the Order of the Pure Flame, working to prevent a controlled dark age while reclaiming her identity and purpose..
+- The novel's theme is: the consequences of religious extremism.
+--- END KEY RELIABLE KG FACTS ---
