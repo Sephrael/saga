@@ -1,321 +1,195 @@
-# SAGA: Semantic And Graph-enhanced Authoring
+# SAGA: Semantic And Graph-enhanced Authoring 🌌📚
+## Let NANA (Next-gen Autonomous Narrative Architecture) tell you a story, just like old times!
 
-An autonomous, agentic creative writing system that generates full-length novels using advanced AI techniques, semantic context understanding, and knowledge graph management.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## 🚀 Key Features
+SAGA is an autonomous, agentic creative-writing system designed to generate entire novels. Powered by the **NANA** engine, SAGA leverages Large Language Models (LLMs) and a Neo4j graph database to create rich, coherent, and evolving narratives.
 
-### Core Capabilities
-- **Autonomous Novel Generation**: Generates complete novels chapter by chapter with minimal human intervention
-- **Knowledge Graph Integration**: Uses Neo4j to maintain rich relationships between characters, locations, plot points, and world elements
-- **Semantic Context Generation**: Employs embeddings to retrieve relevant context from previous chapters for narrative consistency
-- **Agentic Scene Planning**: Plans detailed scenes with character interactions, dialogue points, and narrative focus before writing
-- **Quality Evaluation & Revision**: Automatically evaluates chapter quality and performs targeted revisions when needed
-- **Dynamic Knowledge Management**: Continuously updates character profiles and world-building as the story progresses
+## Overview
 
-### Advanced Features
-- **Hybrid Context System**: Combines semantic similarity search with knowledge graph facts for optimal context
-- **Patch-based Revision**: Makes surgical edits to specific problematic sections rather than rewriting entire chapters
-- **Multi-Model Architecture**: Uses different specialized models for planning, drafting, evaluation, and revision tasks
-- **Embedding Coherence Checking**: Ensures narrative flow consistency between chapters using cosine similarity
-- **Provisional Data Handling**: Tracks and manages potentially unreliable information from unrevised drafts
-- **Comprehensive Caching**: LRU caching for embeddings, summaries, and token counting for performance
+Ever dreamt of an AI that could not just write a paragraph, but an entire saga? SAGA, with its NANA engine, aims to do just that. It's more than just a text generator; it's a team of specialized AI agents working together:
 
-### Generation Modes
-- **Configured Mode**: Uses predefined genre, theme, and setting parameters
-- **Unhinged Mode**: Randomly selects from curated lists of genres, themes, protagonists, and conflicts for creative variety
-- **User-Supplied Mode**: Accepts detailed story elements via JSON input file
+*   **PlannerAgent:** Outlines detailed scene-by-scene plans for each chapter.
+*   **DraftingAgent:** Writes the initial prose for chapters based on plans and context.
+*   **ComprehensiveEvaluatorAgent:** Critically assesses drafts for plot, theme, consistency, and narrative depth.
+*   **WorldContinuityAgent:** Specifically checks for and helps maintain consistency with established world-building and character facts.
+*   **ChapterRevisionLogic:** Implements revisions based on evaluation feedback, using either targeted patches or full rewrites.
+*   **KGMaintainerAgent:** Manages the novel's knowledge graph in Neo4j, extracting new information, summarizing chapters, and pre-populating initial data.
 
-## 🏗️ Architecture Overview
+SAGA builds a dynamic understanding of the story's world, characters, and plot, storing this evolving knowledge in a Neo4j graph database. This allows for greater consistency and depth as the narrative unfolds.
 
-SAGA follows a modular, async-first architecture:
+## Key Features
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Novel Agent   │───▶│   State Manager  │───▶│     Neo4j       │
-│   (Orchestrator)│    │   (Persistence)  │    │  (Knowledge     │
-└─────────────────┘    └──────────────────┘    │   Graph)        │
-         │                       │              └─────────────────┘
-         ▼                       ▼              
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  Logic Modules  │    │  LLM Interface   │───▶│  OpenAI-style   │
-│  (Planning,     │    │  (API calls,     │    │    API          │
-│   Drafting,     │    │   Embeddings)    │    │  + Ollama       │
-│   Evaluation)   │    │                  │    │  (Embeddings)   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+*   **Autonomous Novel Generation:** Capable of generating multiple chapters in a single run.
+*   **Agentic Architecture:** Utilizes multiple specialized AI agents for different stages of the writing process.
+*   **Knowledge Graph Integration:** Employs a Neo4j database to store and retrieve story canon, character development, world-building details, and plot points.
+*   **Semantic Context Generation:** Uses embeddings (via Ollama) to create semantically relevant context from previous chapters, ensuring narrative flow.
+*   **Iterative Drafting & Revision:** Chapters go through drafting, evaluation, and revision cycles to improve quality.
+*   **Dynamic State Adaptation:** The system learns and updates its knowledge graph based on the generated content.
+*   **Configurable Generation:**
+    *   Supports "Unhinged Mode" for more random and surprising story elements.
+    *   Allows configuration of different LLMs for various tasks (planning, drafting, evaluation).
+    *   Accepts user-supplied story elements via `user_story_elements.json` for a custom starting point.
+*   **Rich Progress Display:** Optional live progress updates in the console using the Rich library.
 
-## 🔄 Pipeline Flow
+## Architecture & Pipeline
 
-### 1. Initial Setup
-- **Plot Generation**: Creates story outline with protagonist, plot points, and narrative arc
-- **World Building**: Establishes locations, societies, systems, lore, and factions
-- **Character Creation**: Develops initial character profiles and relationships
-- **KG Pre-population**: Seeds Neo4j with initial story elements and relationships
+SAGA's NANA engine orchestrates a pipeline of agents and logic modules for each chapter:
 
-### 2. Chapter Generation Loop
-For each chapter:
+1.  **Initial Setup (First Run):**
+    *   If `user_story_elements.json` is present, it's used to bootstrap the plot, characters, and world.
+    *   Otherwise, `InitialSetupLogic` generates a plot outline, initial character profiles (including the protagonist), and core world-building elements using LLMs. This can be guided by "Unhinged Mode" or configured defaults.
+    *   The `KGMaintainerAgent` pre-populates the Neo4j graph with this initial data.
 
-1. **Scene Planning** (Optional): Plans 10-18 detailed scenes with character interactions and dialogue points
-2. **Context Generation**: 
-   - Retrieves semantically relevant previous chapters using embedding similarity
-   - Fetches reliable knowledge graph facts about characters and world elements
-   - Combines into hybrid context for optimal narrative consistency
-3. **Chapter Drafting**: Generates initial chapter text using hybrid context and scene plan
-4. **Quality Evaluation**: Analyzes chapter for:
-   - Consistency with established canon
-   - Plot arc advancement
-   - Thematic alignment
-   - Narrative depth and length
-5. **Revision Process** (if needed):
-   - **Patch-based**: Makes targeted fixes to specific problematic quotes
-   - **Full Rewrite**: Complete chapter regeneration for major issues
-6. **Knowledge Updates**: Extracts and updates character developments, world changes, and new relationships
-7. **Persistence**: Saves chapter text, embeddings, and metadata to both Neo4j and local files
+2.  **Chapter Generation Loop (for each chapter):**
+    *   **Planning:** The `PlannerAgent` creates a detailed scene-by-scene plan for the current chapter based on the overall plot point and current story state.
+    *   **Context Generation:** `ContextGenerationLogic` assembles a "hybrid context" string. This includes:
+        *   Semantic context from previous chapters (retrieved via vector similarity search in Neo4j).
+        *   Key reliable facts extracted from the Knowledge Graph by `PromptDataGetters`.
+    *   **Drafting:** The `DraftingAgent` (using `ChapterDraftingLogic`) writes the initial draft of the chapter, guided by the scene plan, plot point focus, and the hybrid context. It also receives filtered character and world data.
+    *   **Evaluation:**
+        *   The `ComprehensiveEvaluatorAgent` assesses the draft for coherence, plot arc adherence, thematic consistency, and narrative depth.
+        *   The `WorldContinuityAgent` performs a focused check for consistency against established lore, character profiles, and plot points.
+    *   **Revision (if needed):**
+        *   If evaluation flags issues, `ChapterRevisionLogic` takes over.
+        *   It can generate targeted "patches" to fix specific problems or perform a full chapter rewrite if `ENABLE_PATCH_BASED_REVISION` is true and issues are suitable.
+        *   This process can be iterative up to a configured number of attempts.
+    *   **Finalization & Knowledge Update:**
+        *   The `KGMaintainerAgent` summarizes the final chapter text.
+        *   An embedding is generated for the final chapter text.
+        *   The chapter data (text, summary, embedding, provisional status) is saved to Neo4j by the `StateManager`.
+        *   The `KGMaintainerAgent` extracts new knowledge (character updates, world-building changes, new KG triples) from the final chapter text and updates both the in-memory state and the Neo4j graph.
+    *   The orchestrator updates its internal state (character profiles, world-building) based on the KG Maintainer's merges.
 
-### 3. Continuous Learning
-- Updates character status and relationships based on story events
-- Expands world-building with new locations and lore
-- Maintains provisional data tracking for quality control
-- Builds comprehensive knowledge graph for future context retrieval
-
-## 🛠️ Installation & Setup
+## Setup
 
 ### Prerequisites
-- Python 3.8+
-- Docker and Docker Compose
-- OpenAI-compatible API endpoint (local or remote)
-- Ollama for embeddings (recommended)
 
-### Quick Start
+*   Python 3.8+
+*   Docker & Docker Compose
+*   An Ollama-compatible LLM server (e.g., running via LM Studio, oobabooga's text-generation-webui with OpenAI extension, or a dedicated OpenAI-API compatible server).
+*   An Ollama instance (can be the same as the LLM server if it supports embeddings, or a separate one) for generating text embeddings.
 
-1. **Clone the repository**:
+### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/Lanerra/saga.git
 cd saga
 ```
 
-2. **Install Python dependencies**:
+### 2. Install Python Dependencies
+
+It's recommended to use a virtual environment:
+
 ```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. **Start Neo4j database**:
+### 3. Configure SAGA
+
+Most configuration is done in `config.py`. Key settings to review and potentially set via environment variables:
+
+*   **LLM API:**
+    *   `OPENAI_API_BASE`: URL of your OpenAI-compatible LLM API endpoint (e.g., `http://127.0.0.1:8080/v1`).
+    *   `OPENAI_API_KEY`: API key for the LLM (can be "nope" or any string if your server doesn't require auth).
+*   **Embedding Model (Ollama):**
+    *   `OLLAMA_EMBED_URL`: URL of your Ollama API for embeddings (e.g., `http://127.0.0.1:11434`).
+    *   `EMBEDDING_MODEL`: Name of the embedding model in Ollama (e.g., `nomic-embed-text:latest`). Ensure this model is pulled in Ollama.
+*   **Neo4j Connection:**
+    *   `NEO4J_URI`: Bolt URI for Neo4j (defaults to `bolt://localhost:7687`).
+    *   `NEO4J_USER`: Neo4j username (defaults to `neo4j`).
+    *   `NEO4J_PASSWORD`: Neo4j password (defaults to `saga_password`).
+    *   `NEO4J_DATABASE`: Neo4j database name (defaults to `neo4j`).
+*   **Model Aliases:**
+    *   `LARGE_MODEL`, `MEDIUM_MODEL`, `SMALL_MODEL`, `NARRATOR_MODEL`: Set these to the names of the models you want to use for different tasks, as recognized by your `OPENAI_API_BASE` server.
+*   **Output Directory:**
+    *   `BASE_OUTPUT_DIR`: Where novel outputs, logs, and debug files will be stored (defaults to `novel_output`).
+*   **Logging:**
+    *   `LOG_LEVEL`: Set to `DEBUG`, `INFO`, `WARNING`, `ERROR` (defaults to `INFO`).
+
+You can set these as environment variables or modify `config.py` directly.
+
+### 4. Set up Neo4j Database
+
+SAGA uses Neo4j to store its knowledge graph. A `docker-compose.yml` file is provided to run Neo4j in a Docker container.
+
+Use the `manage_neo4j.sh` script:
+
+*   **Start Neo4j:**
+    ```bash
+    ./manage_neo4j.sh start
+    ```
+    This will start a Neo4j container. You can access the Neo4j Browser at `http://localhost:7474`.
+    Login with `neo4j` / `saga_password` (or your configured credentials).
+
+*   **Stop Neo4j:**
+    ```bash
+    ./manage_neo4j.sh stop
+    ```
+
+*   **Check Status:**
+    ```bash
+    ./manage_neo4j.sh status
+    ```
+
+The first time SAGA runs, it will attempt to create necessary constraints and indexes in the Neo4j database, including a vector index for chapter embeddings.
+
+### 5. (Optional) User-Supplied Story Elements
+
+If you want to provide your own starting point for the novel, a `user_story_elements.json.example` file is provided as a template in the root directory. Simply edit the template as desired and save it as `user_story_elements.json`. SAGA will use this to initialize the plot, characters, and world. If this file is not present, SAGA will generate these elements.
+
+### 6. (Optional) Unhinged Mode Data
+
+For "Unhinged Mode" (randomized initial elements), SAGA looks for JSON files in the `unhinged_data/` directory:
+*   `unhinged_genres.json`
+*   `unhinged_themes.json`
+*   `unhinged_settings_archetypes.json`
+*   `unhinged_protagonist_archetypes.json`
+*   `unhinged_conflict_types.json`
+
+These should contain lists of strings. If not present, defaults from `config.py` will be used.
+
+## Running SAGA
+
+Once Neo4j is running and your configuration is set:
+
 ```bash
-chmod +x manage_neo4j.sh
-./manage_neo4j.sh start
+python nana_orchestrator.py
 ```
 
-4. **Configure environment variables** (create `.env` file):
-```bash
-# LLM API Configuration
-OPENAI_API_BASE=http://127.0.0.1:8080/v1  # Your LLM API endpoint
-OPENAI_API_KEY=your_api_key_here
+SAGA will begin the novel generation process.
+*   On the first run, it will perform initial setup (plot, world, characters) and pre-populate the Neo4j KG.
+*   On subsequent runs, it will load existing state from Neo4j and continue generating chapters.
+*   The number of chapters generated per run is controlled by `CHAPTERS_PER_RUN` in `config.py`.
 
-# Ollama for embeddings
-OLLAMA_EMBED_URL=http://127.0.0.1:11434
-EMBEDDING_MODEL=nomic-embed-text:latest
+Output files (chapters, logs, debug info) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`).
 
-# Neo4j Configuration
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=saga_password
+## Resetting the Database
 
-# Model Configuration (adjust for your setup)
-LARGE_MODEL=Qwen3-14B
-MEDIUM_MODEL=Qwen3-8B
-SMALL_MODEL=Qwen3-4B
-```
+If you want to start SAGA from scratch (e.g., after a test run or to try a new story), you can wipe the Neo4j database.
 
-5. **Run SAGA**:
-```bash
-python main.py
-```
+**⚠️ WARNING: This will delete ALL data in the Neo4j database currently pointed to by your configuration.**
 
-## 🎛️ Neo4j Management
+1.  Ensure SAGA is not running.
+2.  Run the `reset_neo4j.py` script:
+    ```bash
+    python reset_neo4j.py
+    ```
+    You will be asked for confirmation.
+    To skip confirmation (e.g., in a script):
+    ```bash
+    python reset_neo4j.py --force
+    ```
+    Use the `--uri`, `--user`, and `--password` arguments if your Neo4j instance uses different credentials than the defaults in `config.py` or `reset_neo4j.py`.
 
-Use the provided script to manage your Neo4j instance:
+After resetting, the next run of `python nana_orchestrator.py` will perform the initial setup again.
 
-```bash
-# Start Neo4j
-./manage_neo4j.sh start
+## License
 
-# Check status
-./manage_neo4j.sh status
-
-# Stop Neo4j
-./manage_neo4j.sh stop
-```
-
-### Accessing Neo4j Browser
-- **URL**: http://localhost:7474
-- **Username**: neo4j
-- **Password**: saga_password
-
-You can explore the knowledge graph visually, query relationships, and monitor the story's evolving structure in real-time.
-
-### Useful Neo4j Queries
-
-**View all characters and their relationships**:
-```cypher
-MATCH (c:Character)-[r:DYNAMIC_REL]->(target)
-RETURN c.name, r.type, target.name
-```
-
-**Explore world elements by category**:
-```cypher
-MATCH (we:WorldElement)
-RETURN we.category, we.name, we.description
-ORDER BY we.category, we.name
-```
-
-**Track plot progression**:
-```cypher
-MATCH (ni:NovelInfo)-[:HAS_PLOT_POINT]->(pp:PlotPoint)
-RETURN pp.sequence, pp.description
-ORDER BY pp.sequence
-```
-
-## ⚙️ Configuration
-
-### Model Configuration
-SAGA supports multiple models for different tasks:
-- **LARGE_MODEL**: Complex reasoning (planning, evaluation)
-- **MEDIUM_MODEL**: Balanced tasks (knowledge updates, patch generation)
-- **SMALL_MODEL**: Simple tasks (JSON correction, quick summaries)
-- **NARRATOR_MODEL**: High-quality text generation (drafting, revision)
-
-### Generation Parameters
-Key settings in `config.py`:
-- `CHAPTERS_PER_RUN`: Number of chapters to generate per execution
-- `MIN_ACCEPTABLE_DRAFT_LENGTH`: Minimum character count for chapters
-- `TARGET_SCENES_MIN/MAX`: Scene count range for chapter planning
-- `ENABLE_AGENTIC_PLANNING`: Toggle detailed scene planning
-- `ENABLE_PATCH_BASED_REVISION`: Enable targeted revision vs. full rewrites
-- `UNHINGED_PLOT_MODE`: Enable random story element generation
-
-### Story Input Options
-
-**Option 1: Configured Generation**
-Set story parameters in `config.py`:
-```python
-CONFIGURED_GENRE = "dystopian horror"
-CONFIGURED_THEME = "the cost of power"
-CONFIGURED_SETTING_DESCRIPTION = "a walled city where memories extend lifespan"
-```
-
-**Option 2: User-Supplied Elements**
-Create `user_story_elements.json`:
-```json
-{
-  "novel_concept": {
-    "title": "The Memory Merchants",
-    "genre": "dystopian fiction",
-    "theme": "the price of immortality",
-    "logline": "In a world where memories can be traded for extended life..."
-  },
-  "protagonist": {
-    "name": "Aria Chen",
-    "description": "A memory broker questioning the system",
-    "character_arc": "From complicit trader to revolutionary leader"
-  },
-  "plot_points": [
-    "Aria discovers a forbidden memory cache",
-    "She uncovers the truth about the memory trade",
-    "..."
-  ]
-}
-```
-
-## 📊 Output Structure
-
-SAGA generates organized output:
-```
-novel_output/
-├── chapters/                 # Final chapter text files
-│   ├── chapter_0001.txt
-│   └── chapter_0002.txt
-├── chapter_logs/            # Raw LLM outputs for debugging
-│   ├── chapter_0001_raw_llm_log.txt
-│   └── chapter_0002_raw_llm_log.txt
-├── debug_outputs/           # Debug information and failed attempts
-├── plot_outline.json        # Backup of plot structure
-├── character_profiles.json  # Backup of character data
-├── world_building.json      # Backup of world data
-└── saga_run.log            # Comprehensive system logs
-```
-
-## 🔍 Advanced Features
-
-### Quality Control
-- **Coherence Scoring**: Measures narrative consistency between chapters
-- **Evaluation Categories**: Consistency, plot advancement, thematic alignment, narrative depth
-- **Provisional Data Tracking**: Marks potentially unreliable information from unrevised drafts
-- **Retry Logic**: Automatic fallback models and retry mechanisms for reliability
-
-### Performance Optimization
-- **Async Operations**: Non-blocking I/O throughout the system
-- **Smart Caching**: LRU caches for embeddings, summaries, and tokenization
-- **Token Management**: Intelligent prompt truncation and token counting
-- **Batch Operations**: Efficient Neo4j batch transactions
-
-### Extensibility
-- **Modular Logic**: Easy to add new generation steps or modify existing ones
-- **Plugin Architecture**: Clean separation of concerns allows easy customization
-- **Model Agnostic**: Works with any OpenAI-compatible API
-- **Format Flexibility**: Plain text parsing reduces dependency on specific model output formats
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Neo4j Connection Errors**:
-```bash
-./manage_neo4j.sh status  # Check if Neo4j is running
-./manage_neo4j.sh start   # Start if stopped
-```
-
-**LLM API Timeouts**:
-- Check your API endpoint is accessible
-- Adjust timeout settings in `config.py`
-- Verify model names match your API setup
-
-**Memory Issues**:
-- Reduce `MAX_CONTEXT_TOKENS` for smaller models
-- Lower `CHAPTERS_PER_RUN` for less memory usage
-- Check embedding model requirements
-
-**Generation Quality**:
-- Increase `MIN_ACCEPTABLE_DRAFT_LENGTH` for longer chapters
-- Enable `ENABLE_AGENTIC_PLANNING` for better structure
-- Adjust temperature settings for creativity vs. consistency
-
-## 📝 Logging
-
-SAGA provides comprehensive logging at multiple levels:
-- **INFO**: Major operations and progress
-- **DEBUG**: Detailed operation traces
-- **WARNING**: Non-fatal issues and fallbacks
-- **ERROR**: Failures and exceptions
-
-Logs are written to both console and `novel_output/saga_run.log`.
-
-## 🤝 Contributing
-
-SAGA is open source and welcomes contributions! Areas of particular interest:
-- Additional LLM provider integrations
-- New evaluation metrics and revision strategies
-- Performance optimizations
-- User interface improvements
-- Documentation and examples
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-SAGA builds upon research in autonomous agents, large language models, and knowledge representation. Special thanks to the open source community for foundational tools like Neo4j, Llama.cpp, Ollama, and the various Python libraries that make this system possible.
+This project is licensed under the Apache License, Version 2.0. See the `LICENSE` file for details.
 
 ---
 
-**Ready to write your novel?** Start with `python main.py` and watch SAGA craft your story, one chapter at a time! 📚✨
+Let NANA spin you a tale! Happy authoring!
