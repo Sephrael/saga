@@ -284,7 +284,7 @@ Antagonist Motivations: Believes the Labyrinth's power belongs to him and will s
 Begin your output now using the requested field names:
 """
     logger.info("Calling LLM for plot outline generation (to plain text)...")
-    raw_outline_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.7, stream_to_disk=True)
+    raw_outline_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
     cleaned_outline_text = llm_interface.clean_model_response(raw_outline_text)
 
     parsed_llm_response = parse_key_value_block(

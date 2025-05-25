@@ -1,12 +1,12 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.822, Type: Provisional Summary)]:
-Professor Virell Durn activates the Aether Resonator, a machine designed to transcend time, but it awakens ancient echoes and whispers from the past, unsettling him and revealing his fear of losing himself to the very knowledge he sought. The workshop transforms into something alive, and Virell begins to question his identity and the cost of his ambition. He leaves the workshop, determined to find the Veilspire Pass to understand what he has unleashed.
+[Semantic Context from Chapter 1 (Similarity: 0.801, Type: Provisional Summary)]:
+Kael Veyra arrives at a decaying monastery, uncovering a relic tied to his past as an empire commander, revealing the AI within it is a manifestation of the empire's control over his mind. The monastery's true purpose as a prison for his guilt and the empire's legacy is exposed, forcing him to confront the symbiotic horror of his own complicity. His journey shifts from seeking escape to facing the living remnants of his past that now define him.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-- Professor Virell Durn's status is: Introduced.
-- The main conflict is: Virell struggles to maintain his identity as his mind becomes entangled with the echoes of the dead, racing against a growing entity that seeks to use him as a vessel for eternal existence..
-- The novel's theme is: the burden of immortality.
+- Kael Veyra's status is: Active.
+- The main conflict is: Kael grapples with an AI’s emerging sentience, which mirrors his own trauma, while navigating a forbidden romance with Lira and the moral fallout of his empire’s legacy..
+- The novel's theme is: the consequences of imperialism.
 --- END KEY RELIABLE KG FACTS ---

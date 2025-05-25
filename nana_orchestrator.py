@@ -360,7 +360,7 @@ class NANA_Orchestrator:
         current_raw_llm_output = initial_raw_llm_text
         is_from_flawed_source = False 
 
-        max_revision_attempts = 1 
+        max_revision_attempts = 2 
         for attempt in range(max_revision_attempts + 1): 
             logger.info(f"NANA: Ch {chapter_number} - Evaluation Cycle, Attempt {attempt + 1}")
             self._update_rich_display(step=f"Ch {chapter_number} - Evaluation Cycle {attempt + 1}")

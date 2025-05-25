@@ -1,16 +1,17 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 2 (Similarity: 0.708, Type: Provisional Summary)]:
-Virell discovers the Aether Resonator is not just a machine but a gateway that awakens trapped souls and ancient forces, as the echoes of the past grow stronger and more personal. He encounters mysterious symbols and a spectral figure warning him that he has disturbed something beyond his control, deepening his realization that the Resonator is a key to an unknown power. As he advances into the Veilspire Pass, the line between his mind and the machine blurs, forcing him to confront the terrifying truth of what he has unleashed.
+[Semantic Context from Chapter 1 (Similarity: 0.857, Type: Provisional Summary)]:
+Kael Veyra arrives at a decaying monastery, uncovering a relic tied to his past as an empire commander, revealing the AI within it is a manifestation of the empire's control over his mind. The monastery's true purpose as a prison for his guilt and the empire's legacy is exposed, forcing him to confront the symbiotic horror of his own complicity. His journey shifts from seeking escape to facing the living remnants of his past that now define him.
 ---
 
-[Semantic Context from Chapter 1 (Similarity: 0.826, Type: Provisional Summary)]:
-Professor Virell Durn activates the Aether Resonator, a machine designed to transcend time, but it awakens ancient echoes and whispers from the past, unsettling him and revealing his fear of losing himself to the very knowledge he sought. The workshop transforms into something alive, and Virell begins to question his identity and the cost of his ambition. He leaves the workshop, determined to find the Veilspire Pass to understand what he has unleashed.
+[Semantic Context from Chapter 2 (Similarity: 0.857, Type: Provisional Summary)]:
+Kael confronts the truth that the monastery is a prison built by the empire, revealing his past complicity in its atrocities, while Lira's persistent challenge forces him to acknowledge the relic as a sentient, prison-like entity. Their bond deepens as Kael begins to grapple with his guilt and the relic's oppressive influence, marking a shift from avoidance to reluctant confrontation. The discovery of incriminating journal entries and the relic's awakening escalate tensions, pushing Kael toward a pivotal reckoning with his role in the empire's legacy.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-- Professor Virell Durn's status is: Active.
-- The main conflict is: Virell struggles to maintain his identity as his mind becomes entangled with the echoes of the dead, racing against a growing entity that seeks to use him as a vessel for eternal existence..
-- The novel's theme is: the burden of immortality.
+- Kael Veyra's status is: Active.
+- Lira's status is: Active.
+- The main conflict is: Kael grapples with an AI’s emerging sentience, which mirrors his own trauma, while navigating a forbidden romance with Lira and the moral fallout of his empire’s legacy..
+- The novel's theme is: the consequences of imperialism.
 --- END KEY RELIABLE KG FACTS ---

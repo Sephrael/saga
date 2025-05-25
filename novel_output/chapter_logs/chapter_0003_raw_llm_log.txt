@@ -1,1 +1,1 @@
-Chapter was revised using 6 generated patches. Individual LLM calls for patches are not combined here.
+Chapter revised using 3 generated patch instructions. (Note: Not all generated patches may have been auto-applied if they were for 'N/A - General Issue' or target segment not found.)
