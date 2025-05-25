@@ -6,7 +6,8 @@ from typing import Dict, Any, List, Optional, Tuple
 import config
 import llm_interface
 from type import ProblemDetail
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from data_access import kg_queries # For querying KG
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
@@ -208,11 +209,11 @@ SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for
         """
         logger.info(f"WorldContinuityAgent: Querying KG regarding potential contradiction around '{entity1}'...")
         facts = []
-        facts.extend(await state_manager.async_query_kg(subject=entity1, chapter_limit=chapter_limit, include_provisional=False))
-        facts.extend(await state_manager.async_query_kg(obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False))
+        facts.extend(await kg_queries.query_kg_from_db(subject=entity1, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
+        facts.extend(await kg_queries.query_kg_from_db(obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
 
         if entity2 and relation:
-            facts.extend(await state_manager.async_query_kg(subject=entity1, predicate=relation, obj_val=entity2, chapter_limit=chapter_limit, include_provisional=False))
+            facts.extend(await kg_queries.query_kg_from_db(subject=entity1, predicate=relation, obj_val=entity2, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
 
         unique_facts_strs = set()
         formatted_facts = []

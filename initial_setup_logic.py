@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import config
 import llm_interface
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
 from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text
 
 logger = logging.getLogger(__name__)

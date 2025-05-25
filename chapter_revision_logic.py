@@ -1,4 +1,3 @@
-      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
@@ -19,6 +18,7 @@ import llm_interface
 import drafting_agent 
 import utils # For numpy_cosine_similarity and find_semantically_closest_segment
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
+# No direct state_manager import needed here
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +215,7 @@ async def _generate_single_patch_instruction_llm(
 
 
     plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
-    protagonist_name = _get_prop_from_agent(plot_outline_data, 'protagonist_name', config.DEFAULT_PROTAGONIST_NAME)
+    protagonist_name = _get_nested_prop_from_agent(agent, 'plot_outline', 'protagonist_name', config.DEFAULT_PROTAGONIST_NAME) # Corrected access
 
     prompt = f"""/no_think
 You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled "{_get_nested_prop_from_agent(agent, 'plot_outline', 'title', 'Untitled Novel')}" about {protagonist_name}.
@@ -472,7 +472,7 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
             continue
         
         # Check for overlapping patches based on the identified target_start_char and target_end_char
-        current_segment_tuple = (target_start_char, target_end_char)
+        # current_segment_tuple = (target_start_char, target_end_char) # Not used directly
         has_overlap = False
         for r_start, r_end, _ in replacements:
             if max(target_start_char, r_start) < min(target_end_char, r_end): # Check for overlap
@@ -664,7 +664,7 @@ async def revise_chapter_draft_logic(
             )
         
         plot_outline_data_full_rewrite = _get_prop_from_agent(agent, 'plot_outline', {})
-        protagonist_name_full_rewrite = _get_prop_from_agent(plot_outline_data_full_rewrite, "protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+        protagonist_name_full_rewrite = _get_nested_prop_from_agent(agent, 'plot_outline', "protagonist_name", config.DEFAULT_PROTAGONIST_NAME) # Corrected access
         
         all_problem_descriptions_str = ""
         if problems_to_fix: # Ensure there are problems to list

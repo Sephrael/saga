@@ -12,7 +12,8 @@ from prompt_data_getters import (
     get_world_state_snippet_for_prompt,
     get_reliable_kg_facts_for_drafting_prompt
 )
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from data_access import chapter_queries # For get_chapter_data_from_db
 from parsing_utils import split_text_into_blocks, parse_key_value_block
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class PlannerAgent:
         scene_blocks_text = split_text_into_blocks(text, separator_regex_str=r'\n\s*---\s*\n')
 
         if not scene_blocks_text or (len(scene_blocks_text) == 1 and "SCENE:" not in scene_blocks_text[0].upper()):
+            # Fallback split if "---" is not used but "SCENE: <number>" is present
             raw_split_by_header = re.split(r'(^\s*SCENE:\s*\d+\s*$)', text.strip(), flags=re.IGNORECASE | re.MULTILINE)
             combined_blocks = []
             current_block_lines = []
@@ -57,15 +59,17 @@ class PlannerAgent:
                 if not part_stripped: continue
                 is_header = re.match(r'^\s*SCENE:\s*\d+\s*$', part_stripped, flags=re.IGNORECASE | re.MULTILINE)
                 if is_header:
-                    if current_block_lines:
+                    if current_block_lines: # Finalize previous block
                         combined_blocks.append("\n".join(current_block_lines))
                         current_block_lines = []
+                    current_block_lines.append(part_stripped) # Start new block with header
+                elif current_block_lines: # If it's not a header, and we have an active block, append to it
                     current_block_lines.append(part_stripped)
-                elif current_block_lines:
-                    current_block_lines.append(part_stripped)
-            if current_block_lines:
+            if current_block_lines: # Append the last block
                 combined_blocks.append("\n".join(current_block_lines))
+            
             scene_blocks_text = [block for block in combined_blocks if block.strip()]
+
 
         if not scene_blocks_text:
             logger.warning(f"No scene blocks found for Ch {chapter_number} after attempting splits.")
@@ -89,24 +93,30 @@ class PlannerAgent:
                     f"Assigning sequential: {len(scenes_data) + 1}. Parsed value: {parsed_scene_dict.get('scene_number')}"
                 )
                 parsed_scene_dict["scene_number"] = len(scenes_data) + 1
+            
             missing_keys = required_keys_internal - set(parsed_scene_dict.keys())
             if missing_keys:
                 logger.warning(f"Partial scene data parsed for Ch {chapter_number}, block {block_num+1}. Missing keys: {missing_keys}. Data: {parsed_scene_dict}")
+                # Populate missing keys with defaults to maintain structure
                 for req_key in required_keys_internal:
                     if req_key not in parsed_scene_dict:
                         if req_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
                             parsed_scene_dict[req_key] = []
-                        elif req_key == "scene_number": pass
+                        elif req_key == "scene_number": pass # Already handled
                         else: parsed_scene_dict[req_key] = "N/A - Missing from LLM output"
+            
+            # Ensure list types are correct even if parser somehow missed it
             for list_key in ["characters_involved", "key_dialogue_points", "scene_focus_elements"]:
                 if not isinstance(parsed_scene_dict.get(list_key), list):
                     logger.warning(f"Scene {parsed_scene_dict.get('scene_number', 'N/A')} in Ch {chapter_number} has non-list for '{list_key}'. Correcting. Value: {parsed_scene_dict.get(list_key)}")
                     parsed_scene_dict[list_key] = [str(parsed_scene_dict.get(list_key))] if parsed_scene_dict.get(list_key) else []
+
             scenes_data.append(parsed_scene_dict)
 
         if not scenes_data:
             logger.error(f"Failed to parse any valid scenes from LLM output for Ch {chapter_number}. Raw text: '{text[:500]}...'")
             return None
+        
         return [scene for scene in scenes_data if isinstance(scene, dict)] # type: ignore
 
     async def plan_chapter_scenes(
@@ -131,7 +141,7 @@ class PlannerAgent:
 
         context_summary = ""
         if chapter_number > 1:
-            prev_chap_data = await state_manager.async_get_chapter_data_from_db(chapter_number - 1)
+            prev_chap_data = await chapter_queries.get_chapter_data_from_db(chapter_number - 1) # MODIFIED
             if prev_chap_data:
                 prev_summary = prev_chap_data.get('summary')
                 prev_is_provisional = prev_chap_data.get('is_provisional', False)
@@ -212,24 +222,28 @@ Output ONLY the scene plan text as described.
                 if not isinstance(scene_dict, dict):
                     logger.warning(f"Parsed scene item {i+1} for ch {chapter_number} is not a dict. Skipping. Item: {scene_dict}")
                     continue
+                # Validate structure more thoroughly
                 required_scene_keys_internal = set(SCENE_PLAN_KEY_MAP.values())
                 if not required_scene_keys_internal.issubset(scene_dict.keys()):
                     missing_k = required_scene_keys_internal - set(scene_dict.keys())
                     logger.warning(f"Scene {i+1} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}")
                     continue
+                
+                # Type check important fields
                 valid_types = (
                     isinstance(scene_dict.get("scene_number"), int) and
                     isinstance(scene_dict.get("summary"), str) and scene_dict.get("summary", "").strip() and
-                    isinstance(scene_dict.get("characters_involved"), list) and
-                    isinstance(scene_dict.get("key_dialogue_points"), list) and
+                    isinstance(scene_dict.get("characters_involved"), list) and # Parser ensures this
+                    isinstance(scene_dict.get("key_dialogue_points"), list) and # Parser ensures this
                     isinstance(scene_dict.get("setting_details"), str) and scene_dict.get("setting_details", "").strip() and
-                    isinstance(scene_dict.get("scene_focus_elements"), list) and
+                    isinstance(scene_dict.get("scene_focus_elements"), list) and # Parser ensures this
                     isinstance(scene_dict.get("contribution"), str) and scene_dict.get("contribution", "").strip()
                 )
                 if not valid_types:
                     logger.warning(f"Scene {i+1} from parser for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_dict}")
                     continue
-                final_scenes_typed.append(scene_dict) # type: ignore [arg-type]
+                
+                final_scenes_typed.append(scene_dict) # type: ignore [arg-type] # After validation, this should be fine
 
             if final_scenes_typed:
                 logger.info(f"Generated valid detailed scene plan for chapter {chapter_number} with {len(final_scenes_typed)} scenes from plain text.")

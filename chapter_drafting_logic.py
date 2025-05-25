@@ -10,7 +10,7 @@ from typing import Tuple, Optional, List
 import config
 import llm_interface 
 from type import SceneDetail
-from state_manager import state_manager
+# No direct state_manager import needed here as orchestrator passes data
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text, 
     get_filtered_world_data_for_prompt_plain_text,       
@@ -138,7 +138,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 --- BEGIN CHAPTER {chapter_number} TEXT ---
 """
     logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-    raw_llm_text = await llm_interface.async_call_llm(
+    raw_llm_text, usage_data = await llm_interface.async_call_llm( # usage_data added here
         model_name=config.DRAFTING_MODEL,
         prompt=prompt,
         temperature=0.6, # Standard temperature for creative generation
@@ -148,14 +148,14 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
     )
     if not raw_llm_text:
         logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
-        return None, None
+        return None, None # No usage data to return if call failed this badly
 
     cleaned_text = llm_interface.clean_model_response(raw_llm_text)
 
     if not cleaned_text or len(cleaned_text) < 50: # Arbitrary threshold for "virtually no content"
         logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
         # Return raw LLM text for debugging purposes if cleaning resulted in empty.
-        return None, raw_llm_text 
+        return None, raw_llm_text # Return usage_data even if text is poor
 
     if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
          logger.warning(
@@ -165,4 +165,5 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
          )
 
     logger.info(f"Generated initial draft for ch {chapter_number} (Length: {len(cleaned_text)} chars).")
+    # Return usage_data along with the text
     return cleaned_text, raw_llm_text

@@ -12,7 +12,8 @@ import copy
 from typing import Dict, List, Optional, Set, Tuple, Any
 
 import config
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from data_access import character_queries, world_queries, kg_queries # MODIFIED
 from type import SceneDetail
 
 logger = logging.getLogger(__name__)
@@ -35,16 +36,14 @@ async def get_character_state_snippet_for_prompt(agent_or_props: Any, current_ch
     """
     Creates a concise plain text string of key character states for prompts,
     fetching data directly from Neo4j.
-    MODIFIED: Uses agent_or_props.
+    MODIFIED: Uses agent_or_props and new data_access functions.
     """
     text_output_lines: List[str] = []
     char_names_to_process: List[str] = []
 
-    # Access plot_outline potentially from a nested dict if agent_or_props is novel_props
     plot_outline_data = _get_prop(agent_or_props, 'plot_outline', _get_prop(agent_or_props, 'plot_outline_full', {}))
     protagonist_name = _get_prop(plot_outline_data, "protagonist_name")
 
-    # Access character_profiles
     character_profiles_data = _get_prop(agent_or_props, 'character_profiles', {})
     all_known_char_names_from_state: List[str] = list(character_profiles_data.keys())
 
@@ -62,7 +61,7 @@ async def get_character_state_snippet_for_prompt(agent_or_props: Any, current_ch
         else config.KG_PREPOPULATION_CHAPTER_NUM
 
     fetch_tasks = [
-        state_manager.get_character_info_for_snippet(name, effective_filter_chapter)
+        character_queries.get_character_info_for_snippet_from_db(name, effective_filter_chapter) # MODIFIED
         for name in char_names_to_process
     ]
 
@@ -77,7 +76,7 @@ async def get_character_state_snippet_for_prompt(agent_or_props: Any, current_ch
 
         if isinstance(res_or_exc, Exception):
             logger.error(f"Error fetching snippet info for character '{char_name_for_snippet}' from Neo4j: {res_or_exc}")
-            profile_fallback = character_profiles_data.get(char_name_for_snippet, {}) # Use fetched character_profiles_data
+            profile_fallback = character_profiles_data.get(char_name_for_snippet, {}) 
             desc_fb = (str(profile_fallback.get("description", "Error fetching description."))[:config.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]).strip() + "..."
             status_fb = str(profile_fallback.get("status", "Unknown (error fetching status)"))
             dev_note_fb = "Error fetching development note."
@@ -92,7 +91,7 @@ async def get_character_state_snippet_for_prompt(agent_or_props: Any, current_ch
             text_output_lines.append(f"  Most Recent Development Note: {dev_note_fb}")
         elif res_or_exc is None:
             logger.warning(f"Neo4j character snippet fetch for '{char_name_for_snippet}' was None. Using local state as fallback.")
-            profile_fallback = character_profiles_data.get(char_name_for_snippet, {}) # Use fetched character_profiles_data
+            profile_fallback = character_profiles_data.get(char_name_for_snippet, {}) 
             desc_fb = (str(profile_fallback.get("description", "N/A"))[:config.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]).strip() + "..."
             status_fb = str(profile_fallback.get("status", "Unknown"))
             dev_note_fb = "N/A"
@@ -123,7 +122,7 @@ async def get_world_state_snippet_for_prompt(agent_or_props: Any, current_chapte
     """
     Creates a concise plain text string of key world states for prompts,
     fetching data directly from Neo4j.
-    MODIFIED: Uses agent_or_props.
+    MODIFIED: Uses agent_or_props and new data_access functions.
     """
     text_output_lines: List[str] = []
     any_provisional_in_world_snippet = False
@@ -144,14 +143,14 @@ async def get_world_state_snippet_for_prompt(agent_or_props: Any, current_chapte
     for category_name, max_items in world_categories_to_fetch.items():
         if max_items > 0:
             fetch_tasks_world.append(
-                state_manager.get_world_elements_for_snippet(category_name, effective_filter_chapter, max_items)
+                world_queries.get_world_elements_for_snippet_from_db(category_name, effective_filter_chapter, max_items) # MODIFIED
             )
             category_names_for_tasks.append(category_name)
 
     if not fetch_tasks_world:
         return "No significant world-building data available or applicable to fetch for snippet."
 
-    world_building_data = _get_prop(agent_or_props, 'world_building', {}) # For fallback
+    world_building_data = _get_prop(agent_or_props, 'world_building', {}) 
     world_info_results = await asyncio.gather(*fetch_tasks_world, return_exceptions=True)
 
     for i, res_or_exc in enumerate(world_info_results):
@@ -162,7 +161,7 @@ async def get_world_state_snippet_for_prompt(agent_or_props: Any, current_chapte
         if isinstance(res_or_exc, Exception):
             logger.error(f"Error fetching snippet info for world category '{category_name_result}' from Neo4j: {res_or_exc}")
             category_items_lines.append("  - Error fetching data.")
-        elif not res_or_exc:
+        elif not res_or_exc: # Empty list from DB query
             logger.warning(f"Neo4j world snippet fetch for '{category_name_result}' empty. Using local state as fallback.")
             category_data_fallback = world_building_data.get(category_name_result, {})
             item_count_fb = 0
@@ -176,7 +175,7 @@ async def get_world_state_snippet_for_prompt(agent_or_props: Any, current_chapte
                 item_count_fb +=1
             if item_count_fb == 0:
                  category_items_lines.append("  - None notable or available (from local state).")
-        else:
+        else: # Results from DB
             items_list = res_or_exc
             category_has_provisional = False
             for item_data in items_list:
@@ -203,7 +202,6 @@ async def get_world_state_snippet_for_prompt(agent_or_props: Any, current_chapte
 
     return "\n".join(text_output_lines).strip() if text_output_lines else "No significant world-building data available or applicable."
 
-# _format_dict_for_plain_text_prompt remains the same internally
 def _format_dict_for_plain_text_prompt(data: Dict[str, Any], indent_level: int = 0, name_override: Optional[str] = None) -> List[str]:
     lines = []
     indent = "  " * indent_level
@@ -221,15 +219,16 @@ def _format_dict_for_plain_text_prompt(data: Dict[str, Any], indent_level: int =
     sorted_keys.extend(sorted(remaining_keys))
     for key in sorted_keys:
         value = data[key]
-        if key.startswith(("source_quality_chapter_", "updated_in_chapter_", "added_in_chapter_", "prompt_notes_skip_this_key", "is_provisional", "is_provisional_hint")):
-            if key == "prompt_notes" and isinstance(value, list) and value:
-                 lines.append(f"{indent}Prompt Notes:")
-                 for note in value:
-                     lines.append(f"{indent}  - {str(note)}")
+        # Skip internal/metadata keys unless it's 'prompt_notes'
+        if key.startswith(("source_quality_chapter_", "updated_in_chapter_", "added_in_chapter_", "is_provisional", "is_provisional_hint")) \
+           and key != "prompt_notes": # Specifically allow prompt_notes
             continue
+        if key == "prompt_notes_skip_this_key": # Another example of a skip key
+            continue
+
         key_str = str(key).replace("_", " ").capitalize()
         if isinstance(value, dict):
-            if value:
+            if value: # Only print header if dict is not empty
                 lines.append(f"{indent}{key_str}:")
                 lines.extend(_format_dict_for_plain_text_prompt(value, indent_level + 1))
         elif isinstance(value, list):
@@ -238,16 +237,15 @@ def _format_dict_for_plain_text_prompt(data: Dict[str, Any], indent_level: int =
             else:
                 lines.append(f"{indent}{key_str}:")
                 try: display_items = sorted([str(x) for x in value])
-                except TypeError: display_items = value
+                except TypeError: display_items = [str(x) for x in value] # Fallback if not sortable
                 for item in display_items:
-                    if isinstance(item, dict):
+                    if isinstance(item, dict): # Handle list of dicts
                          lines.extend(_format_dict_for_plain_text_prompt(item, indent_level + 2, name_override="- Item"))
                     else: lines.append(f"{indent}  - {str(item)}")
-        elif value is not None and str(value).strip():
+        elif value is not None and str(value).strip(): # Ensure value is not just whitespace
              lines.append(f"{indent}{key_str}: {str(value)}")
     return lines
 
-# _add_provisional_notes_and_filter_developments remains the same internally
 def _add_provisional_notes_and_filter_developments(
     item_data_original: Dict[str, Any],
     up_to_chapter_inclusive: Optional[int],
@@ -256,33 +254,50 @@ def _add_provisional_notes_and_filter_developments(
     item_data = copy.deepcopy(item_data_original)
     prompt_notes_list = []
     effective_filter_chapter = config.KG_PREPOPULATION_CHAPTER_NUM if up_to_chapter_inclusive == 0 else up_to_chapter_inclusive
+    
     dev_elaboration_prefix = "development_in_chapter_" if is_character else "elaboration_in_chapter_"
+    added_prefix = "added_in_chapter_"
+    
     keys_to_remove = []
     has_provisional_data_relevant_to_filter = False
-    for key in list(item_data.keys()):
-        if key.startswith(dev_elaboration_prefix):
+
+    for key in list(item_data.keys()): # Iterate over copy of keys for safe removal
+        # Filter future development/elaboration/added keys
+        if key.startswith((dev_elaboration_prefix, added_prefix)):
             try:
-                chap_num_of_dev = int(key.split("_")[-1])
-                if effective_filter_chapter is not None and chap_num_of_dev > effective_filter_chapter:
+                chap_num_of_key = int(key.split("_")[-1])
+                if effective_filter_chapter is not None and chap_num_of_key > effective_filter_chapter:
                     keys_to_remove.append(key)
-            except ValueError: logger.warning(f"Could not parse chapter from key '{key}' during filtering.")
+            except ValueError:
+                logger.warning(f"Could not parse chapter from key '{key}' during filtering.")
+        
+        # Check for provisional data source notes
         if key.startswith("source_quality_chapter_"):
             try:
                 chap_num_of_source = int(key.split("_")[-1])
+                # Only consider provisional notes relevant up to the filter chapter
                 if (effective_filter_chapter is None or chap_num_of_source <= effective_filter_chapter) and \
                    item_data[key] == "provisional_from_unrevised_draft":
                     has_provisional_data_relevant_to_filter = True
                     note = f"Data from Chapter {chap_num_of_source} may be provisional (from unrevised draft)."
-                    if note not in prompt_notes_list: prompt_notes_list.append(note)
-            except ValueError: logger.warning(f"Could not parse chapter from source_quality key '{key}'.")
-    for k_rem in keys_to_remove: item_data.pop(k_rem, None)
-    if has_provisional_data_relevant_to_filter: item_data["is_provisional_hint"] = True
-    if prompt_notes_list: item_data["prompt_notes"] = prompt_notes_list
+                    if note not in prompt_notes_list:
+                        prompt_notes_list.append(note)
+            except ValueError:
+                logger.warning(f"Could not parse chapter from source_quality key '{key}'.")
+
+    for k_rem in keys_to_remove:
+        item_data.pop(k_rem, None)
+    
+    if has_provisional_data_relevant_to_filter:
+        item_data["is_provisional_hint"] = True # Internal hint for formatting
+        
+    if prompt_notes_list:
+        item_data["prompt_notes"] = prompt_notes_list # This will be formatted by _format_dict_for_plain_text_prompt
+        
     return item_data
 
 
 async def _get_character_profiles_dict_with_notes(agent_or_props: Any, up_to_chapter_inclusive: Optional[int]) -> Dict[str, Any]:
-    """ MODIFIED: Uses agent_or_props. """
     logger.debug(f"Internal: Getting character profiles dict with notes up to chapter {up_to_chapter_inclusive}.")
     processed_profiles: Dict[str, Any] = {}
     filter_chapter = config.KG_PREPOPULATION_CHAPTER_NUM if up_to_chapter_inclusive == 0 else up_to_chapter_inclusive
@@ -301,7 +316,6 @@ async def _get_character_profiles_dict_with_notes(agent_or_props: Any, up_to_cha
     return processed_profiles
 
 async def get_filtered_character_profiles_for_prompt_plain_text(agent_or_props: Any, up_to_chapter_inclusive: Optional[int] = None) -> str:
-    """ MODIFIED: Uses agent_or_props. """
     logger.info(f"Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter {up_to_chapter_inclusive}.")
     profiles_dict_with_notes = await _get_character_profiles_dict_with_notes(agent_or_props, up_to_chapter_inclusive)
     if not profiles_dict_with_notes: return "No character profiles available."
@@ -316,7 +330,6 @@ async def get_filtered_character_profiles_for_prompt_plain_text(agent_or_props: 
 
 
 async def _get_world_data_dict_with_notes(agent_or_props: Any, up_to_chapter_inclusive: Optional[int]) -> Dict[str, Any]:
-    """ MODIFIED: Uses agent_or_props. """
     logger.debug(f"Internal: Getting world data dict with notes up to chapter {up_to_chapter_inclusive}.")
     processed_world_data: Dict[str, Any] = {}
     filter_chapter = config.KG_PREPOPULATION_CHAPTER_NUM if up_to_chapter_inclusive == 0 else up_to_chapter_inclusive
@@ -328,17 +341,18 @@ async def _get_world_data_dict_with_notes(agent_or_props: Any, up_to_chapter_inc
     for category_name, category_items_original in world_building_data.items():
         if not isinstance(category_items_original, dict) and category_name not in ["is_default", "source", "user_supplied_data"]:
             logger.warning(f"World category '{category_name}' content is not a dict (type: {type(category_items_original)}). Skipping formatting.")
-            processed_world_data[category_name] = {}
+            processed_world_data[category_name] = {} # Ensure key exists but empty
             continue
         if category_name in ["is_default", "source", "user_supplied_data"]:
-             processed_world_data[category_name] = category_items_original
+             processed_world_data[category_name] = category_items_original # Copy metadata as is
              continue
+        
         processed_category: Dict[str, Any] = {}
-        if category_name == "_overview_":
+        if category_name == "_overview_": # Overview is a single dict of details
              processed_category = _add_provisional_notes_and_filter_developments(
                 category_items_original, filter_chapter, is_character=False
             )
-        else:
+        else: # Other categories contain item_name: item_details pairs
             for item_name, item_data_original in category_items_original.items():
                 if not isinstance(item_data_original, dict):
                     logger.warning(f"World item '{item_name}' in category '{category_name}' is not a dict. Skipping.")
@@ -350,52 +364,67 @@ async def _get_world_data_dict_with_notes(agent_or_props: Any, up_to_chapter_inc
     return processed_world_data
 
 async def get_filtered_world_data_for_prompt_plain_text(agent_or_props: Any, up_to_chapter_inclusive: Optional[int] = None) -> str:
-    """ MODIFIED: Uses agent_or_props. """
     logger.info(f"Fetching and formatting filtered world data as PLAIN TEXT up to chapter {up_to_chapter_inclusive}.")
     world_data_dict_with_notes = await _get_world_data_dict_with_notes(agent_or_props, up_to_chapter_inclusive)
     if not world_data_dict_with_notes: return "No world-building data available."
+    
     output_lines = []
     overview_data = world_data_dict_with_notes.get("_overview_")
-    if overview_data and isinstance(overview_data, dict) and overview_data.get("description"):
+    if overview_data and isinstance(overview_data, dict) and overview_data.get("description"): # Check if overview has content
         output_lines.append("World-Building Overview:")
         output_lines.extend(_format_dict_for_plain_text_prompt(overview_data, indent_level=1))
-        output_lines.append("")
+        output_lines.append("") # Add a blank line after overview
+    
     sorted_categories = sorted([cat for cat in world_data_dict_with_notes.keys() if cat not in ["_overview_", "is_default", "source", "user_supplied_data"]])
+    
     for category_name in sorted_categories:
         category_items = world_data_dict_with_notes[category_name]
-        if not isinstance(category_items, dict) or not category_items: continue
-        output_lines.append(f"{category_name.replace('_', ' ').capitalize()}:")
+        if not isinstance(category_items, dict) or not category_items: continue # Skip empty categories
+        
+        category_header_added = False
         for item_name in sorted(category_items.keys()):
             item_data = category_items[item_name]
-            if not isinstance(item_data, dict) or not item_data: continue
+            if not isinstance(item_data, dict) or not item_data: continue # Skip empty items
+
+            if not category_header_added: # Add category header only if there's content
+                output_lines.append(f"{category_name.replace('_', ' ').capitalize()}:")
+                category_header_added = True
+
             item_lines = _format_dict_for_plain_text_prompt(item_data, indent_level=1, name_override=item_name)
             output_lines.extend(item_lines)
-            if item_lines: output_lines.append("")
-        if output_lines and output_lines[-1] == "": output_lines.pop()
-        if output_lines and output_lines[-1].startswith(f"{category_name.replace('_', ' ').capitalize()}:") and \
-           (len(output_lines) == 1 or output_lines[-2] == ""):
-            output_lines.pop()
-        else: output_lines.append("")
+            if item_lines: output_lines.append("") # Blank line after each item's details
+        
+        # Clean up trailing blank line if it was the last thing added for this category
+        if output_lines and output_lines[-1] == "" and category_header_added:
+             pass # Keep the blank line to separate categories
+        elif category_header_added: # If header was added but no items, or no blank line after last item
+            output_lines.append("") # Ensure a blank line after a non-empty category
+
     if not output_lines: return "No significant world-building data available after filtering."
     return "\n".join(output_lines).strip()
 
 
 async def heuristic_entity_spotter_for_kg(agent_or_props: Any, text_snippet: str) -> List[str]:
-    """ MODIFIED: Uses agent_or_props. """
     character_profiles_data = _get_prop(agent_or_props, 'character_profiles', {})
     world_building_data = _get_prop(agent_or_props, 'world_building', {})
 
-    entities = set(character_profiles_data.keys())
+    entities = set(character_profiles_data.keys()) # Start with known character names
+    
+    # Regex for capitalized words/phrases (potential proper nouns)
     for match in re.finditer(r'\b([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){0,2})\b', text_snippet):
         entities.add(match.group(1).strip())
+        
+    # Add known world-building item names
     for category, items in world_building_data.items():
         if isinstance(items, dict) and category not in ["_overview_", "is_default", "source", "user_supplied_data"]:
             for item_name in items.keys():
-                if isinstance(item_name, str) and item_name.strip():
+                if isinstance(item_name, str) and item_name.strip(): # Ensure item_name is a valid string
                      entities.add(item_name.strip())
+
     common_false_positives = {"The", "A", "An", "Is", "It", "He", "She", "They", "Chapter", "Section", "I", "We", "You"}
+    # Filter out common words and very short strings, unless they are known entities
     return sorted([e for e in list(entities)
-                   if (len(e) > 2 or e in character_profiles_data or e in world_building_data) and e not in common_false_positives])
+                   if (len(e) > 2 or e in character_profiles_data or e in world_building_data.get(e, {})) and e not in common_false_positives])
 
 
 async def get_reliable_kg_facts_for_drafting_prompt(
@@ -405,8 +434,8 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     max_facts_per_char: int = 2,
     max_total_facts: int = 7
 ) -> str:
-    """ MODIFIED: Uses agent_or_props. """
     if chapter_number <= 0: return "No KG facts applicable for pre-first chapter."
+    
     kg_chapter_limit = max(config.KG_PREPOPULATION_CHAPTER_NUM, chapter_number - 1)
     facts_for_prompt: List[str] = []
 
@@ -416,13 +445,17 @@ async def get_reliable_kg_facts_for_drafting_prompt(
 
     novel_id = config.MAIN_NOVEL_INFO_NODE_ID
     characters_of_interest: Set[str] = {protagonist_name} if protagonist_name else set()
+
     if chapter_plan and isinstance(chapter_plan, list):
         for scene_detail in chapter_plan:
             if isinstance(scene_detail, dict) and "characters_involved" in scene_detail and isinstance(scene_detail["characters_involved"], list):
                 for char_name_in_plan in scene_detail["characters_involved"]:
                     if isinstance(char_name_in_plan, str) and char_name_in_plan.strip():
                         characters_of_interest.add(char_name_in_plan.strip())
+    
     logger.debug(f"KG fact gathering for Ch {chapter_number} draft: Chars of interest: {characters_of_interest}, KG chapter limit: {kg_chapter_limit}")
+
+    # Novel-level context
     novel_context_queries_params = [
         (f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.theme AS value, 'The novel\\'s theme' AS description", {"novel_id_param": novel_id}, "theme"),
         (f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.conflict_summary AS value, 'The main conflict' AS description", {"novel_id_param": novel_id}, "conflict_summary")
@@ -430,40 +463,58 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     for query, params, desc_key in novel_context_queries_params:
         if len(facts_for_prompt) >= max_total_facts: break
         try:
-            res = await state_manager._execute_read_query(query, params)
-            if res and res[0] and res[0].get('value'):
-                facts_for_prompt.append(f"- {res[0]['description']} is: {res[0]['value']}.")
+            res = await kg_queries.query_kg_from_db(subject=novel_id, predicate=desc_key) # Simplified query
+            if res and res[0] and res[0].get('object'): # Assuming query_kg returns object
+                facts_for_prompt.append(f"- {res[0]['description']} is: {res[0]['object']}.")
         except Exception as e: logger.warning(f"KG Query for novel context '{desc_key}' failed: {e}")
-    for char_name in list(characters_of_interest)[:3]:
+
+    # Character-specific facts
+    for char_name in list(characters_of_interest)[:3]: # Limit characters to process for brevity
         if len(facts_for_prompt) >= max_total_facts: break
         facts_for_this_char = 0
+
+        # Get status directly from Character node property
         char_node_status_query = "MATCH (c:Character:Entity {name: $char_name_param}) WHERE (c.is_provisional IS NULL OR c.is_provisional = FALSE) RETURN c.status AS status_value LIMIT 1"
         try:
-            status_res = await state_manager._execute_read_query(char_node_status_query, {"char_name_param": char_name})
-            if status_res and status_res[0] and status_res[0].get('status_value') and facts_for_this_char < max_facts_per_char:
-                facts_for_prompt.append(f"- {char_name}'s status is: {status_res[0]['status_value']}.")
+            status_res = await kg_queries.query_kg_from_db(subject=char_name, predicate="has_status") # Example predicate
+            if status_res and status_res[0] and status_res[0].get('object') and facts_for_this_char < max_facts_per_char:
+                facts_for_prompt.append(f"- {char_name}'s status is: {status_res[0]['object']}.")
                 facts_for_this_char += 1
         except Exception as e: logger.warning(f"KG Query for '{char_name}' status from node property failed: {e}")
+
+        # Get status from DYNAMIC_REL if node property fails or to augment
         if facts_for_this_char < max_facts_per_char and len(facts_for_prompt) < max_total_facts:
-            status_val_kg = await state_manager.async_get_most_recent_value(char_name, "status_is", kg_chapter_limit, include_provisional=False)
+            status_val_kg = await kg_queries.get_most_recent_value_from_db(char_name, "status_is", kg_chapter_limit, include_provisional=False)
             if status_val_kg:
-                facts_for_prompt.append(f"- {char_name}'s status (from KG) is: {status_val_kg}.")
+                facts_for_prompt.append(f"- {char_name}'s status (from KG relation) is: {status_val_kg}.")
                 facts_for_this_char += 1
+        
+        # Get location
         if facts_for_this_char < max_facts_per_char and len(facts_for_prompt) < max_total_facts:
-            loc_val = await state_manager.async_get_most_recent_value(char_name, "located_in", kg_chapter_limit, include_provisional=False)
+            loc_val = await kg_queries.get_most_recent_value_from_db(char_name, "located_in", kg_chapter_limit, include_provisional=False)
             if loc_val:
                 facts_for_prompt.append(f"- {char_name} is located in: {loc_val}.")
                 facts_for_this_char += 1
+        
+        # Get a key relationship
         if facts_for_this_char < max_facts_per_char and len(facts_for_prompt) < max_total_facts:
-            rel_query = "MATCH (c1:Character:Entity {name: $char_name_param})-[r:DYNAMIC_REL]->(c2:Character:Entity) WHERE r.chapter_added <= $chapter_limit_param AND r.is_provisional = FALSE AND r.type IN ['ally_of', 'enemy_of', 'mentor_of', 'protege_of'] RETURN c2.name AS related_char_name, r.type AS rel_type ORDER BY r.chapter_added DESC, r.confidence DESC LIMIT 1"
-            try:
-                rel_res = await state_manager._execute_read_query(rel_query, {"char_name_param": char_name, "chapter_limit_param": kg_chapter_limit})
-                if rel_res and rel_res[0] and rel_res[0].get('related_char_name'):
-                    rel_type_display = rel_res[0]['rel_type'].replace('_', ' ')
-                    facts_for_prompt.append(f"- {char_name} has a key relationship ({rel_type_display}) with: {rel_res[0]['related_char_name']}.")
+            rel_query_results = await kg_queries.query_kg_from_db(
+                subject=char_name, 
+                chapter_limit=kg_chapter_limit, 
+                include_provisional=False, 
+                limit_results=1 # Get one most recent, non-provisional relation
+            )
+            # Filter for specific interesting relationship types client-side if needed
+            interesting_rel_types = ['ally_of', 'enemy_of', 'mentor_of', 'protege_of', 'related_to']
+            for rel_res in rel_query_results:
+                if rel_res.get('predicate') in interesting_rel_types:
+                    rel_type_display = rel_res['predicate'].replace('_', ' ')
+                    facts_for_prompt.append(f"- {char_name} has a key relationship ({rel_type_display}) with: {rel_res.get('object')}.")
                     facts_for_this_char +=1
-            except Exception as e: logger.warning(f"KG Query for '{char_name}' key relationship failed: {e}")
+                    break # Take only one key relationship per character for this snippet
+            
     if not facts_for_prompt:
         return "No specific reliable KG facts identified as highly relevant for this chapter's current focus from Neo4j."
+    
     unique_facts = sorted(list(set(facts_for_prompt)))
     return "**Key Reliable KG Facts (from Neo4j - up to previous chapter/initial state):**\n" + "\n".join(unique_facts[:max_total_facts])

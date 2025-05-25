@@ -1,0 +1,137 @@
+# data_access/kg_queries.py
+import logging
+from typing import Optional, List, Dict, Any
+import config
+from core_db.base_db_manager import neo4j_manager
+
+logger = logging.getLogger(__name__)
+
+async def add_kg_triple_to_db(
+    subject: str,
+    predicate: str,
+    obj_val: str,
+    chapter_added: int,
+    confidence: float = 1.0,
+    is_provisional: bool = False
+):
+    subj_s, pred_s, obj_s = subject.strip(), predicate.strip(), obj_val.strip()
+    if not all([subj_s, pred_s, obj_s]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM:
+        logger.warning(f"Neo4j: Invalid KG triple for add: S='{subj_s}', P='{pred_s}', O='{obj_s}', Chap={chapter_added}")
+        return
+
+    query = """
+    MERGE (s:Entity {name: $subject_param})
+    MERGE (o:Entity {name: $object_param})
+    // Use a more robust MERGE for the relationship to handle updates correctly
+    // This approach tries to find an existing relationship and update it, or creates a new one.
+    // It avoids creating duplicate relationships if the combination of S-P-O for a chapter already exists.
+    WITH s, o, $predicate_param AS pred_param, $chapter_added_param AS chap_param, 
+         $is_provisional_param AS prov_param, $confidence_param AS conf_param
+         
+    OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: pred_param}]->(o)
+    WHERE existing_r.chapter_added = chap_param // Match existing relationship for this specific chapter addition
+    
+    FOREACH (r_to_update IN CASE WHEN existing_r IS NOT NULL THEN [existing_r] ELSE [] END |
+      SET r_to_update.is_provisional = prov_param,
+          r_to_update.confidence = conf_param,
+          r_to_update.last_updated = timestamp()
+    )
+    FOREACH (ignoreMe IN CASE WHEN existing_r IS NULL THEN [1] ELSE [] END |
+      CREATE (s)-[new_r:DYNAMIC_REL {
+        type: pred_param,
+        chapter_added: chap_param,
+        is_provisional: prov_param,
+        confidence: conf_param,
+        created_at: timestamp(),
+        last_updated: timestamp()
+      }]->(o)
+    )
+    """
+    parameters = {
+        "subject_param": subj_s,
+        "predicate_param": pred_s,
+        "object_param": obj_s,
+        "chapter_added_param": chapter_added,
+        "confidence_param": confidence,
+        "is_provisional_param": is_provisional
+    }
+    try:
+        await neo4j_manager.execute_write_query(query, parameters)
+        logger.debug(f"Neo4j: Added/Updated KG triple for Ch {chapter_added}: ({subj_s}, {pred_s}, {obj_s}). Prov: {is_provisional}, Conf: {confidence}")
+    except Exception as e:
+        logger.error(f"Neo4j: Error adding KG triple: ({subj_s}, {pred_s}, {obj_s}). Error: {e}", exc_info=True)
+
+async def query_kg_from_db(
+    subject: Optional[str] = None,
+    predicate: Optional[str] = None,
+    obj_val: Optional[str] = None,
+    chapter_limit: Optional[int] = None,
+    include_provisional: bool = True,
+    limit_results: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    conditions = []
+    parameters: Dict[str, Any] = {} # Explicitly type parameters
+    match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)"
+
+    if subject is not None:
+        conditions.append("s.name = $subject_param")
+        parameters["subject_param"] = subject.strip()
+    if predicate is not None:
+        conditions.append("r.type = $predicate_param")
+        parameters["predicate_param"] = predicate.strip()
+    if obj_val is not None:
+        conditions.append("o.name = $object_param")
+        parameters["object_param"] = obj_val.strip()
+    if chapter_limit is not None:
+        conditions.append("r.chapter_added <= $chapter_limit_param")
+        parameters["chapter_limit_param"] = chapter_limit
+    if not include_provisional:
+        conditions.append("r.is_provisional = FALSE")
+
+    where_clause = ""
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
+
+    return_clause = """
+    RETURN s.name AS subject, r.type AS predicate, o.name AS object,
+           r.chapter_added AS chapter_added, r.confidence AS confidence, r.is_provisional AS is_provisional
+    """
+    order_clause = " ORDER BY r.chapter_added DESC, r.confidence DESC"
+    limit_clause_str = "" # Renamed to avoid conflict
+    if limit_results is not None and limit_results > 0:
+        limit_clause_str = f" LIMIT {int(limit_results)}"
+    
+    full_query = match_clause + where_clause + return_clause + order_clause + limit_clause_str
+    try:
+        results = await neo4j_manager.execute_read_query(full_query, parameters)
+        triples_list: List[Dict[str, Any]] = [dict(record) for record in results] if results else []
+        logger.debug(f"Neo4j: KG query returned {len(triples_list)} results for query: {full_query} with params {parameters}")
+        return triples_list
+    except Exception as e:
+        logger.error(f"Neo4j: Error querying KG. Query: {full_query}, Params: {parameters}, Error: {e}", exc_info=True)
+        return []
+
+async def get_most_recent_value_from_db(
+    subject: str,
+    predicate: str,
+    chapter_limit: Optional[int] = None,
+    include_provisional: bool = False
+) -> Optional[str]:
+    if not subject.strip() or not predicate.strip():
+        logger.warning(f"Neo4j: get_most_recent_value_from_db: empty subject or predicate. S='{subject}', P='{predicate}'")
+        return None
+
+    results = await query_kg_from_db(
+        subject=subject,
+        predicate=predicate,
+        chapter_limit=chapter_limit,
+        include_provisional=include_provisional,
+        limit_results=1
+    )
+    if results and results[0] and 'object' in results[0]:
+        value = str(results[0]["object"])
+        logger.debug(f"Neo4j: Found most recent value for ('{subject}', '{predicate}'): '{value}' from Ch {results[0].get('chapter_added','N/A')}")
+        return value
+    
+    logger.debug(f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, provisional={include_provisional}")
+    return None

@@ -64,7 +64,7 @@ class DraftingAgent:
 
     async def draft_chapter(
         self,
-        novel_props: Dict[str, Any], # Contains plot_outline, character_profiles, world_building
+        agent_or_props: Any, # Changed from novel_props to agent_or_props
         chapter_number: int,
         plot_point_focus: Optional[str],
         hybrid_context: str,
@@ -73,6 +73,7 @@ class DraftingAgent:
         """
         Generates the initial draft text for a chapter.
         Returns the draft, raw LLM output, and LLM usage data.
+        'agent_or_props' can be the NANA_Orchestrator instance or a novel_props dictionary.
         """
         if not plot_point_focus:
             plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
@@ -89,16 +90,27 @@ class DraftingAgent:
         else:
             plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
 
-        char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
-        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
+        # Use agent_or_props for these getters
+        char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(agent_or_props, chapter_number - 1)
+        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(agent_or_props, chapter_number - 1)
+
+        # Accessing plot_outline attributes from 'agent_or_props'
+        if hasattr(agent_or_props, 'plot_outline'): # If it's the orchestrator instance
+            plot_outline_data = agent_or_props.plot_outline
+        elif isinstance(agent_or_props, dict): # If it's novel_props_cache
+            plot_outline_data = agent_or_props.get('plot_outline_full', agent_or_props.get('plot_outline', {}))
+        else:
+            plot_outline_data = {} # Fallback
+            logger.warning("Could not determine plot_outline_data source in DraftingAgent.")
+
 
         prompt = f"""/no_think
-You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{novel_props.get('title', 'Untitled Novel')}".
+You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{plot_outline_data.get('title', 'Untitled Novel')}".
 **Story Bible / Core Information:**
-  - Genre: {novel_props.get('genre', 'N/A')}
-  - Central Theme: {novel_props.get('theme', 'N/A')}
-  - Protagonist: {novel_props.get('protagonist_name', 'N/A')}
-  - Protagonist's Character Arc: {novel_props.get('character_arc', 'N/A')}
+  - Genre: {plot_outline_data.get('genre', 'N/A')}
+  - Central Theme: {plot_outline_data.get('theme', 'N/A')}
+  - Protagonist: {plot_outline_data.get('protagonist_name', 'N/A')}
+  - Protagonist's Character Arc: {plot_outline_data.get('character_arc', 'N/A')}
 
 {plan_section_for_prompt}
 
@@ -122,7 +134,7 @@ You are an expert novelist tasked with writing Chapter {chapter_number} of the n
 4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).
    - **Crucially, the `KEY RELIABLE KG FACTS` section within the `HYBRID CONTEXT` provides established canon that MUST be respected.**
    - The `SEMANTIC CONTEXT` section within the `HYBRID CONTEXT` should guide narrative flow, tone, and recall of recent events.
-5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{novel_props.get('genre', 'story')}'.
+5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{plot_outline_data.get('genre', 'story')}'.
 6. **Employ 'showing' over 'telling':** Use vivid descriptions, sensory details, character actions, internal monologues, and nuanced dialogue to convey information, atmosphere, and emotions.
 7. **Fully develop dialogue exchanges:** Allow characters to express themselves naturally, incorporating pauses, subtext, emotional reactions, and non-verbal cues. Don't shy away from longer conversations if they serve character or plot.
 8. **Thoroughly explore the protagonist's (and other key characters') thoughts, feelings, and internal reactions** to the unfolding events and interactions. Dedicate space to their internal processing.

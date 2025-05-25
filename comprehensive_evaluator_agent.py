@@ -7,7 +7,8 @@ import config
 import llm_interface
 import utils
 from type import EvaluationResult, ProblemDetail
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from data_access import chapter_queries # For get_embedding_from_db
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
@@ -277,7 +278,7 @@ If NO problems are found for a category or overall, output ONLY the phrase: "No 
 
         current_embedding_task = llm_interface.async_get_embedding(draft_text)
         if chapter_number > 1:
-            prev_embedding = await state_manager.async_get_embedding_from_db(chapter_number - 1)
+            prev_embedding = await chapter_queries.get_embedding_from_db(chapter_number - 1) # MODIFIED
             current_embedding = await current_embedding_task 
             if current_embedding is not None and prev_embedding is not None:
                 coherence_score = utils.numpy_cosine_similarity(current_embedding, prev_embedding)

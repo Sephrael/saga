@@ -8,7 +8,9 @@ from async_lru import alru_cache
 
 import config
 import llm_interface
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from core_db.base_db_manager import neo4j_manager # For execute_cypher_batch
+from data_access import kg_queries # For add_kg_triple_to_db
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     heuristic_entity_spotter_for_kg,
@@ -266,24 +268,26 @@ def _robust_merge_world_item_data_logic_internal(
         if isinstance(value_from_update, dict): 
             if not isinstance(current_value_in_target, dict):
                 current_item_data[key] = {} 
-                current_value_in_target = current_item_data[key]
-                item_was_modified_this_call = True
-            merged_sub_dict = _robust_merge_world_item_data_logic_internal(
-                current_value_in_target, value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source=False 
+                current_value_in_target = current_item_data[key] # This now points to the new empty dict
+                item_was_modified_this_call = True # Marked as modified because a new sub-dict was created
+            # Recursive call for nested dicts - ensure correct provisional flag propagation
+            _robust_merge_world_item_data_logic_internal( # Modifies current_value_in_target (which is current_item_data[key]) in-place
+                current_value_in_target, value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source
             )
-            if merged_sub_dict != current_value_in_target or any(k not in current_value_in_target for k in merged_sub_dict): 
-                 item_was_modified_this_call = True
+            # Simplified: assume modification if sub-dict was processed. A more precise check would compare before/after.
+            item_was_modified_this_call = True
 
         elif isinstance(value_from_update, list): 
             if not isinstance(current_value_in_target, list):
                 current_item_data[key] = [] 
+                current_value_in_target = current_item_data[key] # Update reference
                 item_was_modified_this_call = True
             
-            initial_list_len = len(current_item_data[key])
+            initial_list_len = len(current_value_in_target)
             for item_in_list_update in value_from_update:
-                if item_in_list_update not in current_item_data[key]: 
-                    current_item_data[key].append(item_in_list_update)
-            if len(current_item_data[key]) > initial_list_len : item_was_modified_this_call = True
+                if item_in_list_update not in current_value_in_target: 
+                    current_value_in_target.append(item_in_list_update)
+            if len(current_value_in_target) > initial_list_len : item_was_modified_this_call = True
         
         elif value_from_update != current_value_in_target: 
             current_item_data[key] = value_from_update
@@ -325,16 +329,17 @@ def _merge_world_item_updates_into_state_internal(
 
         if category_key == "_overview_":
             item_log_name = "_overview_"
-            existing_item_data = target_category_dict 
-            if not existing_item_data: 
-                 world_building_dict_to_update[category_key] = {}
+            existing_item_data = target_category_dict # For _overview_, target_category_dict is the item itself
+            if not existing_item_data: # If target_category_dict was {} (e.g. first time for overview)
+                 world_building_dict_to_update[category_key] = {} # Ensure it's a dict
                  existing_item_data = world_building_dict_to_update[category_key]
 
-            merged_item_data = _robust_merge_world_item_data_logic_internal(
+            _robust_merge_world_item_data_logic_internal( # Modifies existing_item_data in-place
                  existing_item_data, category_updates_dict, item_log_name, chapter_number, from_flawed_draft
             )
-            if merged_item_data.get(f"updated_in_chapter_{chapter_number}") or \
-               (from_flawed_draft and merged_item_data.get(f"source_quality_chapter_{chapter_number}")):
+            # Check if it was marked as updated by the merge logic
+            if existing_item_data.get(f"updated_in_chapter_{chapter_number}") or \
+               (from_flawed_draft and existing_item_data.get(f"source_quality_chapter_{chapter_number}")):
                 items_affected_count +=1
             continue
 
@@ -348,17 +353,18 @@ def _merge_world_item_updates_into_state_internal(
             existing_item_data = target_category_dict.get(item_name)
 
             if existing_item_data is None: 
-                target_category_dict[item_name] = {} 
+                target_category_dict[item_name] = {} # Create new item entry
                 existing_item_data = target_category_dict[item_name]
-                existing_item_data[f"added_in_chapter_{chapter_number}"] = True
-                items_affected_count +=1 
+                existing_item_data[f"added_in_chapter_{chapter_number}"] = True # Mark as added
+                items_affected_count +=1 # Count as affected because it's new
             
-            merged_item_data = _robust_merge_world_item_data_logic_internal(
+            _robust_merge_world_item_data_logic_internal( # Modifies existing_item_data in-place
                 existing_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft
             )
-            if merged_item_data.get(f"updated_in_chapter_{chapter_number}") or \
-               (from_flawed_draft and merged_item_data.get(f"source_quality_chapter_{chapter_number}")):
-                if not existing_item_data.get(f"added_in_chapter_{chapter_number}"): 
+            # Check if it was marked as updated and wasn't just added in this call
+            if existing_item_data.get(f"updated_in_chapter_{chapter_number}") or \
+               (from_flawed_draft and existing_item_data.get(f"source_quality_chapter_{chapter_number}")):
+                if not existing_item_data.get(f"added_in_chapter_{chapter_number}"): # Don't double-count if it was just added
                      items_affected_count += 1
     
     if items_affected_count > 0:
@@ -478,7 +484,7 @@ async def _prepopulate_kg_from_dicts_internal(
     
     if cypher_statements:
         try:
-            await state_manager.execute_cypher_batch(cypher_statements)
+            await neo4j_manager.execute_cypher_batch(cypher_statements) # MODIFIED
             logger.info(f"KG pre-population complete: Executed {len(cypher_statements)} Cypher statements directly from initial data.")
         except Exception as e: logger.error(f"Error during direct KG pre-population batch execution: {e}", exc_info=True)
     else: logger.info("No Cypher statements generated for KG pre-population from initial data.")
@@ -781,7 +787,7 @@ Begin your output now:
                         obj_truncated = obj_val[:500] + "..." if len(obj_val) > 503 else obj_val
                         
                         kg_add_tasks.append(
-                            state_manager.async_add_kg_triple(subj, pred, obj_truncated, chapter_number, is_provisional=is_from_flawed_draft)
+                            kg_queries.add_kg_triple_to_db(subj, pred, obj_truncated, chapter_number, is_provisional=is_from_flawed_draft) # MODIFIED
                         )
                         added_count += 1
                     else:

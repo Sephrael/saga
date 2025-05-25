@@ -9,7 +9,15 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import config
 import llm_interface
-from state_manager import state_manager
+# from state_manager import state_manager # No longer used directly
+from core_db.base_db_manager import neo4j_manager # Use the new manager
+from data_access import ( # Import specific query functions
+    plot_queries,
+    character_queries,
+    world_queries,
+    chapter_queries,
+    kg_queries
+)
 from type import EvaluationResult, SceneDetail, ProblemDetail, AgentStateData
 
 # Import Agent classes
@@ -31,7 +39,7 @@ try:
     from rich.text import Text
     from rich.console import Group
     from rich.table import Table
-    from rich.logging import RichHandler # MODIFIED: Import RichHandler
+    from rich.logging import RichHandler 
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -48,7 +56,7 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
     class Panel: 
         def __init__(self, *args, **kwargs): pass
-    class RichHandler: # Dummy for when Rich is not available
+    class RichHandler: 
         def __init__(self, *args, **kwargs): pass
 
 
@@ -95,8 +103,8 @@ class NANA_Orchestrator:
                 Panel(self.rich_status_group, title="SAGA NANA Progress", border_style="blue", expand=True), 
                 refresh_per_second=config.RICH_REFRESH_PER_SECOND,
                 transient=False,
-                redirect_stdout=True, # Explicitly set, though default
-                redirect_stderr=True  # Explicitly set, though default
+                redirect_stdout=True, 
+                redirect_stderr=True 
             )
         else:
             logger.info("Rich library not available or ENABLE_RICH_PROGRESS is False. Progress will be shown via standard logs.")
@@ -117,16 +125,12 @@ class NANA_Orchestrator:
         
         elapsed_seconds = time.time() - self.run_start_time
         self.status_text_elapsed_time.plain = f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}"
-        # Rich Live automatically refreshes; explicit update call is not strictly needed here
-        # if self.rich_live.is_started: # Check if live is started before trying to update directly (optional)
-        #    self.rich_live.update(Panel(self.rich_status_group, title="SAGA NANA Progress", border_style="blue", expand=True))
 
 
     def _accumulate_tokens(self, operation_name: str, usage_data: Optional[Dict[str, int]]):
         if usage_data and isinstance(usage_data.get("completion_tokens"), int):
             completed_tokens = usage_data["completion_tokens"]
             self.total_tokens_generated_this_run += completed_tokens
-            # Log only if Rich is not handling console output to avoid duplicate messages
             if not (RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS):
                  logger.info(
                     f"NANA Activity: Tokens from '{operation_name}': {completed_tokens}. "
@@ -158,13 +162,13 @@ class NANA_Orchestrator:
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
         self._update_rich_display(step="Initializing Orchestrator")
-        self.chapter_count = await state_manager.async_load_chapter_count()
+        self.chapter_count = await chapter_queries.load_chapter_count_from_db() # MODIFIED
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
 
         load_tasks = {
-            "plot": state_manager.get_plot_outline(),
-            "chars": state_manager.get_character_profiles(),
-            "world": state_manager.get_world_building()
+            "plot": plot_queries.get_plot_outline_from_db(), # MODIFIED
+            "chars": character_queries.get_character_profiles_from_db(), # MODIFIED
+            "world": world_queries.get_world_building_from_db() # MODIFIED
         }
         results = await asyncio.gather(*load_tasks.values(), return_exceptions=True)
         loaded_data = dict(zip(load_tasks.keys(), results))
@@ -187,9 +191,9 @@ class NANA_Orchestrator:
     async def _save_core_novel_state_to_neo4j(self):
         logger.info("NANA: Saving core novel state (plot, characters, world) to Neo4j...")
         tasks = [
-            state_manager.save_plot_outline(self.plot_outline),
-            state_manager.save_character_profiles(self.character_profiles),
-            state_manager.save_world_building(self.world_building)
+            plot_queries.save_plot_outline_to_db(self.plot_outline), # MODIFIED
+            character_queries.save_character_profiles_to_db(self.character_profiles), # MODIFIED
+            world_queries.save_world_building_to_db(self.world_building) # MODIFIED
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         success_count = 0
@@ -258,7 +262,7 @@ class NANA_Orchestrator:
             return
 
         pp_check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}})-[:HAS_PLOT_POINT]->(:PlotPoint) RETURN count(*) AS pp_count"
-        pp_result = await state_manager._execute_read_query(pp_check_query)
+        pp_result = await neo4j_manager.execute_read_query(pp_check_query) # MODIFIED
         if pp_result and pp_result[0] and pp_result[0]['pp_count'] > 0:
             logger.info("Found existing NovelInfo with plot points. Assuming KG already pre-populated. Skipping explicit pre-population.")
             return
@@ -345,10 +349,15 @@ class NANA_Orchestrator:
         await self._save_debug_output(chapter_number, "hybrid_context_for_draft", hybrid_context_for_draft)
         self._update_rich_display(step=f"Ch {chapter_number} - Drafting Initial Text")
 
+        # Pass self (orchestrator) instead of novel_props_cache to drafting_agent if it needs direct attribute access
         initial_draft_text, initial_raw_llm_text, draft_usage = await self.drafting_agent.draft_chapter(
-            self.novel_props_cache, chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
+            self, # Pass orchestrator instance (agent)
+            chapter_number, 
+            plot_point_focus, 
+            hybrid_context_for_draft, 
+            chapter_plan
         )
-        self._accumulate_tokens(f"Ch{chapter_number}-Drafting", draft_usage)
+        self._accumulate_tokens(f"Ch{chapter_number}-Drafting", draft_usage) # Accumulate tokens from drafting
         if not initial_draft_text:
             logger.error(f"NANA: Drafting Agent failed for Ch {chapter_number}. No initial draft produced.")
             await self._save_debug_output(chapter_number, "initial_draft_fail_raw_llm", initial_raw_llm_text or "Drafting Agent returned None for raw output.")
@@ -406,7 +415,7 @@ class NANA_Orchestrator:
 
                 self._update_rich_display(step=f"Ch {chapter_number} - Revision Attempt {attempt + 1}")
                 revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
-                    self, 
+                    self, # Pass orchestrator instance (agent)
                     current_text_to_process, 
                     chapter_number,
                     evaluation_result, 
@@ -443,7 +452,7 @@ class NANA_Orchestrator:
             return None 
 
         self._update_rich_display(step=f"Ch {chapter_number} - Saving to DB")
-        await state_manager.async_save_chapter_data(
+        await chapter_queries.save_chapter_data_to_db( # MODIFIED
             chapter_number, current_text_to_process, current_raw_llm_output or "N/A",
             chapter_summary, final_embedding, is_from_flawed_source
         )
@@ -478,9 +487,9 @@ class NANA_Orchestrator:
         if self.rich_live: self.rich_live.start()
 
         try:
-            await state_manager.connect()
-            await state_manager.create_db_and_tables() 
-            logger.info("NANA: State_manager initialized and Neo4j connection/schema verified.")
+            await neo4j_manager.connect() # MODIFIED
+            await neo4j_manager.create_db_schema()  # MODIFIED (renamed from create_db_and_tables)
+            logger.info("NANA: Neo4j connection and schema verified.")
 
             await self.async_init_orchestrator() 
 
@@ -521,7 +530,7 @@ class NANA_Orchestrator:
                     break 
 
             logger.info(f"\n--- NANA: Novel writing process finished for this run ---")
-            final_chapter_count_from_db = await state_manager.async_load_chapter_count() 
+            final_chapter_count_from_db = await chapter_queries.load_chapter_count_from_db()  # MODIFIED
             logger.info(f"NANA: Successfully processed {chapters_successfully_written_this_run} chapter(s) in this run.")
             logger.info(f"NANA: Current total chapters in database: {final_chapter_count_from_db}")
             logger.info(f"NANA: Total LLM tokens generated this run: {self.total_tokens_generated_this_run}")
@@ -534,26 +543,22 @@ class NANA_Orchestrator:
             self._update_rich_display(step="Critical Error in Main Loop")
         finally:
             if self.rich_live: 
-                # Keep the final status for a moment before stopping
                 await asyncio.sleep(0.1) 
                 self.rich_live.stop() 
-            await state_manager.close()
+            await neo4j_manager.close() # MODIFIED
             logger.info("NANA: Neo4j driver successfully closed on application exit.")
 
 
 def setup_logging_nana():
-    # MODIFIED: logging setup
-    # Base configuration without default stream handler
     logging.basicConfig(
         level=config.LOG_LEVEL,
-        format=config.LOG_FORMAT, # This format will be used by FileHandler
+        format=config.LOG_FORMAT, 
         datefmt=config.LOG_DATE_FORMAT,
-        handlers=[] # Initialize with no handlers
+        handlers=[] 
     )
     
     root_logger = logging.getLogger()
 
-    # File Handler (always add if LOG_FILE is configured)
     if config.LOG_FILE:
         try:
             log_dir = os.path.dirname(config.LOG_FILE)
@@ -566,34 +571,30 @@ def setup_logging_nana():
             formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler) 
-            # Log initial message to file via root logger, not logger.info which might not have RichHandler yet
             root_logger.info(f"File logging enabled. Log file: {config.LOG_FILE}")
         except Exception as e:
-            # Use root_logger here as well for consistency if initial setup fails
             root_logger.error(f"Failed to configure file logging to {config.LOG_FILE}: {e}", exc_info=True)
 
-    # Console Handler (Rich or standard StreamHandler)
     if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
-        # RichHandler is already imported at the top of the file if available
         rich_handler = RichHandler(
             level=config.LOG_LEVEL, 
             rich_tracebacks=True, 
-            show_path=False, # Hides module path for cleaner logs, customize as needed
-            markup=True, # Allows Rich markup in log messages
-            show_time=True, # Rich handler's own time formatting
-            show_level=True # Rich handler's own level display
+            show_path=False, 
+            markup=True, 
+            show_time=True, 
+            show_level=True 
         )
         root_logger.addHandler(rich_handler)
-        # root_logger.info("Rich logging handler enabled for console.") # Let RichHandler log this
     else:
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(config.LOG_LEVEL)
         stream_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
-        root_logger.info("Standard stream logging handler enabled for console.")
+        if not (RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS): # Log only if Rich isn't also logging it
+             root_logger.info("Standard stream logging handler enabled for console.")
 
-    # Set levels for noisy loggers after all handlers are configured
+
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
     logging.getLogger("neo4j").setLevel(logging.WARNING) 
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -609,23 +610,22 @@ if __name__ == "__main__":
         asyncio.run(orchestrator.run_novel_generation_loop())
     except KeyboardInterrupt:
         logger.info("NANA Orchestrator shutting down gracefully due to KeyboardInterrupt...")
-        if orchestrator.rich_live and orchestrator.rich_live.is_started:
+        if orchestrator.rich_live and orchestrator.rich_live.is_started: # type: ignore
             orchestrator._update_rich_display(step="Shutdown (KeyboardInterrupt)")
-            orchestrator.rich_live.stop()
+            orchestrator.rich_live.stop() # type: ignore
     except Exception as main_err:
         logger.critical(f"NANA Orchestrator encountered an unhandled main exception: {main_err}", exc_info=True)
-        if orchestrator.rich_live and orchestrator.rich_live.is_started:
+        if orchestrator.rich_live and orchestrator.rich_live.is_started: # type: ignore
             orchestrator._update_rich_display(step=f"FATAL ERROR: {str(main_err)[:50]}...")
-            orchestrator.rich_live.stop()
+            orchestrator.rich_live.stop() # type: ignore
     finally:
-        if state_manager.driver is not None: 
+        if neo4j_manager.driver is not None: # MODIFIED
             logger.info("Ensuring Neo4j driver is closed from main entry point.")
             async def _close_driver_main():
-                 await state_manager.close()
+                 await neo4j_manager.close() # MODIFIED
             try:
-                # Check if event loop is running before trying to run a new one
                 if asyncio.get_event_loop().is_running():
-                    asyncio.create_task(_close_driver_main()) # Schedule if loop is running
+                    asyncio.create_task(_close_driver_main()) 
                 else:
                     asyncio.run(_close_driver_main())
             except RuntimeError as e: 

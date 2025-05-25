@@ -12,7 +12,8 @@ from typing import List, Optional, Dict, Any
 import config
 import llm_interface
 # import utils # numpy_cosine_similarity no longer needed here
-from state_manager import state_manager
+# from state_manager import state_manager # No longer directly used
+from data_access import chapter_queries # For chapter data and similarity search
 from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt 
 from type import SceneDetail
 
@@ -70,7 +71,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
         fallback_chapter_limit = config.CONTEXT_CHAPTER_COUNT
         for i in range(max(1, current_chapter_number - fallback_chapter_limit), current_chapter_number):
             if total_tokens_accumulated >= max_semantic_tokens: break
-            chap_data = await state_manager.async_get_chapter_data_from_db(i)
+            chap_data = await chapter_queries.get_chapter_data_from_db(i) # MODIFIED
             if chap_data:
                 content = (chap_data.get('summary') or chap_data.get('text', '')).strip()
                 is_prov = chap_data.get('is_provisional', False)
@@ -99,7 +100,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
         return final_semantic_context
 
     # Use Neo4j vector search
-    similar_chapters_data = await state_manager.async_find_similar_chapters(
+    similar_chapters_data = await chapter_queries.find_similar_chapters_in_db( # MODIFIED
         query_embedding_np,
         config.CONTEXT_CHAPTER_COUNT,
         current_chapter_number # Exclude the current chapter if it somehow got an embedding
@@ -115,7 +116,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
     if immediate_prev_chap_num > 0:
         is_immediate_prev_present = any(ch_data['chapter_number'] == immediate_prev_chap_num for ch_data in similar_chapters_data)
         if not is_immediate_prev_present:
-            immediate_prev_data = await state_manager.async_get_chapter_data_from_db(immediate_prev_chap_num)
+            immediate_prev_data = await chapter_queries.get_chapter_data_from_db(immediate_prev_chap_num) # MODIFIED
             if immediate_prev_data and (immediate_prev_data.get('summary') or immediate_prev_data.get('text')):
                 # Prepend it to ensure it's considered first for token budget, but it might displace a less relevant "similar" chapter
                 # Or, just add it, and let token truncation handle it. Let's add it.
