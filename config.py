@@ -20,6 +20,9 @@ limitations under the License.
 Copyright 2025 Dennis Lewis
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import logging
 import json
@@ -215,5 +218,3 @@ FALLBACK_CHARS_PER_TOKEN: float = 4.0
 ENABLE_RICH_PROGRESS: bool = os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
 # How many times per second the Rich Live display should attempt to refresh.
 RICH_REFRESH_PER_SECOND: float = 4.0
-
-    
