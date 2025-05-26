@@ -9,3 +9,4 @@ aiosqlite==0.20.0
 tiktoken
 neo4j==5.28.1
 rich==14.0.0
+spacy
