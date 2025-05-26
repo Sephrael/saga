@@ -1,6 +1,6 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.895, Type: Summary)]:
-Elira Voss, once a leader of a cult that imposed a hive mind on its followers, returns to the abandoned temple to uncover the truth behind its teachings and the hidden library beyond reality's edge, where knowledge and truth are preserved but at a great cost. She confronts her past, realizing the hive mind was a prison rather than a gift, and decides to break free from its control. With determination, she follows ancient symbols to the library, ready to face whatever lies beyond the threshold.
+[Semantic Context from Chapter 1 (Similarity: 0.757, Type: Summary)]:
+Elira Voss receives a crucial commission from the Patron to build a structure that can purify the poisoned air of the desert, which challenges her belief in architecture as a means of control and forces her to reconsider her approach. She initially struggles with the task, but after facing the harsh reality of the desert's resistance, she shifts to a more harmonious design that works with the environment rather than against it. The council begins to accept her new vision, recognizing the need for balance and understanding over domination.
 ---
 --- END SEMANTIC CONTEXT ---
 
