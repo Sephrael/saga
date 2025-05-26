@@ -218,7 +218,8 @@ async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str,
         setting_archetype = kwargs.get("setting_archetype", random.choice(config.UNHINGED_SETTINGS_ARCHETYPES))
         protagonist_archetype = kwargs.get("protagonist_archetype", random.choice(config.UNHINGED_PROTAGONIST_ARCHETYPES))
         conflict_archetype = kwargs.get("conflict_archetype", random.choice(config.UNHINGED_CONFLICT_TYPES))
-        prompt_core_elements = f"""You are crafting a novel concept.
+        prompt_core_elements = f"""/no_think
+You are crafting a novel concept.
 Core Elements:
   - Genre: '{genre}'
   - Theme: '{theme}'
@@ -233,7 +234,8 @@ Based on these, generate the following plot outline fields:
         genre = kwargs.get("genre", config.CONFIGURED_GENRE)
         theme = kwargs.get("theme", config.CONFIGURED_THEME)
         setting_description_input = kwargs.get("setting_description", config.CONFIGURED_SETTING_DESCRIPTION)
-        prompt_core_elements = f"""You are crafting a novel concept.
+        prompt_core_elements = f"""/no_think
+You are crafting a novel concept.
 Core Elements:
   - Genre: '{genre}'
   - Theme: '{theme}'

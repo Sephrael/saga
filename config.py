@@ -77,11 +77,6 @@ NEO4J_VECTOR_DIMENSIONS: int = EXPECTED_EMBEDDING_DIM # Must match your embeddin
 NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine" # e.g., 'cosine', 'euclidean'
 
 # Model Aliases
-#LARGE_MODEL_DEFAULT: str = "Qwen3-14B"
-#MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B"
-#SMALL_MODEL_DEFAULT: str = "Qwen3-4B"
-#NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B"
-
 LARGE_MODEL_DEFAULT: str = "Qwen3-14B-Q4"
 MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B-Q4"
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B-Q4"
@@ -93,7 +88,7 @@ SMALL_MODEL: str = os.getenv("SMALL_MODEL", SMALL_MODEL_DEFAULT)
 NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT)
 
 # --- LLM Call Settings & Fallbacks ---
-LLM_RETRY_ATTEMPTS: int = 3
+LLM_RETRY_ATTEMPTS: int = int(os.getenv("LLM_RETRY_ATTEMPTS", "3"))
 LLM_RETRY_DELAY_SECONDS: float = 3.0
 FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL
 
@@ -137,10 +132,10 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 
 # --- Generation Parameters ---
-MAX_CONTEXT_TOKENS: int = 40960
-MAX_GENERATION_TOKENS: int = 16384
+MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "40960"))
+MAX_GENERATION_TOKENS: int = int(os.getenv("MAX_GENERATION_TOKENS", "16384"))
 CONTEXT_CHAPTER_COUNT: int = 5 # Used by Neo4j vector search limit and fallback
-CHAPTERS_PER_RUN: int = 3
+CHAPTERS_PER_RUN: int = int(os.getenv("CHAPTERS_PER_RUN", "3"))
 LLM_TOP_P: float = 0.95
 
 
@@ -151,10 +146,10 @@ KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
 TOKENIZER_CACHE_SIZE: int = 10
 
 # --- Agentic Planning & Prompt Context Snippets ---
-ENABLE_AGENTIC_PLANNING: bool = True
-MAX_PLANNING_TOKENS: int = 8192
-TARGET_SCENES_MIN: int = 3
-TARGET_SCENES_MAX: int = 7
+ENABLE_AGENTIC_PLANNING: bool = True # This was not in the list to make env configurable
+MAX_PLANNING_TOKENS: int = int(os.getenv("MAX_PLANNING_TOKENS", "8192"))
+TARGET_SCENES_MIN: int = int(os.getenv("TARGET_SCENES_MIN", "3"))
+TARGET_SCENES_MAX: int = int(os.getenv("TARGET_SCENES_MAX", "7"))
 PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80
 PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120
 PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
@@ -164,16 +159,24 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 
 # --- Revision and Validation ---
-ENABLE_PATCH_BASED_REVISION: bool = True
-MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 3 # Max patches to generate per revision cycle
+ENABLE_PATCH_BASED_REVISION: bool = os.getenv("ENABLE_PATCH_BASED_REVISION", "True").lower() == "true"
+MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = int(os.getenv("MAX_PATCH_INSTRUCTIONS_TO_GENERATE", "3"))
 MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 8192 # Character window for patch context
-REVISION_COHERENCE_THRESHOLD: float = 0.60
-REVISION_SIMILARITY_ACCEPTANCE: float = 0.985 # If patched/rewritten text is this similar, log warning
-MAX_SUMMARY_TOKENS: int = 4096
-MAX_KG_TRIPLE_TOKENS: int = 8192
-MAX_PREPOP_KG_TOKENS: int = 16384
+REVISION_COHERENCE_THRESHOLD: float = float(os.getenv("REVISION_COHERENCE_THRESHOLD", "0.60"))
+REVISION_SIMILARITY_ACCEPTANCE: float = float(os.getenv("REVISION_SIMILARITY_ACCEPTANCE", "0.985")) # If patched/rewritten text is this similar, log warning
+MAX_SUMMARY_TOKENS: int = int(os.getenv("MAX_SUMMARY_TOKENS", "4096"))
+MAX_KG_TRIPLE_TOKENS: int = int(os.getenv("MAX_KG_TRIPLE_TOKENS", "8192"))
+MAX_PREPOP_KG_TOKENS: int = int(os.getenv("MAX_PREPOP_KG_TOKENS", "16384"))
 
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = 13000
+MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT = 13000
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = int(os.getenv("MIN_ACCEPTABLE_DRAFT_LENGTH", str(MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT)))
+if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000: # Arbitrary threshold for warning
+    logging.warning(
+        f"MIN_ACCEPTABLE_DRAFT_LENGTH is set to {MIN_ACCEPTABLE_DRAFT_LENGTH}, "
+        f"which is significantly higher than the default {MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT}. "
+        "This may lead to very long chapter drafts (e.g., 30K+ characters)."
+    )
+
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True
 KG_PREPOPULATION_CHAPTER_NUM: int = 0
 
@@ -187,7 +190,7 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
 
 # --- Novel Configuration ---
-UNHINGED_PLOT_MODE: bool = True
+UNHINGED_PLOT_MODE: bool = os.getenv("UNHINGED_PLOT_MODE", "False").lower() == "true"
 CONFIGURED_GENRE: str = "dystopian horror"
 CONFIGURED_THEME: str = "the cost of power"
 CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
