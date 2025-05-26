@@ -1,6 +1,6 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.819, Type: Summary)]:
-Elara Voss, a woman who has long controlled the dead for personal gain, is confronted by a mysterious man who reveals a cursed valley where spirits are in torment. The valley is a wound in time, bleeding corruption into the world, and Elara realizes she has been complicit in its existence. She decides to confront the truth and face the consequences of her past actions by entering the valley, seeking redemption.
+[Semantic Context from Chapter 1 (Similarity: 0.895, Type: Summary)]:
+Elira Voss, once a leader of a cult that imposed a hive mind on its followers, returns to the abandoned temple to uncover the truth behind its teachings and the hidden library beyond reality's edge, where knowledge and truth are preserved but at a great cost. She confronts her past, realizing the hive mind was a prison rather than a gift, and decides to break free from its control. With determination, she follows ancient symbols to the library, ready to face whatever lies beyond the threshold.
 ---
 --- END SEMANTIC CONTEXT ---
 

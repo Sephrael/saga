@@ -1,10 +1,10 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.809, Type: Summary)]:
-Elara Voss, a woman who has long controlled the dead for personal gain, is confronted by a mysterious man who reveals a cursed valley where spirits are in torment. The valley is a wound in time, bleeding corruption into the world, and Elara realizes she has been complicit in its existence. She decides to confront the truth and face the consequences of her past actions by entering the valley, seeking redemption.
+[Semantic Context from Chapter 1 (Similarity: 0.848, Type: Summary)]:
+Elira Voss, once a leader of a cult that imposed a hive mind on its followers, returns to the abandoned temple to uncover the truth behind its teachings and the hidden library beyond reality's edge, where knowledge and truth are preserved but at a great cost. She confronts her past, realizing the hive mind was a prison rather than a gift, and decides to break free from its control. With determination, she follows ancient symbols to the library, ready to face whatever lies beyond the threshold.
 ---
 
-[Semantic Context from Chapter 2 (Similarity: 0.816, Type: Provisional Summary)]:
-Elara Voss arrives at a cursed valley, where the supernatural presence is overwhelming and the past and present are entangled in an endless cycle of suffering. The valley, once a place of solitude for her, now reveals itself as a prison built by the ancient Keepers of the Veil to contain the echoes of the dead, and she realizes she has been part of this cycle through her manipulation of spirits and the Machine. Standing before the Machine, she confronts her past actions and chooses to embrace her new role as a guardian rather than a manipulator.
+[Semantic Context from Chapter 2 (Similarity: 0.878, Type: Summary)]:
+Elira discovers the Harmonic Key in the Temple Ruins, realizing the hive mind's true nature as a system of control embedded in the world itself. She confronts the Keeper, who warns her that the truth is a prison, but she chooses to seek freedom by entering the library, where memories and knowledge can be reclaimed.
 ---
 --- END SEMANTIC CONTEXT ---
 

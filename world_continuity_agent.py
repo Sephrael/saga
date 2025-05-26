@@ -5,9 +5,9 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import config
 import llm_interface
+import utils # MODIFIED: For spaCy functions
 from type import ProblemDetail
-# from state_manager import state_manager # No longer directly used
-from data_access import kg_queries # For querying KG
+from data_access import kg_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
@@ -17,24 +17,25 @@ from parsing_utils import split_text_into_blocks, parse_key_value_block
 
 logger = logging.getLogger(__name__)
 
-# Using the same PROBLEM_DETAIL_KEY_MAP as the comprehensive evaluator
 PROBLEM_DETAIL_KEY_MAP = {
     "issue_category": "issue_category",
     "problem_description": "problem_description",
-    "quote_from_original": "quote_from_original",
+    "quote_from_original": "quote_from_original_text", # Maps to text field
     "suggested_fix_focus": "suggested_fix_focus"
 }
 
 class WorldContinuityAgent:
-    def __init__(self, model_name: str = config.EVALUATION_MODEL): # Can use a different model if specialized
+    def __init__(self, model_name: str = config.EVALUATION_MODEL):
         self.model_name = model_name
         logger.info(f"WorldContinuityAgent initialized with model: {self.model_name}")
+        utils.load_spacy_model_if_needed() # Ensure spaCy model is available
 
-    def _parse_llm_consistency_output(self, text: str, chapter_number: int) -> List[ProblemDetail]:
+    async def _parse_llm_consistency_output(self, text: str, chapter_number: int, original_draft_text: str) -> List[ProblemDetail]: # Added original_draft_text
         """
         Parses LLM plain text output specifically for consistency problems.
+        Populates character offsets for the quote and its containing sentence using spaCy.
         """
-        problems_data: List[Dict[str, Any]] = []
+        final_problems: List[ProblemDetail] = []
         if not text or not text.strip() or "no significant consistency problems found" in text.lower() or "no significant problems found" in text.lower():
             logger.info(f"Consistency check for Ch {chapter_number} is empty or indicates no problems. No problems parsed.")
             return []
@@ -45,53 +46,73 @@ class WorldContinuityAgent:
             if not block_content.strip():
                 continue
             logger.debug(f"Parsing consistency problem block {block_num+1} for Ch {chapter_number}:\n{block_content[:150]}...")
-            
+
             parsed_problem_dict = parse_key_value_block(
                 block_text_or_lines=block_content,
                 key_map=PROBLEM_DETAIL_KEY_MAP,
-                list_internal_keys=[] # No list keys for ProblemDetail structure
+                list_internal_keys=[]
             )
-            
+
             required_keys_internal = set(PROBLEM_DETAIL_KEY_MAP.values())
             missing_keys = required_keys_internal - set(parsed_problem_dict.keys())
 
+            problem_meta: ProblemDetail = { # Initialize with defaults
+                "issue_category": "consistency", # Default for this agent
+                "problem_description": "N/A",
+                "quote_from_original_text": "N/A - Malformed LLM Output",
+                "quote_char_start": None, "quote_char_end": None,
+                "sentence_char_start": None, "sentence_char_end": None,
+                "suggested_fix_focus": "Review LLM output."
+            }
+
             if missing_keys:
                 logger.warning(f"Could not parse all required fields from consistency problem block {block_num+1} for Ch {chapter_number}. Missing: {missing_keys}. Block: '{block_content[:150]}...'")
-                problems_data.append({
-                    "issue_category": "consistency", # Default to consistency for parsing errors in this agent
-                    "problem_description": f"Malformed consistency problem block from LLM: {block_content}",
-                    "quote_from_original": "N/A - Malformed LLM Output",
-                    "suggested_fix_focus": "Review LLM output and prompt for consistency evaluation formatting."
-                })
+                problem_meta["problem_description"] = f"Malformed consistency problem block from LLM: {block_content}"
+                final_problems.append(problem_meta)
                 continue
 
-            # Sanitize quote_from_original
-            if not parsed_problem_dict.get("quote_from_original", "").strip():
-                parsed_problem_dict["quote_from_original"] = "N/A - General Issue"
-                logger.debug(f"Consistency problem block {block_num+1} for Ch {chapter_number} had empty quote, defaulted to 'N/A - General Issue'. Problem: {parsed_problem_dict['problem_description']}")
+            problem_meta["problem_description"] = parsed_problem_dict.get("problem_description", "N/A")
+            problem_meta["quote_from_original_text"] = parsed_problem_dict.get("quote_from_original_text", "N/A - General Issue")
+            problem_meta["suggested_fix_focus"] = parsed_problem_dict.get("suggested_fix_focus", "N/A")
 
-            # Ensure issue_category is 'consistency' or 'meta' if something went really wrong.
-            # For this agent, it should primarily be 'consistency'.
             category = str(parsed_problem_dict.get("issue_category", "consistency")).strip().lower()
             if category != "consistency":
                  logger.warning(f"WorldContinuityAgent parsed a non-consistency category '{category}' in block {block_num+1} for Ch {chapter_number}. Forcing to 'consistency'.")
-                 parsed_problem_dict["issue_category"] = "consistency"
-            
-            problems_data.append(parsed_problem_dict)
-            
-        return [prob for prob in problems_data if isinstance(prob, dict)] # type: ignore
+                 problem_meta["issue_category"] = "consistency"
+            else:
+                problem_meta["issue_category"] = category
+
+            quote_text_from_llm = problem_meta["quote_from_original_text"]
+            # Normalize "N/A..." variations to a single canonical form first
+            if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip():
+                problem_meta["quote_from_original_text"] = "N/A - General Issue"
+                logger.debug(f"Consistency problem block {block_num+1} for Ch {chapter_number} is 'N/A - General Issue' or empty quote.")
+            elif utils.NLP_SPACY is not None and original_draft_text.strip():
+                offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(original_draft_text, quote_text_from_llm)
+                if offsets_tuple:
+                    q_start, q_end, s_start, s_end = offsets_tuple
+                    problem_meta["quote_char_start"] = q_start
+                    problem_meta["quote_char_end"] = q_end
+                    problem_meta["sentence_char_start"] = s_start
+                    problem_meta["sentence_char_end"] = s_end
+                    logger.debug(f"Ch {chapter_number} consistency problem: Quote '{quote_text_from_llm[:30]}...' found at {q_start}-{q_end}, Sentence: {s_start}-{s_end}")
+                else:
+                    logger.warning(f"Ch {chapter_number} consistency problem: Could not find quote via spaCy utils: '{quote_text_from_llm[:50]}...'. Offsets will be None.")
+            elif not original_draft_text.strip():
+                 logger.warning(f"Ch {chapter_number} consistency problem: Original draft text is empty. Cannot find offsets for quote: '{quote_text_from_llm[:50]}...'")
+            else: # spaCy not loaded
+                logger.info(f"Ch {chapter_number} consistency problem: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'")
+
+            final_problems.append(problem_meta)
+        return final_problems
 
     async def check_consistency(
         self,
-        novel_props: Dict[str, Any], # Contains plot_outline, character_profiles, world_building
+        novel_props: Dict[str, Any],
         draft_text: str,
         chapter_number: int,
-        previous_chapters_context: str # This is the HYBRID context from orchestrator
+        previous_chapters_context: str
     ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
-        """
-        Checks the draft text for consistency with world-building, character profiles,
-        plot outline, and KG facts. Returns problems and LLM usage data.
-        """
         if not draft_text:
             logger.warning(f"WorldContinuityAgent: Consistency check skipped for Ch {chapter_number}: empty draft text.")
             return [], None
@@ -167,34 +188,18 @@ SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for
         raw_consistency_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=0.2, 
+            temperature=0.2,
             allow_fallback=True,
-            stream_to_disk=False 
+            stream_to_disk=False
         )
-
         cleaned_consistency_text = llm_interface.clean_model_response(raw_consistency_text)
-        consistency_problems = self._parse_llm_consistency_output(cleaned_consistency_text, chapter_number)
+        # Pass original_draft_text to the parser
+        consistency_problems = await self._parse_llm_consistency_output(cleaned_consistency_text, chapter_number, draft_text)
 
-        validated_problems: List[ProblemDetail] = []
-        for prob_item in consistency_problems:
-            quote = prob_item["quote_from_original"]
-            non_general_quote_markers = ["N/A - General Issue", "N/A - Malformed LLM Output"]
-            if quote not in non_general_quote_markers and quote.strip() and draft_text:
-                if quote not in draft_text:
-                    logger.warning(
-                        f"WorldContinuityAgent: Problem quote for Ch {chapter_number} NOT VERBATIM in chapter text: '{quote[:50]}...'. "
-                        f"Problem: {prob_item['problem_description']}"
-                    )
-            validated_problems.append(prob_item)
-
-        logger.info(f"World/Continuity consistency check for Ch {chapter_number} found {len(validated_problems)} problems.")
-        return validated_problems, usage_data
+        logger.info(f"World/Continuity consistency check for Ch {chapter_number} found {len(consistency_problems)} problems.")
+        return consistency_problems, usage_data
 
     async def suggest_canon_corrections(self, problems: List[ProblemDetail]) -> List[str]:
-        """
-        (Placeholder)
-        Given a list of consistency problems, suggests specific corrections.
-        """
         logger.warning("suggest_canon_corrections method is a placeholder and not fully implemented.")
         suggestions = []
         for problem in problems:
@@ -203,17 +208,13 @@ SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for
         return suggestions
 
     async def query_kg_for_contradiction(self, entity1: str, entity2: Optional[str] = None, relation: Optional[str] = None, chapter_limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        (New Capability)
-        Queries the KG for facts about entities/relations that might be involved in a contradiction.
-        """
         logger.info(f"WorldContinuityAgent: Querying KG regarding potential contradiction around '{entity1}'...")
         facts = []
-        facts.extend(await kg_queries.query_kg_from_db(subject=entity1, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
-        facts.extend(await kg_queries.query_kg_from_db(obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
+        facts.extend(await kg_queries.query_kg_from_db(subject=entity1, chapter_limit=chapter_limit, include_provisional=False))
+        facts.extend(await kg_queries.query_kg_from_db(obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False))
 
         if entity2 and relation:
-            facts.extend(await kg_queries.query_kg_from_db(subject=entity1, predicate=relation, obj_val=entity2, chapter_limit=chapter_limit, include_provisional=False)) # MODIFIED
+            facts.extend(await kg_queries.query_kg_from_db(subject=entity1, predicate=relation, obj_val=entity2, chapter_limit=chapter_limit, include_provisional=False))
 
         unique_facts_strs = set()
         formatted_facts = []

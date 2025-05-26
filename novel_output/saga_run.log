@@ -1,570 +1,489 @@
-2025-05-25 17:08:43 - INFO - [root:574] - File logging enabled. Log file: novel_output/saga_run.log
-2025-05-25 17:08:43 - INFO - [root:603] - NANA Logging setup complete. Application Log Level: INFO.
-2025-05-25 17:08:43 - INFO - [__main__:67] - Initializing NANA Orchestrator...
-2025-05-25 17:08:43 - INFO - [planner_agent:38] - PlannerAgent initialized with model: Qwen3-8B-Q4
-2025-05-25 17:08:43 - INFO - [drafting_agent:19] - DraftingAgent initialized with model: Qwen3-8B-Q4
-2025-05-25 17:08:43 - INFO - [comprehensive_evaluator_agent:32] - ComprehensiveEvaluatorAgent initialized with model: Qwen3-8B-Q4
-2025-05-25 17:08:43 - INFO - [world_continuity_agent:31] - WorldContinuityAgent initialized with model: Qwen3-8B-Q4
-2025-05-25 17:08:43 - INFO - [kg_maintainer_agent:496] - KGMaintainerAgent initialized with model: Qwen3-8B-Q4
-2025-05-25 17:08:43 - INFO - [__main__:112] - NANA Orchestrator initialized.
-2025-05-25 17:08:43 - INFO - [__main__:483] - --- NANA: Starting Novel Generation Run ---
-2025-05-25 17:08:43 - INFO - [core_db.base_db_manager:38] - Successfully connected to Neo4j at bolt://localhost:7687
-2025-05-25 17:08:43 - INFO - [core_db.base_db_manager:94] - Creating/verifying Neo4j indexes and constraints, including vector index...
-2025-05-25 17:08:43 - INFO - [core_db.base_db_manager:134] - Successfully created/verified vector index: chapterEmbeddings
-2025-05-25 17:08:43 - INFO - [core_db.base_db_manager:137] - Neo4j schema (indexes, constraints, vector index) verification process complete.
-2025-05-25 17:08:43 - INFO - [__main__:492] - NANA: Neo4j connection and schema verified.
-2025-05-25 17:08:43 - INFO - [__main__:163] - NANA Orchestrator async_init_orchestrator started...
-2025-05-25 17:08:43 - INFO - [data_access.chapter_queries:15] - Neo4j loaded chapter count: 0
-2025-05-25 17:08:43 - INFO - [__main__:166] - Loaded chapter count from Neo4j: 0
-2025-05-25 17:08:43 - INFO - [data_access.plot_queries:83] - Loading decomposed plot outline from Neo4j...
-2025-05-25 17:08:43 - INFO - [data_access.character_queries:131] - Loading decomposed character profiles from Neo4j...
-2025-05-25 17:08:43 - INFO - [data_access.world_queries:138] - Loading decomposed world building data from Neo4j...
-2025-05-25 17:08:43 - WARNING - [data_access.plot_queries:91] - No NovelInfo node found with id 'saga_main_novel_info'. Returning empty plot outline.
-2025-05-25 17:08:44 - INFO - [__main__:187] - NANA Orchestrator async_init_orchestrator complete.
-2025-05-25 17:08:44 - INFO - [__main__:212] - NANA performing initial setup...
-2025-05-25 17:08:44 - INFO - [__main__:213] - 
+2025-05-26 08:08:11 - INFO - [root:574] - File logging enabled. Log file: novel_output/saga_run.log
+2025-05-26 08:08:11 - INFO - [root:603] - NANA Logging setup complete. Application Log Level: INFO.
+2025-05-26 08:08:11 - INFO - [__main__:67] - Initializing NANA Orchestrator...
+2025-05-26 08:08:11 - INFO - [planner_agent:38] - PlannerAgent initialized with model: Qwen3-8B-Q4
+2025-05-26 08:08:11 - INFO - [drafting_agent:19] - DraftingAgent initialized with model: Qwen3-8B-Q4
+2025-05-26 08:08:11 - INFO - [comprehensive_evaluator_agent:30] - ComprehensiveEvaluatorAgent initialized with model: Qwen3-8B-Q4
+2025-05-26 08:08:11 - INFO - [world_continuity_agent:30] - WorldContinuityAgent initialized with model: Qwen3-8B-Q4
+2025-05-26 08:08:11 - INFO - [kg_maintainer_agent:496] - KGMaintainerAgent initialized with model: Qwen3-8B-Q4
+2025-05-26 08:08:11 - INFO - [__main__:112] - NANA Orchestrator initialized.
+2025-05-26 08:08:11 - INFO - [__main__:483] - --- NANA: Starting Novel Generation Run ---
+2025-05-26 08:08:11 - INFO - [core_db.base_db_manager:38] - Successfully connected to Neo4j at bolt://localhost:7687
+2025-05-26 08:08:11 - INFO - [core_db.base_db_manager:94] - Creating/verifying Neo4j indexes and constraints, including vector index...
+2025-05-26 08:08:11 - INFO - [core_db.base_db_manager:134] - Successfully created/verified vector index: chapterEmbeddings
+2025-05-26 08:08:11 - INFO - [core_db.base_db_manager:137] - Neo4j schema (indexes, constraints, vector index) verification process complete.
+2025-05-26 08:08:11 - INFO - [__main__:492] - NANA: Neo4j connection and schema verified.
+2025-05-26 08:08:11 - INFO - [__main__:163] - NANA Orchestrator async_init_orchestrator started...
+2025-05-26 08:08:11 - INFO - [data_access.chapter_queries:15] - Neo4j loaded chapter count: 0
+2025-05-26 08:08:11 - INFO - [__main__:166] - Loaded chapter count from Neo4j: 0
+2025-05-26 08:08:11 - INFO - [data_access.plot_queries:83] - Loading decomposed plot outline from Neo4j...
+2025-05-26 08:08:11 - INFO - [data_access.character_queries:131] - Loading decomposed character profiles from Neo4j...
+2025-05-26 08:08:11 - INFO - [data_access.world_queries:138] - Loading decomposed world building data from Neo4j...
+2025-05-26 08:08:11 - WARNING - [data_access.plot_queries:91] - No NovelInfo node found with id 'saga_main_novel_info'. Returning empty plot outline.
+2025-05-26 08:08:11 - INFO - [__main__:187] - NANA Orchestrator async_init_orchestrator complete.
+2025-05-26 08:08:11 - INFO - [__main__:212] - NANA performing initial setup...
+2025-05-26 08:08:11 - INFO - [__main__:213] - 
 --- NANA: Initializing Plot, Characters, and World ---
-2025-05-25 17:08:44 - INFO - [initial_setup_logic:200] - Generating plot outline. Unhinged mode: True
-2025-05-25 17:08:44 - INFO - [initial_setup_logic:208] - No valid user-supplied file found or processed. Proceeding with LLM/default generation for plot outline.
-2025-05-25 17:08:44 - INFO - [initial_setup_logic:286] - Calling LLM for plot outline generation (to plain text)...
-2025-05-25 17:08:52 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 683 tk, Comp: 608 tk, Total: 1291 tk
-2025-05-25 17:08:52 - INFO - [initial_setup_logic:321] - Successfully generated plot outline via LLM: 'Echoes of the Forgotten'
-2025-05-25 17:08:52 - INFO - [initial_setup_logic:350] - Created initial character profile for protagonist 'Elara Voss'.
-2025-05-25 17:08:52 - INFO - [__main__:234] -    Plot Outline initialized/loaded (source: llm_generated_unhinged). Title: 'Echoes of the Forgotten'
-2025-05-25 17:08:52 - INFO - [initial_setup_logic:448] - Generating initial world-building data (to plain text) via LLM...
-2025-05-25 17:09:15 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 638 tk, Comp: 1581 tk, Total: 2219 tk
-2025-05-25 17:09:15 - INFO - [initial_setup_logic:490] - Successfully generated initial world-building dictionary via LLM.
-2025-05-25 17:09:15 - INFO - [__main__:241] -    World Building initialized/loaded (source: llm_generated).
-2025-05-25 17:09:15 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
-2025-05-25 17:09:15 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
-2025-05-25 17:09:15 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
-2025-05-25 17:09:15 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
-2025-05-25 17:09:15 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 6 Cypher statements.
-2025-05-25 17:09:15 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
-2025-05-25 17:09:15 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 11 Cypher statements.
-2025-05-25 17:09:15 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
-2025-05-25 17:09:15 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
-2025-05-25 17:09:15 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
-2025-05-25 17:09:15 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
-2025-05-25 17:09:15 - INFO - [__main__:247] -    Initial plot, character, and world data saved to Neo4j.
-2025-05-25 17:09:15 - INFO - [__main__:257] - NANA: Checking if KG pre-population is needed...
-2025-05-25 17:09:15 - INFO - [__main__:267] - Found existing NovelInfo with plot points. Assuming KG already pre-populated. Skipping explicit pre-population.
-2025-05-25 17:09:15 - INFO - [__main__:505] - 
+2025-05-26 08:08:11 - INFO - [initial_setup_logic:200] - Generating plot outline. Unhinged mode: True
+2025-05-26 08:08:11 - INFO - [initial_setup_logic:208] - No valid user-supplied file found or processed. Proceeding with LLM/default generation for plot outline.
+2025-05-26 08:08:11 - INFO - [initial_setup_logic:286] - Calling LLM for plot outline generation (to plain text)...
+2025-05-26 08:08:23 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 685 tk, Comp: 527 tk, Total: 1212 tk
+2025-05-26 08:08:23 - INFO - [initial_setup_logic:321] - Successfully generated plot outline via LLM: 'The Veil of Echoes'
+2025-05-26 08:08:23 - INFO - [initial_setup_logic:350] - Created initial character profile for protagonist 'Elira Voss'.
+2025-05-26 08:08:23 - INFO - [__main__:234] -    Plot Outline initialized/loaded (source: llm_generated_unhinged). Title: 'The Veil of Echoes'
+2025-05-26 08:08:23 - INFO - [initial_setup_logic:448] - Generating initial world-building data (to plain text) via LLM...
+2025-05-26 08:08:46 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 616 tk, Comp: 1579 tk, Total: 2195 tk
+2025-05-26 08:08:46 - INFO - [initial_setup_logic:490] - Successfully generated initial world-building dictionary via LLM.
+2025-05-26 08:08:46 - INFO - [__main__:241] -    World Building initialized/loaded (source: llm_generated).
+2025-05-26 08:08:46 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
+2025-05-26 08:08:46 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
+2025-05-26 08:08:46 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
+2025-05-26 08:08:46 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
+2025-05-26 08:08:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 6 Cypher statements.
+2025-05-26 08:08:46 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
+2025-05-26 08:08:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 9 Cypher statements.
+2025-05-26 08:08:46 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
+2025-05-26 08:08:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
+2025-05-26 08:08:46 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
+2025-05-26 08:08:46 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
+2025-05-26 08:08:46 - INFO - [__main__:247] -    Initial plot, character, and world data saved to Neo4j.
+2025-05-26 08:08:46 - INFO - [__main__:257] - NANA: Checking if KG pre-population is needed...
+2025-05-26 08:08:46 - INFO - [__main__:267] - Found existing NovelInfo with plot points. Assuming KG already pre-populated. Skipping explicit pre-population.
+2025-05-26 08:08:46 - INFO - [__main__:505] - 
 --- NANA: Starting Novel Writing Process ---
-2025-05-25 17:09:15 - INFO - [__main__:509] - NANA: Current Chapter Count (at start of run): 0
-2025-05-25 17:09:15 - INFO - [__main__:511] - NANA: Targeting Chapters: 1 to 3 in this run.
-2025-05-25 17:09:15 - INFO - [__main__:517] - 
+2025-05-26 08:08:46 - INFO - [__main__:509] - NANA: Current Chapter Count (at start of run): 0
+2025-05-26 08:08:46 - INFO - [__main__:511] - NANA: Targeting Chapters: 1 to 3 in this run.
+2025-05-26 08:08:46 - INFO - [__main__:517] - 
 --- NANA: Attempting Chapter 1 ---
-2025-05-25 17:09:15 - INFO - [__main__:324] - === NANA: Starting Chapter 1 Generation ===
-2025-05-25 17:09:15 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 1 with detailed scenes...
-2025-05-25 17:09:15 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'locations' empty. Using local state as fallback.
-2025-05-25 17:09:15 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'systems' empty. Using local state as fallback.
-2025-05-25 17:09:15 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'factions' empty. Using local state as fallback.
-2025-05-25 17:09:15 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 1 (target scenes: 3-7)...
-2025-05-25 17:09:34 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 639 tk, Comp: 1290 tk, Total: 1929 tk
-2025-05-25 17:09:34 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 1 with 7 scenes from plain text.
-2025-05-25 17:09:34 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 1...
-2025-05-25 17:09:34 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 1, Tokens (est.): 85.
-2025-05-25 17:09:34 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 1 draft generation.
-2025-05-25 17:09:34 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:09:34 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:09:34 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 1 draft. Target minimum length: 15000 chars.
-2025-05-25 17:10:24 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 2417 tk, Comp: 3016 tk, Total: 5433 tk
-2025-05-25 17:10:24 - WARNING - [drafting_agent:165] - Ch 1 draft is short (13685 chars) after cleaning, but will be passed for evaluation/revision. Min required: 15000. Snippet: 'Elara Voss had always been a woman of quiet efficiency. Her home, nestled on the edge of a forgotten village in the misty hills of the north, was a place of order and shadow. Candles flickered against...'
-2025-05-25 17:10:24 - INFO - [drafting_agent:171] - Generated initial draft for ch 1 (Length: 13685 chars).
-2025-05-25 17:10:24 - INFO - [__main__:374] - NANA: Ch 1 - Evaluation Cycle, Attempt 1
-2025-05-25 17:10:24 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 1 draft (length: 13685 chars)...
-2025-05-25 17:10:24 - INFO - [comprehensive_evaluator_agent:298] - Skipping coherence check for Chapter 1.
-2025-05-25 17:10:26 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:10:26 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:10:26 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 1...
-2025-05-25 17:10:45 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4479 tk, Comp: 927 tk, Total: 5406 tk
-2025-05-25 17:10:45 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 1 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter introduces the concept of "the Veil's Song" and a cursed valley that is a wound in time, but these elements are not clearly connected to ...'
-2025-05-25 17:10:45 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 1 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:10:45 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 1 complete. Needs revision: True. Summary of reasons: Draft is too short (13685 chars). Minimum required: 15000.. Detailed problems found: 1
-2025-05-25 17:10:45 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 1...
-2025-05-25 17:10:45 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:10:45 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:10:45 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 1...
-2025-05-25 17:10:47 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4462 tk, Comp: 11 tk, Total: 4473 tk
-2025-05-25 17:10:47 - INFO - [world_continuity_agent:39] - Consistency check for Ch 1 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:10:47 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 1 found 0 problems.
-2025-05-25 17:10:47 - WARNING - [__main__:408] - NANA: Ch 1 draft (Attempt 1) needs revision. Reasons: Draft is too short (13685 chars). Minimum required: 15000.
-2025-05-25 17:10:47 - INFO - [chapter_revision_logic:543] - Attempting revision for chapter 1. Reason(s):
-- Draft is too short (13685 chars). Minimum required: 15000.
-2025-05-25 17:10:47 - INFO - [chapter_revision_logic:558] - Attempting patch-based revision for Ch 1 with 1 potentially actionable problem(s).
-2025-05-25 17:10:47 - INFO - [chapter_revision_logic:199] - Patch (Ch 1, general expansion): Max output tokens set to 8192.
-2025-05-25 17:10:47 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 1. Problem: 'Draft is too short (13685 chars). Minimum required: 15000....' Quote: 'N/A - General Issue...' Max Output Tokens: 8192
-2025-05-25 17:11:43 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5058 tk, Comp: 2699 tk, Total: 7757 tk
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:378] - Generated 1 patch instructions for Ch 1.
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:402] - Patch for 'N/A - General Issue' generated new content: 'Elara Voss had always been a woman of quiet efficiency. Her home, nestled on the edge of a forgotten...'. This content will NOT be automatically inserted by this function. Orchestrator may need to handle its placement or use it to inform full rewrite.
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:409] - No applicable patches with specific search_text to apply for segment replacement.
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:576] - Patch process for Ch 1: Generated 1 patch instructions. Original len: 13685, Patched text len (after auto-application): 13685.
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:630] - Proceeding with full chapter rewrite for Ch 1.
-2025-05-25 17:11:43 - INFO - [chapter_revision_logic:710] - Calling LLM (Qwen3-8B-Q4) for Ch 1 full rewrite. Min length: 15000 chars.
-2025-05-25 17:13:08 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 4868 tk, Comp: 3479 tk, Total: 8347 tk
-2025-05-25 17:13:08 - INFO - [chapter_revision_logic:729] - Full rewrite for Ch 1 generated text of length 15771.
-2025-05-25 17:13:08 - INFO - [chapter_revision_logic:754] - Full rewrite similarity with original text (final check): 0.9453
-2025-05-25 17:13:08 - INFO - [chapter_revision_logic:763] - Revision process for ch 1 produced a candidate text (Length: 15771 chars).
-2025-05-25 17:13:08 - INFO - [__main__:430] - NANA: Ch 1 - Revision attempt 1 successful. New text length: 15771. Re-evaluating in next loop iteration.
-2025-05-25 17:13:08 - INFO - [__main__:374] - NANA: Ch 1 - Evaluation Cycle, Attempt 2
-2025-05-25 17:13:08 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 1 draft (length: 15771 chars)...
-2025-05-25 17:13:08 - INFO - [comprehensive_evaluator_agent:298] - Skipping coherence check for Chapter 1.
-2025-05-25 17:13:08 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:08 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:08 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 1...
-2025-05-25 17:13:31 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4942 tk, Comp: 924 tk, Total: 5866 tk
-2025-05-25 17:13:31 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 1 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter introduces the concept of "the Veil's Song" and the valley as a wound in time, but these elements are not clearly defined or explained. T...'
-2025-05-25 17:13:31 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 1 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:13:31 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 1 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
-2025-05-25 17:13:31 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 1...
-2025-05-25 17:13:31 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:31 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:31 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 1...
-2025-05-25 17:13:33 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4925 tk, Comp: 11 tk, Total: 4936 tk
-2025-05-25 17:13:33 - INFO - [world_continuity_agent:39] - Consistency check for Ch 1 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:13:33 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 1 found 0 problems.
-2025-05-25 17:13:33 - INFO - [__main__:403] - NANA: Ch 1 draft passed evaluation (Attempt 2). Text is considered good.
-2025-05-25 17:13:41 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 3567 tk, Comp: 88 tk, Total: 3655 tk
-2025-05-25 17:13:41 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 1: 'Elara Voss, a woman who has long controlled the dead for personal gain, is confronted by a mysteriou...'
-2025-05-25 17:13:41 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 1.
-2025-05-25 17:13:41 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 1.
-2025-05-25 17:13:41 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 1 (Source text from flawed draft: False)...
-2025-05-25 17:13:41 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 1...
-2025-05-25 17:13:41 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:41 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
-2025-05-25 17:13:41 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 1).
-2025-05-25 17:14:05 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 5142 tk, Comp: 1045 tk, Total: 6187 tk
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 1 complete. Chars updated/new: 1, World cats affected: 3, KG Triples extracted: 23.
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 1. Characters in update: ['Elara Voss']
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elara Voss'. New traits: ['Haunted']
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 1. Updated: 1, New: 0.
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 1. Categories in update: ['locations', 'lore', 'systems']
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:114] - Applied modification to 'atmosphere' for 'locations.The Valley'. New value: 'Now filled with sorrow and decay", MODIFY description: "A cursed valle...'
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'lore.The Veil's Song'. New value: 'A mysterious sound that emanates from the valley, believed to be the v...'
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.The Machine'. New value: 'A device created by an ancient civilization that opened the veil betwe...'
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 1. Approx 3 items affected/added.
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:802] - KG update for ch 1: Attempted to add 23 triples, skipped 0 due to format/content.
-2025-05-25 17:14:05 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 1.
-2025-05-25 17:14:05 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
-2025-05-25 17:14:05 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
-2025-05-25 17:14:05 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
-2025-05-25 17:14:05 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
-2025-05-25 17:14:05 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
-2025-05-25 17:14:05 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
-2025-05-25 17:14:05 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
-2025-05-25 17:14:05 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
-2025-05-25 17:14:05 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 9 Cypher statements.
-2025-05-25 17:14:05 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
-2025-05-25 17:14:05 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
-2025-05-25 17:14:05 - INFO - [__main__:477] - === NANA: Finished Chapter 1 - Successfully Generated ===
-2025-05-25 17:14:05 - INFO - [__main__:523] - NANA: Chapter 1: Processed. Final text length: 15771 chars.
-2025-05-25 17:14:05 - INFO - [__main__:524] -    Snippet: Elara Voss had always been a woman of quiet efficiency. Her home, nestled on the edge of a forgotten village in the misty hills of the north, was a place of order and shadow. The walls were lined with...
-2025-05-25 17:14:05 - INFO - [__main__:517] - 
+2025-05-26 08:08:46 - INFO - [__main__:324] - === NANA: Starting Chapter 1 Generation ===
+2025-05-26 08:08:46 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 1 with detailed scenes...
+2025-05-26 08:08:46 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'locations' empty. Using local state as fallback.
+2025-05-26 08:08:46 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'systems' empty. Using local state as fallback.
+2025-05-26 08:08:46 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'factions' empty. Using local state as fallback.
+2025-05-26 08:08:46 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 1 (target scenes: 3-7)...
+2025-05-26 08:09:06 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 629 tk, Comp: 1392 tk, Total: 2021 tk
+2025-05-26 08:09:06 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 1 with 7 scenes from plain text.
+2025-05-26 08:09:06 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 1...
+2025-05-26 08:09:06 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 1, Tokens (est.): 85.
+2025-05-26 08:09:06 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 1 draft generation.
+2025-05-26 08:09:06 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:06 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:06 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 1 draft. Target minimum length: 13000 chars.
+2025-05-26 08:09:43 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 2363 tk, Comp: 2283 tk, Total: 4646 tk
+2025-05-26 08:09:43 - WARNING - [drafting_agent:165] - Ch 1 draft is short (10729 chars) after cleaning, but will be passed for evaluation/revision. Min required: 13000. Snippet: 'Elira Voss stood at the edge of the temple ruins, her breath shallow as the wind carried the scent of damp earth and ancient decay. The once-proud structure, now a skeletal remains of what it had been...'
+2025-05-26 08:09:43 - INFO - [drafting_agent:171] - Generated initial draft for ch 1 (Length: 10729 chars).
+2025-05-26 08:09:43 - INFO - [__main__:374] - NANA: Ch 1 - Evaluation Cycle, Attempt 1
+2025-05-26 08:09:43 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 1 draft (length: 10729 chars)...
+2025-05-26 08:09:43 - INFO - [comprehensive_evaluator_agent:309] - Skipping coherence check for Chapter 1.
+2025-05-26 08:09:45 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:45 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:45 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 1...
+2025-05-26 08:09:58 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3597 tk, Comp: 632 tk, Total: 4229 tk
+2025-05-26 08:09:58 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 1 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter references "the hive mind" and Elira's past as a cult leader, but does not clearly establish what the hive mind is or how it functions in...'
+2025-05-26 08:09:58 - INFO - [comprehensive_evaluator_agent:41] - Plain text evaluation for Ch 1 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:09:58 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 1 complete. Needs revision: True. Summary of reasons: Draft is too short (10729 chars). Minimum required: 13000.. Detailed problems found: 1
+2025-05-26 08:09:58 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 1...
+2025-05-26 08:09:58 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:58 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:09:58 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 1...
+2025-05-26 08:09:59 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3587 tk, Comp: 11 tk, Total: 3598 tk
+2025-05-26 08:09:59 - INFO - [world_continuity_agent:40] - Consistency check for Ch 1 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:09:59 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 1 found 0 problems.
+2025-05-26 08:09:59 - WARNING - [__main__:408] - NANA: Ch 1 draft (Attempt 1) needs revision. Reasons: Draft is too short (10729 chars). Minimum required: 13000.
+2025-05-26 08:09:59 - INFO - [chapter_revision_logic:537] - Attempting revision for chapter 1. Reason(s):
+- Draft is too short (10729 chars). Minimum required: 13000.
+2025-05-26 08:09:59 - INFO - [chapter_revision_logic:554] - Attempting patch-based revision for Ch 1 with 1 potentially actionable problem(s).
+2025-05-26 08:09:59 - INFO - [chapter_revision_logic:202] - Patch (Ch 1, general expansion): Max output tokens set to 8192.
+2025-05-26 08:09:59 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 1. Problem: 'Draft is too short (10729 chars). Minimum required: 13000....' Quote Text: 'N/A - General Issue...' Max Output Tokens: 8192
+2025-05-26 08:10:43 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3886 tk, Comp: 2429 tk, Total: 6315 tk
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:398] - Generated 1 patch instructions for Ch 1.
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:421] - Patch 1 for 'N/A - General Issue' (expansion) generated new content. This patch type is not auto-inserted here.
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:427] - No patches with specific target information or content to apply for segment replacement.
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:566] - Patch process for Ch 1: Generated 1 patch instructions. Original len: 10729, Patched text len (after auto-application): 10729.
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:606] - Proceeding with full chapter rewrite for Ch 1.
+2025-05-26 08:10:43 - INFO - [chapter_revision_logic:680] - Calling LLM (Qwen3-8B-Q4) for Ch 1 full rewrite. Min length: 13000 chars.
+2025-05-26 08:11:51 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 4233 tk, Comp: 3279 tk, Total: 7512 tk
+2025-05-26 08:11:51 - INFO - [chapter_revision_logic:695] - Full rewrite for Ch 1 generated text of length 15425.
+2025-05-26 08:11:51 - INFO - [chapter_revision_logic:711] - Full rewrite similarity with original text (final check): 0.8681
+2025-05-26 08:11:51 - INFO - [chapter_revision_logic:720] - Revision process for ch 1 produced a candidate text (Length: 15425 chars).
+2025-05-26 08:11:51 - INFO - [__main__:430] - NANA: Ch 1 - Revision attempt 1 successful. New text length: 15425. Re-evaluating in next loop iteration.
+2025-05-26 08:11:51 - INFO - [__main__:374] - NANA: Ch 1 - Evaluation Cycle, Attempt 2
+2025-05-26 08:11:51 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 1 draft (length: 15425 chars)...
+2025-05-26 08:11:51 - INFO - [comprehensive_evaluator_agent:309] - Skipping coherence check for Chapter 1.
+2025-05-26 08:11:51 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:11:51 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:11:51 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 1...
+2025-05-26 08:12:13 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4593 tk, Comp: 968 tk, Total: 5561 tk
+2025-05-26 08:12:13 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 1 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter introduces the concept of a "harmonic key" and "protective sigils" as key elements of the world-building, but these are not referenced or...'
+2025-05-26 08:12:13 - INFO - [comprehensive_evaluator_agent:41] - Plain text evaluation for Ch 1 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:12:13 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 1 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
+2025-05-26 08:12:13 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 1...
+2025-05-26 08:12:13 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:12:13 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:12:13 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 1...
+2025-05-26 08:12:15 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4583 tk, Comp: 11 tk, Total: 4594 tk
+2025-05-26 08:12:15 - INFO - [world_continuity_agent:40] - Consistency check for Ch 1 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:12:15 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 1 found 0 problems.
+2025-05-26 08:12:15 - INFO - [__main__:403] - NANA: Ch 1 draft passed evaluation (Attempt 2). Text is considered good.
+2025-05-26 08:12:23 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 3367 tk, Comp: 105 tk, Total: 3472 tk
+2025-05-26 08:12:23 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 1: 'Elira Voss, once a leader of a cult that imposed a hive mind on its followers, returns to the abando...'
+2025-05-26 08:12:23 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 1.
+2025-05-26 08:12:23 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 1.
+2025-05-26 08:12:23 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 1 (Source text from flawed draft: False)...
+2025-05-26 08:12:23 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 1...
+2025-05-26 08:12:23 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 0.
+2025-05-26 08:12:23 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 0.
+2025-05-26 08:12:23 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 1).
+2025-05-26 08:12:45 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 4764 tk, Comp: 973 tk, Total: 5737 tk
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 1 complete. Chars updated/new: 1, World cats affected: 3, KG Triples extracted: 29.
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 1. Characters in update: ['Elira Voss']
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elira Voss'. New traits: ['Reflective']
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 1. Updated: 1, New: 0.
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 1. Categories in update: ['locations', 'lore', 'systems']
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:114] - Applied modification to 'atmosphere' for 'locations.Temple Ruins'. New value: 'Now heavy with magical fallout...'
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'lore.Hive Mind'. New value: 'A deceptive force that stole individuality and truth from its follower...'
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Memory Lock'. New value: 'A mechanism initiated only by the Keepers to seal away dangerous knowl...'
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Harmonic Key'. New value: 'An object that vibrates at a specific frequency to unlock hidden paths...'
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Protective Sigils'. New value: 'Markings that can either block or amplify the effects of forbidden kno...'
+2025-05-26 08:12:45 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 1. Approx 5 items affected/added.
+2025-05-26 08:12:46 - INFO - [kg_maintainer_agent:802] - KG update for ch 1: Attempted to add 29 triples, skipped 0 due to format/content.
+2025-05-26 08:12:46 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 1.
+2025-05-26 08:12:46 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
+2025-05-26 08:12:46 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
+2025-05-26 08:12:46 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
+2025-05-26 08:12:46 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
+2025-05-26 08:12:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 19 Cypher statements.
+2025-05-26 08:12:46 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
+2025-05-26 08:12:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
+2025-05-26 08:12:46 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
+2025-05-26 08:12:46 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 9 Cypher statements.
+2025-05-26 08:12:46 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
+2025-05-26 08:12:46 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
+2025-05-26 08:12:46 - INFO - [__main__:477] - === NANA: Finished Chapter 1 - Successfully Generated ===
+2025-05-26 08:12:46 - INFO - [__main__:523] - NANA: Chapter 1: Processed. Final text length: 15425 chars.
+2025-05-26 08:12:46 - INFO - [__main__:524] -    Snippet: Elira Voss stood at the edge of the temple ruins, her breath shallow as the wind carried the scent of damp earth and ancient decay. The once-proud structure, now a skeletal remains of what it had been...
+2025-05-26 08:12:46 - INFO - [__main__:517] - 
 --- NANA: Attempting Chapter 2 ---
-2025-05-25 17:14:05 - INFO - [__main__:324] - === NANA: Starting Chapter 2 Generation ===
-2025-05-25 17:14:05 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 2 with detailed scenes...
-2025-05-25 17:14:05 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'factions' empty. Using local state as fallback.
-2025-05-25 17:14:05 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 2 (target scenes: 3-7)...
-2025-05-25 17:14:33 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 745 tk, Comp: 1456 tk, Total: 2201 tk
-2025-05-25 17:14:33 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 2 with 7 scenes from plain text.
-2025-05-25 17:14:33 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 2...
-2025-05-25 17:14:33 - INFO - [context_generation_logic:59] - Semantic context query for ch 2 based on Plot Point 2: 'She ventures into the valley, drawn by a mysterious signal that disrupts her spiritual communion and...'
-2025-05-25 17:14:33 - INFO - [data_access.chapter_queries:150] - Neo4j: Vector search found 1 similar chapters (limit 5).
-2025-05-25 17:14:33 - INFO - [context_generation_logic:186] - Constructed final SEMANTIC context: 105 tokens from 1 chapter snippets (via Neo4j vector search).
-2025-05-25 17:14:33 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 2, Tokens (est.): 182.
-2025-05-25 17:14:33 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 2 draft generation.
-2025-05-25 17:14:33 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:14:33 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:14:33 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 2 draft. Target minimum length: 15000 chars.
-2025-05-25 17:15:32 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 3095 tk, Comp: 3098 tk, Total: 6193 tk
-2025-05-25 17:15:32 - WARNING - [drafting_agent:165] - Ch 2 draft is short (13870 chars) after cleaning, but will be passed for evaluation/revision. Min required: 15000. Snippet: 'Elara Voss had always known that the world was full of whispers. But tonight, those whispers were different—louder, more insistent, like a thread pulling her through the fabric of reality. She had fol...'
-2025-05-25 17:15:32 - INFO - [drafting_agent:171] - Generated initial draft for ch 2 (Length: 13870 chars).
-2025-05-25 17:15:32 - INFO - [__main__:374] - NANA: Ch 2 - Evaluation Cycle, Attempt 1
-2025-05-25 17:15:32 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 2 draft (length: 13870 chars)...
-2025-05-25 17:15:32 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (1): 0.7033
-2025-05-25 17:15:32 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:15:32 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:15:32 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 2...
-2025-05-25 17:15:56 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5070 tk, Comp: 1013 tk, Total: 6083 tk
-2025-05-25 17:15:56 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 2 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter introduces the concept of the Machine as both a tool and a prison, but this is not clearly connected to the civilization that built it, w...'
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"This place… it’s not just a wound in time. It’s a...'. This will prevent direct patching for this issue. Problem desc: The chapter introduces the concept of the Machine as both a tool and a prison, but this is not clearly connected to the civilization that built it, which was mentioned in previous context. This creates an inconsistency in the lore and world-building, as the Machine's true purpose and its connection to the ancient civilization are only implied here.
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"The signal had not just led her here; it had *tra...'. This will prevent direct patching for this issue. Problem desc: While the chapter introduces Elara entering the valley, it does not clearly advance the intended plot point of her being drawn by a mysterious signal that disrupts her spiritual communion. The signal is mentioned but not shown to have any direct impact on her ability to communicate with spirits or her internal state.
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"She had always known that the spirits she called ...'. This will prevent direct patching for this issue. Problem desc: The chapter touches on the theme of corruption but lacks deeper exploration of its consequences. While Elara begins to understand her complicity, there is not enough thematic depth to fully align with the novel’s core theme of "the consequences of corruption."
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"Her thoughts were interrupted by a sudden shift i...'. This will prevent direct patching for this issue. Problem desc: The chapter is rich in atmosphere and description but lacks sufficient character introspection to fully develop Elara’s arc. Her internal conflict and realization are hinted at, but not deeply explored, which could weaken the emotional impact of her transformation.
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"The man tilted his head as if considering her wor...'. This will prevent direct patching for this issue. Problem desc: The chapter contains a lot of descriptive detail but lacks dialogue development. While there are interactions with the mysterious figure and the echoes, they are not fully fleshed out, which could limit the reader’s engagement and emotional investment in the characters.
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"She hesitated for only a moment before stepping t...'. This will prevent direct patching for this issue. Problem desc: The pacing is uneven, with some sections being overly descriptive and others rushed. This could affect the reader’s immersion and understanding of the unfolding events in the valley.
-2025-05-25 17:15:56 - WARNING - [comprehensive_evaluator_agent:351] - Problem quote for Ch 2 was NOT found VERBATIM in chapter text: '"The air was thick with a low, pulsing hum, neithe...'. This will prevent direct patching for this issue. Problem desc: The chapter uses a lot of symbolic language (e.g., "the hum," "shadows," "echoes") but does not clearly define these symbols for the reader. This could confuse or alienate readers unfamiliar with Lovecraftian horror conventions, which often rely on subtle and layered symbolism.
-2025-05-25 17:15:56 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 2 complete. Needs revision: True. Summary of reasons: Consistency issues identified by LLM.; Draft is too short (13870 chars). Minimum required: 15000.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.. Detailed problems found: 9
-2025-05-25 17:15:56 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 2...
-2025-05-25 17:15:56 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:15:56 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:15:56 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 2...
-2025-05-25 17:16:12 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5053 tk, Comp: 639 tk, Total: 5692 tk
-2025-05-25 17:16:12 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"I can end this," she said, her voice barely above...'. Problem: Elara's character arc is inconsistent with her current actions and internal conflict. She is described as evolving into a selfless guardian, yet she still feels the temptation of the Machine's power and seems to be in denial about her role in the valley's corruption.
-2025-05-25 17:16:12 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Machine wasn’t meant to be used by mortals—it...'. Problem: The Machine is described as both a tool and a prison, but its true purpose is not clearly defined in relation to the valley’s curse. This creates ambiguity about how Elara's actions have contributed to the corruption.
-2025-05-25 17:16:12 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She had been feeding them. Now they were feeding ...'. Problem: The text implies Elara has been feeding the spirits, but this is not clearly tied to her established role as a spirit medium who manipulates the dead for personal gain. There is a lack of direct reference to how her actions have caused the valley’s corruption.
-2025-05-25 17:16:12 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Mysterious Man’s words echoed in her mind, hi...'. Problem: The text introduces a mysterious man who speaks to Elara, but this character is not mentioned in the previous chapters or character profiles. This creates an inconsistency in narrative flow and character introduction.
-2025-05-25 17:16:12 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"This was not just a place—it was a prison, one th...'. Problem: The text describes the valley as a "wound in time" and a "prison," but these descriptions are not fully consistent with the world-building notes which only mention the valley as a wound in time. The term "prison" is introduced without prior context or explanation.
-2025-05-25 17:16:12 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 2 found 5 problems.
-2025-05-25 17:16:12 - WARNING - [__main__:393] - NANA: Ch 2 (Attempt 1) - World Continuity Agent found 5 issues.
-2025-05-25 17:16:12 - WARNING - [__main__:408] - NANA: Ch 2 draft (Attempt 1) needs revision. Reasons: Consistency issues identified by LLM.; Draft is too short (13870 chars). Minimum required: 15000.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.; Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:543] - Attempting revision for chapter 2. Reason(s):
+2025-05-26 08:12:46 - INFO - [__main__:324] - === NANA: Starting Chapter 2 Generation ===
+2025-05-26 08:12:46 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 2 with detailed scenes...
+2025-05-26 08:12:46 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'factions' empty. Using local state as fallback.
+2025-05-26 08:12:46 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 2 (target scenes: 3-7)...
+2025-05-26 08:13:09 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 769 tk, Comp: 1313 tk, Total: 2082 tk
+2025-05-26 08:13:09 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 2 with 6 scenes from plain text.
+2025-05-26 08:13:09 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 2...
+2025-05-26 08:13:09 - INFO - [context_generation_logic:59] - Semantic context query for ch 2 based on Plot Point 2: 'She ventures into the unknown, guided by cryptic symbols and the whispers of those who have tried to...'
+2025-05-26 08:13:09 - INFO - [data_access.chapter_queries:150] - Neo4j: Vector search found 1 similar chapters (limit 5).
+2025-05-26 08:13:09 - INFO - [context_generation_logic:186] - Constructed final SEMANTIC context: 122 tokens from 1 chapter snippets (via Neo4j vector search).
+2025-05-26 08:13:09 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 2, Tokens (est.): 199.
+2025-05-26 08:13:09 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 2 draft generation.
+2025-05-26 08:13:09 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
+2025-05-26 08:13:09 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
+2025-05-26 08:13:09 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 2 draft. Target minimum length: 13000 chars.
+2025-05-26 08:14:18 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 2978 tk, Comp: 3784 tk, Total: 6762 tk
+2025-05-26 08:14:18 - INFO - [drafting_agent:171] - Generated initial draft for ch 2 (Length: 17707 chars).
+2025-05-26 08:14:18 - INFO - [__main__:374] - NANA: Ch 2 - Evaluation Cycle, Attempt 1
+2025-05-26 08:14:18 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 2 draft (length: 17707 chars)...
+2025-05-26 08:14:18 - INFO - [comprehensive_evaluator_agent:294] - Coherence score with previous chapter (1): 0.8497
+2025-05-26 08:14:18 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:18 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:18 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 2...
+2025-05-26 08:14:34 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5783 tk, Comp: 617 tk, Total: 6400 tk
+2025-05-26 08:14:34 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 2 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter introduces the Harmonic Key as an object that is both a tool and a conduit, but it lacks clear rules or mechanics about how it functions....'
+2025-05-26 08:14:34 - INFO - [comprehensive_evaluator_agent:41] - Plain text evaluation for Ch 2 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:14:34 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 2 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
+2025-05-26 08:14:34 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 2...
+2025-05-26 08:14:34 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:34 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:34 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 2...
+2025-05-26 08:14:36 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5774 tk, Comp: 11 tk, Total: 5785 tk
+2025-05-26 08:14:36 - INFO - [world_continuity_agent:40] - Consistency check for Ch 2 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:14:36 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 2 found 0 problems.
+2025-05-26 08:14:36 - INFO - [__main__:403] - NANA: Ch 2 draft passed evaluation (Attempt 1). Text is considered good.
+2025-05-26 08:14:43 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 3872 tk, Comp: 71 tk, Total: 3943 tk
+2025-05-26 08:14:43 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 2: 'Elira discovers the Harmonic Key in the Temple Ruins, realizing the hive mind's true nature as a sys...'
+2025-05-26 08:14:43 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 2.
+2025-05-26 08:14:43 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 2.
+2025-05-26 08:14:43 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 2 (Source text from flawed draft: False)...
+2025-05-26 08:14:43 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 2...
+2025-05-26 08:14:43 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:43 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
+2025-05-26 08:14:43 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 2).
+2025-05-26 08:15:14 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 5871 tk, Comp: 1376 tk, Total: 7247 tk
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 2 complete. Chars updated/new: 1, World cats affected: 3, KG Triples extracted: 43.
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 2. Characters in update: ['Elira Voss']
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elira Voss'. New traits: ['Determined, Cautious, Resolute, Reflective, Fearless', 'Reflective', 'Unwavering']
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 2. Updated: 1, New: 0.
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 2. Categories in update: ['locations', 'systems', 'lore']
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:114] - Applied modification to 'atmosphere' for 'locations.Temple Ruins'. New value: 'Heavy with echoes and shifting reality...'
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Harmonic Key'. New value: 'An object that vibrates at a specific frequency to unlock hidden paths...'
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Memory Lock'. New value: 'A mechanism initiated only by the Keepers to seal away dangerous knowl...'
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.Protective Sigils'. New value: 'Markings that can either block or amplify the effects of forbidden kno...'
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'lore.Hive Mind'. New value: 'A system of collective consciousness that once controlled Elira's foll...'
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 2. Approx 5 items affected/added.
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:802] - KG update for ch 2: Attempted to add 43 triples, skipped 0 due to format/content.
+2025-05-26 08:15:14 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 2.
+2025-05-26 08:15:14 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
+2025-05-26 08:15:14 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
+2025-05-26 08:15:14 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
+2025-05-26 08:15:14 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
+2025-05-26 08:15:14 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
+2025-05-26 08:15:14 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
+2025-05-26 08:15:14 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 27 Cypher statements.
+2025-05-26 08:15:14 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
+2025-05-26 08:15:14 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 12 Cypher statements.
+2025-05-26 08:15:14 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
+2025-05-26 08:15:14 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
+2025-05-26 08:15:14 - INFO - [__main__:477] - === NANA: Finished Chapter 2 - Successfully Generated ===
+2025-05-26 08:15:14 - INFO - [__main__:523] - NANA: Chapter 2: Processed. Final text length: 17707 chars.
+2025-05-26 08:15:14 - INFO - [__main__:524] -    Snippet: Elira Voss stepped into the Temple Ruins, her boots crunching over shattered stone and dried leaves as she moved deeper into the labyrinth of forgotten architecture. The air was thick, almost tangible...
+2025-05-26 08:15:14 - INFO - [__main__:517] - 
+--- NANA: Attempting Chapter 3 ---
+2025-05-26 08:15:14 - INFO - [__main__:324] - === NANA: Starting Chapter 3 Generation ===
+2025-05-26 08:15:14 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 3 with detailed scenes...
+2025-05-26 08:15:14 - WARNING - [prompt_data_getters:165] - Neo4j world snippet fetch for 'factions' empty. Using local state as fallback.
+2025-05-26 08:15:14 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 3 (target scenes: 3-7)...
+2025-05-26 08:15:38 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 739 tk, Comp: 1234 tk, Total: 1973 tk
+2025-05-26 08:15:38 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 3 with 6 scenes from plain text.
+2025-05-26 08:15:38 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 3...
+2025-05-26 08:15:38 - INFO - [context_generation_logic:59] - Semantic context query for ch 3 based on Plot Point 3: 'Inside the library, she encounters a sentient archive that reveals the true nature of the hive mind ...'
+2025-05-26 08:15:38 - INFO - [data_access.chapter_queries:150] - Neo4j: Vector search found 2 similar chapters (limit 5).
+2025-05-26 08:15:38 - INFO - [context_generation_logic:186] - Constructed final SEMANTIC context: 210 tokens from 2 chapter snippets (via Neo4j vector search).
+2025-05-26 08:15:38 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 3, Tokens (est.): 287.
+2025-05-26 08:15:38 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 3 draft generation.
+2025-05-26 08:15:38 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:15:38 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:15:38 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 3 draft. Target minimum length: 13000 chars.
+2025-05-26 08:17:23 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 3285 tk, Comp: 5550 tk, Total: 8835 tk
+2025-05-26 08:17:23 - INFO - [drafting_agent:171] - Generated initial draft for ch 3 (Length: 24952 chars).
+2025-05-26 08:17:23 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 1
+2025-05-26 08:17:23 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 24952 chars)...
+2025-05-26 08:17:23 - INFO - [comprehensive_evaluator_agent:294] - Coherence score with previous chapter (2): 0.6619
+2025-05-26 08:17:23 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:17:23 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:17:23 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
+2025-05-26 08:17:41 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 7939 tk, Comp: 553 tk, Total: 8492 tk
+2025-05-26 08:17:41 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter repeats the same sequence of events and dialogue multiple times, which creates redundancy and undermines narrative progression.  
+QUOTE F...'
+2025-05-26 08:17:42 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The Archive’s voice was now more urgent. 'You mad...'. Falling back to semantic sentence search.
+2025-05-26 08:17:45 - INFO - [utils:295] - Best semantic match for query '"The Archive’s voice was now more urgent. 'You made them bel...' has similarity 0.81 at span 17238-17282.
+2025-05-26 08:17:45 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The Archive’s voice was now m...' from 17238-17282 (Similarity: 0.81). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:17:46 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'She had always believed that u...' at 3443-3593 in sentence 3443-3594
+2025-05-26 08:17:46 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The hive mind was never a choi...' at 3260-3350 in sentence 3259-3354
+2025-05-26 08:17:47 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The moment Elira touched the H...' at 23413-23560 in sentence 23408-23561
+2025-05-26 08:17:47 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 3 complete. Needs revision: True. Summary of reasons: Consistency issues identified by LLM.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.. Detailed problems found: 5
+2025-05-26 08:17:47 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 3...
+2025-05-26 08:17:47 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:17:47 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:17:47 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
+2025-05-26 08:18:12 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 7932 tk, Comp: 913 tk, Total: 8845 tk
+2025-05-26 08:18:13 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'It was not just an object—it w...' at 7707-7835 in sentence 7707-7838
+2025-05-26 08:18:13 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'Its form shifting between soli...' at 1460-1545 in sentence 1421-1548
+2025-05-26 08:18:14 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'As she stepped forward, the fi...' at 13383-13496 in sentence 13379-13499
+2025-05-26 08:18:14 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The Archive’s voice was now al...' at 17238-17281 in sentence 17238-17282
+2025-05-26 08:18:15 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'She had spent so long believin...' at 12403-12513 in sentence 12403-12514
+2025-05-26 08:18:15 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"For a moment, she felt as though it was smiling."...'. Falling back to semantic sentence search.
+2025-05-26 08:18:19 - INFO - [utils:290] - Semantic match found for query '"For a moment, she felt as though it was smiling."...', but similarity (0.71) is below threshold (0.75).
+2025-05-26 08:18:19 - WARNING - [utils:158] - Could not confidently locate quote TEXT from LLM: '"For a moment, she felt as though it was smiling."...' in document using direct or semantic search.
+2025-05-26 08:18:19 - WARNING - [world_continuity_agent:100] - Ch 3 consistency problem: Could not find quote via spaCy utils: '"For a moment, she felt as though it was smiling."...'. Offsets will be None.
+2025-05-26 08:18:20 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'She had spent her life avoidin...' at 12958-13057 in sentence 12958-13058
+2025-05-26 08:18:20 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 3 found 7 problems.
+2025-05-26 08:18:20 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 1) - World Continuity Agent found 7 issues.
+2025-05-26 08:18:20 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 1) needs revision. Reasons: Consistency issues identified by LLM.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.; Continuity issues identified by WorldContinuityAgent.
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:537] - Attempting revision for chapter 3. Reason(s):
 - Consistency issues identified by LLM.
-- Draft is too short (13870 chars). Minimum required: 15000.
 - Meta/Uncategorized issues identified by LLM.
 - Narrative Depth/Length issues identified by LLM.
 - Plot Arc deviation identified by LLM.
 - Thematic issues identified by LLM.
 - Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:558] - Attempting patch-based revision for Ch 2 with 14 potentially actionable problem(s).
-2025-05-25 17:16:12 - WARNING - [chapter_revision_logic:336] - Found 14 problems for Ch 2. 14 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
-2025-05-25 17:16:12 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"This place… it’s not just a wound in time. It’s a...'. Providing general text snippet fallback.
-2025-05-25 17:16:12 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"The signal had not just led her here; it had *tra...'. Providing general text snippet fallback.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:199] - Patch (Ch 2, general expansion): Max output tokens set to 8192.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'Draft is too short (13870 chars). Minimum required: 15000....' Quote: 'N/A - General Issue...' Max Output Tokens: 8192
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:214] - Patch (Ch 2, specific fix): Original snippet tokens: 3093. Max output tokens set to 4639.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'The chapter introduces the concept of the Machine as both a ...' Quote: '"This place… it’s not just a wound in time. It’s a...' Max Output Tokens: 4639
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:214] - Patch (Ch 2, specific fix): Original snippet tokens: 3093. Max output tokens set to 4639.
-2025-05-25 17:16:12 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'While the chapter introduces Elara entering the valley, it d...' Quote: '"The signal had not just led her here; it had *tra...' Max Output Tokens: 4639
-2025-05-25 17:16:29 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5411 tk, Comp: 576 tk, Total: 5987 tk
-2025-05-25 17:16:54 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5416 tk, Comp: 1055 tk, Total: 6471 tk
-2025-05-25 17:17:49 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5408 tk, Comp: 3888 tk, Total: 9296 tk
-2025-05-25 17:17:49 - INFO - [chapter_revision_logic:378] - Generated 3 patch instructions for Ch 2.
-2025-05-25 17:17:49 - INFO - [chapter_revision_logic:402] - Patch for 'N/A - General Issue' generated new content: 'Elara Voss had always known that the world was full of whispers. But tonight, those whispers were di...'. This content will NOT be automatically inserted by this function. Orchestrator may need to handle its placement or use it to inform full rewrite.
-2025-05-25 17:17:50 - INFO - [utils:182] - Best semantic match for query '"This place… it’s not just a wound in time. It’s a prison."...' has similarity 0.92 at span 8055-8149.
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:458] - Patch 1: Semantic search (paragraph) identified target segment for '"This place… it’s not just a wound in time. It’s a...' at original chars 8055-8149 (Score: 0.92).
-2025-05-25 17:17:50 - INFO - [utils:182] - Best semantic match for query '"The signal had not just led her here; it had *transformed* ...' has similarity 0.82 at span 2759-3143.
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:458] - Patch 2: Semantic search (paragraph) identified target segment for '"The signal had not just led her here; it had *tra...' at original chars 2759-3143 (Score: 0.82).
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 8055 to 8149 (length 94) with new text (length 2690). Replacement snippet: 'Elara’s breath hitched as she approached the structure. The ...'
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 2759 to 3143 (length 384) with new text (length 4837). Replacement snippet: 'Elara Voss had always known that the world was full of whisp...'
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:506] - Applied 2 out of 2 patches that targeted specific segments.
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:576] - Patch process for Ch 2: Generated 3 patch instructions. Original len: 13870, Patched text len (after auto-application): 20919.
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:597] - Patched text similarity with original: 0.9193
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:610] - Ch 2: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).
-2025-05-25 17:17:50 - INFO - [chapter_revision_logic:763] - Revision process for ch 2 produced a candidate text (Length: 20919 chars).
-2025-05-25 17:17:50 - INFO - [__main__:430] - NANA: Ch 2 - Revision attempt 1 successful. New text length: 20919. Re-evaluating in next loop iteration.
-2025-05-25 17:17:50 - INFO - [__main__:374] - NANA: Ch 2 - Evaluation Cycle, Attempt 2
-2025-05-25 17:17:50 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 2 draft (length: 20919 chars)...
-2025-05-25 17:17:50 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (1): 0.6684
-2025-05-25 17:17:50 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:17:50 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:17:50 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 2...
-2025-05-25 17:18:23 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 6581 tk, Comp: 1165 tk, Total: 7746 tk
-2025-05-25 17:18:23 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 2 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter repeats the same opening paragraph verbatim, which may indicate a copy-paste error or lack of originality in the narrative structure. Thi...'
-2025-05-25 17:18:23 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 2 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:18:23 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 2 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
-2025-05-25 17:18:23 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 2...
-2025-05-25 17:18:23 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:18:23 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:18:23 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 2...
-2025-05-25 17:18:43 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 6564 tk, Comp: 675 tk, Total: 7239 tk
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"Elara Voss had always known that the world was fu...'. Problem: The chapter repeats the same opening paragraph verbatim, which is inconsistent with narrative flow and structure.
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She had always known that the world was full of w...'. Problem: Elara's character arc is not clearly progressing; she remains in a state of self-realization without showing any immediate change in behavior or understanding.
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Machine wasn’t broken—it had been twisted by ...'. Problem: The Machine is described as both a prison and a conduit, but the text does not clearly establish its original purpose or how it was misused by Elara.
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She had been feeding them, she realized now, not ...'. Problem: The concept of "feeding" the spirits is introduced without clear explanation or prior context, making the relationship between Elara and the valley’s entities ambiguous.
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Mysterious Man’s words echoed in her mind, hi...'. Problem: The Mysterious Man appears again without clear explanation of his origin or role, creating confusion about the narrative structure and continuity.
-2025-05-25 17:18:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She had been here before, not in this valley, but...'. Problem: The text implies Elara has been in the valley before, but this contradicts the earlier statement that she had never entered it.
-2025-05-25 17:18:43 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 2 found 6 problems.
-2025-05-25 17:18:43 - WARNING - [__main__:393] - NANA: Ch 2 (Attempt 2) - World Continuity Agent found 6 issues.
-2025-05-25 17:18:43 - WARNING - [__main__:408] - NANA: Ch 2 draft (Attempt 2) needs revision. Reasons: Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:543] - Attempting revision for chapter 2. Reason(s):
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:554] - Attempting patch-based revision for Ch 3 with 10 potentially actionable problem(s).
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:354] - Skipping patch generation for Ch 3 problem 5 (not specific quote text OR not an expansion-type general issue): 'The chapter does not meet the required length of at least 13'
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:354] - Skipping patch generation for Ch 3 problem 11 (specific quote text present, but no offsets found by spaCy utils): 'The Archive is described as "almost smiling" when Elira says'
+2025-05-26 08:18:20 - WARNING - [chapter_revision_logic:358] - Found 12 problems for Ch 3. 10 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1843. Max output tokens set to 2764.
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The chapter repeats the same sequence of events and dialogue...' Quote Text: '"The Archive’s voice was now more urgent. 'You mad...' Max Output Tokens: 2764
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1808. Max output tokens set to 2712.
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The chapter does not clearly advance the intended plot point...' Quote Text: '"She had always believed that unity and control we...' Max Output Tokens: 2712
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1808. Max output tokens set to 2712.
+2025-05-26 08:18:20 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The chapter lacks sufficient exploration of the theme "the c...' Quote Text: '"The hive mind was never a choice, it was a prison...' Max Output Tokens: 2712
+2025-05-26 08:18:26 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4070 tk, Comp: 204 tk, Total: 4274 tk
+2025-05-26 08:18:33 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4021 tk, Comp: 522 tk, Total: 4543 tk
+2025-05-26 08:18:46 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3980 tk, Comp: 975 tk, Total: 4955 tk
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:398] - Generated 3 patch instructions for Ch 3.
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:483] - Patch 1 (spaCy-derived sentence/quote offsets): Queued replacement for segment 17238-17282.
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:483] - Patch 2 (spaCy-derived sentence/quote offsets): Queued replacement for segment 3443-3594.
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:483] - Patch 3 (spaCy-derived sentence/quote offsets): Queued replacement for segment 3259-3354.
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 17238 to 17282 (length 44) with new text (length 918).
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 3443 to 3594 (length 151) with new text (length 2358).
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 3259 to 3354 (length 95) with new text (length 4451).
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:504] - Applied 3 out of 3 patches that targeted specific segments.
+2025-05-26 08:18:46 - INFO - [chapter_revision_logic:566] - Patch process for Ch 3: Generated 3 patch instructions. Original len: 24952, Patched text len (after auto-application): 32389.
+2025-05-26 08:18:47 - INFO - [chapter_revision_logic:585] - Patched text similarity with original: 0.8411
+2025-05-26 08:18:47 - INFO - [chapter_revision_logic:596] - Ch 3: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).
+2025-05-26 08:18:47 - INFO - [chapter_revision_logic:720] - Revision process for ch 3 produced a candidate text (Length: 32389 chars).
+2025-05-26 08:18:47 - INFO - [__main__:430] - NANA: Ch 3 - Revision attempt 1 successful. New text length: 32389. Re-evaluating in next loop iteration.
+2025-05-26 08:18:47 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 2
+2025-05-26 08:18:47 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 32389 chars)...
+2025-05-26 08:18:47 - INFO - [comprehensive_evaluator_agent:294] - Coherence score with previous chapter (2): 0.7267
+2025-05-26 08:18:47 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:18:47 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:18:47 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
+2025-05-26 08:19:06 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 9566 tk, Comp: 655 tk, Total: 10221 tk
+2025-05-26 08:19:06 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter contains repeated identical text from previous paragraphs, which suggests a lack of originality and may confuse the reader.  
+QUOTE FROM ...'
+2025-05-26 08:19:06 - INFO - [comprehensive_evaluator_agent:41] - Plain text evaluation for Ch 3 is empty or indicates no problems. No problems parsed.
+2025-05-26 08:19:06 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 3 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
+2025-05-26 08:19:06 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 3...
+2025-05-26 08:19:06 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:19:06 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:19:06 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
+2025-05-26 08:19:27 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 9559 tk, Comp: 579 tk, Total: 10138 tk
+2025-05-26 08:19:27 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"Elira Voss stepped into the library... 'The cost ...'. Falling back to semantic sentence search.
+2025-05-26 08:19:32 - INFO - [utils:295] - Best semantic match for query '"Elira Voss stepped into the library... 'The cost of freedom...' has similarity 0.87 at span 12296-12379.
+2025-05-26 08:19:32 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"Elira Voss stepped into the l...' from 12296-12379 (Similarity: 0.87). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:19:32 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The Archive’s voice was not sp...' at 1730-1845 in sentence 1730-1846
+2025-05-26 08:19:33 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The first Harmonic Key. Its surface shimmered wit...'. Falling back to semantic sentence search.
+2025-05-26 08:19:37 - INFO - [utils:295] - Best semantic match for query '"The first Harmonic Key. Its surface shimmered with an inten...' has similarity 0.85 at span 11843-11955.
+2025-05-26 08:19:37 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The first Harmonic Key. Its s...' from 11843-11955 (Similarity: 0.85). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:19:38 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The Archive’s form flickered, its light dimming. ...'. Falling back to semantic sentence search.
+2025-05-26 08:19:43 - INFO - [utils:295] - Best semantic match for query '"The Archive’s form flickered, its light dimming. 'You canno...' has similarity 0.84 at span 12693-12792.
+2025-05-26 08:19:43 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The Archive’s form flickered,...' from 12693-12792 (Similarity: 0.84). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:19:43 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'She looked down at the Harmoni...' at 25116-25249 in sentence 25116-25250
+2025-05-26 08:19:43 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 3 found 5 problems.
+2025-05-26 08:19:43 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 2) - World Continuity Agent found 5 issues.
+2025-05-26 08:19:43 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 2) needs revision. Reasons: Continuity issues identified by WorldContinuityAgent.
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:537] - Attempting revision for chapter 3. Reason(s):
 - Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:558] - Attempting patch-based revision for Ch 2 with 6 potentially actionable problem(s).
-2025-05-25 17:18:43 - WARNING - [chapter_revision_logic:336] - Found 6 problems for Ch 2. 6 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
-2025-05-25 17:18:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"Elara Voss had always known that the world was fu...'. Providing general text snippet fallback.
-2025-05-25 17:18:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"She had always known that the world was full of w...'. Providing general text snippet fallback.
-2025-05-25 17:18:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"The Machine wasn’t broken—it had been twisted by ...'. Providing general text snippet fallback.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 2, specific fix): Original snippet tokens: 3602. Max output tokens set to 5403.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'The chapter repeats the same opening paragraph verbatim, whi...' Quote: '"Elara Voss had always known that the world was fu...' Max Output Tokens: 5403
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 2, specific fix): Original snippet tokens: 3602. Max output tokens set to 5403.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'Elara's character arc is not clearly progressing; she remain...' Quote: '"She had always known that the world was full of w...' Max Output Tokens: 5403
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 2, specific fix): Original snippet tokens: 3602. Max output tokens set to 5403.
-2025-05-25 17:18:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 2. Problem: 'The Machine is described as both a prison and a conduit, but...' Quote: '"The Machine wasn’t broken—it had been twisted by ...' Max Output Tokens: 5403
-2025-05-25 17:19:05 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5887 tk, Comp: 748 tk, Total: 6635 tk
-2025-05-25 17:19:10 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5936 tk, Comp: 885 tk, Total: 6821 tk
-2025-05-25 17:19:51 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5960 tk, Comp: 1884 tk, Total: 7844 tk
-2025-05-25 17:19:51 - INFO - [chapter_revision_logic:378] - Generated 3 patch instructions for Ch 2.
-2025-05-25 17:19:52 - INFO - [utils:182] - Best semantic match for query '"Elara Voss had always known that the world was full of whis...' has similarity 0.89 at span 0-623.
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:458] - Patch 1: Semantic search (paragraph) identified target segment for '"Elara Voss had always known that the world was fu...' at original chars 0-623 (Score: 0.89).
-2025-05-25 17:19:52 - INFO - [utils:182] - Best semantic match for query '"She had always known that the world was full of whispers. B...' has similarity 0.82 at span 0-623.
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:458] - Patch 2: Semantic search (paragraph) identified target segment for '"She had always known that the world was full of w...' at original chars 0-623 (Score: 0.82).
-2025-05-25 17:19:52 - WARNING - [chapter_revision_logic:480] - Patch 2 for '"She had always known that the world was full of w...' (targets segment 0-623) overlaps with a previously determined patch for segment 0-623. Skipping this patch to avoid conflict.
-2025-05-25 17:19:52 - INFO - [utils:182] - Best semantic match for query '"The Machine wasn’t broken—it had been twisted by those who ...' has similarity 0.79 at span 20171-20353.
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:458] - Patch 3: Semantic search (paragraph) identified target segment for '"The Machine wasn’t broken—it had been twisted by ...' at original chars 20171-20353 (Score: 0.79).
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 20171 to 20353 (length 182) with new text (length 3492). Replacement snippet: 'Elara’s breath hitched as she approached the structure. The ...'
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 0 to 623 (length 623) with new text (length 4063). Replacement snippet: 'Elara Voss had always known that the world was full of whisp...'
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:506] - Applied 2 out of 3 patches that targeted specific segments.
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:576] - Patch process for Ch 2: Generated 3 patch instructions. Original len: 20919, Patched text len (after auto-application): 27669.
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:597] - Patched text similarity with original: 0.8001
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:610] - Ch 2: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).
-2025-05-25 17:19:52 - INFO - [chapter_revision_logic:763] - Revision process for ch 2 produced a candidate text (Length: 27669 chars).
-2025-05-25 17:19:52 - INFO - [__main__:430] - NANA: Ch 2 - Revision attempt 2 successful. New text length: 27669. Re-evaluating in next loop iteration.
-2025-05-25 17:19:52 - INFO - [__main__:374] - NANA: Ch 2 - Evaluation Cycle, Attempt 3
-2025-05-25 17:19:52 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 2 draft (length: 27669 chars)...
-2025-05-25 17:19:52 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (1): 0.8102
-2025-05-25 17:19:52 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:19:52 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:19:52 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 2...
-2025-05-25 17:20:19 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 8025 tk, Comp: 955 tk, Total: 8980 tk
-2025-05-25 17:20:19 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 2 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter repeats the same phrases and descriptions multiple times, which undermines narrative flow and creates redundancy. This repetition can con...'
-2025-05-25 17:20:19 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 2 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:20:19 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 2 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
-2025-05-25 17:20:19 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 2...
-2025-05-25 17:20:19 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:20:19 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:20:19 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 2...
-2025-05-25 17:20:42 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 8008 tk, Comp: 758 tk, Total: 8766 tk
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"Elara Voss had always known that the world was fu...'. Problem: The chapter repeats identical paragraphs verbatim, which is an internal inconsistency and suggests a lack of narrative progression or originality.
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She could feel the echoes around her, not as dist...'. Problem: The text mentions Elara "feeling the echoes around her, not as distant voices but as living entities," contradicting the established lore that the valley is a wound in time where spirits are trapped in endless loops, not fully sentient or alive.
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Machine was not just a device—it was a testam...'. Problem: The Machine is described as both a "safeguard" and a "prison," which may be inconsistent if the world-building rules or previous chapters have established it as a tool rather than an inherently imprisoning device.
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"She had been feeding them, she realized now, not ...'. Problem: The text suggests Elara has been "feeding" the spirits, which contradicts her established role as a spirit medium who manipulates the dead for personal gain, implying she uses their power rather than nourishing them.
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"Elara Voss had always known that the world was fu...'. Problem: The text implies Elara has "always known" about whispers and the supernatural, which conflicts with the previous chapter where she was only recently introduced to the cursed valley and its significance.
-2025-05-25 17:20:42 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 2 NOT VERBATIM in chapter text: '"The Machine wasn’t broken—it had been twisted by ...'. Problem: The text states that the Machine was "twisted by those who feared its truth," which contradicts the previous chapter where it was implied that Elara herself had twisted it through her actions.
-2025-05-25 17:20:42 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 2 found 6 problems.
-2025-05-25 17:20:42 - WARNING - [__main__:393] - NANA: Ch 2 (Attempt 3) - World Continuity Agent found 6 issues.
-2025-05-25 17:20:42 - WARNING - [__main__:408] - NANA: Ch 2 draft (Attempt 3) needs revision. Reasons: Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:20:42 - ERROR - [__main__:411] - NANA: Ch 2 - Max revision attempts (2) reached. Proceeding with current draft, marked as flawed.
-2025-05-25 17:20:51 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 6141 tk, Comp: 117 tk, Total: 6258 tk
-2025-05-25 17:20:51 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 2: 'Elara Voss arrives at a cursed valley, where the supernatural presence is overwhelming and the past...'
-2025-05-25 17:20:51 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 2.
-2025-05-25 17:20:51 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 2.
-2025-05-25 17:20:51 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 2 (Source text from flawed draft: True)...
-2025-05-25 17:20:51 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 2...
-2025-05-25 17:20:51 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 1.
-2025-05-25 17:20:51 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 1.
-2025-05-25 17:20:51 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 2).
-2025-05-25 17:21:21 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 8133 tk, Comp: 1180 tk, Total: 9313 tk
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 2 complete. Chars updated/new: 1, World cats affected: 4, KG Triples extracted: 28.
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 2. Characters in update: ['Elara Voss']
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elara Voss'. New traits: ['Corrupted', 'Curious, Determined, Guilty, Unstable, Resolute', 'Haunted']
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 2. Updated: 1, New: 0.
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 2. Categories in update: ['locations', 'systems', 'lore', 'factions']
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.The Machine'. New value: 'A device created by an ancient civilization that opened the veil betwe...'
-2025-05-25 17:21:21 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 2. Approx 4 items affected/added.
-2025-05-25 17:21:22 - INFO - [kg_maintainer_agent:802] - KG update for ch 2: Attempted to add 28 triples, skipped 0 due to format/content.
-2025-05-25 17:21:22 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 2.
-2025-05-25 17:21:22 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
-2025-05-25 17:21:22 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
-2025-05-25 17:21:22 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
-2025-05-25 17:21:22 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
-2025-05-25 17:21:22 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
-2025-05-25 17:21:22 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
-2025-05-25 17:21:22 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 25 Cypher statements.
-2025-05-25 17:21:22 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
-2025-05-25 17:21:22 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 12 Cypher statements.
-2025-05-25 17:21:22 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
-2025-05-25 17:21:22 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
-2025-05-25 17:21:22 - INFO - [__main__:477] - === NANA: Finished Chapter 2 - Generated (Marked with Flaws) ===
-2025-05-25 17:21:22 - INFO - [__main__:523] - NANA: Chapter 2: Processed. Final text length: 27669 chars.
-2025-05-25 17:21:22 - INFO - [__main__:524] -    Snippet: Elara Voss had always known that the world was full of whispers. But tonight, those whispers were different—louder, more insistent, like a thread pulling her through the fabric of reality. She had fol...
-2025-05-25 17:21:22 - INFO - [__main__:517] - 
---- NANA: Attempting Chapter 3 ---
-2025-05-25 17:21:22 - INFO - [__main__:324] - === NANA: Starting Chapter 3 Generation ===
-2025-05-25 17:21:22 - INFO - [planner_agent:137] - PlannerAgent planning Chapter 3 with detailed scenes...
-2025-05-25 17:21:22 - INFO - [planner_agent:206] - Calling LLM (Qwen3-8B-Q4) for detailed scene plan for chapter 3 (target scenes: 3-7)...
-2025-05-25 17:21:55 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 846 tk, Comp: 1506 tk, Total: 2352 tk
-2025-05-25 17:21:55 - INFO - [planner_agent:249] - Generated valid detailed scene plan for chapter 3 with 7 scenes from plain text.
-2025-05-25 17:21:55 - INFO - [context_generation_logic:198] - Generating HYBRID context for Chapter 3...
-2025-05-25 17:21:55 - INFO - [context_generation_logic:59] - Semantic context query for ch 3 based on Plot Point 3: 'As she explores, she begins to experience reality fractures—objects shift between states, voices ech...'
-2025-05-25 17:21:55 - INFO - [data_access.chapter_queries:150] - Neo4j: Vector search found 2 similar chapters (limit 5).
-2025-05-25 17:21:55 - INFO - [context_generation_logic:186] - Constructed final SEMANTIC context: 241 tokens from 2 chapter snippets (via Neo4j vector search).
-2025-05-25 17:21:55 - INFO - [context_generation_logic:235] - Generated HYBRID context for Chapter 3, Tokens (est.): 318.
-2025-05-25 17:21:55 - INFO - [drafting_agent:87] - Using detailed scene plan (plain text) for Ch 3 draft generation.
-2025-05-25 17:21:55 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:21:55 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:21:55 - INFO - [drafting_agent:145] - Calling LLM (Qwen3-8B-Q4) for Ch 3 draft. Target minimum length: 15000 chars.
-2025-05-25 17:23:03 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 3700 tk, Comp: 3382 tk, Total: 7082 tk
-2025-05-25 17:23:03 - INFO - [drafting_agent:171] - Generated initial draft for ch 3 (Length: 15564 chars).
-2025-05-25 17:23:03 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 1
-2025-05-25 17:23:03 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 15564 chars)...
-2025-05-25 17:23:03 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (2): 0.8581
-2025-05-25 17:23:03 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:23:03 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:23:03 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
-2025-05-25 17:23:23 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5912 tk, Comp: 782 tk, Total: 6694 tk
-2025-05-25 17:23:23 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter introduces the idea that the Machine was created by the Keepers of the Veil to contain the echoes, but it does not clearly establish how ...'
-2025-05-25 17:23:23 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 3 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:23:23 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 3 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
-2025-05-25 17:23:23 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 3...
-2025-05-25 17:23:23 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:23:23 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:23:23 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
-2025-05-25 17:23:43 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5891 tk, Comp: 747 tk, Total: 6638 tk
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"I can’t keep using this power… it’s too much."...'. Problem: Elara's character arc contradicts her established traits and development. She is described as "corrupted" and "unstable," yet she suddenly acts with clarity and resolve without prior indication of this change.
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine was never meant to be used for power,...'. Problem: The Machine is described as both a "seal" and a "prison," which creates a contradiction with the lore that states it was created by the Keepers of the Veil to contain the echoes, not to imprison them.
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine had given her power, but it had also ...'. Problem: The chapter implies Elara has been complicit in the valley's creation without establishing how or why this is the case, which creates a gap in the narrative and character motivation.
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The valley was not just cursed; it was broken."...'. Problem: The text describes the valley as a "wound in time" but does not consistently reflect this concept in its descriptions of the environment or Elara's experience.
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine’s structure was both ancient and alie...'. Problem: The Machine is described as "alien" and "ancient," yet its function and purpose are not clearly explained in relation to the Keepers of the Veil or the valley's curse.
-2025-05-25 17:23:43 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"She reached for the journal, its cover worn and c...'. Problem: The text introduces a "journal" as an object that contains both a record and a warning, but there is no prior mention or setup for this journal in previous chapters, making its introduction feel abrupt.
-2025-05-25 17:23:43 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 3 found 6 problems.
-2025-05-25 17:23:43 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 1) - World Continuity Agent found 6 issues.
-2025-05-25 17:23:43 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 1) needs revision. Reasons: Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:543] - Attempting revision for chapter 3. Reason(s):
-- Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:558] - Attempting patch-based revision for Ch 3 with 6 potentially actionable problem(s).
-2025-05-25 17:23:43 - WARNING - [chapter_revision_logic:336] - Found 6 problems for Ch 3. 6 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
-2025-05-25 17:23:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"I can’t keep using this power… it’s too much."...'. Providing general text snippet fallback.
-2025-05-25 17:23:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"The Machine was never meant to be used for power,...'. Providing general text snippet fallback.
-2025-05-25 17:23:43 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"The Machine had given her power, but it had also ...'. Providing general text snippet fallback.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 3, specific fix): Original snippet tokens: 3377. Max output tokens set to 5065.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'Elara's character arc contradicts her established traits and...' Quote: '"I can’t keep using this power… it’s too much."...' Max Output Tokens: 5065
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 3, specific fix): Original snippet tokens: 3377. Max output tokens set to 5065.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The Machine is described as both a "seal" and a "prison," wh...' Quote: '"The Machine was never meant to be used for power,...' Max Output Tokens: 5065
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:214] - Patch (Ch 3, specific fix): Original snippet tokens: 3377. Max output tokens set to 5065.
-2025-05-25 17:23:43 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The chapter implies Elara has been complicit in the valley's...' Quote: '"The Machine had given her power, but it had also ...' Max Output Tokens: 5065
-2025-05-25 17:24:06 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5857 tk, Comp: 736 tk, Total: 6593 tk
-2025-05-25 17:24:10 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5877 tk, Comp: 837 tk, Total: 6714 tk
-2025-05-25 17:24:23 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5941 tk, Comp: 646 tk, Total: 6587 tk
-2025-05-25 17:24:23 - INFO - [chapter_revision_logic:378] - Generated 3 patch instructions for Ch 3.
-2025-05-25 17:24:24 - INFO - [utils:182] - Best semantic match for query '"I can’t keep using this power… it’s too much."...' has similarity 0.89 at span 12235-12318.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:458] - Patch 1: Semantic search (paragraph) identified target segment for '"I can’t keep using this power… it’s too much."...' at original chars 12235-12318 (Score: 0.89).
-2025-05-25 17:24:24 - INFO - [utils:182] - Best semantic match for query '"The Machine was never meant to be used for power,” she read...' has similarity 0.95 at span 9980-10240.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:458] - Patch 2: Semantic search (paragraph) identified target segment for '"The Machine was never meant to be used for power,...' at original chars 9980-10240 (Score: 0.95).
-2025-05-25 17:24:24 - INFO - [utils:182] - Best semantic match for query '"The Machine had given her power, but it had also bound her ...' has similarity 0.84 at span 4850-5221.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:458] - Patch 3: Semantic search (paragraph) identified target segment for '"The Machine had given her power, but it had also ...' at original chars 4850-5221 (Score: 0.84).
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 12235 to 12318 (length 83) with new text (length 3340). Replacement snippet: 'Elara Voss had always believed she was in control, that the ...'
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 9980 to 10240 (length 260) with new text (length 2965). Replacement snippet: 'Elara Voss traced her fingers over the brittle pages of the ...'
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 4850 to 5221 (length 371) with new text (length 3909). Replacement snippet: 'Elara Voss stepped into the mist-laden clearing, her boots c...'
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:506] - Applied 3 out of 3 patches that targeted specific segments.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:576] - Patch process for Ch 3: Generated 3 patch instructions. Original len: 15564, Patched text len (after auto-application): 25064.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:597] - Patched text similarity with original: 0.9970
-2025-05-25 17:24:24 - WARNING - [chapter_revision_logic:599] - Patched text for ch 3 is very similar to original (Score: 0.9970). Patches might have been ineffective or minor. May consider full rewrite if problems persist.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:630] - Proceeding with full chapter rewrite for Ch 3.
-2025-05-25 17:24:24 - INFO - [chapter_revision_logic:710] - Calling LLM (Qwen3-8B-Q4) for Ch 3 full rewrite. Min length: 15000 chars.
-2025-05-25 17:25:39 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 6232 tk, Comp: 2910 tk, Total: 9142 tk
-2025-05-25 17:25:39 - INFO - [chapter_revision_logic:729] - Full rewrite for Ch 3 generated text of length 13356.
-2025-05-25 17:25:39 - WARNING - [chapter_revision_logic:745] - Final revised draft for ch 3 is short (13356 chars). Min target: 15000.
-2025-05-25 17:25:39 - INFO - [chapter_revision_logic:754] - Full rewrite similarity with original text (final check): 0.9953
-2025-05-25 17:25:39 - WARNING - [chapter_revision_logic:756] - Full rewrite for ch 3 is very similar to original (Score: 0.9953). The LLM may not have made sufficient changes despite instructions.
-2025-05-25 17:25:39 - INFO - [chapter_revision_logic:763] - Revision process for ch 3 produced a candidate text (Length: 13356 chars).
-2025-05-25 17:25:39 - INFO - [__main__:430] - NANA: Ch 3 - Revision attempt 1 successful. New text length: 13356. Re-evaluating in next loop iteration.
-2025-05-25 17:25:39 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 2
-2025-05-25 17:25:39 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 13356 chars)...
-2025-05-25 17:25:39 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (2): 0.8582
-2025-05-25 17:25:39 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:25:39 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:25:39 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
-2025-05-25 17:26:08 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5440 tk, Comp: 1070 tk, Total: 6510 tk
-2025-05-25 17:26:08 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter introduces the journal as a source of information about the Machine and its purpose, but there is no prior mention or setup in previous c...'
-2025-05-25 17:26:08 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 3 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:26:08 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 3 complete. Needs revision: True. Summary of reasons: Draft is too short (13356 chars). Minimum required: 15000.. Detailed problems found: 1
-2025-05-25 17:26:08 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 3...
-2025-05-25 17:26:08 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:26:08 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:26:08 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
-2025-05-25 17:26:26 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5419 tk, Comp: 723 tk, Total: 6142 tk
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"She had always believed she was in control... but...'. Problem: Elara's character arc is inconsistent with her established traits and development. She is described as "corrupted" and "unstable," yet she suddenly acts with clarity and resolve without prior indication of this change.
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine was never meant to be used for power,...'. Problem: The Machine is described as both a "seal" and a "prison," which contradicts its established role as a device created by the Keepers of the Veil to contain the echoes. This creates confusion about its purpose and function.
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"She had always believed she was in control... But...'. Problem: The text implies that Elara has been "feeding the corruption" through her use of the Machine, but this contradicts the earlier plot point where she was drawn to the valley by a mysterious signal and not by her own actions. This creates ambiguity about her role in the valley's curse.
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine’s structure was both ancient and alie...'. Problem: The Machine is described as both ancient and alien, which may be inconsistent with its role as a creation of the Keepers of the Veil. This creates a contradiction in its nature and origin.
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The journal was not just a record of the past; it...'. Problem: The journal is described as containing warnings about the Machine’s misuse, but there is no prior mention of such a journal in the world building notes or previous chapters. This introduces an unestablished element that may disrupt continuity.
-2025-05-25 17:26:26 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"She felt herself being pulled apart... as if she ...'. Problem: The text suggests that Elara is being "unmade" by the Machine, which contradicts her established role as a spirit medium who has been manipulating spirits for personal gain. This implies she is more vulnerable than previously indicated.
-2025-05-25 17:26:26 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 3 found 6 problems.
-2025-05-25 17:26:26 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 2) - World Continuity Agent found 6 issues.
-2025-05-25 17:26:26 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 2) needs revision. Reasons: Draft is too short (13356 chars). Minimum required: 15000.; Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:543] - Attempting revision for chapter 3. Reason(s):
-- Draft is too short (13356 chars). Minimum required: 15000.
-- Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:558] - Attempting patch-based revision for Ch 3 with 7 potentially actionable problem(s).
-2025-05-25 17:26:26 - WARNING - [chapter_revision_logic:336] - Found 7 problems for Ch 3. 7 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
-2025-05-25 17:26:26 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"She had always believed she was in control... but...'. Providing general text snippet fallback.
-2025-05-25 17:26:26 - WARNING - [chapter_revision_logic:128] - Quote for context window not found: '"The Machine was never meant to be used for power,...'. Providing general text snippet fallback.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:199] - Patch (Ch 3, general expansion): Max output tokens set to 8192.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'Draft is too short (13356 chars). Minimum required: 15000....' Quote: 'N/A - General Issue...' Max Output Tokens: 8192
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:214] - Patch (Ch 3, specific fix): Original snippet tokens: 2905. Max output tokens set to 4357.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'Elara's character arc is inconsistent with her established t...' Quote: '"She had always believed she was in control... but...' Max Output Tokens: 4357
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:214] - Patch (Ch 3, specific fix): Original snippet tokens: 2905. Max output tokens set to 4357.
-2025-05-25 17:26:26 - INFO - [chapter_revision_logic:255] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The Machine is described as both a "seal" and a "prison," wh...' Quote: '"The Machine was never meant to be used for power,...' Max Output Tokens: 4357
-2025-05-25 17:27:08 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5427 tk, Comp: 1601 tk, Total: 7028 tk
-2025-05-25 17:27:22 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5391 tk, Comp: 538 tk, Total: 5929 tk
-2025-05-25 17:27:42 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 5409 tk, Comp: 2939 tk, Total: 8348 tk
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:378] - Generated 3 patch instructions for Ch 3.
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:402] - Patch for 'N/A - General Issue' generated new content: 'Elara Voss stepped into the mist-laden clearing, her boots crunching over brittle leaves that had lo...'. This content will NOT be automatically inserted by this function. Orchestrator may need to handle its placement or use it to inform full rewrite.
-2025-05-25 17:27:42 - INFO - [utils:182] - Best semantic match for query '"She had always believed she was in control... but now she w...' has similarity 0.71 at span 12256-12377.
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:458] - Patch 1: Semantic search (paragraph) identified target segment for '"She had always believed she was in control... but...' at original chars 12256-12377 (Score: 0.71).
-2025-05-25 17:27:42 - INFO - [utils:182] - Best semantic match for query '"The Machine was never meant to be used for power, it was a ...' has similarity 0.90 at span 7772-8032.
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:458] - Patch 2: Semantic search (paragraph) identified target segment for '"The Machine was never meant to be used for power,...' at original chars 7772-8032 (Score: 0.90).
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 12256 to 12377 (length 121) with new text (length 2412). Replacement snippet: 'She had always believed she was in control—of the dead, of h...'
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:502] - Applied patch: Replaced original segment from char 7772 to 8032 (length 260) with new text (length 7358). Replacement snippet: 'Elara Voss stepped into the mist-laden clearing, her boots c...'
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:506] - Applied 2 out of 2 patches that targeted specific segments.
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:576] - Patch process for Ch 3: Generated 3 patch instructions. Original len: 13356, Patched text len (after auto-application): 22745.
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:597] - Patched text similarity with original: 0.9573
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:610] - Ch 3: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).
-2025-05-25 17:27:42 - INFO - [chapter_revision_logic:763] - Revision process for ch 3 produced a candidate text (Length: 22745 chars).
-2025-05-25 17:27:42 - INFO - [__main__:430] - NANA: Ch 3 - Revision attempt 2 successful. New text length: 22745. Re-evaluating in next loop iteration.
-2025-05-25 17:27:42 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 3
-2025-05-25 17:27:42 - INFO - [comprehensive_evaluator_agent:252] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 22745 chars)...
-2025-05-25 17:27:42 - INFO - [comprehensive_evaluator_agent:285] - Coherence score with previous chapter (2): 0.8666
-2025-05-25 17:27:42 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:27:42 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:27:42 - INFO - [comprehensive_evaluator_agent:181] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
-2025-05-25 17:28:18 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 7484 tk, Comp: 1287 tk, Total: 8771 tk
-2025-05-25 17:28:18 - INFO - [comprehensive_evaluator_agent:228] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
-PROBLEM DESCRIPTION: The chapter repeats the same opening paragraph as the closing paragraph, which creates redundancy and disrupts narrative flow. This repetition sugges...'
-2025-05-25 17:28:18 - INFO - [comprehensive_evaluator_agent:40] - Plain text evaluation for Ch 3 is empty or indicates no problems. No problems parsed.
-2025-05-25 17:28:18 - INFO - [comprehensive_evaluator_agent:357] - Evaluation for Ch 3 complete. Needs revision: False. Summary of reasons: None. Detailed problems found: 0
-2025-05-25 17:28:18 - INFO - [world_continuity_agent:99] - WorldContinuityAgent performing focused consistency check for Chapter 3...
-2025-05-25 17:28:18 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:28:18 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:28:18 - INFO - [world_continuity_agent:166] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
-2025-05-25 17:28:38 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 7463 tk, Comp: 638 tk, Total: 8101 tk
-2025-05-25 17:28:38 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"Elara Voss stepped into the mist-laden clearing, ...'. Problem: The chapter repeats the same opening paragraph verbatim, creating redundancy and a lack of narrative progression.
-2025-05-25 17:28:38 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The journal in her hands trembled as she opened i...'. Problem: The journal is described as "bleeding ink" but this detail was previously mentioned in the context of "pages that bleed when read," which should be consistent with established world lore.
-2025-05-25 17:28:38 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"The Machine had never been hers to command. It ha...'. Problem: The Machine is described as both a tool and a prison, but this contradicts the earlier world-building notes that state it was created by the Keepers of the Veil to contain the echoes. The text suggests Elara has been its "servant" and "key," which may not align with the established lore about the Machine being a seal.
-2025-05-25 17:28:38 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"It was a wound in time, and she had been feeding ...'. Problem: The text implies Elara has been feeding the corruption of the valley through her use of the Machine, but this contradicts the earlier plot outline which states she is seeking redemption and understanding, not necessarily that she caused the corruption.
-2025-05-25 17:28:38 - WARNING - [world_continuity_agent:184] - WorldContinuityAgent: Problem quote for Ch 3 NOT VERBATIM in chapter text: '"She reached into her satchel, her hands trembling...'. Problem: The text mentions "the man who had first led her here" without establishing his identity or prior introduction in previous chapters, creating a narrative inconsistency.
-2025-05-25 17:28:38 - INFO - [world_continuity_agent:190] - World/Continuity consistency check for Ch 3 found 5 problems.
-2025-05-25 17:28:38 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 3) - World Continuity Agent found 5 issues.
-2025-05-25 17:28:38 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 3) needs revision. Reasons: Continuity issues identified by WorldContinuityAgent.
-2025-05-25 17:28:38 - ERROR - [__main__:411] - NANA: Ch 3 - Max revision attempts (2) reached. Proceeding with current draft, marked as flawed.
-2025-05-25 17:28:46 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 5042 tk, Comp: 93 tk, Total: 5135 tk
-2025-05-25 17:28:46 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 3: 'Elara Voss enters a misty, eerie valley where she confronts the truth about the Machine, realizing i...'
-2025-05-25 17:28:46 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 3.
-2025-05-25 17:28:46 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 3.
-2025-05-25 17:28:46 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 3 (Source text from flawed draft: True)...
-2025-05-25 17:28:46 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 3...
-2025-05-25 17:28:46 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
-2025-05-25 17:28:46 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
-2025-05-25 17:28:46 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 3).
-2025-05-25 17:29:11 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 7432 tk, Comp: 973 tk, Total: 8405 tk
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 3 complete. Chars updated/new: 1, World cats affected: 2, KG Triples extracted: 25.
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 3. Characters in update: ['Elara Voss']
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elara Voss'. New traits: ['Corrupted', 'Curious, Determined, Guilty, Unstable, Resolute', 'Curious, Determined, Guilty, Unstable, Resolute, Haunted, Corrupted', 'Haunted', 'Self-Sacrificing']
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 3. Updated: 1, New: 0.
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 3. Categories in update: ['lore', 'locations']
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'lore.The Machine'. New value: 'A device created by an ancient civilization that opened the veil betwe...'
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:114] - Applied modification to 'atmosphere' for 'locations.The Valley'. New value: 'Dark, eerie, filled with sorrow and decay, heavy with magical fallout...'
-2025-05-25 17:29:11 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 3. Approx 2 items affected/added.
-2025-05-25 17:29:12 - INFO - [kg_maintainer_agent:802] - KG update for ch 3: Attempted to add 25 triples, skipped 0 due to format/content.
-2025-05-25 17:29:12 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 3.
-2025-05-25 17:29:12 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
-2025-05-25 17:29:12 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
-2025-05-25 17:29:12 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
-2025-05-25 17:29:12 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
-2025-05-25 17:29:12 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 15 Cypher statements.
-2025-05-25 17:29:12 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
-2025-05-25 17:29:12 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
-2025-05-25 17:29:12 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
-2025-05-25 17:29:12 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 31 Cypher statements.
-2025-05-25 17:29:12 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
-2025-05-25 17:29:12 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
-2025-05-25 17:29:12 - INFO - [__main__:477] - === NANA: Finished Chapter 3 - Generated (Marked with Flaws) ===
-2025-05-25 17:29:12 - INFO - [__main__:523] - NANA: Chapter 3: Processed. Final text length: 22745 chars.
-2025-05-25 17:29:12 - INFO - [__main__:524] -    Snippet: Elara Voss stepped into the mist-laden clearing, her boots crunching over brittle leaves that had long since turned to dust. The air was thick and heavy, pressing against her like a living thing, curl...
-2025-05-25 17:29:12 - INFO - [__main__:532] - 
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:554] - Attempting patch-based revision for Ch 3 with 5 potentially actionable problem(s).
+2025-05-26 08:19:43 - WARNING - [chapter_revision_logic:358] - Found 5 problems for Ch 3. 5 were actionable for patch generation. Attempting to generate patches for the first 3 of these.
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1806. Max output tokens set to 2709.
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The chapter contains repetitive and identical content from p...' Quote Text: '"Elira Voss stepped into the library... 'The cost ...' Max Output Tokens: 2709
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1789. Max output tokens set to 2683.
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The text repeats the same paragraph structure and phrases mu...' Quote Text: '"The Archive’s voice was not spoken but *felt*, li...' Max Output Tokens: 2683
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:216] - Patch (Ch 3, specific fix): Original snippet tokens: 1800. Max output tokens set to 2700.
+2025-05-26 08:19:43 - INFO - [chapter_revision_logic:256] - Calling LLM (Qwen3-8B-Q4) for patch in Ch 3. Problem: 'The Harmonic Key is described as "alive" and "resonating wit...' Quote Text: '"The first Harmonic Key. Its surface shimmered wit...' Max Output Tokens: 2700
+2025-05-26 08:19:49 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3960 tk, Comp: 165 tk, Total: 4125 tk
+2025-05-26 08:19:51 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 4064 tk, Comp: 237 tk, Total: 4301 tk
+2025-05-26 08:20:00 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 3983 tk, Comp: 585 tk, Total: 4568 tk
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:398] - Generated 3 patch instructions for Ch 3.
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:483] - Patch 1 (spaCy-derived sentence/quote offsets): Queued replacement for segment 12296-12379.
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:483] - Patch 2 (spaCy-derived sentence/quote offsets): Queued replacement for segment 1730-1846.
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:483] - Patch 3 (spaCy-derived sentence/quote offsets): Queued replacement for segment 11843-11955.
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 12296 to 12379 (length 83) with new text (length 2672).
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 11843 to 11955 (length 112) with new text (length 1087).
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:500] - Applied patch: Replaced original segment from char 1730 to 1846 (length 116) with new text (length 762).
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:504] - Applied 3 out of 3 patches that targeted specific segments.
+2025-05-26 08:20:00 - INFO - [chapter_revision_logic:566] - Patch process for Ch 3: Generated 3 patch instructions. Original len: 32389, Patched text len (after auto-application): 36599.
+2025-05-26 08:20:01 - INFO - [chapter_revision_logic:585] - Patched text similarity with original: 0.9449
+2025-05-26 08:20:01 - INFO - [chapter_revision_logic:596] - Ch 3: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).
+2025-05-26 08:20:01 - INFO - [chapter_revision_logic:720] - Revision process for ch 3 produced a candidate text (Length: 36599 chars).
+2025-05-26 08:20:01 - INFO - [__main__:430] - NANA: Ch 3 - Revision attempt 2 successful. New text length: 36599. Re-evaluating in next loop iteration.
+2025-05-26 08:20:01 - INFO - [__main__:374] - NANA: Ch 3 - Evaluation Cycle, Attempt 3
+2025-05-26 08:20:01 - INFO - [comprehensive_evaluator_agent:259] - ComprehensiveEvaluatorAgent evaluating chapter 3 draft (length: 36599 chars)...
+2025-05-26 08:20:01 - INFO - [comprehensive_evaluator_agent:294] - Coherence score with previous chapter (2): 0.7887
+2025-05-26 08:20:01 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:20:01 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:20:01 - INFO - [comprehensive_evaluator_agent:195] - Calling LLM (Qwen3-8B-Q4) for comprehensive evaluation of chapter 3...
+2025-05-26 08:20:33 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 10469 tk, Comp: 1182 tk, Total: 11651 tk
+2025-05-26 08:20:33 - INFO - [comprehensive_evaluator_agent:239] - Comprehensive evaluation for Ch 3 complete. LLM output (first 200 chars): 'ISSUE CATEGORY: consistency  
+PROBLEM DESCRIPTION: The chapter contains repetitive and redundant text that contradicts the established narrative flow and character development. The same scenes and dia...'
+2025-05-26 08:20:34 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"Elira Voss stepped into the library... The Archiv...'. Falling back to semantic sentence search.
+2025-05-26 08:20:38 - INFO - [utils:295] - Best semantic match for query '"Elira Voss stepped into the library... The Archive’s voice ...' has similarity 0.78 at span 0-149.
+2025-05-26 08:20:38 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"Elira Voss stepped into the l...' from 0-149 (Similarity: 0.78). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:20:39 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"And with that, she stepped into the unknown, her ...'. Falling back to semantic sentence search.
+2025-05-26 08:20:44 - INFO - [utils:295] - Best semantic match for query '"And with that, she stepped into the unknown, her heart heav...' has similarity 0.87 at span 17685-17795.
+2025-05-26 08:20:44 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"And with that, she stepped in...' from 17685-17795 (Similarity: 0.87). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:20:45 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"She had always thought of herself as a guide, a l...'. Falling back to semantic sentence search.
+2025-05-26 08:20:50 - INFO - [utils:295] - Best semantic match for query '"She had always thought of herself as a guide, a leader who ...' has similarity 0.82 at span 3120-3202.
+2025-05-26 08:20:50 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"She had always thought of her...' from 3120-3202 (Similarity: 0.82). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:20:51 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The Archive’s form darkened, its light dimming. ‘...'. Falling back to semantic sentence search.
+2025-05-26 08:20:55 - INFO - [utils:295] - Best semantic match for query '"The Archive’s form darkened, its light dimming. ‘You cannot...' has similarity 0.80 at span 16903-17002.
+2025-05-26 08:20:55 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The Archive’s form darkened, ...' from 16903-17002 (Similarity: 0.80). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:20:56 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"She had spent her life avoiding the truth, but no...'. Falling back to semantic sentence search.
+2025-05-26 08:21:01 - INFO - [utils:295] - Best semantic match for query '"She had spent her life avoiding the truth, but now she saw ...' has similarity 0.85 at span 23731-23831.
+2025-05-26 08:21:01 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"She had spent her life avoidi...' from 23731-23831 (Similarity: 0.85). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:21:02 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The Archive’s voice did not come from lips or lun...'. Falling back to semantic sentence search.
+2025-05-26 08:21:07 - INFO - [utils:295] - Best semantic match for query '"The Archive’s voice did not come from lips or lungs, but fr...' has similarity 0.86 at span 1730-1940.
+2025-05-26 08:21:07 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The Archive’s voice did not c...' from 1730-1940 (Similarity: 0.86). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:21:07 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"The first Harmonic Key hovered above the obsidian...'. Falling back to semantic sentence search.
+2025-05-26 08:21:12 - INFO - [utils:295] - Best semantic match for query '"The first Harmonic Key hovered above the obsidian pedestal....' has similarity 0.80 at span 12489-12638.
+2025-05-26 08:21:12 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"The first Harmonic Key hovere...' from 12489-12638 (Similarity: 0.80). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:21:13 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"Elira Voss stepped into the library... The Archiv...'. Falling back to semantic sentence search.
+2025-05-26 08:21:18 - INFO - [utils:295] - Best semantic match for query '"Elira Voss stepped into the library... The Archive’s voice ...' has similarity 0.81 at span 9014-9092.
+2025-05-26 08:21:18 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"Elira Voss stepped into the l...' from 9014-9092 (Similarity: 0.81). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:21:18 - INFO - [comprehensive_evaluator_agent:366] - Evaluation for Ch 3 complete. Needs revision: True. Summary of reasons: Consistency issues identified by LLM.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.. Detailed problems found: 8
+2025-05-26 08:21:18 - INFO - [world_continuity_agent:120] - WorldContinuityAgent performing focused consistency check for Chapter 3...
+2025-05-26 08:21:18 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:21:18 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:21:18 - INFO - [world_continuity_agent:187] - Calling LLM (Qwen3-8B-Q4) for World/Continuity consistency check of chapter 3...
+2025-05-26 08:21:51 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-8B-Q4') Usage - Prompt: 10462 tk, Comp: 1043 tk, Total: 11505 tk
+2025-05-26 08:21:52 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'Elira Voss stepped into the li...' at 0-148 in sentence 0-149
+2025-05-26 08:21:52 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"Elira hesitated, the gravity of the words sinking...'. Falling back to semantic sentence search.
+2025-05-26 08:21:57 - INFO - [utils:295] - Best semantic match for query '"Elira hesitated, the gravity of the words sinking into her....' has similarity 0.86 at span 21392-21485.
+2025-05-26 08:21:57 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '"Elira hesitated, the gravity ...' from 21392-21485 (Similarity: 0.86). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:21:58 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'As she stepped forward, the fi...' at 24156-24269 in sentence 24152-24272
+2025-05-26 08:21:59 - WARNING - [utils:123] - Direct substring match failed for LLM quote '"It was not a person, nor a creature, but somethin...'. Falling back to semantic sentence search.
+2025-05-26 08:22:03 - INFO - [utils:295] - Best semantic match for query '"It was not a person, nor a creature, but something else—a b...' has similarity 0.98 at span 1311-1420.
+2025-05-26 08:22:03 - INFO - [utils:151] - Semantic Match: Found sentence for LLM quote '"It was not a person, nor a cr...' from 1311-1420 (Similarity: 0.98). Using whole sentence as target.
+2025-05-26 08:22:04 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'Elira Voss stepped into the li...' at 0-148 in sentence 0-149
+2025-05-26 08:22:05 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The first Harmonic Key hovered...' at 12489-12637 in sentence 12489-12638
+2025-05-26 08:22:06 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'As she stepped forward, the fi...' at 24156-24269 in sentence 24152-24272
+2025-05-26 08:22:06 - WARNING - [utils:123] - Direct substring match failed for LLM quote '“You were not born to this,” it said. “You were *c...'. Falling back to semantic sentence search.
+2025-05-26 08:22:11 - INFO - [utils:295] - Best semantic match for query '“You were not born to this,” it said. “You were *chosen*.”...' has similarity 0.91 at span 24785-24807.
+2025-05-26 08:22:11 - INFO - [utils:155] - Semantic Match: Found sentence for LLM quote '“You were not born to this,” i...' from 24785-24807 (Similarity: 0.91). Sub-quote not found in normalized sentence. Using whole sentence.
+2025-05-26 08:22:12 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'Elira Voss stepped into the li...' at 0-148 in sentence 0-149
+2025-05-26 08:22:13 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'The first Harmonic Key hovered...' at 12489-12637 in sentence 12489-12638
+2025-05-26 08:22:13 - INFO - [utils:111] - Direct Substring Match: Found LLM quote (approx) 'As she stepped forward, the fi...' at 24156-24269 in sentence 24152-24272
+2025-05-26 08:22:13 - INFO - [world_continuity_agent:199] - World/Continuity consistency check for Ch 3 found 11 problems.
+2025-05-26 08:22:13 - WARNING - [__main__:393] - NANA: Ch 3 (Attempt 3) - World Continuity Agent found 11 issues.
+2025-05-26 08:22:13 - WARNING - [__main__:408] - NANA: Ch 3 draft (Attempt 3) needs revision. Reasons: Consistency issues identified by LLM.; Meta/Uncategorized issues identified by LLM.; Narrative Depth/Length issues identified by LLM.; Plot Arc deviation identified by LLM.; Thematic issues identified by LLM.; Continuity issues identified by WorldContinuityAgent.
+2025-05-26 08:22:13 - ERROR - [__main__:411] - NANA: Ch 3 - Max revision attempts (2) reached. Proceeding with current draft, marked as flawed.
+2025-05-26 08:22:22 - INFO - [llm_interface:267] - Async: LLM ('Qwen3-4B') Usage - Prompt: 8168 tk, Comp: 105 tk, Total: 8273 tk
+2025-05-26 08:22:22 - INFO - [kg_maintainer_agent:507] - Generated summary for ch 3: 'Elira Voss discovers the Sentient Archive, a being made of knowledge that reveals the hive mind as a...'
+2025-05-26 08:22:22 - INFO - [data_access.chapter_queries:54] - Neo4j: Successfully saved chapter data for chapter 3.
+2025-05-26 08:22:22 - INFO - [__main__:292] - Saved chapter text and raw LLM log files for ch 3.
+2025-05-26 08:22:22 - INFO - [kg_maintainer_agent:752] - KGMaintainerAgent starting knowledge extraction and merge for ch 3 (Source text from flawed draft: True)...
+2025-05-26 08:22:22 - INFO - [kg_maintainer_agent:593] - KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter 3...
+2025-05-26 08:22:22 - INFO - [prompt_data_getters:319] - Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter 2.
+2025-05-26 08:22:22 - INFO - [prompt_data_getters:367] - Fetching and formatting filtered world data as PLAIN TEXT up to chapter 2.
+2025-05-26 08:22:22 - INFO - [kg_maintainer_agent:695] - Calling LLM (Qwen3-8B-Q4) for unified knowledge extraction (Ch 3).
+2025-05-26 08:22:56 - INFO - [llm_interface:267] - Async: Streamed LLM ('Qwen3-8B-Q4') Usage - Prompt: 10503 tk, Comp: 1343 tk, Total: 11846 tk
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:731] - Unified knowledge extraction for Ch 3 complete. Chars updated/new: 1, World cats affected: 3, KG Triples extracted: 29.
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:193] - Merging character profile updates for ch 3. Characters in update: ['Elira Voss']
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:109] - Applied trait modifications for 'Elira Voss'. New traits: ['Creator', 'Determined, Cautious, Resolute, Reflective, Fearless', 'Determined, Cautious, Resolute, Reflective, Fearless, Unwavering', 'Liberator', 'Reflective', 'Tool']
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:228] - Character profile dict merge complete for ch 3. Updated: 1, New: 0.
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:314] - Merging world-building updates for ch 3. Categories in update: ['locations', 'systems', 'lore']
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:114] - Applied modification to 'atmosphere' for 'locations.The Library'. New value: 'Silent, eerie, filled with shifting reality and ancient energy...'
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'systems.The Sentient Archive'. New value: 'A being woven from the very knowledge it contains, capable of revealin...'
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:114] - Applied modification to 'description' for 'lore.Hive Mind'. New value: 'A system of collective consciousness that once controlled Elira's foll...'
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:371] - World-building dict merge complete for ch 3. Approx 3 items affected/added.
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:802] - KG update for ch 3: Attempted to add 29 triples, skipped 0 due to format/content.
+2025-05-26 08:22:56 - INFO - [kg_maintainer_agent:806] - Unified knowledge extraction and merge process complete for ch 3.
+2025-05-26 08:22:56 - INFO - [__main__:192] - NANA: Saving core novel state (plot, characters, world) to Neo4j...
+2025-05-26 08:22:56 - INFO - [data_access.plot_queries:10] - Saving decomposed plot outline to Neo4j using MERGE...
+2025-05-26 08:22:56 - INFO - [data_access.character_queries:10] - Saving decomposed character profiles to Neo4j using MERGE...
+2025-05-26 08:22:56 - INFO - [data_access.world_queries:10] - Saving decomposed world building data to Neo4j using MERGE...
+2025-05-26 08:22:56 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 16 Cypher statements.
+2025-05-26 08:22:56 - INFO - [data_access.character_queries:124] - Successfully saved decomposed character profiles to Neo4j using MERGE.
+2025-05-26 08:22:56 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 17 Cypher statements.
+2025-05-26 08:22:56 - INFO - [data_access.plot_queries:76] - Successfully saved decomposed plot outline to Neo4j using MERGE.
+2025-05-26 08:22:56 - INFO - [core_db.base_db_manager:86] - Successfully executed batch of 33 Cypher statements.
+2025-05-26 08:22:56 - INFO - [data_access.world_queries:129] - Successfully saved decomposed world building data to Neo4j using MERGE.
+2025-05-26 08:22:56 - INFO - [__main__:206] - All core state objects saved to Neo4j successfully.
+2025-05-26 08:22:56 - INFO - [__main__:477] - === NANA: Finished Chapter 3 - Generated (Marked with Flaws) ===
+2025-05-26 08:22:56 - INFO - [__main__:523] - NANA: Chapter 3: Processed. Final text length: 36599 chars.
+2025-05-26 08:22:56 - INFO - [__main__:524] -    Snippet: Elira Voss stepped into the library, her breath catching in her throat as the air thickened with a strange resonance that vibrated through her bones. The moment her foot touched the threshold, the wor...
+2025-05-26 08:22:56 - INFO - [__main__:532] - 
 --- NANA: Novel writing process finished for this run ---
-2025-05-25 17:29:12 - INFO - [data_access.chapter_queries:15] - Neo4j loaded chapter count: 3
-2025-05-25 17:29:12 - INFO - [__main__:534] - NANA: Successfully processed 3 chapter(s) in this run.
-2025-05-25 17:29:12 - INFO - [__main__:535] - NANA: Current total chapters in database: 3
-2025-05-25 17:29:12 - INFO - [__main__:536] - NANA: Total LLM tokens generated this run: 57179
-2025-05-25 17:29:12 - INFO - [__main__:537] - --- NANA: Saga Novel Generation Run Finished. Final Neo4j chapter count: 3 ---
-2025-05-25 17:29:12 - INFO - [core_db.base_db_manager:52] - Neo4j driver closed.
-2025-05-25 17:29:12 - INFO - [__main__:549] - NANA: Neo4j driver successfully closed on application exit.
+2025-05-26 08:22:56 - INFO - [data_access.chapter_queries:15] - Neo4j loaded chapter count: 3
+2025-05-26 08:22:56 - INFO - [__main__:534] - NANA: Successfully processed 3 chapter(s) in this run.
+2025-05-26 08:22:56 - INFO - [__main__:535] - NANA: Current total chapters in database: 3
+2025-05-26 08:22:56 - INFO - [__main__:536] - NANA: Total LLM tokens generated this run: 37206
+2025-05-26 08:22:56 - INFO - [__main__:537] - --- NANA: Saga Novel Generation Run Finished. Final Neo4j chapter count: 3 ---
+2025-05-26 08:22:56 - INFO - [core_db.base_db_manager:52] - Neo4j driver closed.
+2025-05-26 08:22:56 - INFO - [__main__:549] - NANA: Neo4j driver successfully closed on application exit.
