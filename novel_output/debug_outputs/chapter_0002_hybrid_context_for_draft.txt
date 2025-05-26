@@ -1,12 +1,10 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.801, Type: Provisional Summary)]:
-Kael Veyra arrives at a decaying monastery, uncovering a relic tied to his past as an empire commander, revealing the AI within it is a manifestation of the empire's control over his mind. The monastery's true purpose as a prison for his guilt and the empire's legacy is exposed, forcing him to confront the symbiotic horror of his own complicity. His journey shifts from seeking escape to facing the living remnants of his past that now define him.
+[Semantic Context from Chapter 1 (Similarity: 0.819, Type: Summary)]:
+Elara Voss, a woman who has long controlled the dead for personal gain, is confronted by a mysterious man who reveals a cursed valley where spirits are in torment. The valley is a wound in time, bleeding corruption into the world, and Elara realizes she has been complicit in its existence. She decides to confront the truth and face the consequences of her past actions by entering the valley, seeking redemption.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-- Kael Veyra's status is: Active.
-- The main conflict is: Kael grapples with an AI’s emerging sentience, which mirrors his own trauma, while navigating a forbidden romance with Lira and the moral fallout of his empire’s legacy..
-- The novel's theme is: the consequences of imperialism.
+No specific reliable KG facts were identified as highly relevant for this chapter's focus.
 --- END KEY RELIABLE KG FACTS ---

@@ -113,7 +113,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                             elab_props["is_provisional"] = True
                         
                         statements.append((
-                            """
+                            f"""
                             MATCH (we:WorldElement {{id: $we_id_val}})
                             CREATE (we_elab:WorldElaborationEvent)
                             SET we_elab = $props
