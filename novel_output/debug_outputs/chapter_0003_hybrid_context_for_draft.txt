@@ -1,10 +1,10 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.819, Type: Summary)]:
-Elira Voss receives a crucial commission from the Patron to build a structure that can purify the poisoned air of the desert, which challenges her belief in architecture as a means of control and forces her to reconsider her approach. She initially struggles with the task, but after facing the harsh reality of the desert's resistance, she shifts to a more harmonious design that works with the environment rather than against it. The council begins to accept her new vision, recognizing the need for balance and understanding over domination.
+[Semantic Context from Chapter 1 (Similarity: 0.780, Type: Provisional Summary)]:
+Sága discovers a hidden file labeled "Erebus" in the memory vaults, revealing deliberate erasure of the city's past and hinting at systemic control over history. She confronts the system's resistance and grapples with the realization that her colleague Lira may have been silenced for similar discoveries. Sága shifts from passive archivist to determined rebel, vowing to uncover the truth despite the risks.
 ---
 
-[Semantic Context from Chapter 2 (Similarity: 0.838, Type: Summary)]:
-Elira Voss discovers ancient blueprints in Camelot’s ruins that reveal a lost technology designed to harmonize with the desert rather than control it, challenging her belief in dominance and forcing her to confront the desert's silent suffering. The blueprints, filled with symbols and intricate designs, convey a philosophy of balance and healing, leading Elira to realize she must embrace responsibility over ambition to save the desert. She resolves to build the device in secret, accepting the burden of her choice as she transforms from an architect seeking glory into a guardian determined to heal the land.
+[Semantic Context from Chapter 2 (Similarity: 0.836, Type: Provisional Summary)]:
+Sága uncovers a hidden memory fragment revealing that the city's system erases and rewrites people's memories to control them, exposing the Spire as a central tool of manipulation. She confronts a system enforcer, who acknowledges her defiance but warns she is not the first to challenge the system. Her resolve strengthens as she realizes the truth about her lost past and the danger of continuing her quest.
 ---
 --- END SEMANTIC CONTEXT ---
 

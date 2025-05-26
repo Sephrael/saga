@@ -1,0 +1,1 @@
+{'needs_revision': False, 'reasons': [], 'problems_found': [], 'coherence_score': 0.668475329875946, 'consistency_issues': 'Potential consistency issues.', 'plot_deviation_reason': 'Potential plot arc issues.', 'thematic_issues': 'Potential thematic issues.', 'narrative_depth_issues': 'Potential narrative depth/length issues.'}

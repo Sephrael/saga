@@ -1,6 +1,6 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.757, Type: Summary)]:
-Elira Voss receives a crucial commission from the Patron to build a structure that can purify the poisoned air of the desert, which challenges her belief in architecture as a means of control and forces her to reconsider her approach. She initially struggles with the task, but after facing the harsh reality of the desert's resistance, she shifts to a more harmonious design that works with the environment rather than against it. The council begins to accept her new vision, recognizing the need for balance and understanding over domination.
+[Semantic Context from Chapter 1 (Similarity: 0.666, Type: Provisional Summary)]:
+Sága discovers a hidden file labeled "Erebus" in the memory vaults, revealing deliberate erasure of the city's past and hinting at systemic control over history. She confronts the system's resistance and grapples with the realization that her colleague Lira may have been silenced for similar discoveries. Sága shifts from passive archivist to determined rebel, vowing to uncover the truth despite the risks.
 ---
 --- END SEMANTIC CONTEXT ---
 
