@@ -87,6 +87,7 @@ It's recommended to use a virtual environment:
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+python -m spacy download en_core_web_sm
 ```
 
 ### 3. Configure SAGA
