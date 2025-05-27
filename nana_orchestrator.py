@@ -305,11 +305,6 @@ class NANA_Orchestrator:
             return text_to_dedup, 0
 
         try:
-            # utils.deduplicate_text_segments is now async if use_semantic_comparison is True,
-            # but for normalized string comparison, it doesn't strictly need to be async.
-            # However, to keep the interface consistent for future semantic use, we await it.
-            # If it's not actually doing async work internally when use_semantic_comparison=False,
-            # it will just run synchronously within the await.
             deduplicated_text, chars_removed = await utils.deduplicate_text_segments(
                 original_text=text_to_dedup,
                 segment_level=segment_level_dedup,
@@ -369,21 +364,36 @@ class NANA_Orchestrator:
         
         current_text_to_process: Optional[str] = initial_draft_text
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
-        is_from_flawed_source = False
+        is_from_flawed_source_for_kg = False # Tracks if any step necessitates marking final content as provisional for KG
 
         max_revision_attempts = 2
-        for attempt in range(max_revision_attempts + 1):
-            if current_text_to_process is None: # Should not happen if initial draft was successful
-                 logger.error(f"NANA: Ch {chapter_number} - Text became None before evaluation cycle {attempt + 1}. Aborting chapter.")
-                 self._update_rich_display(step=f"Ch {chapter_number} Failed - Text lost before Eval {attempt + 1}")
+        for attempt in range(max_revision_attempts + 1): # Loop for initial eval + revisions
+            if current_text_to_process is None:
+                 logger.error(f"NANA: Ch {chapter_number} - Text became None before processing cycle {attempt + 1}. Aborting chapter.")
+                 self._update_rich_display(step=f"Ch {chapter_number} Failed - Text lost before Cycle {attempt + 1}")
                  return None
+
+            # --- De-duplication before Evaluation ---
+            self._update_rich_display(step=f"Ch {chapter_number} - De-duplication Attempt {attempt + 1}")
+            logger.info(f"NANA: Ch {chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt + 1}")
+            deduplicated_text, removed_char_count = await self.perform_deduplication(
+                current_text_to_process, chapter_number
+            )
+            if removed_char_count > 0:
+                is_from_flawed_source_for_kg = True # Mark as flawed if de-duplication changed text
+                logger.info(f"NANA: Ch {chapter_number} - De-duplication (Attempt {attempt+1}) removed {removed_char_count} characters. Text marked as potentially flawed for KG.")
+                current_text_to_process = deduplicated_text
+                await self._save_debug_output(chapter_number, f"deduplicated_text_attempt_{attempt+1}", current_text_to_process)
+            else:
+                logger.info(f"NANA: Ch {chapter_number} - De-duplication (Attempt {attempt+1}) found no significant changes.")
+            # --- End De-duplication ---
 
             logger.info(f"NANA: Ch {chapter_number} - Evaluation Cycle, Attempt {attempt + 1}")
             self._update_rich_display(step=f"Ch {chapter_number} - Evaluation Cycle {attempt + 1}")
             
             eval_result_obj, eval_usage = await self.evaluator_agent.evaluate_chapter_draft(
                 self.novel_props_cache, current_text_to_process, chapter_number,
-                plot_point_focus, plot_point_index, hybrid_context_for_draft
+                plot_point_focus, plot_point_index, hybrid_context_for_draft # Use same hybrid_context for consistency in eval/revision cycle
             )
             self._accumulate_tokens(f"Ch{chapter_number}-Evaluation-Attempt{attempt+1}", eval_usage)
             evaluation_result: EvaluationResult = eval_result_obj
@@ -398,25 +408,25 @@ class NANA_Orchestrator:
 
             if continuity_problems:
                 logger.warning(f"NANA: Ch {chapter_number} (Attempt {attempt+1}) - World Continuity Agent found {len(continuity_problems)} issues.")
-                evaluation_result["problems_found"].extend(continuity_problems)
-                if not evaluation_result["needs_revision"]:
+                evaluation_result["problems_found"].extend(continuity_problems) # Add to existing problems
+                if not evaluation_result["needs_revision"]: # If evaluator didn't already flag it
                     evaluation_result["needs_revision"] = True
                     evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.")
                 elif "Continuity issues identified by WorldContinuityAgent." not in evaluation_result["reasons"]:
-                    evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.")
+                     evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.") # Ensure reason is present
             
             if not evaluation_result["needs_revision"]:
                 logger.info(f"NANA: Ch {chapter_number} draft passed evaluation (Attempt {attempt+1}). Text is considered good.")
-                is_from_flawed_source = False
+                # is_from_flawed_source_for_kg would already be True if de-duplication removed text
                 self._update_rich_display(step=f"Ch {chapter_number} - Passed Evaluation")
-                break
-            else:
+                break # Exit revision loop
+            else: # Needs revision
                 logger.warning(f"NANA: Ch {chapter_number} draft (Attempt {attempt+1}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons',[]))}")
                 if attempt >= max_revision_attempts:
                     logger.error(f"NANA: Ch {chapter_number} - Max revision attempts ({max_revision_attempts+1}) reached. Proceeding with current draft, marked as flawed.")
-                    is_from_flawed_source = True
+                    is_from_flawed_source_for_kg = True # Mark as flawed due to exhausting revisions
                     self._update_rich_display(step=f"Ch {chapter_number} - Max Revisions Reached (Flawed)")
-                    break
+                    break # Exit revision loop
 
                 self._update_rich_display(step=f"Ch {chapter_number} - Revision Attempt {attempt + 1}")
                 revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
@@ -428,68 +438,24 @@ class NANA_Orchestrator:
                 if revision_tuple_result and revision_tuple_result[0] and len(revision_tuple_result[0]) > 50:
                     current_text_to_process, rev_raw_output = revision_tuple_result
                     current_raw_llm_output = rev_raw_output if rev_raw_output else current_raw_llm_output
-                    logger.info(f"NANA: Ch {chapter_number} - Revision attempt {attempt+1} successful. New text length: {len(current_text_to_process)}. Re-evaluating.")
+                    logger.info(f"NANA: Ch {chapter_number} - Revision attempt {attempt+1} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval).")
                     await self._save_debug_output(chapter_number, f"revised_text_attempt_{attempt+1}", current_text_to_process)
+                    # Loop continues: this revised text will be de-duplicated and re-evaluated
                 else:
                     logger.error(f"NANA: Ch {chapter_number} - Revision attempt {attempt+1} failed to produce usable text. Proceeding with previous draft, marked as flawed.")
-                    is_from_flawed_source = True
+                    is_from_flawed_source_for_kg = True # Mark as flawed due to failed revision
                     self._update_rich_display(step=f"Ch {chapter_number} - Revision Failed (Flawed)")
-                    break
+                    break # Exit revision loop
         
-        if current_text_to_process is None: # Should be caught earlier, but as a safeguard
+        # --- Post-Loop Processing ---
+        if current_text_to_process is None:
             logger.critical(f"NANA: Ch {chapter_number} - current_text_to_process is None after revision loop. Aborting chapter.")
             return None
-
-        self._update_rich_display(step=f"Ch {chapter_number} - De-duplicating Text")
-        deduplicated_text, removed_char_count = await self.perform_deduplication(
-            current_text_to_process, chapter_number
-        )
-        if removed_char_count > 0:
-            logger.info(f"NANA: Ch {chapter_number} - De-duplication removed {removed_char_count} characters. Length before: {len(current_text_to_process)}, after: {len(deduplicated_text)}")
-            current_text_to_process = deduplicated_text
-            await self._save_debug_output(chapter_number, "deduplicated_text", current_text_to_process)
-            if not is_from_flawed_source:
-                 is_from_flawed_source = True
-                 logger.info(f"NANA: Ch {chapter_number} - Marking as flawed due to de-duplication changes.")
-
-        if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-            logger.warning(
-                f"NANA: Ch {chapter_number} text is short ({len(current_text_to_process)} chars) after de-duplication. "
-                f"Attempting expansion. Min required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}."
-            )
-            self._update_rich_display(step=f"Ch {chapter_number} - Expanding (Post-Deduplication)")
-            expansion_problem = ProblemDetail(
-                issue_category="narrative_depth",
-                problem_description=f"Chapter text is too short ({len(current_text_to_process)} chars) after de-duplication. Needs substantial expansion to reach {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
-                quote_from_original_text="N/A - General Issue",
-                quote_char_start=None, quote_char_end=None,
-                sentence_char_start=None, sentence_char_end=None,
-                suggested_fix_focus="Expand existing scenes with more descriptive detail, character introspection, dialogue, and actions. Introduce new relevant details or short elaborations if necessary to meet length and depth requirements while maintaining narrative coherence and quality."
-            )
-            temp_eval_result_for_expansion = EvaluationResult(
-                needs_revision=True,
-                reasons=["Content too short after de-duplication."],
-                problems_found=[expansion_problem],
-                coherence_score=None, consistency_issues=None, plot_deviation_reason=None,
-                thematic_issues=None, narrative_depth_issues="Too short post-deduplication."
-            )
-            expansion_tuple_result, expansion_usage = await revise_chapter_draft_logic(
-                self, current_text_to_process, chapter_number,
-                temp_eval_result_for_expansion, hybrid_context_for_draft, chapter_plan
-            )
-            self._accumulate_tokens(f"Ch{chapter_number}-ExpansionPass", expansion_usage)
-            if expansion_tuple_result and expansion_tuple_result[0] and len(expansion_tuple_result[0]) > len(current_text_to_process) * 1.05:
-                current_text_to_process, exp_raw_output = expansion_tuple_result
-                current_raw_llm_output = exp_raw_output if exp_raw_output else current_raw_llm_output
-                logger.info(f"NANA: Ch {chapter_number} - Expansion pass successful. New text length: {len(current_text_to_process)}.")
-                await self._save_debug_output(chapter_number, "expanded_text_post_dedup", current_text_to_process)
-                if not is_from_flawed_source: is_from_flawed_source = True
-            else:
-                logger.warning(f"NANA: Ch {chapter_number} - Expansion pass did not significantly increase text length or failed.")
         
+        # Final length check, even if evaluation passed, as a safety measure
         if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
-             logger.warning(f"NANA: Final chosen text for Ch {chapter_number} is too short ({len(current_text_to_process)} chars). Marked as flawed.")
-             if not is_from_flawed_source: is_from_flawed_source = True
+             logger.warning(f"NANA: Final chosen text for Ch {chapter_number} is short ({len(current_text_to_process)} chars). Marked as flawed for KG.")
+             is_from_flawed_source_for_kg = True
 
         self._update_rich_display(step=f"Ch {chapter_number} - Summarizing")
         chapter_summary, summary_usage = await self.kg_maintainer_agent.summarize_chapter(current_text_to_process, chapter_number)
@@ -506,13 +472,13 @@ class NANA_Orchestrator:
         self._update_rich_display(step=f"Ch {chapter_number} - Saving to DB")
         await chapter_queries.save_chapter_data_to_db(
             chapter_number, current_text_to_process, current_raw_llm_output or "N/A",
-            chapter_summary, final_embedding, is_from_flawed_source
+            chapter_summary, final_embedding, is_from_flawed_source_for_kg # Use the accumulated flag
         )
         await self._save_chapter_text_and_log(chapter_number, current_text_to_process, current_raw_llm_output)
 
         self._update_rich_display(step=f"Ch {chapter_number} - Updating KG")
         kg_merge_usage = await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.novel_props_cache, chapter_number, current_text_to_process, is_from_flawed_source
+            self.novel_props_cache, chapter_number, current_text_to_process, is_from_flawed_source_for_kg
         )
         self._accumulate_tokens(f"Ch{chapter_number}-KGExtractionMerge", kg_merge_usage)
         self.character_profiles = self.novel_props_cache['character_profiles'] # Sync back if mutable dict was modified
@@ -522,7 +488,7 @@ class NANA_Orchestrator:
         self.chapter_count = max(self.chapter_count, chapter_number)
         await self._save_core_novel_state_to_neo4j()
 
-        status_message = "Successfully Generated" if not is_from_flawed_source else "Generated (Marked with Flaws)"
+        status_message = "Successfully Generated" if not is_from_flawed_source_for_kg else "Generated (Marked with Flaws)"
         logger.info(f"=== NANA: Finished Chapter {chapter_number} - {status_message} ===")
         self._update_rich_display(step=f"Ch {chapter_number} - {status_message}")
         return current_text_to_process
