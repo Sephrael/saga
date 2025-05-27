@@ -47,7 +47,8 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
                 pp_props_for_set = {
                     "id": pp_id,
                     "sequence": i + 1,
-                    "description": point_desc_str
+                    "description": point_desc_str,
+                    "status": "pending"  # NEW: Set initial status
                 }
                 statements.append((
                     "MERGE (pp:PlotPoint {id: $id_val}) SET pp = $props",
@@ -96,11 +97,23 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
 
     plot_points_query = """
     MATCH (ni:NovelInfo {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint)
-    RETURN pp.description AS description
+    RETURN pp.description AS description, pp.status AS status, pp.sequence AS sequence
     ORDER BY pp.sequence ASC
     """
     pp_results = await neo4j_manager.execute_read_query(plot_points_query, {"novel_id_param": novel_id})
-    plot_data['plot_points'] = [record['description'] for record in pp_results] if pp_results else []
+    
+    # Store plot points as list of strings for compatibility with current Orchestrator state,
+    # but log if status is present to indicate successful retrieval.
+    # If status is needed later in Orchestrator, change plot_data['plot_points'] to store list of dicts.
+    plot_data['plot_points'] = []
+    if pp_results:
+        for record in pp_results:
+            plot_data['plot_points'].append(record['description'])
+            if 'status' in record and record['status']:
+                 logger.debug(f"Plot point {record.get('sequence', 'N/A')} has status: {record['status']}")
+        if not plot_data['plot_points']: # Fallback if descriptions are missing but nodes exist
+            plot_data['plot_points'] = [f"Plot Point {i+1}: Description missing from DB" for i in range(len(pp_results))]
 
-    logger.info("Successfully loaded and recomposed plot outline from Neo4j.")
+
+    logger.info(f"Successfully loaded and recomposed plot outline from Neo4j. Number of plot points: {len(plot_data.get('plot_points',[]))}")
     return plot_data

@@ -41,13 +41,14 @@ WORLD_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits"]
 
 
 def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str, Any], unhinged: bool) -> PlotOutlineData:
+    num_default_plot_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
     default_plot: PlotOutlineData = {
         "title": config.DEFAULT_PLOT_OUTLINE_TITLE, "protagonist_name": default_protagonist_name,
         "protagonist_description": f"Default protagonist: {default_protagonist_name}, a character facing challenges.",
-        "plot_points": [f"Default Plot Point {i+1}: An event occurs." for i in range(5)], # Ensure 5 default plot points
-        "character_arc": f"Default character arc: {default_protagonist_name} learns something important.",
+        "plot_points": [f"Default Plot Point {i+1}: An event occurs, expanding the narrative." for i in range(num_default_plot_points)],
+        "character_arc": f"Default character arc: {default_protagonist_name} learns something important over a significant journey.",
         "setting_description": base_elements.get("setting_description", base_elements.get("setting", "A generic place.")),
-        "conflict_summary": "Default conflict: The protagonist must overcome a significant obstacle.",
+        "conflict_summary": "Default conflict: The protagonist must overcome a series of significant obstacles related to the core theme.",
         "is_default": True, "source": "default_fallback"
     }
     default_plot.update({k:v for k,v in base_elements.items() if k in ["genre", "theme"]})
@@ -74,6 +75,9 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
                not isinstance(data.get("plot_points"), list):
                 logger.error(f"User-supplied file '{file_path}' is missing one or more core structures: 'novel_concept', 'protagonist', or 'plot_points'.")
                 return None
+            if not data["plot_points"]: # Ensure plot points list is not empty
+                 logger.error(f"User-supplied file '{file_path}' has an empty 'plot_points' list. This is required.")
+                 return None
             logger.info(f"Successfully loaded user-supplied story data from '{file_path}'.")
             return data
         except json.JSONDecodeError as e:
@@ -117,7 +121,12 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     plot_outline["inciting_incident"] = conflict_data.get("inciting_incident", "")
     plot_outline["climax_event_preview"] = conflict_data.get("climax_event_preview", "")
 
-    plot_outline["plot_points"] = user_data.get("plot_points", [])
+    plot_outline["plot_points"] = user_data.get("plot_points", []) # User must provide sufficient plot points
+    if not plot_outline["plot_points"]:
+        logger.warning("User data provided empty plot_points list. Defaulting to a minimal set for structure.")
+        plot_outline["plot_points"] = [f"User Plot Point {i+1}: Placeholder from empty list." for i in range(config.TARGET_PLOT_POINTS_INITIAL_GENERATION)]
+
+
     plot_outline["setting_description"] = user_data.get("setting", {}).get("primary_setting_description", "")
     plot_outline["source"] = "user_supplied"
     plot_outline["is_default"] = False
@@ -210,6 +219,7 @@ async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str,
     current_plot_outline_key_map = {k.lower().replace(" ", "_"): v for k, v in PLOT_OUTLINE_KEY_MAP.items()}
     llm_fields_to_generate_text = "\n".join([f"- {k.replace('_', ' ').title()}" for k in current_plot_outline_key_map.keys()])
     required_string_keys_internal = ["title", "protagonist_name", "protagonist_description", "character_arc", "conflict_summary", "setting_description"]
+    target_num_plot_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
 
     prompt_core_elements = ""
     if unhinged_mode:
@@ -227,7 +237,7 @@ Core Elements:
   - Protagonist Archetype: '{protagonist_archetype}' (Ensure a specific name is generated for 'Protagonist Name')
   - Conflict Archetype: '{conflict_archetype}'
 
-Based on these, generate the following plot outline fields:
+Based on these, generate the following plot outline fields. Ensure the "Plot Points" section contains approximately {target_num_plot_points} distinct points that form a complete narrative arc suitable for a multi-chapter novel:
 {llm_fields_to_generate_text}"""
         base_elements_for_outline = {"genre": genre, "theme": theme, "setting_archetype_used": setting_archetype, "protagonist_archetype_used": protagonist_archetype, "conflict_archetype_used": conflict_archetype}
     else: # Configured mode
@@ -242,28 +252,30 @@ Core Elements:
   - Setting Description: '{setting_description_input}'
   - Protagonist Name: '{default_protagonist_name}' (You can use this name or generate a new one if it fits better)
 
-Based on these, generate the following plot outline fields:
+Based on these, generate the following plot outline fields. Ensure the "Plot Points" section contains approximately {target_num_plot_points} distinct points that form a complete narrative arc suitable for a multi-chapter novel:
 {llm_fields_to_generate_text}"""
         base_elements_for_outline = {"genre": genre, "theme": theme, "setting_description_input_to_llm": setting_description_input}
 
 
     prompt = f"""/no_think
-You are a creative assistant specializing in crafting compelling narrative structures.
+You are a creative assistant specializing in crafting compelling narrative structures for full novels.
 {prompt_core_elements}
 
 Please output ONLY the plot elements as plain text, using the specified field names.
 Use the format:
 FieldName: Value
 
-For "Plot Points", use this EXACT format with each point on a new line prefixed by "- ":
-Plot Points:
-- First plot point description.
-- Second plot point description.
-- Third plot point description.
-- Fourth plot point description.
-- Fifth plot point description.
+For "Plot Points", use this EXACT format with each point on a new line prefixed by "- ".
+Generate approximately {target_num_plot_points} plot points.
 
-Example of full output:
+Example of "Plot Points" for a {target_num_plot_points}-point outline:
+Plot Points:
+- Plot Point 1 description.
+- Plot Point 2 description.
+...
+- Plot Point {target_num_plot_points} description.
+
+Example of full output (ensure your Plot Points list is longer, aiming for {target_num_plot_points}):
 Title: The Obsidian Labyrinth
 Protagonist Name: Kaelen
 Protagonist Description: A disgraced cartographer haunted by a past failure, seeking redemption.
@@ -273,6 +285,7 @@ Plot Points:
 - Kaelen must navigate a treacherous mountain pass, using his old cartography skills under pressure.
 - Inside the Labyrinth, Kaelen confronts illusions reflecting his past trauma and overcomes them.
 - Kaelen finds the Labyrinth's heart, choosing to seal its dangerous power rather than exploit it, finding peace.
+(Extend this list in your actual output to ~{target_num_plot_points} points)
 Character Arc: Kaelen transforms from a guilt-ridden exile to a self-forgiven individual who values wisdom over renown.
 Conflict Summary: Kaelen races against Silas to find the Obsidian Labyrinth, battling both external dangers and his internal demons, to decide the fate of its ancient power.
 Logline: A disgraced cartographer seeking redemption must outwit a rival and conquer his past to secure a legendary labyrinth's dangerous secret.
@@ -285,7 +298,7 @@ Antagonist Motivations: Believes the Labyrinth's power belongs to him and will s
 
 Begin your output now using the requested field names:
 """
-    logger.info("Calling LLM for plot outline generation (to plain text)...")
+    logger.info(f"Calling LLM for plot outline generation (to plain text), targeting ~{target_num_plot_points} plot points...")
     raw_outline_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
     cleaned_outline_text = llm_interface.clean_model_response(raw_outline_text)
 
@@ -299,19 +312,18 @@ Begin your output now using the requested field names:
         plot_points_value = parsed_llm_response.get("plot_points")
         missing_or_invalid_keys = [k for k in required_string_keys_internal if not (k in parsed_llm_response and isinstance(parsed_llm_response[k], str) and parsed_llm_response[k].strip())]
         
-        if not (isinstance(plot_points_value, list) and len(plot_points_value) >= 3 and all(isinstance(p, str) and p.strip() for p in plot_points_value)):
-            missing_or_invalid_keys.append("plot_points (structure/content issue: needs to be a list of at least 3 non-empty strings)")
+        # Check if plot_points is a list with at least, say, 50% of the target number of non-empty strings
+        min_expected_plot_points = target_num_plot_points // 2
+        if not (isinstance(plot_points_value, list) and len(plot_points_value) >= min_expected_plot_points and all(isinstance(p, str) and p.strip() for p in plot_points_value)):
+            missing_or_invalid_keys.append(f"plot_points (structure/content issue: needs to be a list of at least {min_expected_plot_points} non-empty strings)")
         
         if not missing_or_invalid_keys:
             is_valid = True
             final_outline_data = parsed_llm_response
-            # Ensure exactly 5 plot points, padding or truncating as needed
-            if 'plot_points' in final_outline_data and isinstance(final_outline_data['plot_points'], list):
-                current_pp_count = len(final_outline_data['plot_points'])
-                if current_pp_count < 5:
-                    final_outline_data['plot_points'].extend([f"Placeholder Plot Point {i+1} - expand further." for i in range(current_pp_count, 5)])
-                elif current_pp_count > 5:
-                    final_outline_data['plot_points'] = final_outline_data['plot_points'][:5]
+            # No longer padding/truncating to a fixed small number like 5.
+            # We trust the LLM to generate around target_num_plot_points.
+            # If it's slightly off, that's usually fine. If drastically off, the check above handles it.
+            logger.info(f"LLM generated {len(final_outline_data.get('plot_points',[]))} plot points (target was ~{target_num_plot_points}).")
         else:
             logger.warning(f"LLM generated plot outline failed validation after parsing. Missing/invalid keys: {missing_or_invalid_keys}. Parsed response: {parsed_llm_response}. Raw text snippet: '{cleaned_outline_text[:300]}...'")
 
@@ -320,15 +332,11 @@ Begin your output now using the requested field names:
         agent.plot_outline.update(base_elements_for_outline) # Add genre, theme etc.
         agent.plot_outline.pop("is_default", None) # Remove any default flag if generated
         agent.plot_outline["source"] = "llm_generated_unhinged" if unhinged_mode else "llm_generated_configured"
-        logger.info(f"Successfully generated plot outline via LLM: '{agent.plot_outline.get('title', 'N/A')}'")
+        logger.info(f"Successfully generated plot outline via LLM: '{agent.plot_outline.get('title', 'N/A')}' with {len(agent.plot_outline.get('plot_points',[]))} plot points.")
     else:
         logger.error("Failed to generate a valid plot outline via LLM. Applying default plot outline.")
         agent.plot_outline = _create_default_plot(default_protagonist_name, base_elements_for_outline, unhinged_mode)
-        # If LLM failed, usage_data might still be relevant if the call was made, but quality is low.
-        # If we fell back to default *before* an LLM call, usage_data would be None.
-        # The current logic calls LLM then validates.
 
-    # Ensure protagonist name from outline is valid and update/create profile
     prot_name_from_outline = agent.plot_outline.get('protagonist_name')
     if not prot_name_from_outline or not isinstance(prot_name_from_outline, str) or not prot_name_from_outline.strip():
         agent.plot_outline['protagonist_name'] = default_protagonist_name # Fallback to default if LLM failed this
@@ -336,11 +344,10 @@ Begin your output now using the requested field names:
     
     final_protagonist_name = agent.plot_outline['protagonist_name']
 
-    # Initialize character_profiles on agent if it doesn't exist
     if not hasattr(agent, 'character_profiles') or agent.character_profiles is None:
         agent.character_profiles = {}
 
-    if final_protagonist_name not in agent.character_profiles: # Create profile if not existing (e.g. from user data)
+    if final_protagonist_name not in agent.character_profiles: 
         prot_desc = agent.plot_outline.get('protagonist_description', f"The protagonist, {final_protagonist_name}.")
         char_arc = agent.plot_outline.get('character_arc', "To be determined.")
         agent.character_profiles[final_protagonist_name] = {
@@ -351,7 +358,6 @@ Begin your output now using the requested field names:
         }
         logger.info(f"Created initial character profile for protagonist '{final_protagonist_name}'.")
     
-    # Initialize world_building on agent if it doesn't exist
     if not hasattr(agent, 'world_building') or agent.world_building is None:
         agent.world_building = {"locations": {}, "society": {}, "systems": {}, "lore": {}, "history": {}, "_overview_": {}, "factions": {}}
 
@@ -368,7 +374,6 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
         if agent.world_building.get("user_supplied_data", False):
             logger.info("Skipping LLM world-building generation: Data was user-supplied.")
             return agent.world_building, None
-        # Check if it's substantially populated beyond default/metadata keys
         meaningful_categories_count = sum(1 for cat, items in agent.world_building.items()
                                           if cat not in ["is_default", "user_supplied_data", "source", "_overview_"] and isinstance(items, dict) and items)
         overview_has_content = isinstance(agent.world_building.get("_overview_"), dict) and agent.world_building["_overview_"].get("description")

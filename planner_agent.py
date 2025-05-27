@@ -121,10 +121,10 @@ class PlannerAgent:
 
     async def plan_chapter_scenes(
         self,
-        novel_props: Dict[str, Any], # Contains plot_outline, character_profiles, world_building
-        chapter_number: int,
-        plot_point_focus: Optional[str],
-        plot_point_index: int
+        novel_props: Dict[str, Any], # Contains plot_outline_full, character_profiles, world_building
+        chapter_number: int, # This is the novel's actual chapter number
+        plot_point_focus: Optional[str], # The specific plot point for this chapter
+        plot_point_index: int # 0-based index of this plot_point_focus in the overall plot_points list
     ) -> Tuple[Optional[List[SceneDetail]], Optional[Dict[str, int]]]:
         """
         Generates a detailed scene plan for the chapter.
@@ -141,7 +141,7 @@ class PlannerAgent:
 
         context_summary = ""
         if chapter_number > 1:
-            prev_chap_data = await chapter_queries.get_chapter_data_from_db(chapter_number - 1) # MODIFIED
+            prev_chap_data = await chapter_queries.get_chapter_data_from_db(chapter_number - 1)
             if prev_chap_data:
                 prev_summary = prev_chap_data.get('summary')
                 prev_is_provisional = prev_chap_data.get('is_provisional', False)
@@ -155,20 +155,30 @@ class PlannerAgent:
                         context_summary += f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
 
         protagonist_name = novel_props.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(novel_props, chapter_number, None)
+        kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(novel_props, chapter_number, None) # Chapter plan not available yet for KG facts
         character_state_snippet_plain_text = await get_character_state_snippet_for_prompt(novel_props, chapter_number)
         world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(novel_props, chapter_number)
 
-
+        # Future plot context for pacing
         future_plot_context = ""
-        all_plot_points = novel_props.get('plot_points', [])
-        if plot_point_index + 1 < len(all_plot_points):
-            next_plot_point = all_plot_points[plot_point_index + 1]
-            if isinstance(next_plot_point, str) and next_plot_point.strip():
-                future_plot_context = f"\n**Anticipated Next Major Plot Point (for context, not this chapter's focus):**\n{next_plot_point.strip()}\n"
+        # novel_props['plot_outline_full'] should contain the full plot_data dictionary
+        # which includes the 'plot_points' list of strings.
+        all_plot_points = novel_props.get('plot_outline_full', {}).get('plot_points', [])
+        total_plot_points_in_novel = len(all_plot_points)
+
+        if plot_point_index + 1 < total_plot_points_in_novel:
+            next_pp_text = all_plot_points[plot_point_index + 1]
+            if isinstance(next_pp_text, str) and next_pp_text.strip():
+                future_plot_context = f"\n**Anticipated Next Major Plot Point (PP {plot_point_index + 2}/{total_plot_points_in_novel} - for context, not this chapter's focus):**\n{next_pp_text.strip()}\n"
+            if plot_point_index + 2 < total_plot_points_in_novel:
+                 next_next_pp_text = all_plot_points[plot_point_index + 2]
+                 if isinstance(next_next_pp_text, str) and next_next_pp_text.strip():
+                    future_plot_context += f"**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}\n"
 
         prompt = f"""/no_think
 You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {config.TARGET_SCENES_MAX} detailed scenes** for Chapter {chapter_number} of a novel.
+This chapter is part of a larger narrative arc.
+
 **Novel Concept:**
   - Title: {novel_props.get('title', 'Untitled')}
   - Genre: {novel_props.get('genre', 'N/A')}
@@ -176,10 +186,13 @@ You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {con
   - Protagonist: {protagonist_name}
   - Protagonist's Arc: {novel_props.get('character_arc', 'N/A')}
 
-**Mandatory Focus for THIS Chapter (Plot Point {plot_point_index + 1} of {len(novel_props.get('plot_points',[]))}):**
+**Overall Narrative Context:** This chapter focuses on Plot Point {plot_point_index + 1} of {total_plot_points_in_novel} total major plot points in the novel.
+
+**Mandatory Focus for THIS Chapter (Plot Point {plot_point_index + 1}):**
 {plot_point_focus}
+
 {future_plot_context}
-**Recent Context from Previous Chapter(s):**
+**Recent Context from Previous Chapter(s) (Semantic context & KG Facts):**
 {context_summary if context_summary else "This is the first chapter, or no prior summary is available."}
 {kg_context_section}
 **Current Character States (Key Characters, based on profiles and recent developments - Plain Text):**
@@ -190,6 +203,7 @@ You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {con
 
 **Task:**
 Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}.
+These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.
 For each scene in the plan, provide the following information using clear labels (case-insensitive keys are fine, but use these display names):
 - `SCENE:` (Sequential number for the scene within this chapter)
 - `SUMMARY:` (A concise 1-2 sentence summary of what happens in the scene)
@@ -197,13 +211,13 @@ For each scene in the plan, provide the following information using clear labels
 - `KEY DIALOGUE POINTS:` (List 1-3 brief points outlining crucial dialogue or internal monologue, each on a new line starting with "- ")
 - `SETTING DETAILS:` (Brief description of the specific setting/location)
 - `SCENE FOCUS ELEMENTS:` (List 1-2 specific aspects for targeted elaboration, each on a new line starting with "- ")
-- `CONTRIBUTION:` (A short explanation of how this scene contributes to the chapter's goals or plot)
+- `CONTRIBUTION:` (A short explanation of how this scene contributes to THIS chapter's Mandatory Focus Plot Point)
 
 Separate each complete scene block with a line containing only "---". If you don't use "---", ensure each scene starts clearly with "SCENE: <number>".
 
 Output ONLY the scene plan text as described.
 """
-        logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX})...")
+        logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
         plan_raw_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
@@ -222,29 +236,26 @@ Output ONLY the scene plan text as described.
                 if not isinstance(scene_dict, dict):
                     logger.warning(f"Parsed scene item {i+1} for ch {chapter_number} is not a dict. Skipping. Item: {scene_dict}")
                     continue
-                # Validate structure more thoroughly
                 required_scene_keys_internal = set(SCENE_PLAN_KEY_MAP.values())
                 if not required_scene_keys_internal.issubset(scene_dict.keys()):
                     missing_k = required_scene_keys_internal - set(scene_dict.keys())
                     logger.warning(f"Scene {i+1} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}")
                     continue
                 
-                # Type check important fields
                 valid_types = (
                     isinstance(scene_dict.get("scene_number"), int) and
                     isinstance(scene_dict.get("summary"), str) and scene_dict.get("summary", "").strip() and
-                    isinstance(scene_dict.get("characters_involved"), list) and # Parser ensures this
-                    isinstance(scene_dict.get("key_dialogue_points"), list) and # Parser ensures this
+                    isinstance(scene_dict.get("characters_involved"), list) and 
+                    isinstance(scene_dict.get("key_dialogue_points"), list) and 
                     isinstance(scene_dict.get("setting_details"), str) and scene_dict.get("setting_details", "").strip() and
-                    isinstance(scene_dict.get("scene_focus_elements"), list) and # Parser ensures this
+                    isinstance(scene_dict.get("scene_focus_elements"), list) and 
                     isinstance(scene_dict.get("contribution"), str) and scene_dict.get("contribution", "").strip()
                 )
                 if not valid_types:
                     logger.warning(f"Scene {i+1} from parser for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_dict}")
                     continue
                 
-                final_scenes_typed.append(scene_dict) # type: ignore [arg-type] # After validation, this should be fine
-
+                final_scenes_typed.append(scene_dict) # type: ignore 
             if final_scenes_typed:
                 logger.info(f"Generated valid detailed scene plan for chapter {chapter_number} with {len(final_scenes_typed)} scenes from plain text.")
                 return final_scenes_typed, usage_data

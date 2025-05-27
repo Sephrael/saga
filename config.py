@@ -1,4 +1,3 @@
-      
 # config.py
 """
 Configuration settings for the Saga Novel Generation system.
@@ -137,6 +136,7 @@ MAX_GENERATION_TOKENS: int = int(os.getenv("MAX_GENERATION_TOKENS", "16384"))
 CONTEXT_CHAPTER_COUNT: int = 5 # Used by Neo4j vector search limit and fallback
 CHAPTERS_PER_RUN: int = int(os.getenv("CHAPTERS_PER_RUN", "3"))
 LLM_TOP_P: float = 0.95
+TARGET_PLOT_POINTS_INITIAL_GENERATION: int = int(os.getenv("TARGET_PLOT_POINTS_INITIAL_GENERATION", "12")) # For a more substantial novel arc
 
 
 # --- Caching ---
