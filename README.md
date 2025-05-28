@@ -5,13 +5,13 @@
 
 SAGA is an autonomous, agentic creative-writing system designed to generate entire novels. Powered by the **NANA** engine, SAGA leverages Large Language Models (LLMs) and a Neo4j graph database to create rich, coherent, and evolving narratives.
 
-** Progress Window **
+### Progress Window
 ![SAGA](https://github.com/Lanerra/saga/blob/master/SAGA.png)
 
-** 3 Chapter Knowledge Graph **
+### 3 Chapter Knowledge Graph
 ![KG-3chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG.png)
 
-** 14 Chapter Knowledge Graph **
+### 14 Chapter Knowledge Graph
 ![KG-14chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG-2.png)
 
 ## Overview
@@ -175,6 +175,17 @@ SAGA will begin the novel generation process.
 *   The number of chapters generated per run is controlled by `CHAPTERS_PER_RUN` in `config.py`.
 
 Output files (chapters, logs, debug info) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`).
+
+Currently, SAGA can generate 14 chapters in ~60 minutes (~4.5 minutes per chapter), using ~162K processing tokens to do all the various tasks in the pipeline, containing ~78K tokens of narration (~2:1 ratio with processing tokens) using the following model configuration:
+
+```
+LARGE_MODEL=Qwen3-8B-Q4
+MEDIUM_MODEL=Qwen3-4B-Q4
+SMALL_MODEL=Qwen3-4B-Q4
+NARRATOR_MODEL=Qwen3-8B-Q4
+```
+
+All models used for sample generation are Unsloth's *-UD-Q4_K_XL.gguf
 
 ## Resetting the Database
 
