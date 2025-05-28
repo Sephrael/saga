@@ -379,7 +379,7 @@ class NANA_Orchestrator:
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
         is_from_flawed_source_for_kg = False 
 
-        max_revision_attempts = 2
+        max_revision_attempts = 1
         for attempt in range(max_revision_attempts + 1): 
             if current_text_to_process is None:
                  logger.error(f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt + 1}. Aborting chapter.")
