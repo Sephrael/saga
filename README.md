@@ -7,6 +7,10 @@ SAGA is an autonomous, agentic creative-writing system designed to generate enti
 
 ![SAGA](https://github.com/Lanerra/saga/blob/master/SAGA.png)
 
+![KG-3chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG.png)
+
+![KG-14chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG-2.png)
+
 ## Overview
 
 Ever dreamt of an AI that could not just write a paragraph, but an entire saga? SAGA, with its NANA engine, aims to do just that. It's more than just a text generator; it's a team of specialized AI agents working together:
