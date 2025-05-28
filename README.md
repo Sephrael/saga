@@ -5,10 +5,13 @@
 
 SAGA is an autonomous, agentic creative-writing system designed to generate entire novels. Powered by the **NANA** engine, SAGA leverages Large Language Models (LLMs) and a Neo4j graph database to create rich, coherent, and evolving narratives.
 
+** Progress Window **
 ![SAGA](https://github.com/Lanerra/saga/blob/master/SAGA.png)
 
+** 3 Chapter Knowledge Graph **
 ![KG-3chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG.png)
 
+** 14 Chapter Knowledge Graph **
 ![KG-14chapter](https://github.com/Lanerra/saga/blob/master/SAGA-KG-2.png)
 
 ## Overview
