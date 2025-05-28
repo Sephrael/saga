@@ -4,7 +4,6 @@ Handles the generation of the initial chapter draft for the SAGA system.
 Context data for prompts is now formatted as plain text.
 """
 import logging
-# Removed: import json # Retained for SceneDetail if it remains a complex dict internally for plan
 from typing import Tuple, Optional, List
 
 import config

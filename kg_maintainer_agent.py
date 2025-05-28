@@ -25,9 +25,15 @@ CHAR_UPDATE_KEY_MAP = {
     "relationships": "relationships", "modification_proposal": "modification_proposal",
     re.compile(r"development_in_chapter_\d+"): lambda match: match.group(0).lower() 
 }
-CHAR_UPDATE_LIST_INTERNAL_KEYS = ["traits"]
-CHAR_UPDATE_RELATIONSHIP_HANDLING = {
-    "relationships": {"separator": ";", "item_format": "target:type"} 
+CHAR_UPDATE_LIST_INTERNAL_KEYS = ["traits"] # Relationships handled customly after
+
+# For parse_key_value_block to correctly split single-line comma-separated "Traits: value1, value2"
+CHAR_UPDATE_PKVB_SPECIAL_HANDLING = {
+    "traits": {"separator": ","}
+}
+# For custom post-parsing of relationships if they are not list items
+CHAR_UPDATE_RELATIONSHIP_POST_PARSING_HANDLING = {
+    "relationships": {"separator": ";", "item_format": "target:type"}
 }
 
 
@@ -527,18 +533,21 @@ class KGMaintainerAgent:
                     individual_char_block_text,
                     CHAR_UPDATE_KEY_MAP,
                     CHAR_UPDATE_LIST_INTERNAL_KEYS,
-                    special_list_handling=CHAR_UPDATE_RELATIONSHIP_HANDLING
+                    special_list_handling=CHAR_UPDATE_PKVB_SPECIAL_HANDLING # MODIFIED: Use specific handling for PKVB
                 )
                 
+                # Custom post-processing for relationships using CHAR_UPDATE_RELATIONSHIP_POST_PARSING_HANDLING
                 if "relationships" in parsed_char_data and isinstance(parsed_char_data["relationships"], list):
                     rels_dict = {}
+                    # Relationship lines might be parsed as single strings by parse_key_value_block if they have prefixes like "- "
+                    # Or, if Relationships: Target:Type format is used on one line, it might be a single string.
                     for rel_str_or_item in parsed_char_data["relationships"]:
                         if isinstance(rel_str_or_item, str) and ':' in rel_str_or_item:
                             parts = rel_str_or_item.split(":", 1)
                             if len(parts) == 2 and parts[0].strip() and parts[1].strip():
                                 rels_dict[parts[0].strip()] = parts[1].strip()
                             else: logger.warning(f"Malformed relationship string for {char_name}: '{rel_str_or_item}'")
-                        elif isinstance(rel_str_or_item, str) and rel_str_or_item.strip(): 
+                        elif isinstance(rel_str_or_item, str) and rel_str_or_item.strip(): # A single name, assume 'related'
                             rels_dict[rel_str_or_item.strip()] = "related" 
                     parsed_char_data["relationships"] = rels_dict
                 

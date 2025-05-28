@@ -180,7 +180,7 @@ Your task is to identify specific issues related to:
 {draft_text}
 --- END COMPLETE CHAPTER TEXT ---
 
-**Output Format (CRITICAL):**
+**Output Format (CRITICAL - PLAIN TEXT ONLY):**
 Provide your evaluation as plain text. If problems are found, list each problem individually using the following format (ensure keys like "ISSUE CATEGORY" are used, case can vary):
 
 ISSUE CATEGORY: [consistency | plot_arc | thematic | narrative_depth | meta]
