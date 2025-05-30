@@ -93,9 +93,8 @@ FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL
 
 
 MAIN_GENERATION_MODEL: str = NARRATOR_MODEL
-JSON_CORRECTION_MODEL: str = SMALL_MODEL
 KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
-INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
+INITIAL_SETUP_MODEL: str = MEDIUM_MODEL # Used for Plot Outline, World Building, Character Profiles initial gen
 PLANNING_MODEL: str = LARGE_MODEL
 DRAFTING_MODEL: str = NARRATOR_MODEL
 REVISION_MODEL: str = NARRATOR_MODEL
@@ -112,7 +111,7 @@ CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
 DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
-USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.json"
+USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.md" # Path to the user's Markdown input file
 
 UNHINGED_DATA_DIR: str = "unhinged_data"
 os.makedirs(UNHINGED_DATA_DIR, exist_ok=True)
@@ -178,7 +177,7 @@ if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000: # A
     )
 
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True
-KG_PREPOPULATION_CHAPTER_NUM: int = 0
+KG_PREPOPULATION_CHAPTER_NUM: int = 0 # Chapter number assigned to items from initial setup/prepopulation
 
 
 # --- Logging ---
@@ -198,7 +197,7 @@ DEFAULT_PROTAGONIST_NAME: str = "Sága"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 
 MAIN_NOVEL_INFO_NODE_ID: str = "saga_main_novel_info"
-MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container"
+MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container" # Not currently used but reserved
 MAIN_WORLD_CONTAINER_NODE_ID: str = "saga_main_world_container"
 
 
@@ -221,3 +220,8 @@ FALLBACK_CHARS_PER_TOKEN: float = 4.0
 ENABLE_RICH_PROGRESS: bool = os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
 # How many times per second the Rich Live display should attempt to refresh.
 RICH_REFRESH_PER_SECOND: float = 4.0
+
+# --- Markdown Story Parser Configuration ---
+# Placeholder for values to be filled in by the user if not provided in Markdown.
+# This value will be checked by the initial_setup_logic.
+MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"

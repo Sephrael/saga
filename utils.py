@@ -3,22 +3,28 @@
 General utility functions for the Saga Novel Generation system.
 MODIFIED: Enhanced find_quote_and_sentence_offsets_with_spacy for more robust quote matching.
 ADDED: deduplicate_text_segments for removing near-identical text.
+ADDED: _is_fill_in helper function.
 """
 
 import numpy as np
 import logging
 import re
 import asyncio
-from typing import Optional, Tuple, List, Union, Set # Added Set
+from typing import Optional, Tuple, List, Union, Set, Any # Added Set, Any
 
 # Local application imports - ensure these paths are correct for your project
 import llm_interface
 import spacy
+import config # For MARKDOWN_FILL_IN_PLACEHOLDER
 
 logger = logging.getLogger(__name__)
 
 # Global spaCy model instance
 NLP_SPACY: Optional[spacy.language.Language] = None
+
+def _is_fill_in(value: Any) -> bool:
+    """Checks if a value is the [Fill-in] placeholder."""
+    return isinstance(value, str) and value == config.MARKDOWN_FILL_IN_PLACEHOLDER
 
 def load_spacy_model_if_needed():
     """Loads the spaCy model if it hasn't been loaded yet."""
@@ -321,8 +327,8 @@ async def deduplicate_text_segments(
             logger.warning("Semantic de-duplication path in deduplicate_text_segments is a placeholder and will use normalized text.")
             # Fallthrough to normalized string comparison if use_semantic_comparison is True but not fully implemented async
             normalized_current_seg = _normalize_text_for_matching(seg_text)
-            for _, _, kept_key_norm in kept_segment_info: # Assuming kept_key is normalized string here
-                if normalized_current_seg == kept_key_norm:
+            for _, _, kept_key_comp in kept_segment_info: # Assuming kept_key is normalized string here
+                if isinstance(kept_key_comp, str) and normalized_current_seg == kept_key_comp: # Ensure type for comparison
                     is_duplicate = True
                     break
             if not is_duplicate:

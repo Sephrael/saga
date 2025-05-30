@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import config
 import llm_interface
-import utils # ADDED utils for deduplication
+import utils # ADDED utils for deduplication and _is_fill_in
 from core_db.base_db_manager import neo4j_manager
 from data_access import (
     plot_queries,
@@ -46,11 +46,12 @@ except ImportError:
         def __exit__(self, *args): pass
         def update(self, *args, **kwargs): pass
         def stop(self): pass
-    class Text:
-        def __init__(self, *args, **kwargs): self.plain = "" # type: ignore
-    class Group:
+    class Text: # type: ignore
+        def __init__(self, initial_text: str = ""): self.plain = initial_text 
+        def plain_setter(self, value: str): self.plain = value # type: ignore
+    class Group: # type: ignore
         def __init__(self, *args, **kwargs): pass
-    class Panel:
+    class Panel: # type: ignore
         def __init__(self, *args, **kwargs): pass
     class RichHandler: # type: ignore
         def __init__(self, *args, **kwargs): pass
@@ -94,7 +95,7 @@ class NANA_Orchestrator:
             self.rich_live = Live(
                 Panel(self.rich_status_group, title="SAGA NANA Progress", border_style="blue", expand=True),
                 refresh_per_second=config.RICH_REFRESH_PER_SECOND,
-                transient=False, # Keep display after exit
+                transient=False, 
                 redirect_stdout=False, 
                 redirect_stderr=False
             )
@@ -106,14 +107,16 @@ class NANA_Orchestrator:
     def _update_rich_display(self, chapter_num: Optional[int] = None, step: Optional[str] = None):
         if not (RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS and self.rich_live and self.rich_status_group):
             return
+        
+        # Rich Text plain attribute needs to be set directly
         if chapter_num is not None:
-            self.status_text_current_chapter.plain = f"Current Chapter: {chapter_num}"
+            self.status_text_current_chapter.plain = f"Current Chapter: {chapter_num}" # type: ignore
         if step is not None:
-            self.status_text_current_step.plain = f"Current Step: {step}"
-        self.status_text_novel_title.plain = f"Novel: {self.plot_outline.get('title', 'N/A')}"
-        self.status_text_tokens_generated.plain = f"Tokens Generated (this run): {self.total_tokens_generated_this_run:,}"
+            self.status_text_current_step.plain = f"Current Step: {step}" # type: ignore
+        self.status_text_novel_title.plain = f"Novel: {self.plot_outline.get('title', 'N/A')}" # type: ignore
+        self.status_text_tokens_generated.plain = f"Tokens Generated (this run): {self.total_tokens_generated_this_run:,}" # type: ignore
         elapsed_seconds = time.time() - self.run_start_time
-        self.status_text_elapsed_time.plain = f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}"
+        self.status_text_elapsed_time.plain = f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}" # type: ignore
 
     def _accumulate_tokens(self, operation_name: str, usage_data: Optional[Dict[str, int]]):
         if usage_data and isinstance(usage_data.get("completion_tokens"), int):
@@ -135,10 +138,10 @@ class NANA_Orchestrator:
             "protagonist_name": self.plot_outline.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME),
             "character_arc": self.plot_outline.get("character_arc", "N/A"),
             "logline": self.plot_outline.get("logline", "N/A"),
-            "plot_points": self.plot_outline.get("plot_points", []), # This will be the list of strings
+            "plot_points": self.plot_outline.get("plot_points", []), 
             "character_profiles": self.character_profiles,
             "world_building": self.world_building,
-            "plot_outline_full": self.plot_outline # Keep the full dict for agents needing more than just point list
+            "plot_outline_full": self.plot_outline 
         }
         self._update_rich_display()
 
@@ -195,7 +198,8 @@ class NANA_Orchestrator:
         self._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
         logger.info("\n--- NANA: Initializing Plot, Characters, and World ---")
-        generation_params: Dict[str, Any] = {}
+        
+        generation_params: Dict[str, Any] = {} 
         if config.UNHINGED_PLOT_MODE and not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH):
             generation_params.update({
                 "genre": random.choice(config.UNHINGED_GENRES), "theme": random.choice(config.UNHINGED_THEMES),
@@ -203,44 +207,49 @@ class NANA_Orchestrator:
                 "protagonist_archetype": random.choice(config.UNHINGED_PROTAGONIST_ARCHETYPES),
                 "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES)
             })
-        elif not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH):
-            generation_params.update({
-                "genre": config.CONFIGURED_GENRE, "theme": config.CONFIGURED_THEME,
-                "setting_description": config.CONFIGURED_SETTING_DESCRIPTION
-            })
+        
         _, plot_usage = await generate_plot_outline_logic(self, config.DEFAULT_PROTAGONIST_NAME,
-                                          config.UNHINGED_PLOT_MODE if not os.path.exists(config.USER_STORY_ELEMENTS_FILE_PATH) else False,
+                                          config.UNHINGED_PLOT_MODE, 
                                           **generation_params)
         self._accumulate_tokens("InitialSetup-PlotOutline", plot_usage)
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(f"   Plot Outline initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Number of plot points: {len(self.plot_outline.get('plot_points',[]))}")
-        self._update_rich_display(step="Plot Outline Generated")
+        self._update_rich_display(step="Plot Outline Generated/Loaded")
+        
         _, world_usage = await generate_world_building_logic(self)
         self._accumulate_tokens("InitialSetup-WorldBuilding", world_usage)
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
-        self._update_rich_display(step="World Building Generated")
-        self._update_novel_props_cache()
+        self._update_rich_display(step="World Building Generated/Loaded")
+        
+        self._update_novel_props_cache() 
         await self._save_core_novel_state_to_neo4j()
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
         self._update_rich_display(step="Initial State Saved")
+        
         if not self.plot_outline or not self.plot_outline.get("plot_points") or self.plot_outline.get("is_default"):
             logger.warning("Initial setup resulted in a default or empty/short plot outline. This might impact generation quality.")
+        
         return True
 
     async def _prepopulate_kg_if_needed(self):
         self._update_rich_display(step="Pre-populating KG (if needed)")
         logger.info("NANA: Checking if KG pre-population is needed...")
+        
         plot_source = self.plot_outline.get("source", "")
-        is_user_or_llm_plot = plot_source == "user_supplied" or plot_source.startswith("llm_generated")
-        if not is_user_or_llm_plot:
-            logger.info(f"Skipping KG pre-population: Plot outline is default or source is unclear ('{plot_source}').")
+        is_user_or_llm_plot = plot_source == "user_supplied_markdown" or \
+                              plot_source.startswith("llm_generated") or \
+                              plot_source == "default_fallback" 
+                              
+        if not is_user_or_llm_plot and not self.plot_outline.get("is_default", False):
+            logger.info(f"Skipping KG pre-population: Plot outline source '{plot_source}' suggests it might not be ready for KG.")
             return
-        pp_check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}})-[:HAS_PLOT_POINT]->(pp:PlotPoint) RETURN count(pp) AS pp_count"
-        pp_result_list = await neo4j_manager.execute_read_query(pp_check_query)
 
-        if pp_result_list and pp_result_list[0] and pp_result_list[0].get('pp_count', 0) > 0:
-            logger.info(f"Found existing NovelInfo with {pp_result_list[0]['pp_count']} plot points. Assuming KG already pre-populated. Skipping explicit pre-population.")
+        pp_check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}}) RETURN ni LIMIT 1"
+        novel_info_exists = await neo4j_manager.execute_read_query(pp_check_query)
+
+        if novel_info_exists and novel_info_exists[0]:
+            logger.info(f"Found existing NovelInfo node. Assuming KG already pre-populated or managed elsewhere. Skipping explicit pre-population call.")
             return
         
         logger.info("\n--- NANA: Pre-populating Knowledge Graph from Initial Data ---")
@@ -260,17 +269,15 @@ class NANA_Orchestrator:
             logger.error(f"No plot points available in orchestrator state for chapter {novel_chapter_number}.")
             return None, -1
         
-        # The plot_point_index corresponds to the chapter number (1-based) for the list.
-        # E.g., Chapter 1 uses plot_points_list[0].
         plot_point_index = novel_chapter_number - 1
 
         if 0 <= plot_point_index < len(plot_points_list):
             plot_point_text = plot_points_list[plot_point_index]
-            if isinstance(plot_point_text, str) and plot_point_text.strip():
+            if isinstance(plot_point_text, str) and plot_point_text.strip() and not utils._is_fill_in(plot_point_text): # Ensure not [Fill-in]
                 return plot_point_text, plot_point_index
             else:
-                logger.error(f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is invalid: {plot_point_text}")
-                return None, -1
+                logger.error(f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is invalid or '[Fill-in]': {plot_point_text}")
+                return None, -1 # Treat [Fill-in] as not available for focus
         else:
             logger.error(f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points_list)}) for chapter {novel_chapter_number}.")
             return None, -1
@@ -344,8 +351,8 @@ class NANA_Orchestrator:
             return None
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(novel_chapter_number)
-        if plot_point_focus is None:
-            logger.error(f"NANA: Ch {novel_chapter_number} generation halted: no plot point focus could be determined (index {plot_point_index}).")
+        if plot_point_focus is None: # This now also checks for [Fill-in]
+            logger.error(f"NANA: Ch {novel_chapter_number} generation halted: no concrete plot point focus could be determined (index {plot_point_index}).")
             self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Plot Point Focus")
             return None
 
@@ -365,7 +372,7 @@ class NANA_Orchestrator:
         
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Drafting Initial Text")
         initial_draft_text, initial_raw_llm_text, draft_usage = await self.drafting_agent.draft_chapter(
-            self, novel_chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
+            self.novel_props_cache, novel_chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan 
         )
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Drafting", draft_usage)
         if not initial_draft_text:
@@ -422,9 +429,9 @@ class NANA_Orchestrator:
                 evaluation_result["problems_found"].extend(continuity_problems) 
                 if not evaluation_result["needs_revision"]: 
                     evaluation_result["needs_revision"] = True
-                    evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.")
-                elif "Continuity issues identified by WorldContinuityAgent." not in evaluation_result["reasons"]:
-                     evaluation_result["reasons"].append("Continuity issues identified by WorldContinuityAgent.") 
+                unique_reasons = set(evaluation_result.get("reasons", []))
+                unique_reasons.add("Continuity issues identified by WorldContinuityAgent.")
+                evaluation_result["reasons"] = sorted(list(unique_reasons))
             
             if not evaluation_result["needs_revision"]:
                 logger.info(f"NANA: Ch {novel_chapter_number} draft passed evaluation (Attempt {attempt+1}). Text is considered good.")
@@ -440,7 +447,7 @@ class NANA_Orchestrator:
 
                 self._update_rich_display(step=f"Ch {novel_chapter_number} - Revision Attempt {attempt + 1}")
                 revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
-                    self, current_text_to_process, novel_chapter_number,
+                    self, current_text_to_process, novel_chapter_number, 
                     evaluation_result, hybrid_context_for_draft, chapter_plan
                 )
                 self._accumulate_tokens(f"Ch{novel_chapter_number}-Revision-Attempt{attempt+1}", revision_usage)
@@ -492,11 +499,9 @@ class NANA_Orchestrator:
         self.world_building = self.novel_props_cache['world_building']   
         self._update_novel_props_cache()
 
-        # IMPORTANT: Update self.chapter_count only after successful save and KG update
-        # to reflect that this chapter is now "done" in the context of the novel's progression.
         self.chapter_count = max(self.chapter_count, novel_chapter_number) 
         
-        await self._save_core_novel_state_to_neo4j() # Save potentially updated profiles/world after KG merge
+        await self._save_core_novel_state_to_neo4j() 
 
         status_message = "Successfully Generated" if not is_from_flawed_source_for_kg else "Generated (Marked with Flaws)"
         logger.info(f"=== NANA: Finished Novel Chapter {novel_chapter_number} - {status_message} ===")
@@ -513,42 +518,38 @@ class NANA_Orchestrator:
             await neo4j_manager.connect()
             await neo4j_manager.create_db_schema()
             logger.info("NANA: Neo4j connection and schema verified.")
-            await self.async_init_orchestrator()
+            await self.async_init_orchestrator() # Loads existing state from DB
 
-            # Ensure plot outline is sufficient before proceeding
-            if not self.plot_outline or not self.plot_outline.get("plot_points") or \
-               len(self.plot_outline.get("plot_points", [])) < config.TARGET_PLOT_POINTS_INITIAL_GENERATION // 2: # Arbitrary check for "too few"
-                logger.info("NANA: Plot outline is missing, empty, or too short. Performing initial setup...")
-                if not await self.perform_initial_setup():
+            plot_points_exist = self.plot_outline and self.plot_outline.get("plot_points") and \
+                                len([pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)]) > 0 # Use utils._is_fill_in
+            
+            if not plot_points_exist or not self.plot_outline.get("title") or utils._is_fill_in(self.plot_outline.get("title")): # Use utils._is_fill_in
+                logger.info("NANA: Core plot data missing or insufficient (e.g., no title, no concrete plot points). Performing initial setup...")
+                if not await self.perform_initial_setup(): 
                     logger.critical("NANA: Initial setup failed. Halting generation.")
                     self._update_rich_display(step="Initial Setup Failed - Halting")
                     return
-                # Re-initialize after setup as plot_outline would have changed
                 await self.async_init_orchestrator() 
             
-            await self._prepopulate_kg_if_needed()
-            self._update_novel_props_cache() # Ensure cache is fresh after all init steps
+            await self._prepopulate_kg_if_needed() 
+            self._update_novel_props_cache() 
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
             
-            # Determine the first novel chapter number to write in this run
-            # self.chapter_count is the number of chapters already successfully written
             start_novel_chapter_to_write = self.chapter_count + 1
             
-            available_plot_points = self.plot_outline.get("plot_points", [])
-            total_plot_points_in_outline = len(available_plot_points)
+            available_plot_points = [pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)] # Use utils._is_fill_in
+            total_concrete_plot_points = len(available_plot_points)
             
-            # Plot points already effectively covered by chapters written so far
             plot_points_covered_count = self.chapter_count 
-            
-            remaining_plot_points_to_address_in_novel = total_plot_points_in_outline - plot_points_covered_count
+            remaining_plot_points_to_address_in_novel = total_concrete_plot_points - plot_points_covered_count
 
             logger.info(f"NANA: Current Novel Chapter Count (State): {self.chapter_count}")
-            logger.info(f"NANA: Total Plot Points in Outline: {total_plot_points_in_outline}")
-            logger.info(f"NANA: Remaining Plot Points to Cover in Novel: {remaining_plot_points_to_address_in_novel}")
+            logger.info(f"NANA: Total Concrete Plot Points in Outline: {total_concrete_plot_points}")
+            logger.info(f"NANA: Remaining Concrete Plot Points to Cover in Novel: {remaining_plot_points_to_address_in_novel}")
 
             if remaining_plot_points_to_address_in_novel <= 0:
-                logger.info(f"NANA: All {total_plot_points_in_outline} plot points appear to be covered by existing {self.chapter_count} chapters. No new chapters to generate based on plot outline.")
+                logger.info(f"NANA: All {total_concrete_plot_points} concrete plot points appear to be covered by existing {self.chapter_count} chapters. No new chapters to generate.")
                 self._update_rich_display(chapter_num=self.chapter_count, step="All Plot Points Covered")
             else:
                 chapters_to_attempt_this_run = min(config.CHAPTERS_PER_RUN, remaining_plot_points_to_address_in_novel)
@@ -565,7 +566,6 @@ class NANA_Orchestrator:
                         chapter_text_result = await self.run_chapter_generation_process(current_novel_chapter_number)
                         if chapter_text_result:
                             chapters_successfully_written_this_run += 1
-                            # self.chapter_count is updated inside run_chapter_generation_process
                             logger.info(f"NANA: Novel Chapter {current_novel_chapter_number}: Processed. Final text length: {len(chapter_text_result)} chars.")
                             logger.info(f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}...")
                         else:
@@ -587,7 +587,8 @@ class NANA_Orchestrator:
 
         except Exception as e:
             logger.critical(f"NANA: Unhandled exception in orchestrator main loop: {e}", exc_info=True)
-            if self.rich_live and self.rich_live.is_started: self._update_rich_display(step="Critical Error in Main Loop") # type: ignore
+            if self.rich_live and self.rich_live.is_started: # type: ignore
+                 self._update_rich_display(step="Critical Error in Main Loop")
         finally:
             if self.rich_live and self.rich_live.is_started: # type: ignore
                 await asyncio.sleep(0.1) 
@@ -603,6 +604,10 @@ def setup_logging_nana():
         handlers=[] 
     )
     root_logger = logging.getLogger()
+    # Remove any default handlers that basicConfig might have added
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
     if config.LOG_FILE:
         try:
             log_dir = os.path.dirname(config.LOG_FILE)
@@ -616,23 +621,36 @@ def setup_logging_nana():
             root_logger.addHandler(file_handler)
             root_logger.info(f"File logging enabled. Log file: {config.LOG_FILE}")
         except Exception as e:
-            root_logger.error(f"Failed to configure file logging to {config.LOG_FILE}: {e}", exc_info=True)
+            # Fallback to console if file logging fails
+            console_handler_fallback = logging.StreamHandler()
+            console_handler_fallback.setFormatter(logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT))
+            root_logger.addHandler(console_handler_fallback)
+            root_logger.error(f"Failed to configure file logging to {config.LOG_FILE}: {e}. Logging to console instead.", exc_info=True)
+
 
     if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
+        existing_console = None
+        if root_logger.handlers:
+             for h_idx, h in enumerate(root_logger.handlers): # Use enumerate if you need index
+                  if hasattr(h, 'console') and not isinstance(h, logging.FileHandler): 
+                       existing_console = h.console # type: ignore
+                       break
+        
         rich_handler = RichHandler(
             level=config.LOG_LEVEL, rich_tracebacks=True, show_path=False,
             markup=True, show_time=True, show_level=True,
-            console=logging.getLogger().handlers[0].console if (root_logger.handlers and hasattr(root_logger.handlers[0], 'console')) else None
+            console=existing_console 
         )
         root_logger.addHandler(rich_handler)
-    else:
+        root_logger.info("Rich logging handler enabled for console.")
+    elif not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers): 
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(config.LOG_LEVEL)
         stream_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
-        if not (RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS):
-             root_logger.info("Standard stream logging handler enabled for console.")
+        root_logger.info("Standard stream logging handler enabled for console.")
+
 
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
     logging.getLogger("neo4j").setLevel(logging.WARNING)
@@ -662,9 +680,11 @@ if __name__ == "__main__":
                  await neo4j_manager.close()
             try:
                 loop = asyncio.get_event_loop()
-                if loop.is_running():
+                if loop.is_running() and not loop.is_closed():
                     asyncio.ensure_future(_close_driver_main()) 
-                else:
-                    asyncio.run(_close_driver_main())
+                elif not loop.is_running() and not loop.is_closed(): 
+                    loop.run_until_complete(_close_driver_main())
+                else: 
+                    asyncio.run(_close_driver_main()) 
             except RuntimeError as e:
                  logger.warning(f"Could not explicitly close driver from main (event loop might be closed or other issue): {e}")
