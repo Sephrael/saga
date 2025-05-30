@@ -1,3 +1,4 @@
+      
 # data_access/kg_queries.py
 import logging
 from typing import Optional, List, Dict, Any
@@ -19,41 +20,31 @@ async def add_kg_triple_to_db(
         logger.warning(f"Neo4j: Invalid KG triple for add: S='{subj_s}', P='{pred_s}', O='{obj_s}', Chap={chapter_added}")
         return
 
+    # Refined: Use direct MERGE with ON CREATE / ON MATCH for relationship upsert
     query = """
     MERGE (s:Entity {name: $subject_param})
     MERGE (o:Entity {name: $object_param})
-    // Use a more robust MERGE for the relationship to handle updates correctly
-    // This approach tries to find an existing relationship and update it, or creates a new one.
-    // It avoids creating duplicate relationships if the combination of S-P-O for a chapter already exists.
-    WITH s, o, $predicate_param AS pred_param, $chapter_added_param AS chap_param, 
-         $is_provisional_param AS prov_param, $confidence_param AS conf_param
-         
-    OPTIONAL MATCH (s)-[existing_r:DYNAMIC_REL {type: pred_param}]->(o)
-    WHERE existing_r.chapter_added = chap_param // Match existing relationship for this specific chapter addition
-    
-    FOREACH (r_to_update IN CASE WHEN existing_r IS NOT NULL THEN [existing_r] ELSE [] END |
-      SET r_to_update.is_provisional = prov_param,
-          r_to_update.confidence = conf_param,
-          r_to_update.last_updated = timestamp()
-    )
-    FOREACH (ignoreMe IN CASE WHEN existing_r IS NULL THEN [1] ELSE [] END |
-      CREATE (s)-[new_r:DYNAMIC_REL {
-        type: pred_param,
-        chapter_added: chap_param,
-        is_provisional: prov_param,
-        confidence: conf_param,
-        created_at: timestamp(),
-        last_updated: timestamp()
-      }]->(o)
-    )
+    MERGE (s)-[r:DYNAMIC_REL {
+        type: $predicate_param,
+        chapter_added: $chapter_added_param 
+    }]->(o)
+    ON CREATE SET
+        r.is_provisional = $is_provisional_param,
+        r.confidence = $confidence_param,
+        r.created_at = timestamp(),
+        r.last_updated = timestamp()
+    ON MATCH SET
+        r.is_provisional = $is_provisional_param,
+        r.confidence = $confidence_param,
+        r.last_updated = timestamp()
     """
     parameters = {
         "subject_param": subj_s,
-        "predicate_param": pred_s,
         "object_param": obj_s,
+        "predicate_param": pred_s,
         "chapter_added_param": chapter_added,
-        "confidence_param": confidence,
-        "is_provisional_param": is_provisional
+        "is_provisional_param": is_provisional,
+        "confidence_param": confidence
     }
     try:
         await neo4j_manager.execute_write_query(query, parameters)
@@ -86,7 +77,9 @@ async def query_kg_from_db(
         conditions.append("r.chapter_added <= $chapter_limit_param")
         parameters["chapter_limit_param"] = chapter_limit
     if not include_provisional:
-        conditions.append("r.is_provisional = FALSE")
+        # Check for explicit FALSE, or if the property doesn't exist (older data might not have it)
+        conditions.append("(r.is_provisional = FALSE OR r.is_provisional IS NULL)")
+
 
     where_clause = ""
     if conditions:
@@ -115,7 +108,7 @@ async def get_most_recent_value_from_db(
     subject: str,
     predicate: str,
     chapter_limit: Optional[int] = None,
-    include_provisional: bool = False
+    include_provisional: bool = False # Default changed to False to prefer canon facts
 ) -> Optional[str]:
     if not subject.strip() or not predicate.strip():
         logger.warning(f"Neo4j: get_most_recent_value_from_db: empty subject or predicate. S='{subject}', P='{predicate}'")
@@ -126,12 +119,22 @@ async def get_most_recent_value_from_db(
         predicate=predicate,
         chapter_limit=chapter_limit,
         include_provisional=include_provisional,
-        limit_results=1
+        limit_results=1 # We only need the most recent one
     )
     if results and results[0] and 'object' in results[0]:
         value = str(results[0]["object"])
-        logger.debug(f"Neo4j: Found most recent value for ('{subject}', '{predicate}'): '{value}' from Ch {results[0].get('chapter_added','N/A')}")
+        logger.debug(f"Neo4j: Found most recent value for ('{subject}', '{predicate}'): '{value}' from Ch {results[0].get('chapter_added','N/A')}, Provisional included: {include_provisional}, Actual provisional status: {results[0].get('is_provisional')}")
         return value
     
-    logger.debug(f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, provisional={include_provisional}")
+    # If no result with specified provisionality, try the other way if include_provisional was specific
+    if include_provisional is False: # We explicitly asked for non-provisional and found nothing
+        logger.debug(f"Neo4j: No non-provisional value for ({subject}, {predicate}) up to Ch {chapter_limit}. Trying with provisional if allowed by broader context.")
+        # This function call is specific, the caller might decide to try again with include_provisional=True
+    elif include_provisional is True and not results: # We asked for provisional included and found nothing at all
+         logger.debug(f"Neo4j: No value (provisional or non-provisional) for ({subject}, {predicate}) up to Ch {chapter_limit}")
+
+
+    logger.debug(f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, with include_provisional={include_provisional}.")
     return None
+
+    

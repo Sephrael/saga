@@ -15,7 +15,9 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
     statements: List[Tuple[str, Dict[str, Any]]] = []
 
     # Clear existing world structure
-    statements.append(("MATCH (we:WorldElement) OPTIONAL MATCH (we)-[r]-() DETACH DELETE we, r", {}))
+    # Refined: Changed "MATCH (we:WorldElement) OPTIONAL MATCH (we)-[r]-() DETACH DELETE we, r" to "MATCH (we:WorldElement) DETACH DELETE we"
+    # as "DETACH DELETE we, r" is invalid Cypher. DETACH DELETE we handles relationships.
+    statements.append(("MATCH (we:WorldElement) DETACH DELETE we", {}))
     statements.append(("MATCH (wev:WorldElaborationEvent) DETACH DELETE wev", {}))
     statements.append(("MATCH (wc:WorldContainer {id: $wc_id_param}) DETACH DELETE wc", {"wc_id_param": config.MAIN_WORLD_CONTAINER_NODE_ID}))
     statements.append(("MATCH (vn:ValueNode) DETACH DELETE vn", {})) # Clear ValueNodes used for list properties
@@ -221,18 +223,19 @@ async def get_world_elements_for_snippet_from_db(category: str, chapter_limit: i
     # It checks if the item itself is marked provisional OR if it has any provisional elaborations up to chapter_limit.
     query = """
     MATCH (we:WorldElement {category: $category_param})
-    
+    WHERE (we.created_chapter IS NULL OR we.created_chapter <= $chapter_limit_param) // Ensure element itself is relevant up to chapter_limit
+
     // Check for any provisional elaboration linked to this world element up to the chapter limit
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent)
     WHERE elab.chapter_updated <= $chapter_limit_param AND elab.is_provisional = TRUE
     
     // Group by world element to determine if it's effectively provisional
     WITH we, COLLECT(DISTINCT elab) AS provisional_elaborations 
-    WITH we, (we.is_provisional = TRUE OR size(provisional_elaborations) > 0) AS is_item_provisional
+    WITH we, ( (we.is_provisional = TRUE AND (we.created_chapter IS NULL OR we.created_chapter <= $chapter_limit_param) ) OR size(provisional_elaborations) > 0) AS is_item_provisional_overall
     
     RETURN we.name AS name,
            we.description AS description, // Fetch full description for snippet creation
-           is_item_provisional AS is_provisional
+           is_item_provisional_overall AS is_provisional
     ORDER BY we.name ASC // Consistent ordering
     LIMIT $item_limit_param
     """

@@ -391,7 +391,8 @@ async def _prepopulate_kg_from_dicts_internal(
     if plot_outline:
         novel_props = {k: v for k, v in plot_outline.items() if not isinstance(v, (list, dict)) and v is not None}
         novel_props['id'] = novel_id
-        cypher_statements.append((f"MERGE (ni:NovelInfo {{id: $id}}) SET ni = $props", {"id": novel_id, "props": novel_props}))
+        cypher_statements.append(("MERGE (ni:NovelInfo {id: $id_val}) SET ni = $props_val", 
+                                  {"id_val": novel_id, "props_val": novel_props}))
 
         plot_points = plot_outline.get('plot_points', [])
         if isinstance(plot_points, list):
@@ -399,60 +400,93 @@ async def _prepopulate_kg_from_dicts_internal(
                 if isinstance(desc, str):
                     pp_id = f"{novel_id}_pp_{i+1}"
                     cypher_statements.append((
-                        f"MATCH (ni:NovelInfo {{id: '{novel_id}'}}) MERGE (pp:PlotPoint {{id: $pp_id}}) SET pp.sequence = $seq, pp.description = $desc MERGE (ni)-[:HAS_PLOT_POINT]->(pp)",
-                        {"pp_id": pp_id, "seq": i + 1, "desc": desc}
+                        """
+                        MATCH (ni:NovelInfo {id: $novel_id_val})
+                        MERGE (pp:PlotPoint {id: $pp_id_val})
+                        SET pp.sequence = $seq_val, pp.description = $desc_val
+                        MERGE (ni)-[:HAS_PLOT_POINT]->(pp)
+                        """,
+                        {"novel_id_val": novel_id, "pp_id_val": pp_id, "seq_val": i + 1, "desc_val": desc}
                     ))
                     if i > 0: 
                         prev_pp_id = f"{novel_id}_pp_{i}"
                         cypher_statements.append((
-                            f"MATCH (prev_pp:PlotPoint {{id: '{prev_pp_id}'}}) MATCH (curr_pp:PlotPoint {{id: '{pp_id}'}}) MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)", {}
+                            """
+                            MATCH (prev_pp:PlotPoint {id: $prev_pp_id_val})
+                            MATCH (curr_pp:PlotPoint {id: $curr_pp_id_val})
+                            MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)
+                            """,
+                            {"prev_pp_id_val": prev_pp_id, "curr_pp_id_val": pp_id}
                         ))
     
     for char_name, profile in character_profiles.items():
         if not isinstance(profile, dict): continue
         
-        char_props = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
-        char_props_for_set = char_props.copy()
-        char_props_for_set['name'] = char_name 
-
-        cypher_statements.append(("MERGE (c:Character:Entity {name: $name}) SET c += $props", {"name": char_name, "props": char_props_for_set}))
+        char_props_for_set = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
+        # 'name' is used in MERGE, so it doesn't need to be in SET props if only setting new/updated ones
+        # However, SET c += $props is fine and will handle it.
+        
+        cypher_statements.append(("MERGE (c:Character:Entity {name: $name_val}) SET c += $props_val", 
+                                  {"name_val": char_name, "props_val": char_props_for_set}))
 
         if isinstance(profile.get("traits"), list):
             for trait in profile["traits"]:
                 if isinstance(trait, str):
-                    cypher_statements.append(("MATCH (c:Character {name: $char_name}) MERGE (t:Trait {name: $trait_name}) MERGE (c)-[:HAS_TRAIT]->(t)", {"char_name": char_name, "trait_name": trait}))
+                    cypher_statements.append((
+                        """
+                        MATCH (c:Character:Entity {name: $char_name_val})
+                        MERGE (t:Trait {name: $trait_name_val})
+                        MERGE (c)-[:HAS_TRAIT]->(t)
+                        """,
+                        {"char_name_val": char_name, "trait_name_val": trait}
+                    ))
         
         if isinstance(profile.get("relationships"), dict):
             for target_name, rel_detail in profile["relationships"].items():
-                rel_type = "RELATED_TO"; rel_props_dict = {"description": str(rel_detail)}
+                rel_type = "RELATED_TO" # Default
+                rel_props_to_set = {"description": str(rel_detail)} # Default props
+
                 if isinstance(rel_detail, dict): 
                     rel_type = str(rel_detail.get("type", rel_type)).upper().replace(" ", "_")
-                    rel_props_dict = {k:v for k,v in rel_detail.items() if isinstance(v, (str, int, float, bool))}
-                    rel_props_dict.setdefault("description", f"{rel_type} {target_name}")
+                    rel_props_to_set = {k:v for k,v in rel_detail.items() if isinstance(v, (str, int, float, bool))}
+                    rel_props_to_set.setdefault("description", f"{rel_type} {target_name}")
                 elif isinstance(rel_detail, str): 
-                    rel_type = rel_detail.upper().replace(" ", "_"); rel_props_dict = {"description": rel_detail}
+                    rel_type = rel_detail.upper().replace(" ", "_")
+                    rel_props_to_set = {"description": rel_detail}
                 
-                rel_props_dict.setdefault("chapter_added", config.KG_PREPOPULATION_CHAPTER_NUM)
+                # Ensure chapter_added and is_provisional are set for pre-population
+                specific_chapter_added = rel_props_to_set.setdefault("chapter_added", config.KG_PREPOPULATION_CHAPTER_NUM)
                 is_prov_initial = profile.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft"
-                rel_props_dict.setdefault("is_provisional", is_prov_initial)
+                rel_props_to_set.setdefault("is_provisional", is_prov_initial)
+                
+                # Remove identifying properties from `rel_props_to_set` as they are in `MERGE` pattern
+                # This makes `SET r += ...` more robust against re-setting identifying fields.
+                props_for_set_clause = {k: v for k, v in rel_props_to_set.items() if k not in ['type', 'chapter_added']}
+
 
                 cypher_statements.append((
                     """
-                    MATCH (c1:Character:Entity {name: $char_name1})
-                    MERGE (c2:Entity {name: $char_name2}) 
-                        ON CREATE SET c2:Character, c2.description = 'Auto-created via relationship from ' + $char_name1, c2.name = $char_name2
+                    MATCH (c1:Character:Entity {name: $char_name1_val})
+                    MERGE (c2:Entity {name: $char_name2_val}) 
+                        ON CREATE SET c2:Character, c2.name = $char_name2_val, c2.description = 'Auto-created via relationship from ' + $char_name1_val
                         ON MATCH SET c2:Character 
-                    MERGE (c1)-[r:DYNAMIC_REL {type:$rel_type_val}]->(c2)
-                    SET r += $rel_props_val
+                    MERGE (c1)-[r:DYNAMIC_REL {type: $rel_type_val, chapter_added: $chapter_added_val}]->(c2)
+                    SET r += $props_for_set_clause_val, r.last_updated = timestamp()
                     """,
-                    {"char_name1": char_name, "char_name2": target_name, "rel_type_val": rel_type, "rel_props_val": rel_props_dict}
+                    {
+                        "char_name1_val": char_name, "char_name2_val": target_name, 
+                        "rel_type_val": rel_type, "chapter_added_val": specific_chapter_added,
+                        "props_for_set_clause_val": props_for_set_clause
+                    }
                 ))
 
     for category, items in world_building.items():
         if category == "_overview_" and isinstance(items, dict) and "description" in items:
             overview_props = {"id": config.MAIN_WORLD_CONTAINER_NODE_ID, "overview_description": items["description"]}
-            if items.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft": overview_props["is_provisional"] = True
-            cypher_statements.append((f"MERGE (wc:WorldContainer {{id: $id}}) SET wc = $props", {"id": config.MAIN_WORLD_CONTAINER_NODE_ID, "props": overview_props}))
+            if items.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft": 
+                overview_props["is_provisional"] = True
+            cypher_statements.append(("MERGE (wc:WorldContainer {id: $id_val}) SET wc = $props_val", 
+                                      {"id_val": config.MAIN_WORLD_CONTAINER_NODE_ID, "props_val": overview_props}))
             continue
 
         if not isinstance(items, dict) or category in ["is_default", "source", "user_supplied_data"]:
@@ -466,10 +500,12 @@ async def _prepopulate_kg_from_dicts_internal(
             item_props.update({'id': we_id, 'name': item_name, 'category': category})
 
             created_chapter_num_initial = details.get(f"added_in_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}", config.KG_PREPOPULATION_CHAPTER_NUM)
-            item_props['created_chapter'] = created_chapter_num_initial
-            if details.get(f"source_quality_chapter_{created_chapter_num_initial}") == "provisional_from_unrevised_draft": item_props['is_provisional'] = True
+            item_props['created_chapter'] = created_chapter_num_initial # Ensure this key is consistently set
+            if details.get(f"source_quality_chapter_{created_chapter_num_initial}") == "provisional_from_unrevised_draft": 
+                item_props['is_provisional'] = True
             
-            cypher_statements.append(("MERGE (we:WorldElement {id: $id}) SET we += $props", {"id": we_id, "props": item_props}))
+            cypher_statements.append(("MERGE (we:WorldElement {id: $id_val}) SET we += $props_val", 
+                                      {"id_val": we_id, "props_val": item_props}))
 
             for list_prop_name in ["goals", "rules", "key_elements", "traits"]:
                 if isinstance(details.get(list_prop_name), list):
@@ -481,16 +517,16 @@ async def _prepopulate_kg_from_dicts_internal(
                             rel_name_final = f"HAS_{rel_name_base}"
                             
                             query_str_for_list_prop = f"""
-                                MATCH (we:WorldElement {{id: $we_id}})
-                                MERGE (v:ValueNode {{value: $val_item_value, type: $value_node_type}})
+                                MATCH (we:WorldElement {{id: $we_id_val}})
+                                MERGE (v:ValueNode {{value: $val_item_val, type: $value_node_type_val}})
                                 MERGE (we)-[:{rel_name_final}]->(v)
                             """
                             cypher_statements.append((query_str_for_list_prop, 
-                                                      {"we_id": we_id, "val_item_value": val_item, "value_node_type": list_prop_name}))
+                                                      {"we_id_val": we_id, "val_item_val": val_item, "value_node_type_val": list_prop_name}))
     
     if cypher_statements:
         try:
-            await neo4j_manager.execute_cypher_batch(cypher_statements) # MODIFIED
+            await neo4j_manager.execute_cypher_batch(cypher_statements)
             logger.info(f"KG pre-population complete: Executed {len(cypher_statements)} Cypher statements directly from initial data.")
         except Exception as e: logger.error(f"Error during direct KG pre-population batch execution: {e}", exc_info=True)
     else: logger.info("No Cypher statements generated for KG pre-population from initial data.")
@@ -533,21 +569,18 @@ class KGMaintainerAgent:
                     individual_char_block_text,
                     CHAR_UPDATE_KEY_MAP,
                     CHAR_UPDATE_LIST_INTERNAL_KEYS,
-                    special_list_handling=CHAR_UPDATE_PKVB_SPECIAL_HANDLING # MODIFIED: Use specific handling for PKVB
+                    special_list_handling=CHAR_UPDATE_PKVB_SPECIAL_HANDLING 
                 )
                 
-                # Custom post-processing for relationships using CHAR_UPDATE_RELATIONSHIP_POST_PARSING_HANDLING
                 if "relationships" in parsed_char_data and isinstance(parsed_char_data["relationships"], list):
                     rels_dict = {}
-                    # Relationship lines might be parsed as single strings by parse_key_value_block if they have prefixes like "- "
-                    # Or, if Relationships: Target:Type format is used on one line, it might be a single string.
                     for rel_str_or_item in parsed_char_data["relationships"]:
                         if isinstance(rel_str_or_item, str) and ':' in rel_str_or_item:
                             parts = rel_str_or_item.split(":", 1)
                             if len(parts) == 2 and parts[0].strip() and parts[1].strip():
                                 rels_dict[parts[0].strip()] = parts[1].strip()
                             else: logger.warning(f"Malformed relationship string for {char_name}: '{rel_str_or_item}'")
-                        elif isinstance(rel_str_or_item, str) and rel_str_or_item.strip(): # A single name, assume 'related'
+                        elif isinstance(rel_str_or_item, str) and rel_str_or_item.strip(): 
                             rels_dict[rel_str_or_item.strip()] = "related" 
                     parsed_char_data["relationships"] = rels_dict
                 
@@ -796,7 +829,7 @@ Begin your output now:
                         obj_truncated = obj_val[:500] + "..." if len(obj_val) > 503 else obj_val
                         
                         kg_add_tasks.append(
-                            kg_queries.add_kg_triple_to_db(subj, pred, obj_truncated, chapter_number, is_provisional=is_from_flawed_draft) # MODIFIED
+                            kg_queries.add_kg_triple_to_db(subj, pred, obj_truncated, chapter_number, is_provisional=is_from_flawed_draft)
                         )
                         added_count += 1
                     else:
