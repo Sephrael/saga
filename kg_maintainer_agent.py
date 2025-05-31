@@ -50,7 +50,7 @@ async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key:
     """ Summarizes chapter text using an LLM. Input `chapter_text_full_key` is the actual text. Returns summary and usage."""
     prompt_lines = [
         "/no_think",
-        "You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.",
+        f"You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.", # MODIFIED: f-string
         "The summary should be 1-3 sentences long and capture the most crucial information.",
         "Focus on what changed or was revealed.",
         "",
@@ -66,7 +66,7 @@ async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key:
     summary_raw, usage_data = await llm_interface.async_call_llm(
         model_name=config.SMALL_MODEL,
         prompt=prompt,
-        temperature=0.6,
+        temperature=config.TEMPERATURE_SUMMARY, 
         max_tokens=config.MAX_SUMMARY_TOKENS,
         stream_to_disk=False
     )
@@ -888,9 +888,12 @@ class KGMaintainerAgent:
 
         logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}).")
         raw_extraction_text, usage_data = await llm_interface.async_call_llm(
-            model_name=self.model_name, prompt=prompt, temperature=0.5,
+            model_name=self.model_name, 
+            prompt=prompt, 
+            temperature=config.TEMPERATURE_KG_EXTRACTION, # MODIFIED
             max_tokens=config.MAX_KG_TRIPLE_TOKENS,
-            allow_fallback=True, stream_to_disk=True
+            allow_fallback=True, 
+            stream_to_disk=True
         )
         cleaned_extraction_text = llm_interface.clean_model_response(raw_extraction_text)
 

@@ -204,7 +204,7 @@ class ComprehensiveEvaluatorAgent:
         raw_evaluation_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=0.3,
+            temperature=config.TEMPERATURE_EVALUATION, # MODIFIED
             allow_fallback=True,
             stream_to_disk=False
         )

@@ -266,7 +266,7 @@ async def _generate_single_patch_instruction_llm(
     replace_with_text_raw, usage_data = await llm_interface.async_call_llm(
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
-        temperature=0.6,
+        temperature=config.TEMPERATURE_PATCH, # MODIFIED
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
         stream_to_disk=False
@@ -687,7 +687,7 @@ async def revise_chapter_draft_logic(
         revised_raw_llm_output_full, full_rewrite_usage = await llm_interface.async_call_llm(
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
-            temperature=0.6,
+            temperature=config.TEMPERATURE_REVISION, # MODIFIED
             max_tokens=None,
             allow_fallback=True,
             stream_to_disk=True

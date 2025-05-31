@@ -1,4 +1,3 @@
-      
 # config.py
 """
 Configuration settings for the Saga Novel Generation system.
@@ -131,6 +130,25 @@ EVALUATION_MODEL: str = LARGE_MODEL
 # Model used for generating text patches during revision.
 PATCH_GENERATION_MODEL: str = MEDIUM_MODEL
 
+# Task-specific Temperatures
+# Creative tasks: Higher temperature for more varied output
+TEMPERATURE_INITIAL_SETUP: float = float(os.getenv("TEMPERATURE_INITIAL_SETUP", "0.8"))
+TEMPERATURE_DRAFTING: float = float(os.getenv("TEMPERATURE_DRAFTING", "0.8"))
+TEMPERATURE_REVISION: float = float(os.getenv("TEMPERATURE_REVISION", "0.65")) # Slightly less than pure drafting
+TEMPERATURE_PLANNING: float = float(os.getenv("TEMPERATURE_PLANNING", "0.6")) # Needs structure but also ideas
+
+# Analytical/Extraction tasks: Lower temperature for more deterministic and factual output
+TEMPERATURE_EVALUATION: float = float(os.getenv("TEMPERATURE_EVALUATION", "0.3"))
+TEMPERATURE_CONSISTENCY_CHECK: float = float(os.getenv("TEMPERATURE_CONSISTENCY_CHECK", "0.2")) # Very factual
+TEMPERATURE_KG_EXTRACTION: float = float(os.getenv("TEMPERATURE_KG_EXTRACTION", "0.4"))
+TEMPERATURE_SUMMARY: float = float(os.getenv("TEMPERATURE_SUMMARY", "0.5"))
+TEMPERATURE_PATCH: float = float(os.getenv("TEMPERATURE_PATCH", "0.7")) # Needs to be creative but focused
+
+# Default temperature if a specific one isn't used (fallback)
+TEMPERATURE_DEFAULT: float = 0.6
+
+# Top-P sampling parameter for LLM generation (0.0 to 1.0). Higher is more diverse.
+LLM_TOP_P: float = 0.8
 
 # --- Output and File Paths ---
 # Base directory for all generated novel outputs.
@@ -178,8 +196,6 @@ MAX_GENERATION_TOKENS: int = int(os.getenv("MAX_GENERATION_TOKENS", "16384")) # 
 CONTEXT_CHAPTER_COUNT: int = 5
 # Number of chapters to attempt to generate in a single run of the orchestrator.
 CHAPTERS_PER_RUN: int = int(os.getenv("CHAPTERS_PER_RUN", "3"))
-# Top-P sampling parameter for LLM generation (0.0 to 1.0). Higher is more diverse.
-LLM_TOP_P: float = 0.95
 # Target number of plot points for the initial plot outline generation.
 TARGET_PLOT_POINTS_INITIAL_GENERATION: int = int(os.getenv("TARGET_PLOT_POINTS_INITIAL_GENERATION", "12"))
 
@@ -236,7 +252,7 @@ MAX_KG_TRIPLE_TOKENS: int = int(os.getenv("MAX_KG_TRIPLE_TOKENS", "8192"))
 MAX_PREPOP_KG_TOKENS: int = int(os.getenv("MAX_PREPOP_KG_TOKENS", "16384"))
 
 # Default minimum acceptable length for a chapter draft (in characters).
-MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT = 13000
+MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT = 12000
 # Actual minimum draft length, loaded from environment or default.
 MIN_ACCEPTABLE_DRAFT_LENGTH: int = int(os.getenv("MIN_ACCEPTABLE_DRAFT_LENGTH", str(MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT)))
 # Warn if user sets a very high minimum draft length.
@@ -269,11 +285,11 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 # Toggle for "unhinged plot mode" - generates more random/surprising plot elements if user input is minimal.
 UNHINGED_PLOT_MODE: bool = os.getenv("UNHINGED_PLOT_MODE", "False").lower() == "true"
 # Default genre if not supplied by user or unhinged mode.
-CONFIGURED_GENRE: str = "dystopian horror"
+CONFIGURED_GENRE: str = "fantasy"
 # Default theme if not supplied by user or unhinged mode.
-CONFIGURED_THEME: str = "the cost of power"
+CONFIGURED_THEME: str = "the cost of historical revisionism"
 # Default setting description if not supplied.
-CONFIGURED_SETTING_DESCRIPTION: str = "a walled city where precious memories can be surrendered for an extension to one's lifespan"
+CONFIGURED_SETTING_DESCRIPTION: str = "a megastructure constructed around a star to harness its energy, now partially abandoned"
 # Default protagonist name.
 DEFAULT_PROTAGONIST_NAME: str = "Sága"
 # Default title for the plot outline.

@@ -224,7 +224,7 @@ class PlannerAgent:
         plan_raw_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=0.6,
+            temperature=config.TEMPERATURE_PLANNING, # MODIFIED
             max_tokens=config.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True

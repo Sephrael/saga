@@ -1,8 +1,4 @@
 # initial_setup_logic.py
-# MODIFIED: Added _get_prop and _get_nested_prop helpers for flexible agent/props access if needed,
-# though this module typically modifies the 'agent' object directly.
-# MODIFIED: Integrated Markdown-based user story input.
-# MODIFIED: Simplified validation in _load_user_supplied_data
 import logging
 import json # Retain for fallback or other JSON operations
 import random
@@ -13,7 +9,6 @@ from typing import Dict, Any, Optional, List, Tuple
 import config
 import llm_interface
 import utils # For _is_fill_in
-# from state_manager import state_manager # No longer directly used
 from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text # Retain for LLM output parsing
 from markdown_story_parser import load_and_parse_markdown_story_file # Use your new parser
 
@@ -402,7 +397,12 @@ Plot Points:
 Begin your output now using the requested field names:
 """
         logger.info(f"Calling LLM for plot outline generation/completion (to plain text), targeting ~{target_num_plot_points} plot points...")
-        raw_outline_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
+        raw_outline_text, usage_data = await llm_interface.async_call_llm(
+            model_name=config.INITIAL_SETUP_MODEL, 
+            prompt=prompt, 
+            temperature=config.TEMPERATURE_INITIAL_SETUP, # MODIFIED
+            stream_to_disk=True
+        )
         if usage_data:
             accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
             accumulated_usage_data["completion_tokens"] += usage_data.get("completion_tokens", 0)
@@ -618,7 +618,12 @@ If user context for an element is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or mis
 Begin your detailed world-building output now:
 """
     logger.info("Generating/completing initial world-building data (to plain text) via LLM...")
-    raw_world_data_text, usage_data = await llm_interface.async_call_llm(config.INITIAL_SETUP_MODEL, prompt, 0.6, stream_to_disk=True)
+    raw_world_data_text, usage_data = await llm_interface.async_call_llm(
+        model_name=config.INITIAL_SETUP_MODEL, 
+        prompt=prompt, 
+        temperature=config.TEMPERATURE_INITIAL_SETUP, # MODIFIED
+        stream_to_disk=True
+    )
     if usage_data:
         accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
         accumulated_usage_data["completion_tokens"] += usage_data.get("completion_tokens", 0)

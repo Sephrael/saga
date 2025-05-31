@@ -196,7 +196,7 @@ class WorldContinuityAgent:
         raw_consistency_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=0.2,
+            temperature=config.TEMPERATURE_CONSISTENCY_CHECK, # MODIFIED
             allow_fallback=True,
             stream_to_disk=False
         )

@@ -145,6 +145,7 @@ def truncate_text_by_tokens(text: str, model_name: str, max_tokens: int, truncat
 
     # If marker is too long for the max_tokens budget, we might need to shorten or omit it
     if content_tokens_to_keep < 0:
+        logger.debug(f"Truncation marker ('{truncation_marker}' -> {marker_tokens_len} tokens) is longer than max_tokens ({max_tokens}). Using empty marker.")
         content_tokens_to_keep = max_tokens # Use all tokens for content, no marker
         effective_truncation_marker = ""       # This means marker was longer than max_tokens
 
@@ -153,6 +154,7 @@ def truncate_text_by_tokens(text: str, model_name: str, max_tokens: int, truncat
     # Handle edge case: if content_tokens_to_keep is 0 but max_tokens > 0 (marker took all space)
     # It's better to return a tiny bit of content than just the marker, or an empty string if even that's not possible.
     if not truncated_content_tokens and max_tokens > 0 and tokens: # If original tokens existed
+         logger.debug(f"Truncated content to 0 tokens due to marker length. Attempting to keep 1 token of content.")
          truncated_content_tokens = tokens[:1] # Keep at least one token of content if possible
          effective_truncation_marker = "" # And sacrifice the marker
 
@@ -175,6 +177,7 @@ def _validate_embedding(embedding_list: List[Union[float, int]], expected_dim: i
             logger.warning(f"Embedding from source had unexpected ndim > 1: {embedding.ndim}. Flattening.")
             embedding = embedding.flatten()
         if embedding.shape == (expected_dim,):
+            logger.debug(f"Embedding validated successfully. Shape: {embedding.shape}, Dtype: {embedding.dtype}") 
             return embedding
         logger.error(f"Embedding dimension mismatch: Expected ({expected_dim},), Got {embedding.shape}. Original list length: {len(embedding_list)}")
     except (TypeError, ValueError) as e:
@@ -192,52 +195,48 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
         return None
 
     payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
-    # cache_info = async_get_embedding.cache_info() # Removed due to potential issues if not using standard LRU
-    # logger.debug(f"Async Embedding req to Ollama for model '{config.EMBEDDING_MODEL}': '{text[:80].replace(chr(10), ' ')}...' (Cache info not available for alru_cache directly)")
     logger.debug(f"Async Embedding req to Ollama for model '{config.EMBEDDING_MODEL}': '{text[:80].replace(chr(10), ' ')}...'")
 
 
-    last_exception = None
+    last_exception: Optional[Exception] = None 
     for attempt in range(config.LLM_RETRY_ATTEMPTS):
-        api_response: Optional[httpx.Response] = None # Define here for wider scope in error logging
+        api_response: Optional[httpx.Response] = None 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client: # Increased timeout for potentially long texts
+            async with httpx.AsyncClient(timeout=120.0) as client: 
                 api_response = await client.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload)
-                api_response.raise_for_status() # Raises HTTPStatusError for 4xx/5xx responses
+                api_response.raise_for_status() 
                 data = api_response.json()
 
-            # Try to extract embedding from 'embedding' key first
-            primary_key = "embedding" # Common key for Ollama embeddings
+            primary_key = "embedding" 
             if primary_key in data and isinstance(data[primary_key], list):
                 embedding = _validate_embedding(data[primary_key], config.EXPECTED_EMBEDDING_DIM, config.EMBEDDING_DTYPE)
                 if embedding is not None:
                     return embedding
-            else: # Fallback: Search for any list of numbers in the response that matches dimension
+            else: 
                 logger.warning(f"Ollama (Attempt {attempt+1}): Primary embedding key '{primary_key}' not found or not a list. Data: {data}")
-                for key, value in data.items(): # Check other keys in the response
+                for key, value in data.items(): 
                     if isinstance(value, list) and all(isinstance(item, (float, int)) for item in value):
                         embedding = _validate_embedding(value, config.EXPECTED_EMBEDDING_DIM, config.EMBEDDING_DTYPE)
                         if embedding is not None:
                             logger.info(f"Ollama (Attempt {attempt+1}): Found embedding using fallback key '{key}'.")
                             return embedding
 
-            # If no suitable embedding found after checking primary and fallback keys
             logger.error(f"Ollama (Attempt {attempt+1}): Embedding extraction failed. No suitable embedding list found in response: {data}")
-            last_exception = ValueError("No suitable embedding list found in Ollama response after parsing.") # More specific error
+            last_exception = ValueError("No suitable embedding list found in Ollama response after parsing.") 
 
         except httpx.TimeoutException as e_timeout:
             last_exception = e_timeout
             logger.warning(f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): Request timed out: {e_timeout}")
         except httpx.HTTPStatusError as e_status:
             last_exception = e_status
+            error_message_detail = f"HTTP status {e_status.response.status_code}: {e_status}. Body: {e_status.response.text[:200]}" 
             logger.warning(
-                f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): HTTP status {e_status.response.status_code}: {e_status}. "
-                f"Body: {e_status.response.text[:200]}" # Log snippet of error body
+                f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): {error_message_detail}" 
             )
-            if 400 <= e_status.response.status_code < 500: # Client-side errors (e.g., model not found)
+            if 400 <= e_status.response.status_code < 500: 
                 logger.error(f"Ollama Embedding: Client-side error {e_status.response.status_code}. Aborting retries.")
-                break # Don't retry client errors
-        except httpx.RequestError as e_req: # Covers network issues, DNS failures, etc.
+                break 
+        except httpx.RequestError as e_req: 
             last_exception = e_req
             logger.warning(f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): Request error: {e_req}")
         except json.JSONDecodeError as e_json:
@@ -247,18 +246,19 @@ async def async_get_embedding(text: str) -> Optional[np.ndarray]:
                  f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): Failed to decode JSON response: {e_json}. "
                  f"Response text: {response_text_snippet}"
             )
-        except Exception as e_exc: # Catch-all for other unexpected errors
+        except Exception as e_exc: 
             last_exception = e_exc
             logger.warning(f"Ollama Embedding (Attempt {attempt+1}/{config.LLM_RETRY_ATTEMPTS}): Unexpected error: {e_exc}", exc_info=True)
 
-        if attempt < config.LLM_RETRY_ATTEMPTS - 1: # If not the last attempt
-            delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** attempt) # Exponential backoff
-            logger.info(f"Ollama Embedding: Retrying in {delay:.2f} seconds...")
+        if attempt < config.LLM_RETRY_ATTEMPTS - 1: 
+            delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** attempt) 
+            retry_reason = type(last_exception).__name__ if last_exception else "Unknown reason" 
+            logger.info(f"Ollama Embedding: Retrying in {delay:.2f} seconds due to: {retry_reason}.") 
             await asyncio.sleep(delay)
-        else: # All retries failed
+        else: 
             logger.error(f"Ollama Embedding: All {config.LLM_RETRY_ATTEMPTS} retry attempts failed. Last error: {last_exception}")
-            return None # Explicitly return None after all retries fail
-    return None # Should be unreachable if loop completes, but as a safeguard
+            return None 
+    return None 
 
 
 def _log_llm_usage(model_name: str, usage_data: Optional[Dict[str, int]], async_mode: bool = False, streamed: bool = False):
@@ -271,16 +271,15 @@ def _log_llm_usage(model_name: str, usage_data: Optional[Dict[str, int]], async_
             f"Comp: {usage_data.get('completion_tokens', 'N/A')} tk, Total: {usage_data.get('total_tokens', 'N/A')} tk"
         )
     else:
-        # Log if usage is missing, helps debug if token counting is needed or API changes
         logger.debug(f"{prefix}{stream_prefix}LLM ('{model_name}') response missing 'usage' information or 'usage' was not a dictionary.")
 
 async def async_call_llm(
     model_name: str,
     prompt: str,
-    temperature: float = 0.6,
-    max_tokens: Optional[int] = None, # Max tokens for the *output/completion*
+    temperature: Optional[float] = None, # MODIFIED: Allow optional temperature override
+    max_tokens: Optional[int] = None, 
     allow_fallback: bool = False,
-    stream_to_disk: bool = False # If True, streams response to a temp file
+    stream_to_disk: bool = False 
 ) -> Tuple[str, Optional[Dict[str, int]]]:
     """
     Asynchronously calls the LLM (OpenAI-compatible API) with retry and optional model fallback.
@@ -293,49 +292,50 @@ async def async_call_llm(
         logger.error("async_call_llm: empty or invalid prompt.")
         return "", None
 
-    prompt_token_count = count_tokens(prompt, model_name) # Estimate for logging/debugging
+    prompt_token_count = count_tokens(prompt, model_name) 
     effective_max_output_tokens = max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
+    
+    # MODIFIED: Use provided temperature or default from config
+    effective_temperature = temperature if temperature is not None else config.TEMPERATURE_DEFAULT 
     
     headers = {"Authorization": f"Bearer {config.OPENAI_API_KEY}", "Content-Type": "application/json"}
     
     current_model_to_try = model_name
     is_fallback_attempt = False
     current_usage_data: Optional[Dict[str, int]] = None
-    final_text_response = "" # Initialize to ensure it's always defined
+    final_text_response = "" 
 
     for attempt_num_overall in range(2):
         if is_fallback_attempt:
             if not allow_fallback or not config.FALLBACK_GENERATION_MODEL:
                 logger.warning(f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Aborting call.")
-                return "", current_usage_data # Return usage from primary attempt if available
+                return "", current_usage_data 
             current_model_to_try = config.FALLBACK_GENERATION_MODEL
             logger.info(f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'.")
             prompt_token_count = count_tokens(prompt, current_model_to_try)
-            current_usage_data = None # Reset usage for fallback model
+            current_usage_data = None 
 
         payload = {
             "model": current_model_to_try,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
+            "temperature": effective_temperature, # MODIFIED: Use effective_temperature
             "top_p": config.LLM_TOP_P,
             "max_tokens": effective_max_output_tokens
         }
 
-        last_exception_for_current_model = None
+        last_exception_for_current_model: Optional[Exception] = None 
         temp_file_path_for_stream: Optional[str] = None
 
         for retry_attempt in range(config.LLM_RETRY_ATTEMPTS):
             logger.debug(
                 f"Async Calling LLM '{current_model_to_try}' (Attempt {retry_attempt+1}/{config.LLM_RETRY_ATTEMPTS}, OverallAttempt: {attempt_num_overall+1}). "
-                f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. Temp: {temperature}, TopP: {config.LLM_TOP_P}"
+                f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. Temp: {effective_temperature}, TopP: {config.LLM_TOP_P}" # MODIFIED: Log effective_temperature
             )
             api_response_obj: Optional[httpx.Response] = None
-            # current_usage_data specific to this attempt is handled inside try/except
-
+            
             try:
                 if stream_to_disk:
                     payload["stream"] = True
-                    # Create a temporary file that will be auto-deleted on close
                     with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8", suffix=".llmstream.txt") as tmp_f:
                         temp_file_path_for_stream = tmp_f.name
                     
@@ -344,7 +344,7 @@ async def async_call_llm(
                     try:
                         async with httpx.AsyncClient(timeout=600.0) as client:
                             async with client.stream("POST", f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers) as response_stream:
-                                response_stream.raise_for_status() # Check for HTTP errors early
+                                response_stream.raise_for_status() 
                                 
                                 async for line in response_stream.aiter_lines():
                                     if line.startswith("data: "):
@@ -359,24 +359,21 @@ async def async_call_llm(
                                                 if content_piece:
                                                     accumulated_stream_content += content_piece
                                                 
-                                                # Check for usage data, often sent with the last content chunk or a finish_reason chunk
-                                                # Some APIs (like Groq) send usage in an x_groq field in the last chunk.
                                                 if chunk_data["choices"][0].get("finish_reason") is not None:
                                                     potential_usage = chunk_data.get("usage")
                                                     if not potential_usage and chunk_data.get("x_groq") and chunk_data["x_groq"].get("usage"):
                                                         potential_usage = chunk_data["x_groq"]["usage"]
                                                     if potential_usage and isinstance(potential_usage, dict):
-                                                        stream_usage_data = potential_usage # Store the latest usage data
+                                                        stream_usage_data = potential_usage 
                                         except json.JSONDecodeError:
                                             logger.warning(f"Async LLM Stream: Could not decode JSON from line: {line}")
                         
-                        # Write accumulated content to temp file (though it's already in accumulated_stream_content)
-                        if temp_file_path_for_stream: # Should always be true here
+                        if temp_file_path_for_stream: 
                             with open(temp_file_path_for_stream, "w", encoding="utf-8") as f_out:
                                 f_out.write(accumulated_stream_content)
 
                         final_text_response = accumulated_stream_content
-                        current_usage_data = stream_usage_data # Assign usage from stream
+                        current_usage_data = stream_usage_data 
                         _log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=True)
                         return final_text_response, current_usage_data
                     finally:
@@ -385,7 +382,7 @@ async def async_call_llm(
                                 os.remove(temp_file_path_for_stream)
                             except Exception as e_clean:
                                 logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} in stream success/finally: {e_clean}")
-                else: # Not streaming
+                else: 
                     payload["stream"] = False
                     async with httpx.AsyncClient(timeout=600.0) as client:
                         api_response_obj = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
@@ -411,9 +408,9 @@ async def async_call_llm(
             except httpx.HTTPStatusError as e_status:
                 last_exception_for_current_model = e_status
                 response_text_snippet = e_status.response.text[:200] if e_status.response else "N/A"
+                error_message_detail = f"API HTTP status error: {e_status}. Status: {e_status.response.status_code if e_status.response else 'N/A'}, Body: {response_text_snippet}" 
                 logger.warning(
-                    f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API HTTP status error: {e_status}. "
-                    f"Status: {e_status.response.status_code if e_status.response else 'N/A'}, Body: {response_text_snippet}"
+                    f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): {error_message_detail}" 
                 )
                 if e_status.response and 400 <= e_status.response.status_code < 500:
                     if e_status.response.status_code == 400 and "context_length_exceeded" in response_text_snippet.lower():
@@ -423,7 +420,7 @@ async def async_call_llm(
                          )
                     else:
                         logger.error(f"Async LLM ('{current_model_to_try}'): Client-side error {e_status.response.status_code}. Aborting retries for this model.")
-                    break # Break retry loop for this model
+                    break 
             except httpx.RequestError as e_req:
                 last_exception_for_current_model = e_req
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API request error (network/connection): {e_req}")
@@ -431,7 +428,6 @@ async def async_call_llm(
                 last_exception_for_current_model = e_json
                 response_text_snippet = ""
                 if api_response_obj and hasattr(api_response_obj, 'text'): response_text_snippet = api_response_obj.text[:200]
-                # For stream errors, response_text_snippet might be harder to get if error is mid-stream before full accumulation
                 logger.warning(
                     f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Failed to decode API JSON response: {e_json}. "
                     f"Response text snippet (if available): {response_text_snippet}"
@@ -448,30 +444,23 @@ async def async_call_llm(
 
             if retry_attempt < config.LLM_RETRY_ATTEMPTS - 1:
                 delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** retry_attempt)
-                logger.info(f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds...")
+                retry_reason = type(last_exception_for_current_model).__name__ if last_exception_for_current_model else "Unknown reason" 
+                logger.info(f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds due to: {retry_reason}.") 
                 await asyncio.sleep(delay)
             else:
                 logger.error(f"Async LLM ('{current_model_to_try}'): All {config.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}")
-                # No break here, let the outer loop decide on fallback
         
-        if last_exception_for_current_model is None: # Success with current_model_to_try
-            return final_text_response, current_usage_data # Should have been returned inside the try block
+        if last_exception_for_current_model is None: 
+            return final_text_response, current_usage_data 
 
-        # If we are here, current_model_to_try failed all its retries
-        is_fallback_attempt = True # Signal to try fallback in the next iteration of the outer loop
+        is_fallback_attempt = True 
 
-        # If primary model failed with a client error, don't attempt fallback immediately.
         if attempt_num_overall == 0 and isinstance(last_exception_for_current_model, httpx.HTTPStatusError) and \
            last_exception_for_current_model.response and 400 <= last_exception_for_current_model.response.status_code < 500:
-            logger.error(f"Async LLM: Primary model '{model_name}' failed with client error. Not attempting fallback if this was the primary.")
-            # We still let the loop run once more to check allow_fallback etc.
-            # The `return "", current_usage_data` will be hit if fallback is not allowed/configured.
-            # current_usage_data might be None here if all attempts failed before getting usage.
-            # Return the usage from the last *successful data retrieval* if any, or None.
-
-    # If loop finishes, all attempts (primary and fallback if applicable) failed
+            logger.error(f"Async LLM: Primary model '{model_name}' failed with client error. Not attempting fallback if this was the primary and fallback is disabled or unconfigured.")
+            
     logger.error(f"Async LLM: Call failed for '{model_name}' after all primary and potential fallback attempts.")
-    return "", current_usage_data # Return usage from the last attempt (might be None)
+    return "", current_usage_data 
 
 
 def clean_model_response(text: str) -> str:
@@ -483,49 +472,41 @@ def clean_model_response(text: str) -> str:
     original_length = len(text)
     cleaned_text = text
 
-    # 1. Remove <think>...</think> blocks AND THEIR CONTENT.
-    #    This regex matches the opening tag, then any characters (non-greedy .*?), then the closing tag.
-    #    The re.DOTALL flag makes '.' match newlines as well.
-    #    The re.IGNORECASE flag handles variations in tag casing.
+    text_before_think_removal = cleaned_text 
     think_tags_to_remove = [
         "think", "thought", "thinking", "reasoning", "rationale",
         "meta", "reflection", "internal_monologue", "plan", "analysis",
-        "no_think" # Also remove /no_think if it's accidentally left by model
+        "no_think" 
     ]
     for tag_name in think_tags_to_remove:
-        # Pattern for <tag>content</tag>
         block_pattern = re.compile(
             rf'<\s*{tag_name}\s*>.*?<\s*/\s*{tag_name}\s*>',
             flags=re.DOTALL | re.IGNORECASE
         )
         cleaned_text = block_pattern.sub('', cleaned_text)
         
-        # Pattern for self-closing <tag/> or <tag /> if models ever output these for thoughts
         self_closing_pattern = re.compile(
             rf'<\s*{tag_name}\s*/\s*>',
             flags=re.IGNORECASE
         )
         cleaned_text = self_closing_pattern.sub('', cleaned_text)
         
-        # Remove just an opening <tag> if its closing tag was already removed or missing
-        # Be careful with this one, as it might remove legitimate XML/HTML if that's part of the desired output.
-        # Given the context of SAGA, it's unlikely to be desired narrative output.
         lone_opening_pattern = re.compile(rf'<\s*{tag_name}\s*>', flags=re.IGNORECASE)
         cleaned_text = lone_opening_pattern.sub('', cleaned_text)
-        # And lone closing tags
+
         lone_closing_pattern = re.compile(rf'<\s*/\s*{tag_name}\s*>', flags=re.IGNORECASE)
         cleaned_text = lone_closing_pattern.sub('', cleaned_text)
 
+    if len(cleaned_text) < len(text_before_think_removal): 
+        logger.debug(f"clean_model_response: Removed content associated with <think>/similar tags. Length before: {len(text_before_think_removal)}, after: {len(cleaned_text)}.")
 
-    # Remove common markdown code blocks (like ```json ... ```)
+
     cleaned_text = re.sub(r'```(?:[a-zA-Z0-9]+)?\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
     cleaned_text = re.sub(r'^```\s*\n', '', cleaned_text, flags=re.MULTILINE) 
     cleaned_text = re.sub(r'\n\s*```$', '', cleaned_text, flags=re.MULTILINE)
 
-    # Remove "Chapter X" or similar headers, but try to keep the title if present
     cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-—]?\s*(.*?)\s*$', r'\1', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
     
-    # Remove common preamble/postamble phrases
     common_phrases_patterns = [
         r"^\s*(Okay,\s*)?(Sure,\s*)?(Here's|Here is)\s+(the|your)\s+[\w\s]+?:\s*",
         r"^\s*I've written the\s+[\w\s]+?\s+as requested:\s*",
@@ -554,7 +535,7 @@ def clean_model_response(text: str) -> str:
 
     if original_length > 0 and len(final_text) < original_length:
         reduction_percentage = ((original_length - len(final_text)) / original_length) * 100
-        if reduction_percentage > 0.5: # Log if reduction is more than trivial (e.g., > 0.5%)
+        if reduction_percentage > 0.5: 
             logger.debug(f"Cleaning reduced text length from {original_length} to {len(final_text)} ({reduction_percentage:.1f}% reduction).")
 
     return final_text
