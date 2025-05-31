@@ -28,28 +28,32 @@ except ImportError:
     def _format_scene_plan_for_prompt_func(chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
         logger.warning("_format_scene_plan_for_prompt_func is a fallback stub!")
         if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
-        plan_text_parts = []
+        
+        plan_text_parts_list = [] # Use a list for building strings
         current_tokens = 0
         header = "**Detailed Scene Plan (Stubbed - MUST BE FOLLOWED CLOSELY):**\n"
         header_tokens = llm_interface.count_tokens(header, model_name_for_tokens)
+
         if header_tokens > max_tokens_budget: return "... (plan header too long for budget)"
-        plan_text_parts.append(header)
+        plan_text_parts_list.append(header)
         current_tokens += header_tokens
 
         for scene_idx, scene in enumerate(chapter_plan):
-            scene_text = (
-                f"Scene Number: {scene.get('scene_number', 'N/A')}\n"
-                f"  Summary: {scene.get('summary', 'No summary')}\n"
-            )
-            if scene_idx < len(chapter_plan) -1 : scene_text += ("-" * 10) + "\n"
+            scene_text_parts_inner = [
+                f"Scene Number: {scene.get('scene_number', 'N/A')}",
+                f"  Summary: {scene.get('summary', 'No summary')}"
+            ]
+            if scene_idx < len(chapter_plan) -1 : scene_text_parts_inner.append("-" * 10)
+            scene_text = "\n".join(scene_text_parts_inner) + "\n"
+
 
             scene_tokens = llm_interface.count_tokens(scene_text, model_name_for_tokens)
             if current_tokens + scene_tokens > max_tokens_budget:
-                plan_text_parts.append("... (plan truncated in prompt due to token limit)\n")
+                plan_text_parts_list.append("... (plan truncated in prompt due to token limit)\n")
                 break
-            plan_text_parts.append(scene_text)
+            plan_text_parts_list.append(scene_text)
             current_tokens += scene_tokens
-        return "".join(plan_text_parts)
+        return "".join(plan_text_parts_list)
 
 
 def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:
@@ -85,14 +89,9 @@ def _get_context_window_for_patch_llm(
     if not original_doc_text: return ""
 
     quote_text_from_llm = problem["quote_from_original_text"]
-    # Use sentence offsets if available, otherwise quote offsets, otherwise fallback
-    # Prefer sentence offsets as they define the segment to be replaced.
     focus_start = problem.get("sentence_char_start")
     focus_end = problem.get("sentence_char_end")
 
-    # If sentence offsets are not available, but quote offsets are, use quote offsets.
-    # This might happen if find_quote_and_sentence_offsets_with_spacy used its direct match
-    # logic but couldn't align it to a spaCy sentence perfectly, or if it's a very short quote.
     if focus_start is None or focus_end is None:
         focus_start = problem.get("quote_char_start")
         focus_end = problem.get("quote_char_end")
@@ -101,7 +100,6 @@ def _get_context_window_for_patch_llm(
 
 
     if "N/A - General Issue" in quote_text_from_llm or focus_start is None or focus_end is None:
-        # General issue or offsets not found, use general text snippet logic
         if "N/A - General Issue" not in quote_text_from_llm:
              logger.warning(f"Context window for patch: No valid offsets for quote '{quote_text_from_llm[:30]}...'. Using general snippet logic.")
 
@@ -117,19 +115,17 @@ def _get_context_window_for_patch_llm(
         else:
              return original_doc_text
 
-    # We have precise focus offsets (sentence or quote)
     focus_len = focus_end - focus_start
     half_window_around_focus = (window_size_chars - focus_len) // 2
 
     context_start = max(0, focus_start - half_window_around_focus)
     context_end = min(len(original_doc_text), focus_end + half_window_around_focus)
 
-    # Adjust if the window is cut off and try to maintain window_size_chars
     current_window_len = context_end - context_start
     if current_window_len < window_size_chars:
-        if context_start == 0: # Shift end
+        if context_start == 0:
             context_end = min(len(original_doc_text), context_start + window_size_chars)
-        elif context_end == len(original_doc_text): # Shift start
+        elif context_end == len(original_doc_text):
             context_start = max(0, context_end - window_size_chars)
 
     prefix = "..." if context_start > 0 else ""
@@ -140,8 +136,8 @@ def _get_context_window_for_patch_llm(
 
 async def _generate_single_patch_instruction_llm(
     agent: Any,
-    original_chapter_text_snippet_for_llm: str, # The windowed context for the LLM
-    problem: ProblemDetail, # Contains original quote text and its offsets, AND sentence offsets
+    original_chapter_text_snippet_for_llm: str, 
+    problem: ProblemDetail, 
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]]
@@ -150,109 +146,121 @@ async def _generate_single_patch_instruction_llm(
     Generates a single patch instruction. The PatchInstruction will store target_char_start/end
     referring to the SENTENCE containing the problem quote if available.
     """
-    plan_focus_section = ""
+    plan_focus_section_parts: List[str] = []
     plot_point_focus, _ = _get_plot_point_info_from_agent(agent, chapter_number)
     max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 4
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-        plan_focus_section = _format_scene_plan_for_prompt_func(chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt)
-        if "plan truncated" in plan_focus_section:
+        formatted_plan = _format_scene_plan_for_prompt_func(chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt)
+        plan_focus_section_parts.append(formatted_plan)
+        if "plan truncated" in formatted_plan:
              logger.warning(f"Scene plan token-truncated for Ch {chapter_number} patch generation prompt.")
     else:
-        plan_focus_section = f"**Original Chapter Focus (Reference for overall chapter direction):**\n{plot_point_focus or 'Not specified.'}\n"
+        plan_focus_section_parts.append(f"**Original Chapter Focus (Reference for overall chapter direction):**\n{plot_point_focus or 'Not specified.'}\n")
+    plan_focus_section_str = "".join(plan_focus_section_parts)
+
 
     is_general_expansion_task = False
-    length_expansion_instruction_header = ""
-    original_quote_text_from_problem = problem['quote_from_original_text'] # Use the ProblemDetail field
+    length_expansion_instruction_header_parts: List[str] = []
+    original_quote_text_from_problem = problem['quote_from_original_text']
 
     if problem['issue_category'] == "narrative_depth" and \
        ("short" in problem['problem_description'].lower() or \
         "length" in problem['problem_description'].lower() or \
         "expand" in problem['suggested_fix_focus'].lower() or \
         "depth" in problem['problem_description'].lower() or \
-        original_quote_text_from_problem == "N/A - General Issue"): # Check canonical "N/A - General Issue"
-        length_expansion_instruction_header = (
-            f"\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** "
-            f"The 'replace_with' text MUST be significantly longer and more detailed. "
-            f"Add descriptive details, character thoughts, dialogue, actions, and sensory information. "
-        )
+        original_quote_text_from_problem == "N/A - General Issue"):
+        length_expansion_instruction_header_parts.append(f"\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** ")
+        length_expansion_instruction_header_parts.append(f"The 'replace_with' text MUST be significantly longer and more detailed. ")
+        length_expansion_instruction_header_parts.append(f"Add descriptive details, character thoughts, dialogue, actions, and sensory information. ")
         if original_quote_text_from_problem == "N/A - General Issue":
             is_general_expansion_task = True
-            length_expansion_instruction_header += (
+            length_expansion_instruction_header_parts.append(
                 f"Since the original quote is 'N/A - General Issue', your 'replace_with' text should be a **new, expanded passage** "
                 f"that addresses the 'Problem Description' and 'Suggested Fix Focus' within the broader 'Text Snippet' context. "
                 f"This generated text is intended as a candidate for insertion or to inform a broader rewrite of a section."
             )
         else:
-             length_expansion_instruction_header += (
+             length_expansion_instruction_header_parts.append(
                 f"Aim for a notable increase in length and detail for the conceptual segment related to the original quote."
              )
+    length_expansion_instruction_header_str = "".join(length_expansion_instruction_header_parts)
 
-    prompt_instruction_for_replacement_scope = ""
+    prompt_instruction_for_replacement_scope_parts: List[str] = []
     max_patch_output_tokens = 0
 
     if is_general_expansion_task:
-        prompt_instruction_for_replacement_scope = (
+        prompt_instruction_for_replacement_scope_parts.append(
             "    - The 'Original Quote Illustrating Problem' is \"N/A - General Issue\". Therefore, your `replace_with` text should be a **new, self-contained, and substantially expanded passage** "
-            "that addresses the \"Problem Description\" and \"Suggested Fix Focus\" as guided by the `length_expansion_instruction_header`. "
+            "that addresses the \"Problem Description\" and \"Suggested Fix Focus\" as guided by the `length_expansion_instruction_header_str`. "
             "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
         )
         max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2
         max_patch_output_tokens = max(max_patch_output_tokens, 750)
         logger.info(f"Patch (Ch {chapter_number}, general expansion): Max output tokens set to {max_patch_output_tokens}.")
-    else: # Specific quote
-        prompt_instruction_for_replacement_scope = (
+    else: 
+        prompt_instruction_for_replacement_scope_parts.append(
             "    - The 'Original Quote Illustrating Problem' is specific. Your `replace_with` text should be a revised version "
             "of the **entire conceptual sentence or short paragraph** within the 'ORIGINAL TEXT SNIPPET' that best corresponds to that quote. Your output will replace that whole segment.\n"
             "    - **Crucially, for this specific fix, your replacement text should primarily focus on correcting the identified issue. "
-            "If `length_expansion_instruction_header` is present, apply its guidance to *this specific segment*. Otherwise, aim for a length comparable to the original segment, plus necessary additions for the fix. "
+        )
+        if length_expansion_instruction_header_str: # Only add this if expansion is requested
+            prompt_instruction_for_replacement_scope_parts.append(
+                "If `length_expansion_instruction_header_str` is present, apply its guidance to *this specific segment*. "
+            )
+        prompt_instruction_for_replacement_scope_parts.append(
+            "Otherwise, aim for a length comparable to the original segment, plus necessary additions for the fix. "
             "Avoid excessive unrelated expansion beyond the scope of the problem for this segment.**"
         )
         original_snippet_tokens = llm_interface.count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL)
-        expansion_factor = 2.5 if length_expansion_instruction_header else 1.5
+        expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
         max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 3)
         max_patch_output_tokens = max(max_patch_output_tokens, 200)
         logger.info(f"Patch (Ch {chapter_number}, specific fix): Original snippet tokens: {original_snippet_tokens}. Max output tokens set to {max_patch_output_tokens}.")
+    prompt_instruction_for_replacement_scope_str = "".join(prompt_instruction_for_replacement_scope_parts)
 
     plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
     protagonist_name = _get_nested_prop_from_agent(agent, 'plot_outline', 'protagonist_name', config.DEFAULT_PROTAGONIST_NAME)
 
-    prompt = f"""/no_think
-You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled "{_get_nested_prop_from_agent(agent, 'plot_outline', 'title', 'Untitled Novel')}" about {protagonist_name}.
-**Novel Context:**
-  - Genre: {_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'N/A')}
-  - Theme: {_get_nested_prop_from_agent(agent, 'plot_outline', 'theme', 'N/A')}
-  - Protagonist: {protagonist_name} ({_get_nested_prop_from_agent(agent, 'plot_outline', 'character_arc', 'N/A')})
+    prompt_lines = [
+        "/no_think",
+        f"You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled \"{_get_nested_prop_from_agent(agent, 'plot_outline', 'title', 'Untitled Novel')}\" about {protagonist_name}.",
+        "**Novel Context:**",
+        f"  - Genre: {_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'N/A')}",
+        f"  - Theme: {_get_nested_prop_from_agent(agent, 'plot_outline', 'theme', 'N/A')}",
+        f"  - Protagonist: {protagonist_name} ({_get_nested_prop_from_agent(agent, 'plot_outline', 'character_arc', 'N/A')})",
+        "",
+        plan_focus_section_str,
+        "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
+        "--- BEGIN HYBRID CONTEXT ---",
+        hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context.",
+        "--- END HYBRID CONTEXT ---",
+        "",
+        "**Specific Problem to Address in the Chapter:**",
+        f"  - Issue Category: {problem['issue_category']}",
+        f"  - Problem Description: {problem['problem_description']}",
+        f"  - Original Quote Illustrating Problem: \"{original_quote_text_from_problem}\"",
+        f"  - Suggested Fix Focus: {problem['suggested_fix_focus']}",
+        "",
+        "**Text Snippet from Original Chapter (This is the broader context around the problem. If the quote is 'N/A - General Issue', this is general chapter context to inform your new passage):**",
+        "--- BEGIN ORIGINAL TEXT SNIPPET ---",
+        original_chapter_text_snippet_for_llm,
+        "--- END ORIGINAL TEXT SNIPPET ---",
+        length_expansion_instruction_header_str,
+        "**Instructions for Generating Replacement Text:**",
+        "1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.",
+        "2.  Generate a `replace_with` text according to the following:",
+        prompt_instruction_for_replacement_scope_str,
+        "3.  The `replace_with` text MUST address the \"Problem Description\" and \"Suggested Fix Focus\".",
+        "4.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).",
+        "5.  If `length_expansion_instruction_header_str` is present, ensure substantial expansion as guided for the targeted segment or new passage.",
+        "6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any \"Replace with:\" prefixes. Just the raw text intended for replacement/insertion.",
+        "",
+        f"--- BEGIN REPLACE_WITH TEXT (for the segment related to \"{original_quote_text_from_problem}\" or as a new passage if quote is \"N/A - General Issue\") ---"
+    ]
+    prompt = "\n".join(prompt_lines)
 
-{plan_focus_section}
-**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**
---- BEGIN HYBRID CONTEXT ---
-{hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context."}
---- END HYBRID CONTEXT ---
-
-**Specific Problem to Address in the Chapter:**
-  - Issue Category: {problem['issue_category']}
-  - Problem Description: {problem['problem_description']}
-  - Original Quote Illustrating Problem: "{original_quote_text_from_problem}"
-  - Suggested Fix Focus: {problem['suggested_fix_focus']}
-
-**Text Snippet from Original Chapter (This is the broader context around the problem. If the quote is 'N/A - General Issue', this is general chapter context to inform your new passage):**
---- BEGIN ORIGINAL TEXT SNIPPET ---
-{original_chapter_text_snippet_for_llm}
---- END ORIGINAL TEXT SNIPPET ---
-{length_expansion_instruction_header}
-**Instructions for Generating Replacement Text:**
-1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.
-2.  Generate a `replace_with` text according to the following:
-{prompt_instruction_for_replacement_scope}
-3.  The `replace_with` text MUST address the "Problem Description" and "Suggested Fix Focus".
-4.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).
-5.  If `length_expansion_instruction_header` is present, ensure substantial expansion as guided for the targeted segment or new passage.
-6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any "Replace with:" prefixes. Just the raw text intended for replacement/insertion.
-
---- BEGIN REPLACE_WITH TEXT (for the segment related to "{original_quote_text_from_problem}" or as a new passage if quote is "N/A - General Issue") ---
-"""
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10),' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10),' ')}...' Max Output Tokens: {max_patch_output_tokens}")
 
     replace_with_text_raw, usage_data = await llm_interface.async_call_llm(
@@ -273,7 +281,7 @@ You are a surgical revision expert generating replacement text for Chapter {chap
         logger.warning(f"Patch LLM returned empty after cleaning for Ch {chapter_number} problem: {problem['problem_description']}")
         return None, usage_data
 
-    if length_expansion_instruction_header:
+    if length_expansion_instruction_header_str:
         if not is_general_expansion_task:
             if len(original_chapter_text_snippet_for_llm) > 100 and len(replace_with_text_cleaned) < len(original_chapter_text_snippet_for_llm) * 1.2:
                 logger.warning(
@@ -287,14 +295,9 @@ You are a surgical revision expert generating replacement text for Chapter {chap
                     f"Problem: {problem['problem_description'][:60]}"
                 )
 
-    # Prioritize sentence_char_start/end from the ProblemDetail for defining the patch target.
-    # These are populated by the evaluator using spaCy.
     target_start_for_patch: Optional[int] = problem.get("sentence_char_start")
     target_end_for_patch: Optional[int] = problem.get("sentence_char_end")
 
-    # If sentence offsets are still None (e.g., spaCy failed or "N/A" quote),
-    # and it's a specific quote (not "N/A"), then try to use quote offsets as a less precise fallback.
-    # Semantic search in _apply_patches_to_text will then try to find a paragraph.
     if original_quote_text_from_problem != "N/A - General Issue" and \
        (target_start_for_patch is None or target_end_for_patch is None) and \
        (problem.get("quote_char_start") is not None and problem.get("quote_char_end") is not None):
@@ -305,7 +308,6 @@ You are a surgical revision expert generating replacement text for Chapter {chap
     elif original_quote_text_from_problem != "N/A - General Issue" and \
          (target_start_for_patch is None or target_end_for_patch is None):
         logger.error(f"Patch for Ch {chapter_number}: Problem '{original_quote_text_from_problem[:50]}' specific text but NO OFFSETS (sentence or quote). Patch will likely fail to apply precisely.")
-        # target_start/end_for_patch will remain None, forcing semantic search if this patch is even generated.
 
     patch_instruction: PatchInstruction = {
         "original_problem_quote_text": original_quote_text_from_problem,
@@ -319,7 +321,7 @@ You are a surgical revision expert generating replacement text for Chapter {chap
 
 async def _generate_patch_instructions_logic(
     agent: Any,
-    original_text: str, # Full original chapter text
+    original_text: str, 
     problems_to_fix: List[ProblemDetail],
     chapter_number: int,
     hybrid_context_for_revision: str,
@@ -333,7 +335,6 @@ async def _generate_patch_instructions_logic(
         is_specific_and_located = (
             p_item["quote_from_original_text"] != "N/A - General Issue" and
             p_item["quote_from_original_text"].strip() and
-            # Either sentence OR quote offsets must be present for it to be "located"
             (p_item.get("sentence_char_start") is not None or p_item.get("quote_char_start") is not None)
         )
         is_expansion_depth_issue_general = (
@@ -354,7 +355,7 @@ async def _generate_patch_instructions_logic(
             logger.info(f"Skipping patch generation for Ch {chapter_number} problem {p_idx+1} ({reason_skip}): '{p_item['problem_description'][:60]}'")
 
     problems_to_process = actionable_problems_for_patch_generation[:config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
-    if len(problems_to_fix) > len(problems_to_process): # Log if truncated
+    if len(problems_to_fix) > len(problems_to_process): 
         logger.warning(
             f"Found {len(problems_to_fix)} problems for Ch {chapter_number}. "
             f"{len(actionable_problems_for_patch_generation)} were actionable for patch generation. "
@@ -410,7 +411,6 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
 
     applicable_patches: List[PatchInstruction] = []
     for p_idx, p_item in enumerate(patch_instructions):
-        # An applicable patch has replacement text AND either precise offsets OR a specific quote text (for semantic fallback)
         has_content = p_item["replace_with"].strip()
         has_precise_offsets = p_item.get("target_char_start") is not None and p_item.get("target_char_end") is not None
         has_specific_quote_text = p_item["original_problem_quote_text"] != "N/A - General Issue" and p_item["original_problem_quote_text"].strip()
@@ -436,10 +436,6 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
         method_used = "spaCy-derived sentence/quote offsets"
 
         if segment_to_replace_start is None or segment_to_replace_end is None:
-            # This block is for when PatchInstruction's target_char_start/end are None,
-            # meaning spaCy utils didn't return sentence/quote offsets, or it was an "N/A" problem originally
-            # that somehow made it here (though filtering should prevent that "N/A" case here).
-            # We rely on original_problem_quote_text for semantic search.
             quote_text_for_semantic_search = patch["original_problem_quote_text"]
             if quote_text_for_semantic_search != "N/A - General Issue" and quote_text_for_semantic_search.strip():
                 logger.info(f"Patch {patch_idx+1}: Missing precise offsets for problem '{quote_text_for_semantic_search[:50]}'. Attempting semantic paragraph search.")
@@ -448,7 +444,7 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
                     original_text,
                     quote_text_for_semantic_search,
                     segment_type="paragraph",
-                    min_similarity_threshold=0.60 # Default threshold
+                    min_similarity_threshold=0.60
                 )
                 if semantic_match_info:
                     segment_to_replace_start, segment_to_replace_end, score = semantic_match_info
@@ -461,14 +457,13 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
             else:
                 logger.warning(f"Patch {patch_idx+1}: Skipping as it has no precise offsets and no specific quote text for semantic search. Quote: '{quote_text_for_semantic_search}'")
                 failed_patches_target_not_found +=1
-                continue # Cannot apply this patch
+                continue 
 
-        if segment_to_replace_start is None or segment_to_replace_end is None : # Final check
+        if segment_to_replace_start is None or segment_to_replace_end is None : 
             logger.error(f"Patch {patch_idx+1}: Logic error, segment_to_replace offsets are still None after checks. Skipping. Patch: {patch}")
             failed_patches_target_not_found +=1
             continue
         
-        # Check for overlaps with already queued replacements
         has_overlap = False
         for r_start, r_end, _ in replacements:
             if max(segment_to_replace_start, r_start) < min(segment_to_replace_end, r_end):
@@ -490,7 +485,7 @@ async def _apply_patches_to_text(original_text: str, patch_instructions: List[Pa
         logger.info("No patches could be confidently mapped to text segments for replacement.")
         return original_text
 
-    replacements.sort(key=lambda x: x[0], reverse=True) # Apply from end to start
+    replacements.sort(key=lambda x: x[0], reverse=True) 
     current_text_list = list(original_text)
     applied_count = 0
 
@@ -537,9 +532,8 @@ async def revise_chapter_draft_logic(
     logger.info(f"Attempting revision for chapter {chapter_number}. Reason(s):\n- {revision_reason_str}")
 
     patched_text: Optional[str] = None
-    raw_patch_llm_outputs_combined: str = ""
+    raw_patch_llm_outputs_combined_parts: List[str] = []
 
-    # Check for actionable problems based on updated ProblemDetail structure
     actionable_problems_for_patch_gen_check = [
         p for p in problems_to_fix if
         (p["quote_from_original_text"] != "N/A - General Issue" and p["quote_from_original_text"].strip() and \
@@ -559,7 +553,7 @@ async def revise_chapter_draft_logic(
         _add_usage(patch_usage)
         if patch_instructions:
             patched_text = await _apply_patches_to_text(original_text, patch_instructions)
-            raw_patch_llm_outputs_combined = (
+            raw_patch_llm_outputs_combined_parts.append(
                 f"Chapter revised using {len(patch_instructions)} generated patch instructions. "
                 f"(Note: Not all generated patches may have been auto-applied if they were for 'N/A - General Issue' or target segment not found.)\n"
             )
@@ -569,6 +563,8 @@ async def revise_chapter_draft_logic(
             )
         else:
             logger.warning(f"Patch-based revision for Ch {chapter_number}: No valid patch instructions were generated. Will consider full rewrite if needed.")
+    
+    raw_patch_llm_outputs_combined_str = "".join(raw_patch_llm_outputs_combined_parts)
 
     final_revised_text: Optional[str] = None
     final_raw_llm_output: Optional[str] = None
@@ -592,7 +588,7 @@ async def revise_chapter_draft_logic(
             use_patched_text_as_final = True
         if use_patched_text_as_final:
             final_revised_text = patched_text
-            final_raw_llm_output = raw_patch_llm_outputs_combined
+            final_raw_llm_output = raw_patch_llm_outputs_combined_str
             logger.info(f"Ch {chapter_number}: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite).")
 
     if not use_patched_text_as_final and evaluation_result.get("needs_revision"):
@@ -609,16 +605,19 @@ async def revise_chapter_draft_logic(
             original_text, config.REVISION_MODEL, max_original_snippet_tokens,
             truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)"
         )
-        plan_focus_section_full_rewrite = ""
+        plan_focus_section_full_rewrite_parts: List[str] = []
         plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(agent, chapter_number)
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 3
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-            plan_focus_section_full_rewrite = _format_scene_plan_for_prompt_func(chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite)
-            if "plan truncated" in plan_focus_section_full_rewrite:
+            formatted_plan_fr = _format_scene_plan_for_prompt_func(chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite)
+            plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
+            if "plan truncated" in formatted_plan_fr:
                  logger.warning(f"Scene plan token-truncated for Ch {chapter_number} full rewrite prompt.")
         else:
-            plan_focus_section_full_rewrite = f"**Original Chapter Focus (Target):**\n{plot_point_focus_full_rewrite or 'Not specified.'}\n"
-        length_issue_explicit_instruction_full_rewrite = ""
+            plan_focus_section_full_rewrite_parts.append(f"**Original Chapter Focus (Target):**\n{plot_point_focus_full_rewrite or 'Not specified.'}\n")
+        plan_focus_section_full_rewrite_str = "".join(plan_focus_section_full_rewrite_parts)
+
+        length_issue_explicit_instruction_full_rewrite_parts: List[str] = []
         needs_expansion_from_problems = any(
             (p['issue_category'] == 'narrative_depth' and
              ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
@@ -629,54 +628,61 @@ async def revise_chapter_draft_logic(
             kw in revision_reason_str.lower() for kw in ["too short", "lacking in depth", "brief", "expand", "length", "narrative depth", "detail", "insufficient"]
         )
         if needs_expansion_from_problems or needs_expansion_from_reasons:
-            length_issue_explicit_instruction_full_rewrite = (
-                f"\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. "
-                f"Your revision MUST substantially expand the narrative by incorporating more descriptive details, character thoughts/introspection, dialogue, actions, and sensory information. "
+            length_issue_explicit_instruction_full_rewrite_parts.extend([
+                f"\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. ",
+                f"Your revision MUST substantially expand the narrative by incorporating more descriptive details, character thoughts/introspection, dialogue, actions, and sensory information. ",
                 f"Aim for a chapter length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters."
-            )
+            ])
+        length_issue_explicit_instruction_full_rewrite_str = "".join(length_issue_explicit_instruction_full_rewrite_parts)
+
         plot_outline_data_full_rewrite = _get_prop_from_agent(agent, 'plot_outline', {})
         protagonist_name_full_rewrite = _get_nested_prop_from_agent(agent, 'plot_outline', "protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
-        all_problem_descriptions_str = ""
+        
+        all_problem_descriptions_parts: List[str] = []
         if problems_to_fix:
-            all_problem_descriptions_str = "**Detailed Issues to Address (from evaluation):**\n"
+            all_problem_descriptions_parts.append("**Detailed Issues to Address (from evaluation):**\n")
             for prob_idx, prob_item in enumerate(problems_to_fix):
-                all_problem_descriptions_str += (
-                    f"  {prob_idx+1}. Category: {prob_item['issue_category']}\n"
-                    f"     Description: {prob_item['problem_description']}\n"
-                    # Use quote_from_original_text here for the full rewrite prompt
-                    f"     Quote Ref: \"{prob_item['quote_from_original_text'][:100].replace(chr(10),' ')}...\"\n"
+                all_problem_descriptions_parts.extend([
+                    f"  {prob_idx+1}. Category: {prob_item['issue_category']}",
+                    f"     Description: {prob_item['problem_description']}",
+                    f"     Quote Ref: \"{prob_item['quote_from_original_text'][:100].replace(chr(10),' ')}...\"",
                     f"     Fix Focus: {prob_item['suggested_fix_focus']}\n"
-                )
-            all_problem_descriptions_str += "---\n"
-        prompt_full_rewrite = f"""/no_think
-You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.
-**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**
---- FEEDBACK START ---
-{llm_interface.clean_model_response(revision_reason_str).strip()}
---- FEEDBACK END ---
-{all_problem_descriptions_str}
-{length_issue_explicit_instruction_full_rewrite}
-{plan_focus_section_full_rewrite}
-**Hybrid Context from Previous Chapters (Semantic Context & KG Facts - for consistency):**
---- BEGIN HYBRID CONTEXT ---
-{hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context."}
---- END HYBRID CONTEXT ---
-**Original Draft Snippet (for reference of what went wrong - DO NOT COPY VERBATIM. Your goal is a fresh rewrite addressing all critique and aligning with the plan/focus):**
---- BEGIN ORIGINAL DRAFT SNIPPET ---
-{original_snippet}
---- END ORIGINAL DRAFT SNIPPET ---
+                ])
+            all_problem_descriptions_parts.append("---\n")
+        all_problem_descriptions_str = "".join(all_problem_descriptions_parts)
+        
+        prompt_full_rewrite_lines = [
+            "/no_think",
+            f"You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.",
+            "**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**",
+            "--- FEEDBACK START ---",
+            llm_interface.clean_model_response(revision_reason_str).strip(),
+            "--- FEEDBACK END ---",
+            all_problem_descriptions_str,
+            length_issue_explicit_instruction_full_rewrite_str,
+            plan_focus_section_full_rewrite_str,
+            "**Hybrid Context from Previous Chapters (Semantic Context & KG Facts - for consistency):**",
+            "--- BEGIN HYBRID CONTEXT ---",
+            hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context.",
+            "--- END HYBRID CONTEXT ---",
+            "**Original Draft Snippet (for reference of what went wrong - DO NOT COPY VERBATIM. Your goal is a fresh rewrite addressing all critique and aligning with the plan/focus):**",
+            "--- BEGIN ORIGINAL DRAFT SNIPPET ---",
+            original_snippet,
+            "--- END ORIGINAL DRAFT SNIPPET ---",
+            "",
+            "**Revision Instructions:**",
+            "1.  **ABSOLUTE PRIORITY:** Thoroughly address ALL issues listed in **Critique/Reason(s) for Revision** and **Detailed Issues to Address**.",
+            "2.  **Rewrite the ENTIRE chapter.** Produce a fresh, coherent, and engaging narrative.",
+            "3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite_str`, follow it closely. Otherwise, align with the `Original Chapter Focus`.",
+            "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
+            f"5.  Maintain the novel's established tone, style, and genre ('{_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'story')}').",
+            f"6.  Target a substantial chapter length, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
+            "7.  **Output ONLY the rewritten chapter text.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
+            "",
+            f"--- BEGIN REVISED CHAPTER {chapter_number} TEXT ---"
+        ]
+        prompt_full_rewrite = "\n".join(prompt_full_rewrite_lines)
 
-**Revision Instructions:**
-1.  **ABSOLUTE PRIORITY:** Thoroughly address ALL issues listed in **Critique/Reason(s) for Revision** and **Detailed Issues to Address**.
-2.  **Rewrite the ENTIRE chapter.** Produce a fresh, coherent, and engaging narrative.
-3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite`, follow it closely. Otherwise, align with the `Original Chapter Focus`.
-4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.
-5.  Maintain the novel's established tone, style, and genre ('{_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'story')}').
-6.  Target a substantial chapter length, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.
-7.  **Output ONLY the rewritten chapter text.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.
-
---- BEGIN REVISED CHAPTER {chapter_number} TEXT ---
-"""
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
         revised_raw_llm_output_full, full_rewrite_usage = await llm_interface.async_call_llm(
             model_name=config.REVISION_MODEL,
@@ -702,7 +708,7 @@ You are an expert novelist rewriting Chapter {chapter_number} featuring protagon
         return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
     if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
-    if final_revised_text is not patched_text: # Full rewrite occurred
+    if final_revised_text is not patched_text: 
         original_embedding_full_final, revised_embedding_full_final = await asyncio.gather(
             llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(final_revised_text)
         )

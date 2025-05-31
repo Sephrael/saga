@@ -48,18 +48,21 @@ WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "tra
 @alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
 async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key: str, chapter_number: int) -> Tuple[str, Optional[Dict[str, int]]]:
     """ Summarizes chapter text using an LLM. Input `chapter_text_full_key` is the actual text. Returns summary and usage."""
-    prompt = f"""/no_think
-You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.
-The summary should be 1-3 sentences long and capture the most crucial information.
-Focus on what changed or was revealed.
+    prompt_lines = [
+        "/no_think",
+        "You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.",
+        "The summary should be 1-3 sentences long and capture the most crucial information.",
+        "Focus on what changed or was revealed.",
+        "",
+        "Full Chapter Text:",
+        "--- BEGIN TEXT ---",
+        chapter_text_full_key,
+        "--- END TEXT ---",
+        "",
+        "Output ONLY the summary text. No extra commentary or \"Summary:\" prefix."
+    ]
+    prompt = "\n".join(prompt_lines)
 
-Full Chapter Text:
---- BEGIN TEXT ---
-{chapter_text_full_key}
---- END TEXT ---
-
-Output ONLY the summary text. No extra commentary or "Summary:" prefix.
-"""
     summary_raw, usage_data = await llm_interface.async_call_llm(
         model_name=config.SMALL_MODEL,
         prompt=prompt,
@@ -735,28 +738,40 @@ class KGMaintainerAgent:
         current_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         current_world_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
         candidate_entities_list = await heuristic_entity_spotter_for_kg(novel_props, chapter_text)
-        candidate_entities_text = "Candidate Entities (for KG triple focus):\n" + "\n".join([f"- {e}" for e in candidate_entities_list]) if candidate_entities_list else "Candidate Entities: None identified by heuristic."
-
-        dynamic_instr_char = ""
-        dynamic_instr_world = ""
-        if config.ENABLE_DYNAMIC_STATE_ADAPTATION:
-            dynamic_instr_char = (
-                f"For existing characters, if their traits, status, or core description needs modification based on THIS chapter's events, "
-                f"include a line like `Modification Proposal: MODIFY traits: ADD \"Determined\", REMOVE \"Hesitant\"`. "
-                f"Also specify all current `Traits` as a comma-separated list if changed, new `Status`, new `Description`. "
-                f"For NEW characters, provide `Description`, `Traits` (comma-separated), `Status`. "
-                f"For `Relationships`, list them as `Target Name: relationship type` (e.g., `John Doe: ally`) or on new lines under a `Relationships:` header, each as `- Target Name: type`."
-                f"Only include characters that are updated, newly introduced, or have a modification proposal."
-            )
-            dynamic_instr_world = (
-                f"For existing world items, if their properties need modification, include a line like `Modification Proposal: MODIFY atmosphere: \"Now heavy with magical fallout\"`. "
-                f"Also provide the new full value for any changed properties. For NEW world items, provide all known properties. "
-                f"E.g., for locations: `Description: ...`, `Atmosphere: ...`. For factions: `Description: ...`, `Goals:` (followed by '- goal' lines). "
-                f"Only include world elements that are new, significantly changed by THIS chapter's events, or have a modification proposal."
-            )
+        
+        candidate_entities_text_parts: List[str] = []
+        if candidate_entities_list:
+            candidate_entities_text_parts.append("Candidate Entities (for KG triple focus):\n")
+            candidate_entities_text_parts.extend([f"- {e}" for e in candidate_entities_list])
         else:
-            dynamic_instr_char = "Only include characters whose information is directly updated or those newly introduced in THIS chapter. Provide full description, traits (comma-separated), status for new chars."
-            dynamic_instr_world = "Only include world elements that are new or significantly changed by THIS chapter's events. Provide full details for new items."
+            candidate_entities_text_parts.append("Candidate Entities: None identified by heuristic.")
+        candidate_entities_text_str = "\n".join(candidate_entities_text_parts)
+
+
+        dynamic_instr_char_parts: List[str] = []
+        dynamic_instr_world_parts: List[str] = []
+
+        if config.ENABLE_DYNAMIC_STATE_ADAPTATION:
+            dynamic_instr_char_parts.extend([
+                f"For existing characters, if their traits, status, or core description needs modification based on THIS chapter's events, ",
+                f"include a line like `Modification Proposal: MODIFY traits: ADD \"Determined\", REMOVE \"Hesitant\"`. ",
+                f"Also specify all current `Traits` as a comma-separated list if changed, new `Status`, new `Description`. ",
+                f"For NEW characters, provide `Description`, `Traits` (comma-separated), `Status`. ",
+                f"For `Relationships`, list them as `Target Name: relationship type` (e.g., `John Doe: ally`) or on new lines under a `Relationships:` header, each as `- Target Name: type`.",
+                f"Only include characters that are updated, newly introduced, or have a modification proposal."
+            ])
+            dynamic_instr_world_parts.extend([
+                f"For existing world items, if their properties need modification, include a line like `Modification Proposal: MODIFY atmosphere: \"Now heavy with magical fallout\"`. ",
+                f"Also provide the new full value for any changed properties. For NEW world items, provide all known properties. ",
+                f"E.g., for locations: `Description: ...`, `Atmosphere: ...`. For factions: `Description: ...`, `Goals:` (followed by '- goal' lines). ",
+                f"Only include world elements that are new, significantly changed by THIS chapter's events, or have a modification proposal."
+            ])
+        else:
+            dynamic_instr_char_parts.append("Only include characters whose information is directly updated or those newly introduced in THIS chapter. Provide full description, traits (comma-separated), status for new chars.")
+            dynamic_instr_world_parts.append("Only include world elements that are new or significantly changed by THIS chapter's events. Provide full details for new items.")
+        
+        dynamic_instr_char_str = "".join(dynamic_instr_char_parts)
+        dynamic_instr_world_str = "".join(dynamic_instr_world_parts)
 
         common_predicates_str = ", ".join([
             "is_a", "located_in", "has_trait", "status_is", "feels", "knows", "believes", "wants",
@@ -767,66 +782,110 @@ class KGMaintainerAgent:
             "has_description", "has_atmosphere", "has_rule", "has_history_event"
         ])
 
-        prompt = f"""/no_think
-You are a comprehensive literary analyst and knowledge engineer.
-Analyze the **Complete Chapter {chapter_number} Text** (protagonist: {protagonist_name}) and extract information for three distinct knowledge bases.
-Output ONLY plain text, structured as described below.
+        example_output_structure_text_parts = [
+            "### CHARACTER UPDATES ###",
+            "Character: Elara Vance",
+            "Description: Now appears more determined after facing the Shadow Beast.",
+            "Traits: Brave, Resourceful, Determined",
+            "Status: Wounded but resolute",
+            f"Development in Chapter {chapter_number}: Confronted the Shadow Beast, discovered a hidden clue.",
+            "Modification Proposal: MODIFY traits: ADD \"Determined\"",
+            "",
+            "Character: Gorok",
+            "Description: A new troll encountered in the Whispering Woods.",
+            "Traits: Grumpy, Strong",
+            "Status: Wary of Elara",
+            f"Development in Chapter {chapter_number}: Briefly fought Elara, then fled.",
+            "",
+            "### WORLD UPDATES ###",
+            "Category: locations",
+            "Item: Whispering Woods",
+            "Description: The woods now feel colder, and shadows linger longer.",
+            "Atmosphere: Ominous, Chilling",
+            f"Elaboration in Chapter {chapter_number}: Site of the Shadow Beast encounter.",
+            "Modification Proposal: MODIFY atmosphere: \"Ominous, Chilling\"",
+            "",
+            "Category: _overview_",
+            "Description: The general mood of the realm has darkened slightly due to recent events.",
+            f"Elaboration in Chapter {chapter_number}: Overall world overview mentioned or updated.",
+            "",
+            "### KG TRIPLES ###",
+            "Elara Vance | confronted | Shadow Beast",
+            "Elara Vance | status_is | Wounded but resolute",
+            "Whispering Woods | has_atmosphere | Ominous",
+            "Shadow Beast | located_in | Whispering Woods"
+        ]
+        example_output_structure_str = "\n".join(example_output_structure_text_parts)
 
-**Reference Information (Current State Before This Chapter - for context only, extract from THIS chapter's text):**
-  **Character Profiles Snapshot (Plain Text):**
-  ```text
-  {current_profiles_plain_text if current_profiles_plain_text.strip() else "No character profiles provided as reference."}
-  ```
-  **World Building Snapshot (Plain Text):**
-  ```text
-  {current_world_plain_text if current_world_plain_text.strip() else "No world building data provided as reference."}
-  ```
-  {candidate_entities_text}
+        prompt_lines = [
+            "/no_think",
+            "You are a comprehensive literary analyst and knowledge engineer.",
+            f"Analyze the **Complete Chapter {chapter_number} Text** (protagonist: {protagonist_name}) and extract information for three distinct knowledge bases.",
+            "Output ONLY plain text, structured as described below.",
+            "",
+            "**Reference Information (Current State Before This Chapter - for context only, extract from THIS chapter's text):**",
+            "  **Character Profiles Snapshot (Plain Text):**",
+            "  ```text",
+            current_profiles_plain_text if current_profiles_plain_text.strip() else "No character profiles provided as reference.",
+            "  ```",
+            "  **World Building Snapshot (Plain Text):**",
+            "  ```text",
+            current_world_plain_text if current_world_plain_text.strip() else "No world building data provided as reference.",
+            "  ```",
+            candidate_entities_text_str,
+            "",
+            f"**Complete Chapter {chapter_number} Text (Analyze this full text):**",
+            "--- BEGIN COMPLETE CHAPTER TEXT ---",
+            chapter_text,
+            "--- END COMPLETE CHAPTER TEXT ---",
+            "",
+            "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
+            "Use the following section headers EXACTLY:",
+            "`### CHARACTER UPDATES ###`",
+            "`### WORLD UPDATES ###`",
+            "`### KG TRIPLES ###`",
+            "",
+            "**1. Under `### CHARACTER UPDATES ###`:**",
+            "   List each character on a new line: `Character: [Character Name]`",
+            "   Followed by indented key-value pairs for their profile data (use Title Case for keys like \"Description\", \"Traits\", \"Status\"):",
+            "     `Description: [Full description if new or significantly changed]`",
+            "     `Traits: [Comma-separated list, e.g., Brave, Cautious OR list with '-' prefix on new lines]`",
+            "     `Status: [Current status]`",
+            "     `Relationships:` (Optional, if any. List each as \"- Target Name: Relationship Type\", e.g., \"- Gorok: uneasy ally\")",
+            f"     `Development in Chapter {chapter_number}: [Summary of their role/changes in THIS chapter]`",
+            "     `Modification Proposal: [Optional: MODIFY key: value_change]`",
+            f"   {dynamic_instr_char_str}",
+            "",
+            "**2. Under `### WORLD UPDATES ###`:**",
+            "   Start each category with: `Category: [locations | society | systems | lore | history | factions | _overview_]`",
+            "   For `_overview_`, provide: `Description: [Overall world feel change or new general description]` (and other relevant overview keys if applicable)",
+            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter for overview]`",
+            "   For other categories, list items: `Item: [Item Name]`",
+            "   Followed by indented key-value pairs for item details (use Title Case for keys like \"Description\", \"Atmosphere\"):",
+            "     `Description: [Full description if new or changed]`",
+            "     `Atmosphere: [For locations]`",
+            "     `Goals:` (For factions, list each goal on a new line starting with \"- \")",
+            "       `- Goal 1`",
+            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter for this item]`",
+            "     `Modification Proposal: [Optional: MODIFY key: value_change]`",
+            f"   {dynamic_instr_world_str}",
+            "",
+            "**3. Under `### KG TRIPLES ###`:**",
+            "   List each factual triple. Choose ONE format and use it consistently for all triples in this section:",
+            "   Format A (preferred): `Subject | Predicate | Object`",
+            "   Format B: `Subject: [Subject Name], Predicate: [predicate_name], Object: [Object Name/Value]`",
+            "   Format C: `- [Subject, Predicate, Object]`",
+            f"   Use predicates from this suggested list where appropriate: {common_predicates_str}. Focus on NEW facts or significant CHANGES from THIS chapter.",
+            "",
+            "**Example of Expected Output Structure:**",
+            "```",
+            example_output_structure_str,
+            "```",
+            "",
+            "Begin your output now:"
+        ]
+        prompt = "\n".join(prompt_lines)
 
-**Complete Chapter {chapter_number} Text (Analyze this full text):**
---- BEGIN COMPLETE CHAPTER TEXT ---
-{chapter_text}
---- END COMPLETE CHAPTER TEXT ---
-
-**Output Format (CRITICAL - PLAIN TEXT ONLY):**
-Use the following section headers EXACTLY:
-`### CHARACTER UPDATES ###`
-`### WORLD UPDATES ###`
-`### KG TRIPLES ###`
-
-**1. Under `### CHARACTER UPDATES ###`:**
-   List each character on a new line: `Character: [Character Name]`
-   Followed by indented key-value pairs for their profile data (use Title Case for keys like "Description", "Traits", "Status"):
-     `Description: [Full description if new or significantly changed]`
-     `Traits: [Comma-separated list, e.g., Brave, Cautious OR list with '-' prefix on new lines]`
-     `Status: [Current status]`
-     `Relationships:` (Optional, if any. List each as "- Target Name: Relationship Type", e.g., "- Gorok: uneasy ally")
-     `Development in Chapter {chapter_number}: [Summary of their role/changes in THIS chapter]`
-     `Modification Proposal: [Optional: MODIFY key: value_change]`
-   {dynamic_instr_char}
-
-**2. Under `### WORLD UPDATES ###`:**
-   Start each category with: `Category: [locations | society | systems | lore | history | factions | _overview_]`
-   For `_overview_`, provide: `Description: [Overall world feel change or new general description]` (and other relevant overview keys if applicable)
-   For other categories, list items: `Item: [Item Name]`
-   Followed by indented key-value pairs for item details (use Title Case for keys like "Description", "Atmosphere"):
-     `Description: [Full description if new or changed]`
-     `Atmosphere: [For locations]`
-     `Goals:` (For factions, list each goal on a new line starting with "- ")
-       `- Goal 1`
-     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter]`
-     `Modification Proposal: [Optional: MODIFY key: value_change]`
-   {dynamic_instr_world}
-
-**3. Under `### KG TRIPLES ###`:**
-   List each factual triple. Choose ONE format and use it consistently for all triples in this section:
-   Format A (preferred): `Subject | Predicate | Object`
-   Format B: `Subject: [Subject Name], Predicate: [predicate_name], Object: [Object Name/Value]`
-   Format C: `- [Subject, Predicate, Object]`
-   Use predicates from this suggested list where appropriate: {common_predicates_str}. Focus on NEW facts or significant CHANGES from THIS chapter.
-
-Begin your output now:
-"""
         logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}).")
         raw_extraction_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name, prompt=prompt, temperature=0.5,

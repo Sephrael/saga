@@ -27,40 +27,45 @@ class DraftingAgent:
             return "No detailed scene plan available."
 
         plan_text_lines = ["**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**"]
-        total_plan_text_so_far = "\n".join(plan_text_lines) + "\n"
+        # total_plan_text_so_far = "\n".join(plan_text_lines) + "\n" # Initial calculation before loop
+
+        # Build the plan string incrementally
+        current_plan_str_parts = [plan_text_lines[0]] # Start with header
 
         for scene_idx, scene in enumerate(chapter_plan):
-            scene_lines = [
+            scene_lines_parts = [
                 f"Scene Number: {scene.get('scene_number', 'N/A')}",
                 f"  Summary: {scene.get('summary', 'N/A')}",
                 f"  Characters Involved: {', '.join(scene.get('characters_involved', [])) if scene.get('characters_involved') else 'None'}",
-                f"  Key Dialogue Points:"
+                "  Key Dialogue Points:"
             ]
             for point in scene.get('key_dialogue_points', []):
-                scene_lines.append(f"    - {point}")
-            scene_lines.append(f"  Setting Details: {scene.get('setting_details', 'N/A')}")
-            scene_lines.append(f"  Scene Focus Elements:")
+                scene_lines_parts.append(f"    - {point}")
+            scene_lines_parts.append(f"  Setting Details: {scene.get('setting_details', 'N/A')}")
+            scene_lines_parts.append("  Scene Focus Elements:")
             for focus_el in scene.get('scene_focus_elements', []):
-                scene_lines.append(f"    - {focus_el}")
-            scene_lines.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
+                scene_lines_parts.append(f"    - {focus_el}")
+            scene_lines_parts.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
             
             if scene_idx < len(chapter_plan) -1 :
-                scene_lines.append("-" * 20)
+                scene_lines_parts.append("-" * 20)
             
-            current_scene_text_segment = "\n".join(scene_lines) + "\n"
-            prospective_total_plan_text = total_plan_text_so_far + current_scene_text_segment
+            # Check token count before adding this scene's text to the cumulative plan
+            prospective_next_segment = "\n".join(scene_lines_parts)
+            # Test adding the new segment to the current plan parts
+            temp_full_plan_text = "\n".join(current_plan_str_parts + [prospective_next_segment])
             
-            if llm_interface.count_tokens(prospective_total_plan_text, model_name_for_tokens) > max_tokens_budget:
-                plan_text_lines.append("... (plan truncated in prompt due to token limit)")
+            if llm_interface.count_tokens(temp_full_plan_text, model_name_for_tokens) > max_tokens_budget:
+                current_plan_str_parts.append("... (plan truncated in prompt due to token limit)")
                 logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}. Stopped before scene {scene.get('scene_number', 'N/A')}.")
                 break
             
-            plan_text_lines.extend(scene_lines)
-            total_plan_text_so_far = prospective_total_plan_text
-
-        if len(plan_text_lines) <= 1:
+            current_plan_str_parts.append(prospective_next_segment) # Add the segment if it fits
+            
+        if len(current_plan_str_parts) <= 1 : # Only header means no scenes were added
             return "No detailed scene plan available or plan was too long to include any scenes."
-        return "\n".join(plan_text_lines)
+            
+        return "\n".join(current_plan_str_parts)
 
     async def draft_chapter(
         self,
@@ -79,16 +84,18 @@ class DraftingAgent:
             plot_point_focus = "Continue the narrative logically, focusing on character development and plot progression based on previous events."
             logger.warning(f"Plot point focus was None for Ch {chapter_number} draft generation. Using generic fallback.")
 
-        plan_section_for_prompt = ""
+        plan_section_for_prompt_parts: List[str] = []
         if config.ENABLE_AGENTIC_PLANNING:
             if chapter_plan and isinstance(chapter_plan, list):
                 max_plan_tokens_for_prompt = config.MAX_CONTEXT_TOKENS // 3
-                plan_section_for_prompt = self._format_scene_plan_for_prompt(chapter_plan, self.model_name, max_plan_tokens_for_prompt)
+                plan_section_for_prompt_parts.append(self._format_scene_plan_for_prompt(chapter_plan, self.model_name, max_plan_tokens_for_prompt))
                 logger.info(f"Using detailed scene plan (plain text) for Ch {chapter_number} draft generation.")
             else:
-                plan_section_for_prompt = f"**Chapter Plan Note:** No detailed scene plan available. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
+                plan_section_for_prompt_parts.append(f"**Chapter Plan Note:** No detailed scene plan available. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n")
         else:
-            plan_section_for_prompt = f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n"
+            plan_section_for_prompt_parts.append(f"**Chapter Plan Note:** Detailed agentic planning is disabled. Rely on the Overall Plot Point Focus.\n**Overall Plot Point Focus for THIS Chapter:** {plot_point_focus}\n")
+        
+        plan_section_for_prompt_str = "".join(plan_section_for_prompt_parts)
 
         char_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(agent_or_props, chapter_number - 1)
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(agent_or_props, chapter_number - 1)
@@ -97,76 +104,76 @@ class DraftingAgent:
         all_plot_points: List[str] = []
         plot_point_index = -1 # Default if not found
 
-        # Accessing plot_outline attributes from 'agent_or_props'
-        # novel_props_cache is passed as agent_or_props by orchestrator
         if isinstance(agent_or_props, dict): 
             plot_outline_data = agent_or_props.get('plot_outline_full', agent_or_props.get('plot_outline', {}))
-        elif hasattr(agent_or_props, 'plot_outline'): # Fallback if orchestrator instance itself is passed
+        elif hasattr(agent_or_props, 'plot_outline'):
             plot_outline_data = agent_or_props.plot_outline
         else:
             logger.warning("Could not determine plot_outline_data source in DraftingAgent.")
         
         all_plot_points = plot_outline_data.get('plot_points', [])
-        # Determine plot_point_index based on chapter_number
         if chapter_number > 0 and chapter_number <= len(all_plot_points):
-            plot_point_index = chapter_number - 1 # 0-based index
+            plot_point_index = chapter_number - 1
         
         total_plot_points_in_novel = len(all_plot_points)
 
-        # Future plot context for pacing
-        future_plot_context = ""
+        future_plot_context_parts: List[str] = []
         if plot_point_index >= 0 and plot_point_index + 1 < total_plot_points_in_novel:
             next_pp_text = all_plot_points[plot_point_index + 1]
             if isinstance(next_pp_text, str) and next_pp_text.strip():
-                future_plot_context = f"\n**Anticipated Next Major Plot Point (PP {plot_point_index + 2}/{total_plot_points_in_novel} - for context, do not address this yet):**\n{next_pp_text.strip()}"
+                future_plot_context_parts.append(f"\n**Anticipated Next Major Plot Point (PP {plot_point_index + 2}/{total_plot_points_in_novel} - for context, do not address this yet):**\n{next_pp_text.strip()}")
             if plot_point_index + 2 < total_plot_points_in_novel:
                  next_next_pp_text = all_plot_points[plot_point_index + 2]
                  if isinstance(next_next_pp_text, str) and next_next_pp_text.strip():
-                    future_plot_context += f"\n**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}"
+                    future_plot_context_parts.append(f"\n**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}")
+        future_plot_context_str = "".join(future_plot_context_parts)
 
-        prompt = f"""/no_think
-You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled "{plot_outline_data.get('title', 'Untitled Novel')}".
-This chapter is part of a larger narrative arc.
+        prompt_lines = [
+            "/no_think",
+            f"You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled \"{plot_outline_data.get('title', 'Untitled Novel')}\".",
+            "This chapter is part of a larger narrative arc.",
+            "",
+            "**Story Bible / Core Information:**",
+            f"  - Genre: {plot_outline_data.get('genre', 'N/A')}",
+            f"  - Central Theme: {plot_outline_data.get('theme', 'N/A')}",
+            f"  - Protagonist: {plot_outline_data.get('protagonist_name', 'N/A')}",
+            f"  - Protagonist's Character Arc: {plot_outline_data.get('character_arc', 'N/A')}",
+            "",
+            f"**Overall Narrative Context:** This chapter focuses on Plot Point {plot_point_index + 1} of {total_plot_points_in_novel} total major plot points in the novel.",
+            future_plot_context_str,
+            "",
+            plan_section_for_prompt_str,
+            "",
+            "**World Building Notes (Plain Text - pay attention to any 'prompt_notes' indicating provisional data):**",
+            "```text",
+            world_building_plain_text if world_building_plain_text.strip() else "No specific world building notes provided for this chapter's context.",
+            "```",
+            "**Character Profiles (Plain Text - pay attention to any 'prompt_notes' indicating provisional status):**",
+            "```text",
+            char_profiles_plain_text if char_profiles_plain_text.strip() else "No specific character profiles provided for this chapter's context.",
+            "```",
+            "**Hybrid Context (Semantic Context for Flow & KG Facts for Canon - from previous chapters):**",
+            "--- BEGIN HYBRID CONTEXT ---",
+            hybrid_context if hybrid_context.strip() else "No previous context (e.g., this is Chapter 1 or context retrieval failed).",
+            "--- END HYBRID CONTEXT ---",
+            "",
+            "**Writing Instructions:**",
+            f"1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
+            "2. Your primary goal is to advance the current chapter's **Overall Plot Point Focus**. Do NOT attempt to resolve future plot points mentioned in the 'Overall Narrative Context'.",
+            "3. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'Summary', 'Key Dialogue Points', 'Setting Details', and **especially its 'Scene Focus Elements'**. Use the 'Scene Focus Elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.",
+            "4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).",
+            "   - **Crucially, the `KEY RELIABLE KG FACTS` section within the `HYBRID CONTEXT` provides established canon that MUST be respected.**",
+            "   - The `SEMANTIC CONTEXT` section within the `HYBRID CONTEXT` should guide narrative flow, tone, and recall of recent events.",
+            f"5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{plot_outline_data.get('genre', 'story')}'.",
+            "6. **Employ 'showing' over 'telling':** Use vivid descriptions, sensory details, character actions, internal monologues, and nuanced dialogue to convey information, atmosphere, and emotions.",
+            "7. **Fully develop dialogue exchanges:** Allow characters to express themselves naturally, incorporating pauses, subtext, emotional reactions, and non-verbal cues. Don't shy away from longer conversations if they serve character or plot.",
+            "8. **Thoroughly explore the protagonist's (and other key characters') thoughts, feelings, and internal reactions** to the unfolding events and interactions. Dedicate space to their internal processing.",
+            "9. **Output ONLY the chapter text itself.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
+            "",
+            f"--- BEGIN CHAPTER {chapter_number} TEXT ---"
+        ]
+        prompt = "\n".join(prompt_lines)
 
-**Story Bible / Core Information:**
-  - Genre: {plot_outline_data.get('genre', 'N/A')}
-  - Central Theme: {plot_outline_data.get('theme', 'N/A')}
-  - Protagonist: {plot_outline_data.get('protagonist_name', 'N/A')}
-  - Protagonist's Character Arc: {plot_outline_data.get('character_arc', 'N/A')}
-
-**Overall Narrative Context:** This chapter focuses on Plot Point {plot_point_index + 1} of {total_plot_points_in_novel} total major plot points in the novel.
-{future_plot_context}
-
-{plan_section_for_prompt}
-
-**World Building Notes (Plain Text - pay attention to any 'prompt_notes' indicating provisional data):**
-```text
-{world_building_plain_text if world_building_plain_text.strip() else "No specific world building notes provided for this chapter's context."}
-```
-**Character Profiles (Plain Text - pay attention to any 'prompt_notes' indicating provisional status):**
-```text
-{char_profiles_plain_text if char_profiles_plain_text.strip() else "No specific character profiles provided for this chapter's context."}
-```
-**Hybrid Context (Semantic Context for Flow & KG Facts for Canon - from previous chapters):**
---- BEGIN HYBRID CONTEXT ---
-{hybrid_context if hybrid_context.strip() else "No previous context (e.g., this is Chapter 1 or context retrieval failed)."}
---- END HYBRID CONTEXT ---
-
-**Writing Instructions:**
-1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.
-2. Your primary goal is to advance the current chapter's **Overall Plot Point Focus**. Do NOT attempt to resolve future plot points mentioned in the 'Overall Narrative Context'.
-3. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'Summary', 'Key Dialogue Points', 'Setting Details', and **especially its 'Scene Focus Elements'**. Use the 'Scene Focus Elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.
-4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).
-   - **Crucially, the `KEY RELIABLE KG FACTS` section within the `HYBRID CONTEXT` provides established canon that MUST be respected.**
-   - The `SEMANTIC CONTEXT` section within the `HYBRID CONTEXT` should guide narrative flow, tone, and recall of recent events.
-5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{plot_outline_data.get('genre', 'story')}'.
-6. **Employ 'showing' over 'telling':** Use vivid descriptions, sensory details, character actions, internal monologues, and nuanced dialogue to convey information, atmosphere, and emotions.
-7. **Fully develop dialogue exchanges:** Allow characters to express themselves naturally, incorporating pauses, subtext, emotional reactions, and non-verbal cues. Don't shy away from longer conversations if they serve character or plot.
-8. **Thoroughly explore the protagonist's (and other key characters') thoughts, feelings, and internal reactions** to the unfolding events and interactions. Dedicate space to their internal processing.
-9. **Output ONLY the chapter text itself.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.
-
---- BEGIN CHAPTER {chapter_number} TEXT ---
-"""
         logger.info(f"Calling LLM ({self.model_name}) for Ch {chapter_number} draft. Plot Point {plot_point_index+1}/{total_plot_points_in_novel}. Target min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
         raw_llm_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,

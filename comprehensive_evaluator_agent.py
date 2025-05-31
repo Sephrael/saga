@@ -141,57 +141,65 @@ class ComprehensiveEvaluatorAgent:
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
         kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(novel_props, chapter_number, None)
 
-        prompt = f"""/no_think
-You are a Master Editor evaluating Chapter {chapter_number} of a novel titled "{novel_props.get('title', 'Untitled Novel')}" (Protagonist: {protagonist_name_str}).
-Analyze the **Complete Chapter Text** provided below.
-Your task is to identify specific issues related to:
-1.  **CONSISTENCY**: Contradictions with Plot Outline, Character Profiles, World Building, Key Reliable KG Facts, Previous Context, or internal inconsistencies within THIS chapter.
-2.  **PLOT_ARC**: How well this chapter addresses or advances its Intended Plot Point: "{plot_point_focus_str}" (Plot Point #{plot_point_index + 1}).
-3.  **THEMATIC_ALIGNMENT**: Alignment with the novel's core elements (Genre: {novel_genre_str}, Theme: {novel_theme_str}, Protagonist's Arc: {protagonist_arc_str}).
-4.  **NARRATIVE_DEPTH_AND_LENGTH**: Sufficiency of descriptive detail, character introspection, dialogue development, pacing, and overall length (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters).
+        plot_points_summary_lines = [
+            f"- PP {i+1}: {pp[:100]}..." for i, pp in enumerate(novel_props.get('plot_points', []))
+        ] if novel_props.get('plot_points') else ["  - Not available"]
+        plot_points_summary_str = "\n".join(plot_points_summary_lines)
+        
+        prompt_lines = [
+            "/no_think",
+            f"You are a Master Editor evaluating Chapter {chapter_number} of a novel titled \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
+            "Analyze the **Complete Chapter Text** provided below.",
+            "Your task is to identify specific issues related to:",
+            "1.  **CONSISTENCY**: Contradictions with Plot Outline, Character Profiles, World Building, Key Reliable KG Facts, Previous Context, or internal inconsistencies within THIS chapter.",
+            f"2.  **PLOT_ARC**: How well this chapter addresses or advances its Intended Plot Point: \"{plot_point_focus_str}\" (Plot Point #{plot_point_index + 1}).",
+            f"3.  **THEMATIC_ALIGNMENT**: Alignment with the novel's core elements (Genre: {novel_genre_str}, Theme: {novel_theme_str}, Protagonist's Arc: {protagonist_arc_str}).",
+            f"4.  **NARRATIVE_DEPTH_AND_LENGTH**: Sufficiency of descriptive detail, character introspection, dialogue development, pacing, and overall length (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters).",
+            "",
+            "**Reference Information for CONSISTENCY Check (Summary Format):**",
+            "  **Plot Outline Summary:**",
+            "  ```text",
+            f"  Title: {novel_props.get('title', 'N/A')}",
+            f"  Genre: {novel_props.get('genre', 'N/A')}",
+            f"  Theme: {novel_props.get('theme', 'N/A')}",
+            f"  Protagonist: {novel_props.get('protagonist_name', 'N/A')} ({novel_props.get('character_arc', 'N/A')})",
+            f"  Logline: {novel_props.get('logline', 'N/A')}",
+            "  Key Plot Points (summary):",
+            plot_points_summary_str,
+            "  ```",
+            "  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**",
+            "  ```text",
+            char_profiles_plain_text,
+            "  ```",
+            "  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**",
+            "  ```text",
+            world_building_plain_text,
+            "  ```",
+            kg_check_results_text,
+            "  **Previous Chapters Context (Semantic Flow & KG Facts for Canon):**",
+            "  --- PREVIOUS CONTEXT ---",
+            previous_chapters_context if previous_chapters_context.strip() else "N/A (e.g., Chapter 1 or context retrieval failed).",
+            "  --- END PREVIOUS CONTEXT ---",
+            "",
+            f"**Complete Chapter {chapter_number} Text (to analyze):**",
+            "--- BEGIN COMPLETE CHAPTER TEXT ---",
+            draft_text,
+            "--- END COMPLETE CHAPTER TEXT ---",
+            "",
+            "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
+            "Provide your evaluation as plain text. If problems are found, list each problem individually using the following format (ensure keys like \"ISSUE CATEGORY\" are used, case can vary):",
+            "",
+            "ISSUE CATEGORY: [consistency | plot_arc | thematic | narrative_depth | meta]",
+            "PROBLEM DESCRIPTION: [A concise description of the specific issue.]",
+            "QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the \"Complete Chapter Text\" that clearly illustrates this specific problem.** If the issue is general (e.g., overall length, pervasive tone issue) and no single quote captures it, or if a quote is truly inapplicable, use \"N/A - General Issue\".]",
+            "SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote/issue should focus on (e.g., \"Clarify character's motivation\", \"Expand description of setting to enhance atmosphere\").]",
+            "---",
+            "",
+            "If multiple problems are found, separate each problem block with a line containing only \"---\".",
+            "If NO problems are found for a category or overall, output ONLY the phrase: \"No significant problems found.\""
+        ]
+        prompt = "\n".join(prompt_lines)
 
-**Reference Information for CONSISTENCY Check (Summary Format):**
-  **Plot Outline Summary:**
-  ```text
-  Title: {novel_props.get('title', 'N/A')}
-  Genre: {novel_props.get('genre', 'N/A')}
-  Theme: {novel_props.get('theme', 'N/A')}
-  Protagonist: {novel_props.get('protagonist_name', 'N/A')} ({novel_props.get('character_arc', 'N/A')})
-  Logline: {novel_props.get('logline', 'N/A')}
-  Key Plot Points (summary):
-  {chr(10).join([f"- PP {i+1}: {pp[:100]}..." for i, pp in enumerate(novel_props.get('plot_points', []))]) if novel_props.get('plot_points') else "  - Not available"}
-  ```
-  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**
-  ```text
-  {char_profiles_plain_text}
-  ```
-  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**
-  ```text
-  {world_building_plain_text}
-  ```
-  {kg_check_results_text}
-  **Previous Chapters Context (Semantic Flow & KG Facts for Canon):**
-  --- PREVIOUS CONTEXT ---
-  {previous_chapters_context if previous_chapters_context.strip() else "N/A (e.g., Chapter 1 or context retrieval failed)."}
-  --- END PREVIOUS CONTEXT ---
-
-**Complete Chapter {chapter_number} Text (to analyze):**
---- BEGIN COMPLETE CHAPTER TEXT ---
-{draft_text}
---- END COMPLETE CHAPTER TEXT ---
-
-**Output Format (CRITICAL - PLAIN TEXT ONLY):**
-Provide your evaluation as plain text. If problems are found, list each problem individually using the following format (ensure keys like "ISSUE CATEGORY" are used, case can vary):
-
-ISSUE CATEGORY: [consistency | plot_arc | thematic | narrative_depth | meta]
-PROBLEM DESCRIPTION: [A concise description of the specific issue.]
-QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the "Complete Chapter Text" that clearly illustrates this specific problem.** If the issue is general (e.g., overall length, pervasive tone issue) and no single quote captures it, or if a quote is truly inapplicable, use "N/A - General Issue".]
-SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote/issue should focus on (e.g., "Clarify character's motivation", "Expand description of setting to enhance atmosphere").]
----
-
-If multiple problems are found, separate each problem block with a line containing only "---".
-If NO problems are found for a category or overall, output ONLY the phrase: "No significant problems found."
-"""
         logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number}...")
         raw_evaluation_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
