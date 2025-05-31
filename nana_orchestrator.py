@@ -508,9 +508,45 @@ class NANA_Orchestrator:
         self._update_rich_display(step=f"Ch {novel_chapter_number} - {status_message}")
         return current_text_to_process
 
+    def _validate_critical_configs(self) -> bool:
+        """
+        Performs basic validation of critical string configurations.
+        Returns True if all checks pass, False otherwise.
+        """
+        critical_str_configs = {
+            "OLLAMA_EMBED_URL": config.OLLAMA_EMBED_URL,
+            "OPENAI_API_BASE": config.OPENAI_API_BASE,
+            "EMBEDDING_MODEL": config.EMBEDDING_MODEL,
+            "NEO4J_URI": config.NEO4J_URI,
+            "LARGE_MODEL": config.LARGE_MODEL,
+            "MEDIUM_MODEL": config.MEDIUM_MODEL,
+            "SMALL_MODEL": config.SMALL_MODEL,
+            "NARRATOR_MODEL": config.NARRATOR_MODEL,
+        }
+        missing_or_empty_configs = []
+        for name, value in critical_str_configs.items():
+            if not value or not isinstance(value, str) or not value.strip():
+                missing_or_empty_configs.append(name)
+        
+        if missing_or_empty_configs:
+            logger.critical(f"NANA CRITICAL CONFIGURATION ERROR: The following critical configuration(s) are missing or empty: {', '.join(missing_or_empty_configs)}. Please set them (e.g., in .env file or environment variables) and restart.")
+            return False
+        
+        if config.EXPECTED_EMBEDDING_DIM <= 0:
+            logger.critical(f"NANA CRITICAL CONFIGURATION ERROR: EXPECTED_EMBEDDING_DIM must be a positive integer, but is {config.EXPECTED_EMBEDDING_DIM}.")
+            return False
+            
+        logger.info("Critical configurations validated successfully.")
+        return True
 
     async def run_novel_generation_loop(self):
         logger.info("--- NANA: Starting Novel Generation Run ---")
+        
+        if not self._validate_critical_configs(): # MODIFICATION: Added validation call
+            self._update_rich_display(step="Critical Config Error - Halting")
+            if self.rich_live and self.rich_live.is_started: self.rich_live.stop() # type: ignore
+            return # Halt if critical configs are missing
+
         self.total_tokens_generated_this_run = 0
         self.run_start_time = time.time()
         if self.rich_live: self.rich_live.start()

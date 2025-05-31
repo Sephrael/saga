@@ -37,7 +37,6 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
         return ""
     logger.debug(f"Retrieving and constructing SEMANTIC context for Chapter {current_chapter_number} via Neo4j vector search...")
 
-    # Access plot_outline from agent_or_props (which is novel_props_cache)
     plot_outline_data = agent_or_props.get('plot_outline_full', agent_or_props.get('plot_outline', {}))
 
     plot_points = []
@@ -45,13 +44,10 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
         plot_points = plot_outline_data.get("plot_points", [])
 
     plot_point_focus = None
-    plot_point_index = -1 # 0-based index
     if plot_points and isinstance(plot_points, list) and current_chapter_number > 0:
-        # The plot_point_index for the current_chapter_number (1-based)
         idx = current_chapter_number - 1 
         if 0 <= idx < len(plot_points):
             plot_point_focus = str(plot_points[idx]) if plot_points[idx] is not None else None
-            plot_point_index = idx
         else:
             logger.warning(f"Cannot determine plot point focus for chapter {current_chapter_number}: index {idx} out of bounds for {len(plot_points)} plot points.")
     else:
@@ -61,17 +57,17 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
     context_query_text = plot_point_focus if plot_point_focus else f"Narrative context relevant to events leading up to chapter {current_chapter_number}."
 
     if plot_point_focus:
-        logger.info(f"Semantic context query for ch {current_chapter_number} based on Plot Point {plot_point_index + 1}: '{context_query_text[:100]}...'")
+        plot_point_index_display = (current_chapter_number - 1) + 1 # 1-based for logging
+        logger.info(f"Semantic context query for ch {current_chapter_number} based on Plot Point {plot_point_index_display}: '{context_query_text[:100]}...'")
     else:
         logger.warning(f"No specific plot point found for ch {current_chapter_number}. Using generic semantic context query.")
 
     query_embedding_np = await llm_interface.async_get_embedding(context_query_text)
-    max_semantic_tokens = (config.MAX_CONTEXT_TOKENS * 2) // 3 # Reserve 2/3 for semantic, 1/3 for other prompt parts
+    max_semantic_tokens = (config.MAX_CONTEXT_TOKENS * 2) // 3 
 
     if query_embedding_np is None:
         logger.warning("Failed to generate embedding for semantic context query. Falling back to sequential previous chapter summaries/text.")
-        # Fallback logic remains the same as before
-        context_parts: List[str] = []
+        context_parts_list: List[str] = []
         total_tokens_accumulated = 0
         fallback_chapter_limit = config.CONTEXT_CHAPTER_COUNT
         for i in range(max(1, current_chapter_number - fallback_chapter_limit), current_chapter_number):
@@ -88,7 +84,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
                     full_content_part = f"{prefix}{content}{suffix}"
                     part_tokens = llm_interface.count_tokens(full_content_part, config.DRAFTING_MODEL) 
                     if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
-                        context_parts.append(full_content_part)
+                        context_parts_list.append(full_content_part)
                         total_tokens_accumulated += part_tokens
                     else:
                         remaining_tokens = max_semantic_tokens - total_tokens_accumulated
@@ -96,15 +92,14 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
                             truncated_content_part = llm_interface.truncate_text_by_tokens(
                                 full_content_part, config.DRAFTING_MODEL, remaining_tokens
                             )
-                            context_parts.append(truncated_content_part)
+                            context_parts_list.append(truncated_content_part)
                             total_tokens_accumulated += remaining_tokens
                         break 
-        final_semantic_context = "\n".join(reversed(context_parts)).strip()
+        final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
         final_tokens = llm_interface.count_tokens(final_semantic_context, config.DRAFTING_MODEL)
         logger.info(f"Constructed fallback semantic context: {final_tokens} tokens.")
         return final_semantic_context
 
-    # Use Neo4j vector search
     similar_chapters_data = await chapter_queries.find_similar_chapters_in_db( 
         query_embedding_np,
         config.CONTEXT_CHAPTER_COUNT,
@@ -136,7 +131,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
         reverse=True
     )
 
-    context_parts: List[str] = []
+    context_parts_list: List[str] = []
     total_tokens_accumulated = 0
 
     for chap_data in sorted_chapters_for_context:
@@ -159,7 +154,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
             part_tokens = llm_interface.count_tokens(full_content_part, config.DRAFTING_MODEL)
 
             if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
-                context_parts.append(full_content_part)
+                context_parts_list.append(full_content_part)
                 total_tokens_accumulated += part_tokens
             else:
                 remaining_tokens = max_semantic_tokens - total_tokens_accumulated
@@ -167,16 +162,16 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
                     truncated_content_part = llm_interface.truncate_text_by_tokens(
                         full_content_part, config.DRAFTING_MODEL, remaining_tokens
                     )
-                    context_parts.append(truncated_content_part)
+                    context_parts_list.append(truncated_content_part)
                     total_tokens_accumulated += remaining_tokens
                 break 
             logger.debug(f"Added SEMANTIC context from ch {chap_num} ({ctype}, Sim: {score_str}), {part_tokens} tokens. Total: {total_tokens_accumulated}.")
         else:
             logger.warning(f"Chapter {chap_num} (Sim: {score_str}) from vector search had no content (summary/text). Skipping.")
 
-    final_semantic_context = "\n".join(reversed(context_parts)).strip()
+    final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
     final_tokens = llm_interface.count_tokens(final_semantic_context, config.DRAFTING_MODEL)
-    logger.info(f"Constructed final SEMANTIC context: {final_tokens} tokens from {len(context_parts)} chapter snippets (via Neo4j vector search).")
+    logger.info(f"Constructed final SEMANTIC context: {final_tokens} tokens from {len(context_parts_list)} chapter snippets (via Neo4j vector search).")
     return final_semantic_context
 
 
@@ -196,7 +191,7 @@ async def generate_hybrid_chapter_context_logic(agent_or_props: Any, current_cha
     semantic_context_str, kg_facts_str = await asyncio.gather(
         semantic_context_task, kg_facts_task
     )
-    hybrid_context_parts = []
+    hybrid_context_parts: List[str] = []
     if semantic_context_str and semantic_context_str.strip():
         hybrid_context_parts.append("--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---")
         hybrid_context_parts.append(semantic_context_str)
@@ -216,6 +211,7 @@ async def generate_hybrid_chapter_context_logic(agent_or_props: Any, current_cha
         hybrid_context_parts.append("\n\n--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---")
         hybrid_context_parts.append("Knowledge Graph fact retrieval did not yield specific results for this chapter.")
         hybrid_context_parts.append("--- END KEY RELIABLE KG FACTS ---")
+        
     final_hybrid_context = "\n".join(hybrid_context_parts).strip()
     num_hybrid_tokens = llm_interface.count_tokens(final_hybrid_context, config.DRAFTING_MODEL) 
     if num_hybrid_tokens > config.MAX_CONTEXT_TOKENS:
