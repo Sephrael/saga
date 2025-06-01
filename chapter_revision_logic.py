@@ -1,9 +1,11 @@
+      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
 Supports both full rewrite and targeted patch-based revisions.
 Context data for prompts is now formatted as plain text.
 MODIFIED: Integrates spaCy for precise quote and sentence offset identification for patches.
+MODIFIED: Refined patch generation prompt with clearer instructions and an example for 'replace_with'.
 """
 import logging
 import asyncio
@@ -12,48 +14,62 @@ from typing import Tuple, Optional, List, Dict, Any
 
 import config
 import llm_interface
-import drafting_agent
+import drafting_agent # Corrected: No longer directly instantiating DraftingAgent here.
 import utils # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed() # Ensure spaCy model is loaded when this module is imported
 
-try:
-    _temp_drafting_agent_for_format = drafting_agent.DraftingAgent()
-    _format_scene_plan_for_prompt_func = _temp_drafting_agent_for_format._format_scene_plan_for_prompt
-    logger.debug("Successfully imported _format_scene_plan_for_prompt from drafting_agent.")
-except ImportError:
-    logger.error("Could not import _format_scene_plan_for_prompt from drafting_agent for chapter_revision_logic. Revision planning might be affected.")
-    def _format_scene_plan_for_prompt_func(chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
-        logger.warning("_format_scene_plan_for_prompt_func is a fallback stub!")
-        if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
-        
-        plan_text_parts_list = [] # Use a list for building strings
-        current_tokens = 0
-        header = "**Detailed Scene Plan (Stubbed - MUST BE FOLLOWED CLOSELY):**\n"
-        header_tokens = llm_interface.count_tokens(header, model_name_for_tokens)
+# Placeholder for the actual formatting function if needed differently here,
+# or it should be passed in/accessed via the 'agent' object if it's stateful.
+# For now, assuming it's a static-like method accessible or we use a generic one.
+# This was previously trying to import from a temp DraftingAgent instance which is not ideal.
+# If the formatting is truly specific to how DraftingAgent does it, it should be a utility
+# or part of the 'agent' object passed to revision logic.
+# For this iteration, we'll use the placeholder logic if the proper one isn't available via `agent`.
 
-        if header_tokens > max_tokens_budget: return "... (plan header too long for budget)"
-        plan_text_parts_list.append(header)
-        current_tokens += header_tokens
+def _get_formatted_scene_plan_from_agent_or_fallback(
+    agent: Any, # This 'agent' is the orchestrator
+    chapter_plan: List[SceneDetail],
+    model_name_for_tokens: str,
+    max_tokens_budget: int
+) -> str:
+    """Attempts to get formatted scene plan from agent (orchestrator, which might hold a drafting_agent instance or its methods) or uses a fallback."""
+    if hasattr(agent, 'drafting_agent') and hasattr(agent.drafting_agent, '_format_scene_plan_for_prompt'):
+        try:
+            return agent.drafting_agent._format_scene_plan_for_prompt(chapter_plan, model_name_for_tokens, max_tokens_budget)
+        except Exception as e:
+            logger.error(f"Error calling _format_scene_plan_for_prompt via agent.drafting_agent: {e}. Using fallback.")
+    
+    # Fallback stub logic (similar to previous, but as a clear fallback)
+    logger.warning("_get_formatted_scene_plan_from_agent_or_fallback: Using fallback scene plan formatting logic.")
+    if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
+    
+    plan_text_parts_list = [] 
+    current_tokens = 0
+    header = "**Detailed Scene Plan (Stubbed - MUST BE FOLLOWED CLOSELY):**\n"
+    header_tokens = llm_interface.count_tokens(header, model_name_for_tokens)
 
-        for scene_idx, scene in enumerate(chapter_plan):
-            scene_text_parts_inner = [
-                f"Scene Number: {scene.get('scene_number', 'N/A')}",
-                f"  Summary: {scene.get('summary', 'No summary')}"
-            ]
-            if scene_idx < len(chapter_plan) -1 : scene_text_parts_inner.append("-" * 10)
-            scene_text = "\n".join(scene_text_parts_inner) + "\n"
+    if header_tokens > max_tokens_budget: return "... (plan header too long for budget)"
+    plan_text_parts_list.append(header)
+    current_tokens += header_tokens
 
+    for scene_idx, scene in enumerate(chapter_plan):
+        scene_text_parts_inner = [
+            f"Scene Number: {scene.get('scene_number', 'N/A')}",
+            f"  Summary: {scene.get('summary', 'No summary')}"
+        ]
+        if scene_idx < len(chapter_plan) -1 : scene_text_parts_inner.append("-" * 10)
+        scene_text = "\n".join(scene_text_parts_inner) + "\n"
 
-            scene_tokens = llm_interface.count_tokens(scene_text, model_name_for_tokens)
-            if current_tokens + scene_tokens > max_tokens_budget:
-                plan_text_parts_list.append("... (plan truncated in prompt due to token limit)\n")
-                break
-            plan_text_parts_list.append(scene_text)
-            current_tokens += scene_tokens
-        return "".join(plan_text_parts_list)
+        scene_tokens = llm_interface.count_tokens(scene_text, model_name_for_tokens)
+        if current_tokens + scene_tokens > max_tokens_budget:
+            plan_text_parts_list.append("... (plan truncated in prompt due to token limit)\n")
+            break
+        plan_text_parts_list.append(scene_text)
+        current_tokens += scene_tokens
+    return "".join(plan_text_parts_list)
 
 
 def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:
@@ -151,7 +167,9 @@ async def _generate_single_patch_instruction_llm(
     max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-        formatted_plan = _format_scene_plan_for_prompt_func(chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt)
+        formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback( # MODIFIED to use helper
+            agent, chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt
+        )
         plan_focus_section_parts.append(formatted_plan)
         if "plan truncated" in formatted_plan:
              logger.warning(f"Scene plan token-truncated for Ch {chapter_number} patch generation prompt.")
@@ -195,8 +213,8 @@ async def _generate_single_patch_instruction_llm(
             "that addresses the \"Problem Description\" and \"Suggested Fix Focus\" as guided by the `length_expansion_instruction_header_str`. "
             "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
         )
-        max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2
-        max_patch_output_tokens = max(max_patch_output_tokens, 750)
+        max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2 # Allow generous output for new passages
+        max_patch_output_tokens = max(max_patch_output_tokens, 750) # Ensure at least a decent chunk
         logger.info(f"Patch (Ch {chapter_number}, general expansion): Max output tokens set to {max_patch_output_tokens}.")
     else: 
         prompt_instruction_for_replacement_scope_parts.append(
@@ -215,13 +233,27 @@ async def _generate_single_patch_instruction_llm(
         original_snippet_tokens = llm_interface.count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL)
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
-        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2)
-        max_patch_output_tokens = max(max_patch_output_tokens, 200)
+        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2) # Cap at half of model's max
+        max_patch_output_tokens = max(max_patch_output_tokens, 200) # Ensure at least a small replacement can be generated
         logger.info(f"Patch (Ch {chapter_number}, specific fix): Original snippet tokens: {original_snippet_tokens}. Max output tokens set to {max_patch_output_tokens}.")
     prompt_instruction_for_replacement_scope_str = "".join(prompt_instruction_for_replacement_scope_parts)
 
     plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
     protagonist_name = _get_nested_prop_from_agent(agent, 'plot_outline', 'protagonist_name', config.DEFAULT_PROTAGONIST_NAME)
+
+    # --- Few-Shot Example for Patch Output ---
+    # This example shows the LLM what a good `replace_with` text looks like.
+    few_shot_patch_example_str = f"""
+--- Example of how to provide 'replace_with' text (this is an example, NOT part of current task) ---
+IF THE PROBLEM WAS:
+  - Issue Category: narrative_depth
+  - Problem Description: The reaction of Elara to seeing the ghost felt understated.
+  - Original Quote Illustrating Problem: "Elara saw the ghost and gasped."
+  - Suggested Fix Focus: Expand on Elara's internal emotional reaction and physical response.
+THEN YOUR 'replace_with' TEXT MIGHT BE (just the text, no other explanation):
+A chill traced Elara's spine, not from the crypt's cold, but from the translucent figure coalescing before her. Her breath hitched, a silent scream trapped in her throat as the ghostly visage turned its empty sockets towards her. Every instinct screamed to flee, but her feet felt rooted to the stone floor, a terrifying paralysis gripping her.
+--- End of Example ---
+"""
 
     prompt_lines = [
         "/no_think",
@@ -248,6 +280,7 @@ async def _generate_single_patch_instruction_llm(
         original_chapter_text_snippet_for_llm,
         "--- END ORIGINAL TEXT SNIPPET ---",
         length_expansion_instruction_header_str,
+        few_shot_patch_example_str, # Added few-shot example
         "**Instructions for Generating Replacement Text:**",
         "1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.",
         "2.  Generate a `replace_with` text according to the following:",
@@ -255,7 +288,7 @@ async def _generate_single_patch_instruction_llm(
         "3.  The `replace_with` text MUST address the \"Problem Description\" and \"Suggested Fix Focus\".",
         "4.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).",
         "5.  If `length_expansion_instruction_header_str` is present, ensure substantial expansion as guided for the targeted segment or new passage.",
-        "6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any \"Replace with:\" prefixes. Just the raw text intended for replacement/insertion.",
+        "6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any \"Replace with:\" prefixes. Just the raw text intended for replacement/insertion. (See example above for how to format the text).",
         "",
         f"--- BEGIN REPLACE_WITH TEXT (for the segment related to \"{original_quote_text_from_problem}\" or as a new passage if quote is \"N/A - General Issue\") ---"
     ]
@@ -266,7 +299,7 @@ async def _generate_single_patch_instruction_llm(
     replace_with_text_raw, usage_data = await llm_interface.async_call_llm(
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
-        temperature=config.TEMPERATURE_PATCH, # MODIFIED
+        temperature=config.TEMPERATURE_PATCH, 
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
         stream_to_disk=False
@@ -609,7 +642,9 @@ async def revise_chapter_draft_logic(
         plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(agent, chapter_number)
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-            formatted_plan_fr = _format_scene_plan_for_prompt_func(chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite)
+            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback( # MODIFIED to use helper
+                agent, chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite
+            )
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
             if "plan truncated" in formatted_plan_fr:
                  logger.warning(f"Scene plan token-truncated for Ch {chapter_number} full rewrite prompt.")
@@ -661,7 +696,7 @@ async def revise_chapter_draft_logic(
             all_problem_descriptions_str,
             length_issue_explicit_instruction_full_rewrite_str,
             plan_focus_section_full_rewrite_str,
-            "**Hybrid Context from Previous Chapters (Semantic Context & KG Facts - for consistency):**",
+            "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
             "--- BEGIN HYBRID CONTEXT ---",
             hybrid_context_for_revision if hybrid_context_for_revision.strip() else "No previous context.",
             "--- END HYBRID CONTEXT ---",
@@ -687,7 +722,7 @@ async def revise_chapter_draft_logic(
         revised_raw_llm_output_full, full_rewrite_usage = await llm_interface.async_call_llm(
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
-            temperature=config.TEMPERATURE_REVISION, # MODIFIED
+            temperature=config.TEMPERATURE_REVISION, 
             max_tokens=None,
             allow_fallback=True,
             stream_to_disk=True

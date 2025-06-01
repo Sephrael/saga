@@ -128,6 +128,19 @@ class WorldContinuityAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
+        # --- Few-Shot Example for Consistency Output ---
+        few_shot_consistency_example_str = f"""
+ISSUE CATEGORY: consistency
+PROBLEM DESCRIPTION: The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.
+QUOTE FROM ORIGINAL: She admired the brilliant blue glow of the Sunstone clutched in her hand.
+SUGGESTED FIX FOCUS: Change the Sunstone's color to 'crimson red' to align with established world canon.
+---
+ISSUE CATEGORY: consistency
+PROBLEM DESCRIPTION: Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states "Kael | mentored | Elara (Ch: 3)".
+QUOTE FROM ORIGINAL: "I do not believe we have crossed paths before, young one," Kael said, peering at Elara.
+SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her).
+"""
+
         prompt_lines = [
             "/no_think",
             f"You are a World & Continuity Expert Editor for Chapter {chapter_number} of the novel \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
@@ -168,27 +181,18 @@ class WorldContinuityAgent:
             "--- END COMPLETE CHAPTER TEXT ---",
             "",
             "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
-            "If consistency problems are found, list each problem individually using the following format:",
-            "",
-            "ISSUE CATEGORY: consistency",
-            "PROBLEM DESCRIPTION: [A concise description of the specific consistency issue.]",
-            "QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the \"Complete Chapter Text\" that clearly illustrates this specific problem.** If the issue is general and no single quote captures it, or if a quote is truly inapplicable, use \"N/A - General Issue\".]",
-            "SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote/issue should focus on to resolve the consistency (e.g., \"Align character's action with profile trait X\", \"Correct factual detail Y based on world notes\").]",
-            "---",
-            "",
-            "If multiple problems are found, separate each problem block with a line containing only \"---\".",
+            "If consistency problems are found, list each problem individually.",
+            "Use the EXACT keys: `ISSUE CATEGORY: consistency`, `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
+            "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \"N/A - General Issue\".",
+            "Separate each problem block with a line containing only \"---\".",
             "If NO consistency problems are found, output ONLY the phrase: \"No significant consistency problems found.\"",
             "",
-            "Example if issues are found:",
-            "ISSUE CATEGORY: consistency",
-            "PROBLEM DESCRIPTION: Character X states they have never left their village, but their profile mentions they studied in the Capital.",
-            "QUOTE FROM ORIGINAL: \"I've never seen anything beyond these village walls,\" X sighed.",
-            "SUGGESTED FIX FOCUS: Change X's dialogue to reflect their past experience in the Capital, or adjust profile if this is a new character development.",
-            "---",
-            "ISSUE CATEGORY: consistency",
-            "PROBLEM DESCRIPTION: The 'Sunstone' is described as blue, but world notes state it's always red.",
-            "QUOTE FROM ORIGINAL: She admired the brilliant blue glow of the Sunstone.",
-            "SUGGESTED FIX FOCUS: Change 'blue' to 'red' to match established world canon for the Sunstone."
+            "**Follow this example structure for your output precisely:**",
+            "```plaintext",
+            few_shot_consistency_example_str.strip(),
+            "```",
+            "",
+            "Begin output now:"
         ]
         prompt = "\n".join(prompt_lines)
 
@@ -196,7 +200,7 @@ class WorldContinuityAgent:
         raw_consistency_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_CONSISTENCY_CHECK, # MODIFIED
+            temperature=config.TEMPERATURE_CONSISTENCY_CHECK, 
             allow_fallback=True,
             stream_to_disk=False
         )

@@ -1,3 +1,4 @@
+      
 # comprehensive_evaluator_agent.py
 import logging
 import asyncio
@@ -145,6 +146,24 @@ class ComprehensiveEvaluatorAgent:
             f"- PP {i+1}: {pp[:100]}..." for i, pp in enumerate(novel_props.get('plot_points', []))
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
+
+        # --- Few-Shot Example for Comprehensive Evaluation Output ---
+        few_shot_eval_example_str = f"""
+ISSUE CATEGORY: consistency
+PROBLEM DESCRIPTION: Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.
+QUOTE FROM ORIGINAL: "I've never seen anything beyond these village walls," Elara sighed, gazing at the distant mountains.
+SUGGESTED FIX FOCUS: Adjust Elara's dialogue to align with her established backstory of training in the Capital, or reconcile this statement with her past (e.g., she's being metaphorical or hiding her past).
+---
+ISSUE CATEGORY: plot_arc
+PROBLEM DESCRIPTION: The chapter focuses heavily on a minor side character's backstory, which doesn't significantly advance the intended plot point about finding the Sunstone.
+QUOTE FROM ORIGINAL: The old merchant then spent a long while recounting his youthful adventures in the spice trade, detailing three different voyages.
+SUGGESTED FIX FOCUS: Reduce the side character's backstory significantly or tie it directly into how it helps or hinders the search for the Sunstone. Ensure the main plot point progression is central.
+---
+ISSUE CATEGORY: narrative_depth
+PROBLEM DESCRIPTION: The confrontation with the antagonist feels rushed and lacks emotional impact. The protagonist's internal reaction to the antagonist's reveal is minimal.
+QUOTE FROM ORIGINAL: "It was you all along!" John exclaimed. The Baron merely smiled. Then they fought.
+SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discovering the Baron's betrayal. Show, don't just tell, the emotional weight of this moment. Describe the fight with more detail and tension.
+"""
         
         prompt_lines = [
             "/no_think",
@@ -187,16 +206,18 @@ class ComprehensiveEvaluatorAgent:
             "--- END COMPLETE CHAPTER TEXT ---",
             "",
             "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
-            "Provide your evaluation as plain text. If problems are found, list each problem individually using the following format (ensure keys like \"ISSUE CATEGORY\" are used, case can vary):",
+            "Provide your evaluation as plain text. If problems are found, list each problem individually.",
+            "Use the EXACT keys: `ISSUE CATEGORY:`, `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
+            "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general (e.g., overall length) or no quote applies, use \"N/A - General Issue\".",
+            "Separate each problem block with a line containing only \"---\".",
+            "If NO problems are found, output ONLY the phrase: \"No significant problems found.\"",
             "",
-            "ISSUE CATEGORY: [consistency | plot_arc | thematic | narrative_depth | meta]",
-            "PROBLEM DESCRIPTION: [A concise description of the specific issue.]",
-            "QUOTE FROM ORIGINAL: [**A VERBATIM quote (10-50 words) from the \"Complete Chapter Text\" that clearly illustrates this specific problem.** If the issue is general (e.g., overall length, pervasive tone issue) and no single quote captures it, or if a quote is truly inapplicable, use \"N/A - General Issue\".]",
-            "SUGGESTED FIX FOCUS: [Brief guidance on what the revision for this specific quote/issue should focus on (e.g., \"Clarify character's motivation\", \"Expand description of setting to enhance atmosphere\").]",
-            "---",
+            "**Follow this example structure for your output precisely:**",
+            "```plaintext",
+            few_shot_eval_example_str.strip(),
+            "```",
             "",
-            "If multiple problems are found, separate each problem block with a line containing only \"---\".",
-            "If NO problems are found for a category or overall, output ONLY the phrase: \"No significant problems found.\""
+            "Begin your output now:"
         ]
         prompt = "\n".join(prompt_lines)
 
@@ -204,7 +225,7 @@ class ComprehensiveEvaluatorAgent:
         raw_evaluation_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_EVALUATION, # MODIFIED
+            temperature=config.TEMPERATURE_EVALUATION, 
             allow_fallback=True,
             stream_to_disk=False
         )
