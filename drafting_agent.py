@@ -168,7 +168,8 @@ class DraftingAgent:
             "6. Show, Don't Tell: Use vivid descriptions, sensory details, actions, internal thoughts, and dialogue to convey information and emotion.",
             "7. Dialogue: Develop natural dialogue with subtext, emotion, and non-verbal cues. Longer conversations are acceptable if they serve purpose.",
             "8. Internal Reactions: Thoroughly explore key characters' thoughts and feelings regarding events.",
-            "9. Output: **ONLY the chapter text.** No headers, titles, or meta-discussion.",
+            "9. **CRITICAL: Avoid Redundancy and Repetition.** Do NOT repeat narrative beats, descriptions, specific phrasing, or dialogue patterns that have already been established in the 'Hybrid Context' or earlier in *this current chapter's generation*. Each scene and paragraph should introduce *new information, development, or a fresh perspective* on existing elements. Ensure forward momentum in the plot and character arcs.",
+            "10. Output: **ONLY the chapter text.** No headers, titles, or meta-discussion.",
             "",
             f"--- BEGIN CHAPTER {chapter_number} TEXT ---"
         ]
@@ -178,10 +179,12 @@ class DraftingAgent:
         raw_llm_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_DRAFTING, 
+            temperature=config.TEMPERATURE_DRAFTING,
             max_tokens=None, 
             allow_fallback=True,
-            stream_to_disk=True
+            stream_to_disk=True,
+            frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
+            presence_penalty=config.PRESENCE_PENALTY_DRAFTING
         )
         if not raw_llm_text:
             logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")

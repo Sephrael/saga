@@ -237,22 +237,28 @@ class NANA_Orchestrator:
         logger.info("NANA: Checking if KG pre-population is needed...")
         
         plot_source = self.plot_outline.get("source", "")
-        is_user_or_llm_plot = plot_source == "user_supplied_markdown" or \
-                              plot_source.startswith("llm_generated") or \
-                              plot_source == "default_fallback" 
+        is_plot_ready_for_kg = plot_source in [
+            "user_supplied_markdown",
+            "default_fallback",
+            "configured_or_user_markdown",
+            "unhinged_pure_llm",
+            "llm_generated_or_merged"
+        ] or plot_source.startswith("llm_generated")
                               
-        if not is_user_or_llm_plot and not self.plot_outline.get("is_default", False):
-            logger.info(f"Skipping KG pre-population: Plot outline source '{plot_source}' suggests it might not be ready for KG.")
+        if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
+            logger.info(f"Skipping KG pre-population: Plot outline source '{plot_source}' does not indicate it's ready for KG, and it's not a default plot.")
             return
 
-        pp_check_query = f"MATCH (ni:NovelInfo {{id: '{config.MAIN_NOVEL_INFO_NODE_ID}'}}) RETURN ni LIMIT 1"
-        novel_info_exists = await neo4j_manager.execute_read_query(pp_check_query)
+        # The prepopulate_kg_from_initial_data uses MERGE and should handle existing nodes gracefully.
+        # The main guard is now is_plot_ready_for_kg.
+        # If reset_neo4j.py was run, the graph will be empty anyway.
+        # If it's a continuation, MERGE operations in prepopulate will update.
+        # We no longer strictly need to check for NovelInfo node existence here to decide to skip,
+        # as the underlying prepopulation logic is designed to be idempotent or merging.
+        # However, if `save_core_novel_state_to_neo4j` (which creates NovelInfo) runs before this,
+        # it's fine.
 
-        if novel_info_exists and novel_info_exists[0]:
-            logger.info(f"Found existing NovelInfo node. Assuming KG already pre-populated or managed elsewhere. Skipping explicit pre-population call.")
-            return
-        
-        logger.info("\n--- NANA: Pre-populating Knowledge Graph from Initial Data ---")
+        logger.info(f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---")
         await self.kg_maintainer_agent.prepopulate_kg_from_initial_data(
             self.plot_outline, self.character_profiles, self.world_building
         )
@@ -260,10 +266,6 @@ class NANA_Orchestrator:
         self._update_rich_display(step="KG Pre-population Complete")
 
     def _get_plot_point_info_for_chapter(self, novel_chapter_number: int) -> Tuple[Optional[str], int]:
-        """
-        Gets the plot point focus and its index for a given novel_chapter_number.
-        The plot_point_index is 0-based.
-        """
         plot_points_list = self.plot_outline.get("plot_points", [])
         if not isinstance(plot_points_list, list) or not plot_points_list:
             logger.error(f"No plot points available in orchestrator state for chapter {novel_chapter_number}.")
@@ -273,11 +275,11 @@ class NANA_Orchestrator:
 
         if 0 <= plot_point_index < len(plot_points_list):
             plot_point_text = plot_points_list[plot_point_index]
-            if isinstance(plot_point_text, str) and plot_point_text.strip() and not utils._is_fill_in(plot_point_text): # Ensure not [Fill-in]
+            if isinstance(plot_point_text, str) and plot_point_text.strip() and not utils._is_fill_in(plot_point_text): 
                 return plot_point_text, plot_point_index
             else:
                 logger.error(f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is invalid or '[Fill-in]': {plot_point_text}")
-                return None, -1 # Treat [Fill-in] as not available for focus
+                return None, -1 
         else:
             logger.error(f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points_list)}) for chapter {novel_chapter_number}.")
             return None, -1
@@ -318,24 +320,22 @@ class NANA_Orchestrator:
 
     async def perform_deduplication(self, text_to_dedup: str, chapter_number: int) -> Tuple[str, int]:
         logger.info(f"NANA: Performing de-duplication for Chapter {chapter_number}...")
-        segment_level_dedup = "paragraph" 
-        use_semantic_dedup = False 
-        semantic_similarity_thresh_dedup = 0.97 
-        min_segment_len_dedup = 80
         if not text_to_dedup or not text_to_dedup.strip():
             logger.info(f"De-duplication for Chapter {chapter_number}: Input text is empty. No action taken.")
             return text_to_dedup, 0
         try:
             deduplicated_text, chars_removed = await utils.deduplicate_text_segments(
-                original_text=text_to_dedup, segment_level=segment_level_dedup,
-                similarity_threshold=semantic_similarity_thresh_dedup,
-                use_semantic_comparison=use_semantic_dedup,
-                min_segment_length_chars=min_segment_len_dedup
+                original_text=text_to_dedup,
+                segment_level="paragraph", 
+                similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
+                use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
+                min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH
             )
             if chars_removed > 0:
-                logger.info(f"De-duplication for Chapter {chapter_number} removed {chars_removed} characters using {segment_level_dedup} matching (normalized string).")
+                method = "semantic" if config.DEDUPLICATION_USE_SEMANTIC else "normalized string"
+                logger.info(f"De-duplication for Chapter {chapter_number} removed {chars_removed} characters using {method} matching.")
             else:
-                logger.info(f"De-duplication for Chapter {chapter_number}: No significant duplicates found at {segment_level_dedup} level (normalized string).")
+                logger.info(f"De-duplication for Chapter {chapter_number}: No significant duplicates found.")
             return deduplicated_text, chars_removed
         except Exception as e:
             logger.error(f"Error during de-duplication for Chapter {chapter_number}: {e}", exc_info=True)
@@ -351,7 +351,7 @@ class NANA_Orchestrator:
             return None
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(novel_chapter_number)
-        if plot_point_focus is None: # This now also checks for [Fill-in]
+        if plot_point_focus is None: 
             logger.error(f"NANA: Ch {novel_chapter_number} generation halted: no concrete plot point focus could be determined (index {plot_point_index}).")
             self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Plot Point Focus")
             return None
@@ -385,6 +385,7 @@ class NANA_Orchestrator:
         current_text_to_process: Optional[str] = initial_draft_text
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
         is_from_flawed_source_for_kg = False 
+        de_duplication_occurred_this_chapter = False 
 
         max_revision_attempts = 1
         for attempt in range(max_revision_attempts + 1): 
@@ -399,6 +400,7 @@ class NANA_Orchestrator:
                 current_text_to_process, novel_chapter_number
             )
             if removed_char_count > 0:
+                de_duplication_occurred_this_chapter = True 
                 is_from_flawed_source_for_kg = True 
                 logger.info(f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt+1}) removed {removed_char_count} characters. Text marked as potentially flawed for KG.")
                 current_text_to_process = deduplicated_text
@@ -438,17 +440,18 @@ class NANA_Orchestrator:
                 self._update_rich_display(step=f"Ch {novel_chapter_number} - Passed Evaluation")
                 break 
             else: 
+                is_from_flawed_source_for_kg = True 
                 logger.warning(f"NANA: Ch {novel_chapter_number} draft (Attempt {attempt+1}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons',[]))}")
                 if attempt >= max_revision_attempts:
                     logger.error(f"NANA: Ch {novel_chapter_number} - Max revision attempts ({max_revision_attempts+1}) reached. Proceeding with current draft, marked as flawed.")
-                    is_from_flawed_source_for_kg = True 
                     self._update_rich_display(step=f"Ch {novel_chapter_number} - Max Revisions Reached (Flawed)")
                     break 
 
                 self._update_rich_display(step=f"Ch {novel_chapter_number} - Revision Attempt {attempt + 1}")
                 revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
                     self, current_text_to_process, novel_chapter_number, 
-                    evaluation_result, hybrid_context_for_draft, chapter_plan
+                    evaluation_result, hybrid_context_for_draft, chapter_plan,
+                    is_from_flawed_source=de_duplication_occurred_this_chapter 
                 )
                 self._accumulate_tokens(f"Ch{novel_chapter_number}-Revision-Attempt{attempt+1}", revision_usage)
                 
@@ -459,7 +462,6 @@ class NANA_Orchestrator:
                     await self._save_debug_output(novel_chapter_number, f"revised_text_attempt_{attempt+1}", current_text_to_process)
                 else:
                     logger.error(f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt+1} failed to produce usable text. Proceeding with previous draft, marked as flawed.")
-                    is_from_flawed_source_for_kg = True 
                     self._update_rich_display(step=f"Ch {novel_chapter_number} - Revision Failed (Flawed)")
                     break 
         
@@ -509,10 +511,6 @@ class NANA_Orchestrator:
         return current_text_to_process
 
     def _validate_critical_configs(self) -> bool:
-        """
-        Performs basic validation of critical string configurations.
-        Returns True if all checks pass, False otherwise.
-        """
         critical_str_configs = {
             "OLLAMA_EMBED_URL": config.OLLAMA_EMBED_URL,
             "OPENAI_API_BASE": config.OPENAI_API_BASE,
@@ -542,10 +540,10 @@ class NANA_Orchestrator:
     async def run_novel_generation_loop(self):
         logger.info("--- NANA: Starting Novel Generation Run ---")
         
-        if not self._validate_critical_configs(): # MODIFICATION: Added validation call
+        if not self._validate_critical_configs(): 
             self._update_rich_display(step="Critical Config Error - Halting")
             if self.rich_live and self.rich_live.is_started: self.rich_live.stop() # type: ignore
-            return # Halt if critical configs are missing
+            return 
 
         self.total_tokens_generated_this_run = 0
         self.run_start_time = time.time()
@@ -554,27 +552,31 @@ class NANA_Orchestrator:
             await neo4j_manager.connect()
             await neo4j_manager.create_db_schema()
             logger.info("NANA: Neo4j connection and schema verified.")
-            await self.async_init_orchestrator() # Loads existing state from DB
+            await self.async_init_orchestrator() 
 
             plot_points_exist = self.plot_outline and self.plot_outline.get("plot_points") and \
-                                len([pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)]) > 0 # Use utils._is_fill_in
+                                len([pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)]) > 0 
             
-            if not plot_points_exist or not self.plot_outline.get("title") or utils._is_fill_in(self.plot_outline.get("title")): # Use utils._is_fill_in
+            if not plot_points_exist or not self.plot_outline.get("title") or utils._is_fill_in(self.plot_outline.get("title")): 
                 logger.info("NANA: Core plot data missing or insufficient (e.g., no title, no concrete plot points). Performing initial setup...")
                 if not await self.perform_initial_setup(): 
                     logger.critical("NANA: Initial setup failed. Halting generation.")
                     self._update_rich_display(step="Initial Setup Failed - Halting")
                     return
-                await self.async_init_orchestrator() 
+                # After initial setup, the state (self.plot_outline etc.) is updated.
+                # Re-run async_init_orchestrator to ensure novel_props_cache and chapter_count are correctly based on this new state.
+                # However, perform_initial_setup already saves to DB and updates the cache.
+                # A full re-init might not be needed, but we need to ensure the state is consistent.
+                self._update_novel_props_cache() # Ensure cache reflects potential changes from setup.
             
             await self._prepopulate_kg_if_needed() 
-            self._update_novel_props_cache() 
+            self._update_novel_props_cache() # Final update before generation loop
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
             
             start_novel_chapter_to_write = self.chapter_count + 1
             
-            available_plot_points = [pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)] # Use utils._is_fill_in
+            available_plot_points = [pp for pp in self.plot_outline.get("plot_points", []) if not utils._is_fill_in(pp)] 
             total_concrete_plot_points = len(available_plot_points)
             
             plot_points_covered_count = self.chapter_count 

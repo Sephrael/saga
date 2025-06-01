@@ -31,8 +31,10 @@ WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL = {
     "overview": "_overview_", "locations": "locations", "society": "society", "systems": "systems",
     "lore": "lore", "history": "history", "factions": "factions"
 }
+# Pattern for world category headers, e.g., "Locations:" or "Category: Factions"
 WORLD_CATEGORY_HEADER_PATTERN = re.compile(r"^\s*(?:Category\s*:\s*)?([A-Za-z\s_]+?):\s*$", re.IGNORECASE | re.MULTILINE)
-WORLD_ITEM_HEADER_PATTERN = re.compile(r"^\s*([A-Za-z0-9\s'\-]+?)(?::\s*$|$)", re.MULTILINE) # Item name can be followed by colon or end of line
+# Pattern for world item headers, e.g., "The Old Mill:" or "The Sunken City" (colon optional if at end of line)
+WORLD_ITEM_HEADER_PATTERN = re.compile(r"^\s*([A-Za-z0-9\s'\-]+?)(?::\s*$|$)", re.MULTILINE)
 WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL = {
     "description": "description", "atmosphere": "atmosphere", "modification_proposal": "modification_proposal",
     "goals": "goals", "rules": "rules", "key_elements": "key_elements", "traits": "traits"
@@ -46,8 +48,6 @@ def _get_val_or_fill_in(data_dict: Optional[Dict[str, Any]], key: str, default_i
     if val is None or (isinstance(val, str) and not val.strip()): # Empty string is also a "fill-in" case
         return config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
     return val
-
-# _is_fill_in moved to utils.py
 
 def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str, Any], unhinged: bool) -> PlotOutlineData:
     num_default_plot_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
@@ -65,7 +65,6 @@ def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str,
         default_plot.update({
             k: base_elements[k] for k in ["setting_archetype_used", "protagonist_archetype_used", "conflict_archetype_used"] if k in base_elements
         })
-    # Ensure all known plot outline keys exist, defaulting to [Fill-in] if not covered
     for key_in_map in PLOT_OUTLINE_KEY_MAP.values():
         if key_in_map not in default_plot:
             default_plot[key_in_map] = [] if key_in_map in PLOT_OUTLINE_LIST_INTERNAL_KEYS else config.MARKDOWN_FILL_IN_PLACEHOLDER
@@ -79,48 +78,34 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
         return None
     if not user_data: 
         logger.warning(f"User story elements file '{config.USER_STORY_ELEMENTS_FILE_PATH}' was empty or could not be parsed. Will proceed with LLM generation or defaults.")
-        return {} # Return empty dict to signify parsing attempt but no data
+        return {} 
 
-    # Basic validation: check for at least one top-level key that is expected (e.g. novel_concept)
-    # The parser creates these keys based on # headers.
     expected_top_level_keys = ["novel_concept", "protagonist", "plot_points", "setting", "world_details", "antagonist", "conflict", "other_key_characters"]
-    
     found_any_expected_key = False
     for key in expected_top_level_keys:
-        if key in user_data and isinstance(user_data[key], dict) and user_data[key]: # Check if key exists and has content
-            found_any_expected_key = True
-            break
+        if key in user_data and isinstance(user_data[key], dict) and user_data[key]: 
+            found_any_expected_key = True; break
         elif key == "plot_points" and key in user_data and isinstance(user_data[key], list) and user_data[key]:
-            found_any_expected_key = True
-            break
+            found_any_expected_key = True; break
             
     if not found_any_expected_key:
         logger.error(f"User-supplied Markdown data from '{config.USER_STORY_ELEMENTS_FILE_PATH}' does not seem to contain any expected top-level sections with content. Parsed data: {user_data}")
-        return {} # Treat as effectively empty if no recognizable structure
+        return {} 
         
     logger.info(f"Successfully loaded and performed initial validation on user-supplied story data from '{config.USER_STORY_ELEMENTS_FILE_PATH}'.")
     return user_data
 
-
 def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
-    """
-    Populates agent's state attributes (plot_outline, character_profiles, world_building)
-    from user-supplied data (parsed from Markdown).
-    'agent' is typically the NANA_Orchestrator instance.
-    Values of config.MARKDOWN_FILL_IN_PLACEHOLDER will be preserved for later LLM generation.
-    """
     plot_outline: PlotOutlineData = agent.plot_outline if hasattr(agent, 'plot_outline') and agent.plot_outline else {}
     character_profiles: Dict[str, Any] = agent.character_profiles if hasattr(agent, 'character_profiles') and agent.character_profiles else {}
     world_building: WorldBuildingData = agent.world_building if hasattr(agent, 'world_building') and agent.world_building else {}
 
-    # Ensure base structure for world_building
     for cat in ["locations", "society", "systems", "lore", "history", "factions", "_overview_"]:
         world_building.setdefault(cat, {})
     world_building["user_supplied_data"] = True
     world_building["is_default"] = False
     world_building["source"] = "user_supplied_markdown"
 
-    # Novel Concept & Plot Outline
     nc = user_data.get("novel_concept", {})
     plot_outline["title"] = _get_val_or_fill_in(nc, "title")
     plot_outline["genre"] = _get_val_or_fill_in(nc, "genre")
@@ -147,15 +132,12 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
         logger.warning(f"Markdown 'plot_points' parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in].")
         plot_outline["plot_points"] = [config.MARKDOWN_FILL_IN_PLACEHOLDER] * config.TARGET_PLOT_POINTS_INITIAL_GENERATION
     else:
-        # Ensure all items are strings or [Fill-in]
         plot_outline["plot_points"] = [
             str(pp).strip() if isinstance(pp, str) and (pp.strip() or utils._is_fill_in(pp)) else config.MARKDOWN_FILL_IN_PLACEHOLDER
             for pp in raw_plot_points
         ]
-        # If user provided some, but less than target, pad with [Fill-in]
         while len(plot_outline["plot_points"]) > 0 and len(plot_outline["plot_points"]) < config.TARGET_PLOT_POINTS_INITIAL_GENERATION and plot_outline["plot_points"][-1] != config.MARKDOWN_FILL_IN_PLACEHOLDER :
              plot_outline["plot_points"].append(config.MARKDOWN_FILL_IN_PLACEHOLDER)
-
 
     setting_data_md = user_data.get("setting", {}) 
     plot_outline["setting_description"] = _get_val_or_fill_in(setting_data_md, "primary_setting_description")
@@ -164,17 +146,16 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     plot_outline["is_default"] = False
     agent.plot_outline = plot_outline
 
-    # Character Profiles
     prot_name_val = plot_outline["protagonist_name"] 
     if not utils._is_fill_in(prot_name_val): 
-        character_profiles.setdefault(prot_name_val, {}) # Ensure exists
+        character_profiles.setdefault(prot_name_val, {}) 
         character_profiles[prot_name_val].update({
             "description": plot_outline["protagonist_description"],
             "traits": [t for t in prot_data.get("traits", []) if isinstance(t,str) and (t.strip() or utils._is_fill_in(t))],
             "status": _get_val_or_fill_in(prot_data, "initial_status") or "As described",
             "character_arc_summary": plot_outline["character_arc"],
             "role": "protagonist", "source": "user_supplied_markdown",
-            "relationships": prot_data.get("relationships", {}) # Parser should give dict
+            "relationships": prot_data.get("relationships", {}) 
         })
     
     ant_name_val = plot_outline["antagonist_name"]
@@ -198,19 +179,16 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                 character_profiles[char_name_other].update({
                     "description": _get_val_or_fill_in(char_detail_raw, "description"),
                     "traits": [t for t in char_detail_raw.get("traits", []) if isinstance(t,str) and (t.strip() or utils._is_fill_in(t))],
-                    "status": "As described", # Default status
-                    "role_in_story": _get_val_or_fill_in(char_detail_raw, "role_in_story"), # Role specific to this character
+                    "status": "As described", 
+                    "role_in_story": _get_val_or_fill_in(char_detail_raw, "role_in_story"), 
                     "source": "user_supplied_markdown",
                     "relationships": char_detail_raw.get("relationships", {})
                 })
     agent.character_profiles = character_profiles
 
-    # World Building
-    # Overview
     world_building.setdefault("_overview_", {})
-    world_building["_overview_"]["description"] = plot_outline["setting_description"] # Tied to plot's setting desc
+    world_building["_overview_"]["description"] = plot_outline["setting_description"] 
 
-    # Key Locations
     key_locations_md = setting_data_md.get("key_locations", {}) 
     if isinstance(key_locations_md, dict):
         world_building.setdefault("locations", {})
@@ -224,15 +202,11 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                     "source": "user_supplied_markdown"
                 })
 
-    # World Details (Unique Features, Factions, Lore)
     wd_details = user_data.get("world_details", {}) 
-    
-    # Unique World Feature
-    unique_feature_md_item_name = "unique_world_feature" # This is the key from parser
+    unique_feature_md_item_name = "unique_world_feature" 
     unique_feature_data = wd_details.get(unique_feature_md_item_name, {})
     if isinstance(unique_feature_data, dict) and "description" in unique_feature_data :
         actual_feature_name_to_use = "Unique World Feature" 
-        
         world_building.setdefault("systems", {})
         world_building["systems"].setdefault(actual_feature_name_to_use, {})
         world_building["systems"][actual_feature_name_to_use].update({
@@ -241,7 +215,6 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
             "source": "user_supplied_markdown"
         })
 
-    # Key Factions
     key_factions_md = wd_details.get("key_factions", {})
     if isinstance(key_factions_md, dict):
         world_building.setdefault("factions", {})
@@ -255,7 +228,6 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                     "source": "user_supplied_markdown"
                 })
             
-    # Relevant Lore
     relevant_lore_md = wd_details.get("relevant_lore", {})
     if isinstance(relevant_lore_md, dict):
         world_building.setdefault("lore", {})
@@ -270,18 +242,10 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                 if "known_effects" in lore_details_raw: 
                     world_building["lore"][lore_name]["known_effects"] = _get_val_or_fill_in(lore_details_raw, "known_effects")
 
-
     agent.world_building = world_building
     logger.info("Agent state populated from user-supplied Markdown data (preserving '[Fill-in]' markers).")
 
-
 async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Tuple[PlotOutlineData, Optional[Dict[str, int]]]:
-    """
-    Generates or loads plot outline. Modifies agent.plot_outline and potentially agent.character_profiles.
-    'agent' is the NANA_Orchestrator instance.
-    Returns the plot outline and LLM usage data.
-    Handles `[Fill-in]` placeholders from Markdown input.
-    """
     logger.info(f"Generating plot outline. Unhinged mode: {unhinged_mode}")
     user_supplied_data = _load_user_supplied_data() 
     
@@ -400,8 +364,10 @@ Begin your output now using the requested field names:
         raw_outline_text, usage_data = await llm_interface.async_call_llm(
             model_name=config.INITIAL_SETUP_MODEL, 
             prompt=prompt, 
-            temperature=config.TEMPERATURE_INITIAL_SETUP, # MODIFIED
-            stream_to_disk=True
+            temperature=config.TEMPERATURE_INITIAL_SETUP, 
+            stream_to_disk=True,
+            frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
+            presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP
         )
         if usage_data:
             accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
@@ -443,7 +409,6 @@ Begin your output now using the requested field names:
                     elif base_elements_for_outline.get(be_key): 
                          agent.plot_outline[be_key] = base_elements_for_outline.get(be_key)
 
-
             agent.plot_outline.pop("is_default", None) 
             if not agent.plot_outline.get("source") or agent.plot_outline.get("source") == "default_fallback":
                 agent.plot_outline["source"] = base_elements_for_outline.get("source_hint", "llm_generated_or_merged")
@@ -481,7 +446,6 @@ Begin your output now using the requested field names:
                                      if utils._is_fill_in(agent.plot_outline.get("protagonist_description")) \
                                      else "As described in plot outline"
 
-
     logger.info(f"Finalized character profile for protagonist '{final_protagonist_name}'.")
     
     if not hasattr(agent, 'world_building') or agent.world_building is None:
@@ -492,12 +456,7 @@ Begin your output now using the requested field names:
 
     return agent.plot_outline, accumulated_usage_data if llm_was_called else None
 
-
 async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, Optional[Dict[str, int]]]:
-    """
-    Generates initial world-building data. Modifies agent.world_building.
-    Handles `[Fill-in]` placeholders from Markdown input.
-    """
     llm_was_called = False
     accumulated_usage_data: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -536,7 +495,6 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
              agent.world_building["source"] = "llm_generated_default_context"
         needs_llm_for_world = True
 
-
     if not needs_llm_for_world:
         logger.info("World building data seems complete, skipping LLM call.")
         return agent.world_building, None
@@ -549,7 +507,6 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
         world_setting_desc = agent.plot_outline.get("setting_description", 'A newly conceived world.')
     if utils._is_fill_in(world_setting_desc): 
         world_setting_desc = 'A mysterious and detailed world waiting to be fleshed out.'
-
 
     user_world_context_str = "\n**User-Provided World Context (Respect these if not '[Fill-in]', complete if '[Fill-in]'):**\n"
     has_world_user_context = False
@@ -582,7 +539,7 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
                                 fill_in_list_items = [li for li in d_val if utils._is_fill_in(li)]
                                 if concrete_list_items: item_context_parts.append(f"{d_key_display}: {concrete_list_items}")
                                 if fill_in_list_items: item_context_parts.append(f"{d_key_display}: ({len(fill_in_list_items)} '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' items)")
-                                if concrete_list_items or fill_in_list_items: has_fill_in_item_detail = True 
+                                if concrete_list_items or fill_in_list_items: has_fill_in_item_detail = True # This was potential bug, should be based on fill_in_list_items mainly
                             elif str(d_val).strip(): 
                                 item_context_parts.append(f"{d_key_display}: {d_val}")
                         
@@ -621,8 +578,10 @@ Begin your detailed world-building output now:
     raw_world_data_text, usage_data = await llm_interface.async_call_llm(
         model_name=config.INITIAL_SETUP_MODEL, 
         prompt=prompt, 
-        temperature=config.TEMPERATURE_INITIAL_SETUP, # MODIFIED
-        stream_to_disk=True
+        temperature=config.TEMPERATURE_INITIAL_SETUP, 
+        stream_to_disk=True,
+        frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
+        presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP
     )
     if usage_data:
         accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
@@ -630,12 +589,16 @@ Begin your detailed world-building output now:
         accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
     
     cleaned_world_text = llm_interface.clean_model_response(raw_world_data_text)
+    logger.debug(f"Cleaned LLM world-building output (len: {len(cleaned_world_text)}):\nSTART_OF_WB_TEXT\n{cleaned_world_text}\nEND_OF_WB_TEXT")
+
     normalized_detail_key_map = {k.lower().replace(" ", "_"): v for k, v in WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL.items()}
     parsed_llm_response = parse_hierarchical_structured_text(
         cleaned_world_text, WORLD_CATEGORY_HEADER_PATTERN, WORLD_ITEM_HEADER_PATTERN,
         normalized_detail_key_map, WORLD_DETAIL_LIST_INTERNAL_KEYS,
         overview_category_internal_key="_overview_" 
     )
+    logger.debug(f"Result of parse_hierarchical_structured_text: {parsed_llm_response}")
+
 
     if not agent.world_building: agent.world_building = {"source":"llm_generated_or_merged", "_overview_":{}}
 
@@ -669,7 +632,7 @@ Begin your detailed world-building output now:
                         else: 
                             for detail_key_llm_raw, detail_val_llm in details_llm.items():
                                 internal_detail_key = WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL.get(
-                                    detail_key_llm_raw.lower().replace(" ","_"), detail_key_llm_raw # Use raw if not in map
+                                    detail_key_llm_raw.lower().replace(" ","_"), detail_key_llm_raw 
                                 )
                                 if utils._is_fill_in(existing_item_details.get(internal_detail_key)) or existing_item_details.get(internal_detail_key) is None:
                                     existing_item_details[internal_detail_key] = detail_val_llm

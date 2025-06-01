@@ -84,7 +84,7 @@ async def find_quote_and_sentence_offsets_with_spacy(
         return None
 
     spacy_doc = NLP_SPACY(doc_text)
-    best_direct_match_offsets: Optional[Tuple[int, int, int, int]] = None
+    # best_direct_match_offsets: Optional[Tuple[int, int, int, int]] = None # Not used directly
 
     # Attempt 1: Direct Substring Match (case-insensitive)
     current_pos = 0
@@ -284,129 +284,82 @@ def get_text_segments(text: str, segment_level: str = "paragraph") -> List[Tuple
 async def deduplicate_text_segments(
     original_text: str,
     segment_level: str = "paragraph",
-    similarity_threshold: float = 0.95, # Only used if use_semantic_comparison is True
-    use_semantic_comparison: bool = False,
-    min_segment_length_chars: int = 50
+    similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD, # Use config
+    use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,   # Use config
+    min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH # Use config
 ) -> Tuple[str, int]:
     """
     Removes near-duplicate segments from text.
-    Default strategy is paragraph-level, normalized string comparison.
+    Supports normalized string comparison or semantic comparison (async).
     """
     if not original_text.strip():
         return original_text, 0
 
-    # segments_with_offsets contains (stripped_segment_text, original_start_char, original_end_char)
     segments_with_offsets = get_text_segments(original_text, segment_level)
     if not segments_with_offsets:
         return original_text, 0
 
-    # Store info for segments we decide to keep
-    # (original_start_char, original_end_char, comparison_key)
-    # comparison_key will be normalized text or embedding vector
-    kept_segment_info: List[Tuple[int, int, Union[str, np.ndarray]]] = []
-    
-    # For normalized string comparison, we can use a set of seen normalized texts for O(N) check
-    seen_normalized_texts: Set[str] = set()
-    # For semantic, we'd need to store embeddings and compare, which is O(N^2)
-
-    segments_to_build_final_text: List[Tuple[int, int]] = [] # (start_char, end_char) of segments to keep from original
+    kept_segment_info_for_semantic: List[Tuple[int, int, np.ndarray]] = []
+    seen_normalized_texts_for_string: Set[str] = set()
+    segments_to_build_final_text: List[Tuple[int, int]] = []
 
     for i, (seg_text, seg_start, seg_end) in enumerate(segments_with_offsets):
         if len(seg_text) < min_segment_length_chars:
-            segments_to_build_final_text.append((seg_start, seg_end)) # Keep short segments
+            segments_to_build_final_text.append((seg_start, seg_end))
+            if use_semantic_comparison: # Still get embedding for short segments if semantic is on
+                short_seg_embedding = await llm_interface.async_get_embedding(seg_text)
+                if short_seg_embedding is not None:
+                    kept_segment_info_for_semantic.append((seg_start, seg_end, short_seg_embedding))
             continue
 
         is_duplicate = False
         if use_semantic_comparison:
-            # This part needs async handling for embeddings if we were to implement it fully here.
-            # For now, sticking to the recommendation of normalized string comparison.
-            # If semantic were used, we'd compare current_seg_embedding with embeddings of segments in kept_segment_info.
-            # For simplicity in this direct implementation, we'll show the string comparison path.
-            # To make semantic work here, this whole function would need to be async,
-            # and embedding generation would be interleaved or batched.
-            logger.warning("Semantic de-duplication path in deduplicate_text_segments is a placeholder and will use normalized text.")
-            # Fallthrough to normalized string comparison if use_semantic_comparison is True but not fully implemented async
-            normalized_current_seg = _normalize_text_for_matching(seg_text)
-            for _, _, kept_key_comp in kept_segment_info: # Assuming kept_key is normalized string here
-                if isinstance(kept_key_comp, str) and normalized_current_seg == kept_key_comp: # Ensure type for comparison
+            current_seg_embedding = await llm_interface.async_get_embedding(seg_text)
+            if current_seg_embedding is None:
+                logger.warning(f"De-duplication: Could not get embedding for segment (idx {i}, chars {seg_start}-{seg_end}). Keeping it.")
+                segments_to_build_final_text.append((seg_start, seg_end))
+                continue # Skip to next segment
+
+            for _, _, kept_embedding in kept_segment_info_for_semantic:
+                similarity = numpy_cosine_similarity(current_seg_embedding, kept_embedding)
+                if similarity > similarity_threshold:
                     is_duplicate = True
                     break
             if not is_duplicate:
-                 kept_segment_info.append((seg_start, seg_end, normalized_current_seg))
-                 segments_to_build_final_text.append((seg_start, seg_end))
-
+                kept_segment_info_for_semantic.append((seg_start, seg_end, current_seg_embedding))
+                segments_to_build_final_text.append((seg_start, seg_end))
         else: # Normalized string comparison
             normalized_current_seg = _normalize_text_for_matching(seg_text)
-            if normalized_current_seg in seen_normalized_texts:
+            if normalized_current_seg in seen_normalized_texts_for_string:
                 is_duplicate = True
             else:
-                seen_normalized_texts.add(normalized_current_seg)
-                # For normalized string, we only need to store the fact that we've seen it.
-                # We don't need to store the normalized key in kept_segment_info for future comparisons
-                # if we are using the `seen_normalized_texts` set.
-                # However, `kept_segment_info` was more for the semantic path.
-                # For string path, `segments_to_build_final_text` is primary.
+                seen_normalized_texts_for_string.add(normalized_current_seg)
                 segments_to_build_final_text.append((seg_start, seg_end))
         
         if is_duplicate:
-            logger.info(f"De-duplication: Removing segment (idx {i}, chars {seg_start}-{seg_end}) starting with: '{seg_text[:60].replace(chr(10),' ')}...'")
+            method_used = 'semantic' if use_semantic_comparison else 'normalized string'
+            logger.info(f"De-duplication: Removing segment (idx {i}, chars {seg_start}-{seg_end}, method: {method_used}) starting with: '{seg_text[:60].replace(chr(10),' ')}...'")
 
-    if len(segments_to_build_final_text) == len(segments_with_offsets): # No duplicates found
+    if len(segments_to_build_final_text) == len(segments_with_offsets):
         return original_text, 0
 
-    # Reconstruct text from the segments_to_build_final_text, preserving original whitespace
-    # Sort by start offset just in case (though get_text_segments should return them in order)
     segments_to_build_final_text.sort(key=lambda x: x[0])
     
-    final_parts = []
-    # Add text from original_text based on the start/end of the segments TO KEEP.
-    # This implicitly handles the whitespace between kept segments correctly.
-    for start_char, end_char in segments_to_build_final_text:
-        final_parts.append(original_text[start_char:end_char])
-
-    # The joining character depends on the segment_level
-    # If paragraphs, they already contain their trailing newlines (or should).
-    # If sentences, they need a space.
-    # However, `get_text_segments` returns stripped text but original offsets.
-    # So, `original_text[start_char:end_char]` will have the original segment with its surrounding context.
-    # The problem is, if we remove a paragraph, we need to ensure the newline structure is maintained.
-
-    # Simpler reconstruction: build based on slices.
-    # This was the more complex part of the previous attempt.
-    # If we have a list of (start, end) of parts to KEEP, we can build it.
-    # We need to manage the "glue" (whitespace) between them carefully.
-
-    # Let's try a slightly different reconstruction:
-    # Create a "mask" of what to keep.
-    # This is still tricky. The original slice-based removal was probably better.
-
-    # Reverting to a simpler reconstruction based on keeping entire original slices.
-    # The key is that `segments_to_build_final_text` now contains the *original* start/end
-    # of the *stripped* segments that were kept. We need to use these to slice original_text.
+    reconstructed_parts = []
+    last_kept_end = 0
+    for seg_start_orig, seg_end_orig in segments_to_build_final_text:
+        if seg_start_orig > last_kept_end:
+            reconstructed_parts.append(original_text[last_kept_end:seg_start_orig])
+        reconstructed_parts.append(original_text[seg_start_orig:seg_end_orig])
+        last_kept_end = seg_end_orig
     
-    reconstructed_text_parts = []
-    current_doc_pointer = 0
-    for seg_start, seg_end in segments_to_build_final_text: # These are segments to KEEP
-        # Append text from end of last kept segment (or doc start) up to start of current kept segment
-        # This captures inter-segment text/whitespace.
-        if seg_start > current_doc_pointer:
-            reconstructed_text_parts.append(original_text[current_doc_pointer:seg_start])
-        
-        # Append the kept segment itself
-        reconstructed_text_parts.append(original_text[seg_start:seg_end])
-        current_doc_pointer = seg_end
-    
-    # Append any trailing text after the last kept segment
-    if current_doc_pointer < len(original_text):
-        reconstructed_text_parts.append(original_text[current_doc_pointer:])
+    if last_kept_end < len(original_text):
+        reconstructed_parts.append(original_text[last_kept_end:])
 
-    deduplicated_text = "".join(reconstructed_text_parts)
+    deduplicated_text = "".join(reconstructed_parts)
     
-    # Final cleanup of excessive newlines that might form from stitching
-    deduplicated_text = re.sub(r'\n\s*\n(\s*\n)+', '\n\n', deduplicated_text) # Multiple blank lines to one
-    deduplicated_text = re.sub(r'\n{3,}', '\n\n', deduplicated_text) # 3+ newlines to 2
-    deduplicated_text = deduplicated_text.strip() # Remove leading/trailing whitespace from the whole result
+    deduplicated_text = re.sub(r'\n\s*\n(\s*\n)+', '\n\n', deduplicated_text)
+    deduplicated_text = re.sub(r'\n{3,}', '\n\n', deduplicated_text).strip()
 
     characters_removed_count = len(original_text) - len(deduplicated_text)
-    
     return deduplicated_text, characters_removed_count

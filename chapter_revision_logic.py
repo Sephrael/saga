@@ -1,11 +1,8 @@
-      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
 Supports both full rewrite and targeted patch-based revisions.
 Context data for prompts is now formatted as plain text.
-MODIFIED: Integrates spaCy for precise quote and sentence offset identification for patches.
-MODIFIED: Refined patch generation prompt with clearer instructions and an example for 'replace_with'.
 """
 import logging
 import asyncio
@@ -14,20 +11,12 @@ from typing import Tuple, Optional, List, Dict, Any
 
 import config
 import llm_interface
-import drafting_agent # Corrected: No longer directly instantiating DraftingAgent here.
+# import drafting_agent # No longer directly instantiating DraftingAgent here.
 import utils # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed() # Ensure spaCy model is loaded when this module is imported
-
-# Placeholder for the actual formatting function if needed differently here,
-# or it should be passed in/accessed via the 'agent' object if it's stateful.
-# For now, assuming it's a static-like method accessible or we use a generic one.
-# This was previously trying to import from a temp DraftingAgent instance which is not ideal.
-# If the formatting is truly specific to how DraftingAgent does it, it should be a utility
-# or part of the 'agent' object passed to revision logic.
-# For this iteration, we'll use the placeholder logic if the proper one isn't available via `agent`.
 
 def _get_formatted_scene_plan_from_agent_or_fallback(
     agent: Any, # This 'agent' is the orchestrator
@@ -42,7 +31,6 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
         except Exception as e:
             logger.error(f"Error calling _format_scene_plan_for_prompt via agent.drafting_agent: {e}. Using fallback.")
     
-    # Fallback stub logic (similar to previous, but as a clear fallback)
     logger.warning("_get_formatted_scene_plan_from_agent_or_fallback: Using fallback scene plan formatting logic.")
     if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
     
@@ -73,7 +61,7 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
 
 
 def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:
-    return getattr(agent, key, default)
+    return getattr(agent, key, agent.novel_props_cache.get(key, default) if hasattr(agent, 'novel_props_cache') else default)
 
 def _get_nested_prop_from_agent(agent: Any, primary_key: str, secondary_key: str, default: Any = None) -> Any:
     primary_data = _get_prop_from_agent(agent, primary_key, {})
@@ -82,7 +70,7 @@ def _get_nested_prop_from_agent(agent: Any, primary_key: str, secondary_key: str
     return default
 
 def _get_plot_point_info_from_agent(agent: Any, chapter_number: int) -> Tuple[Optional[str], int]:
-    plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
+    plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {}) # 'plot_outline' on orchestrator is the full dict
     plot_points = plot_outline_data.get("plot_points", [])
     if not isinstance(plot_points, list) or not plot_points: return None, -1
     if chapter_number <= 0: return None, -1
@@ -167,7 +155,7 @@ async def _generate_single_patch_instruction_llm(
     max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-        formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback( # MODIFIED to use helper
+        formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback( 
             agent, chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt
         )
         plan_focus_section_parts.append(formatted_plan)
@@ -213,8 +201,8 @@ async def _generate_single_patch_instruction_llm(
             "that addresses the \"Problem Description\" and \"Suggested Fix Focus\" as guided by the `length_expansion_instruction_header_str`. "
             "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
         )
-        max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2 # Allow generous output for new passages
-        max_patch_output_tokens = max(max_patch_output_tokens, 750) # Ensure at least a decent chunk
+        max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2 
+        max_patch_output_tokens = max(max_patch_output_tokens, 750) 
         logger.info(f"Patch (Ch {chapter_number}, general expansion): Max output tokens set to {max_patch_output_tokens}.")
     else: 
         prompt_instruction_for_replacement_scope_parts.append(
@@ -222,7 +210,7 @@ async def _generate_single_patch_instruction_llm(
             "of the **entire conceptual sentence or short paragraph** within the 'ORIGINAL TEXT SNIPPET' that best corresponds to that quote. Your output will replace that whole segment.\n"
             "    - **Crucially, for this specific fix, your replacement text should primarily focus on correcting the identified issue. "
         )
-        if length_expansion_instruction_header_str: # Only add this if expansion is requested
+        if length_expansion_instruction_header_str: 
             prompt_instruction_for_replacement_scope_parts.append(
                 "If `length_expansion_instruction_header_str` is present, apply its guidance to *this specific segment*. "
             )
@@ -233,16 +221,14 @@ async def _generate_single_patch_instruction_llm(
         original_snippet_tokens = llm_interface.count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL)
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
-        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2) # Cap at half of model's max
-        max_patch_output_tokens = max(max_patch_output_tokens, 200) # Ensure at least a small replacement can be generated
+        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2) 
+        max_patch_output_tokens = max(max_patch_output_tokens, 200) 
         logger.info(f"Patch (Ch {chapter_number}, specific fix): Original snippet tokens: {original_snippet_tokens}. Max output tokens set to {max_patch_output_tokens}.")
     prompt_instruction_for_replacement_scope_str = "".join(prompt_instruction_for_replacement_scope_parts)
 
     plot_outline_data = _get_prop_from_agent(agent, 'plot_outline', {})
     protagonist_name = _get_nested_prop_from_agent(agent, 'plot_outline', 'protagonist_name', config.DEFAULT_PROTAGONIST_NAME)
 
-    # --- Few-Shot Example for Patch Output ---
-    # This example shows the LLM what a good `replace_with` text looks like.
     few_shot_patch_example_str = f"""
 --- Example of how to provide 'replace_with' text (this is an example, NOT part of current task) ---
 IF THE PROBLEM WAS:
@@ -280,7 +266,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         original_chapter_text_snippet_for_llm,
         "--- END ORIGINAL TEXT SNIPPET ---",
         length_expansion_instruction_header_str,
-        few_shot_patch_example_str, # Added few-shot example
+        few_shot_patch_example_str, 
         "**Instructions for Generating Replacement Text:**",
         "1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.",
         "2.  Generate a `replace_with` text according to the following:",
@@ -302,7 +288,9 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         temperature=config.TEMPERATURE_PATCH, 
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
-        stream_to_disk=False
+        stream_to_disk=False,
+        frequency_penalty=config.FREQUENCY_PENALTY_PATCH,
+        presence_penalty=config.PRESENCE_PENALTY_PATCH
     )
 
     if not replace_with_text_raw:
@@ -539,7 +527,8 @@ async def revise_chapter_draft_logic(
     chapter_number: int,
     evaluation_result: EvaluationResult,
     hybrid_context_for_revision: str,
-    chapter_plan: Optional[List[SceneDetail]]
+    chapter_plan: Optional[List[SceneDetail]],
+    is_from_flawed_source: bool = False # ADDED: To indicate if original_text might have gaps from de-dup
 ) -> Tuple[Optional[Tuple[str, str]], Optional[Dict[str, int]]]:
     cumulative_usage_data: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -642,7 +631,7 @@ async def revise_chapter_draft_logic(
         plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(agent, chapter_number)
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback( # MODIFIED to use helper
+            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(
                 agent, chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite
             )
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
@@ -685,6 +674,15 @@ async def revise_chapter_draft_logic(
                 ])
             all_problem_descriptions_parts.append("---\n")
         all_problem_descriptions_str = "".join(all_problem_descriptions_parts)
+
+        # MODIFIED: Add note about de-duplication if is_from_flawed_source is True
+        deduplication_note = ""
+        if is_from_flawed_source: # This flag is passed from orchestrator, true if de-dup happened
+            deduplication_note = (
+                "\n**(Note: The 'Original Draft Snippet' below may have had repetitive content removed "
+                "prior to evaluation, or other flaws were present. Ensure your rewrite is cohesive "
+                "and addresses any resulting narrative gaps or inconsistencies.)**\n"
+            )
         
         prompt_full_rewrite_lines = [
             "/no_think",
@@ -694,6 +692,7 @@ async def revise_chapter_draft_logic(
             llm_interface.clean_model_response(revision_reason_str).strip(),
             "--- FEEDBACK END ---",
             all_problem_descriptions_str,
+            deduplication_note, # ADDED
             length_issue_explicit_instruction_full_rewrite_str,
             plan_focus_section_full_rewrite_str,
             "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
@@ -706,13 +705,14 @@ async def revise_chapter_draft_logic(
             "--- END ORIGINAL DRAFT SNIPPET ---",
             "",
             "**Revision Instructions:**",
-            "1.  **ABSOLUTE PRIORITY:** Thoroughly address ALL issues listed in **Critique/Reason(s) for Revision** and **Detailed Issues to Address**.",
+            "1.  **ABSOLUTE PRIORITY:** Thoroughly address ALL issues listed in **Critique/Reason(s) for Revision** and **Detailed Issues to Address**. "
+            "If the original text had content removed (e.g., due to de-duplication) or other flaws as noted, pay special attention to ensuring a smooth, coherent narrative flow and filling any gaps logically.", # MODIFIED to be more general
             "2.  **Rewrite the ENTIRE chapter.** Produce a fresh, coherent, and engaging narrative.",
             "3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite_str`, follow it closely. Otherwise, align with the `Original Chapter Focus`.",
             "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
             f"5.  Maintain the novel's established tone, style, and genre ('{_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'story')}').",
             f"6.  Target a substantial chapter length, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
-            "7.  **Output ONLY the rewritten chapter text.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
+            "7.  Output ONLY the rewritten chapter text.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
             "",
             f"--- BEGIN REVISED CHAPTER {chapter_number} TEXT ---"
         ]
@@ -725,7 +725,9 @@ async def revise_chapter_draft_logic(
             temperature=config.TEMPERATURE_REVISION, 
             max_tokens=None,
             allow_fallback=True,
-            stream_to_disk=True
+            stream_to_disk=True,
+            frequency_penalty=config.FREQUENCY_PENALTY_REVISION,
+            presence_penalty=config.PRESENCE_PENALTY_REVISION
         )
         _add_usage(full_rewrite_usage)
         if not revised_raw_llm_output_full:
@@ -743,7 +745,7 @@ async def revise_chapter_draft_logic(
         return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
     if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
-    if final_revised_text is not patched_text: 
+    if final_revised_text is not patched_text: # Only check similarity if it wasn't the patched text
         original_embedding_full_final, revised_embedding_full_final = await asyncio.gather(
             llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(final_revised_text)
         )

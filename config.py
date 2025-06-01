@@ -64,7 +64,7 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 # Name of the embedding model to use with Ollama (e.g., "nomic-embed-text:latest", "mxbai-embed-large:latest").
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 # Expected dimension of the embeddings produced by EMBEDDING_MODEL. Critical for Neo4j index and numpy operations.
-EXPECTED_EMBEDDING_DIM: int = 768 # Example: Nomic is 768. Adjust if using a different model.
+EXPECTED_EMBEDDING_DIM: int = int(os.getenv("EXPECTED_EMBEDDING_DIM", "768")) # MODIFIED: Allow int from env
 # Numpy data type for storing embeddings. float32 is common.
 EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32)
 
@@ -148,7 +148,38 @@ TEMPERATURE_PATCH: float = float(os.getenv("TEMPERATURE_PATCH", "0.7")) # Needs 
 TEMPERATURE_DEFAULT: float = 0.6
 
 # Top-P sampling parameter for LLM generation (0.0 to 1.0). Higher is more diverse.
-LLM_TOP_P: float = 0.8
+LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.8")) # MODIFIED to get from env
+
+# --- LLM Frequency and Presence Penalties ---
+# Values typically between -2.0 and 2.0. Positive values penalize, negative values encourage.
+# Drafting
+FREQUENCY_PENALTY_DRAFTING: float = float(os.getenv("FREQUENCY_PENALTY_DRAFTING", "0.3"))
+PRESENCE_PENALTY_DRAFTING: float = float(os.getenv("PRESENCE_PENALTY_DRAFTING", "0.2"))
+# Revision
+FREQUENCY_PENALTY_REVISION: float = float(os.getenv("FREQUENCY_PENALTY_REVISION", "0.2"))
+PRESENCE_PENALTY_REVISION: float = float(os.getenv("PRESENCE_PENALTY_REVISION", "0.1"))
+# Patch Generation
+FREQUENCY_PENALTY_PATCH: float = float(os.getenv("FREQUENCY_PENALTY_PATCH", "0.2"))
+PRESENCE_PENALTY_PATCH: float = float(os.getenv("PRESENCE_PENALTY_PATCH", "0.1"))
+# Planning (less likely to need strong penalties, but configurable)
+FREQUENCY_PENALTY_PLANNING: float = float(os.getenv("FREQUENCY_PENALTY_PLANNING", "0.0"))
+PRESENCE_PENALTY_PLANNING: float = float(os.getenv("PRESENCE_PENALTY_PLANNING", "0.0"))
+# Initial Setup (e.g. plot outline)
+FREQUENCY_PENALTY_INITIAL_SETUP: float = float(os.getenv("FREQUENCY_PENALTY_INITIAL_SETUP", "0.1"))
+PRESENCE_PENALTY_INITIAL_SETUP: float = float(os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "0.1"))
+# Evaluation (least likely to need penalties, as it's analytical)
+FREQUENCY_PENALTY_EVALUATION: float = float(os.getenv("FREQUENCY_PENALTY_EVALUATION", "0.0"))
+PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "0.0"))
+# Knowledge Graph Extraction
+FREQUENCY_PENALTY_KG_EXTRACTION: float = float(os.getenv("FREQUENCY_PENALTY_KG_EXTRACTION", "0.0"))
+PRESENCE_PENALTY_KG_EXTRACTION: float = float(os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "0.0"))
+# Summarization
+FREQUENCY_PENALTY_SUMMARY: float = float(os.getenv("FREQUENCY_PENALTY_SUMMARY", "0.0"))
+PRESENCE_PENALTY_SUMMARY: float = float(os.getenv("PRESENCE_PENALTY_SUMMARY", "0.0"))
+# Consistency Check
+FREQUENCY_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("FREQUENCY_PENALTY_CONSISTENCY_CHECK", "0.0"))
+PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("PRESENCE_PENALTY_CONSISTENCY_CHECK", "0.0"))
+
 
 # --- Output and File Paths ---
 # Base directory for all generated novel outputs.
@@ -266,7 +297,13 @@ if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000:
 # Toggle for enabling dynamic state adaptation (e.g., LLM proposing 'MODIFY key: value' changes).
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Currently not env configurable.
 # Chapter number assigned to items from initial setup/prepopulation (e.g., KG facts from initial world/char setup).
-KG_PREPOPULATION_CHAPTER_NUM: int = 0
+KG_PREPOPULATION_CHAPTER_NUM: int = 1
+
+
+# --- De-duplication Configuration ---
+DEDUPLICATION_USE_SEMANTIC: bool = os.getenv("DEDUPLICATION_USE_SEMANTIC", "True").lower() == 'true'
+DEDUPLICATION_SEMANTIC_THRESHOLD: float = float(os.getenv("DEDUPLICATION_SEMANTIC_THRESHOLD", "0.90"))
+DEDUPLICATION_MIN_SEGMENT_LENGTH: int = int(os.getenv("DEDUPLICATION_MIN_SEGMENT_LENGTH", "150")) # Characters
 
 
 # --- Logging ---

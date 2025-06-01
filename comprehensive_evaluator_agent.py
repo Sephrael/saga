@@ -25,6 +25,28 @@ PROBLEM_DETAIL_KEY_MAP = {
     "suggested_fix_focus": "suggested_fix_focus"
 }
 
+# Standardized internal category names
+INTERNAL_VALID_CATEGORIES = {
+    "consistency",
+    "plot_arc",
+    "thematic_alignment", # Standardized internal name
+    "narrative_depth_and_length", # Standardized internal name
+    "meta"
+}
+
+def _normalize_llm_category_to_internal(llm_category_str: str) -> str:
+    """Normalizes category names from LLM output to internal standard names."""
+    normalized = llm_category_str.lower().strip().replace(" ", "_")
+    if "thematic" in normalized: # Catches "thematic_alignment" or "thematic"
+        return "thematic_alignment"
+    if "narrative_depth" in normalized: # Catches "narrative_depth_and_length" or "narrative_depth"
+        return "narrative_depth_and_length"
+    # For exact matches or other categories like consistency, plot_arc, meta
+    if normalized in INTERNAL_VALID_CATEGORIES:
+        return normalized
+    return "meta" # Default if no clear mapping
+
+
 class ComprehensiveEvaluatorAgent:
     def __init__(self, model_name: str = config.EVALUATION_MODEL):
         self.model_name = model_name
@@ -78,11 +100,12 @@ class ComprehensiveEvaluatorAgent:
             problem_meta["quote_from_original_text"] = parsed_problem_dict.get("quote_from_original_text", "N/A - General Issue")
             problem_meta["suggested_fix_focus"] = parsed_problem_dict.get("suggested_fix_focus", "N/A")
             
-            category = str(parsed_problem_dict.get("issue_category", "meta")).strip().lower()
-            valid_categories = ["consistency", "plot_arc", "thematic", "narrative_depth", "meta"]
-            problem_meta["issue_category"] = category if category in valid_categories else "meta"
-            if category not in valid_categories:
-                 logger.warning(f"Parsed unknown issue category '{category}' in block {block_num+1} for Ch {chapter_number}. Defaulting to 'meta'.")
+            llm_category_raw = str(parsed_problem_dict.get("issue_category", "meta")).strip()
+            internal_category = _normalize_llm_category_to_internal(llm_category_raw)
+            problem_meta["issue_category"] = internal_category
+
+            if internal_category == "meta" and llm_category_raw.lower().strip() != "meta":
+                 logger.warning(f"LLM provided category '{llm_category_raw}' in block {block_num+1} for Ch {chapter_number}, which normalized to 'meta'. Check normalization if this is unexpected.")
 
 
             quote_text_from_llm = problem_meta["quote_from_original_text"]
@@ -148,32 +171,38 @@ class ComprehensiveEvaluatorAgent:
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
         # --- Few-Shot Example for Comprehensive Evaluation Output ---
+        # The LLM should use these exact category names in its output.
         few_shot_eval_example_str = f"""
-ISSUE CATEGORY: consistency
+ISSUE CATEGORY: CONSISTENCY
 PROBLEM DESCRIPTION: Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.
 QUOTE FROM ORIGINAL: "I've never seen anything beyond these village walls," Elara sighed, gazing at the distant mountains.
 SUGGESTED FIX FOCUS: Adjust Elara's dialogue to align with her established backstory of training in the Capital, or reconcile this statement with her past (e.g., she's being metaphorical or hiding her past).
 ---
-ISSUE CATEGORY: plot_arc
+ISSUE CATEGORY: PLOT_ARC
 PROBLEM DESCRIPTION: The chapter focuses heavily on a minor side character's backstory, which doesn't significantly advance the intended plot point about finding the Sunstone.
 QUOTE FROM ORIGINAL: The old merchant then spent a long while recounting his youthful adventures in the spice trade, detailing three different voyages.
 SUGGESTED FIX FOCUS: Reduce the side character's backstory significantly or tie it directly into how it helps or hinders the search for the Sunstone. Ensure the main plot point progression is central.
 ---
-ISSUE CATEGORY: narrative_depth
+ISSUE CATEGORY: NARRATIVE_DEPTH_AND_LENGTH
 PROBLEM DESCRIPTION: The confrontation with the antagonist feels rushed and lacks emotional impact. The protagonist's internal reaction to the antagonist's reveal is minimal.
 QUOTE FROM ORIGINAL: "It was you all along!" John exclaimed. The Baron merely smiled. Then they fought.
 SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discovering the Baron's betrayal. Show, don't just tell, the emotional weight of this moment. Describe the fight with more detail and tension.
+---
+ISSUE CATEGORY: THEMATIC_ALIGNMENT
+PROBLEM DESCRIPTION: A newly introduced magical system allowing instant teleportation undermines the established theme of 'arduous journeys have transformative power'.
+QUOTE FROM ORIGINAL: With a flick of her wrist, Mariel teleported the entire party across the Obsidian Peaks.
+SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add significant costs, limitations, or consequences that align with or challenge the core theme in an interesting way, rather than negating it.
 """
         
         prompt_lines = [
             "/no_think",
             f"You are a Master Editor evaluating Chapter {chapter_number} of a novel titled \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
             "Analyze the **Complete Chapter Text** provided below.",
-            "Your task is to identify specific issues related to:",
-            "1.  **CONSISTENCY**: Contradictions with Plot Outline, Character Profiles, World Building, Key Reliable KG Facts, Previous Context, or internal inconsistencies within THIS chapter.",
-            f"2.  **PLOT_ARC**: How well this chapter addresses or advances its Intended Plot Point: \"{plot_point_focus_str}\" (Plot Point #{plot_point_index + 1}).",
-            f"3.  **THEMATIC_ALIGNMENT**: Alignment with the novel's core elements (Genre: {novel_genre_str}, Theme: {novel_theme_str}, Protagonist's Arc: {protagonist_arc_str}).",
-            f"4.  **NARRATIVE_DEPTH_AND_LENGTH**: Sufficiency of descriptive detail, character introspection, dialogue development, pacing, and overall length (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters).",
+            "Your task is to identify specific issues related to these EXACT categories:", # Emphasize exact category names
+            "1.  **CONSISTENCY**",
+            "2.  **PLOT_ARC**",
+            "3.  **THEMATIC_ALIGNMENT**", # Matches example
+            f"4.  **NARRATIVE_DEPTH_AND_LENGTH** (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters)", # Matches example
             "",
             "**Reference Information for CONSISTENCY Check (Summary Format):**",
             "  **Plot Outline Summary:**",
@@ -207,7 +236,8 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
             "",
             "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
             "Provide your evaluation as plain text. If problems are found, list each problem individually.",
-            "Use the EXACT keys: `ISSUE CATEGORY:`, `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
+            "For `ISSUE CATEGORY:`, use one of the EXACT category names listed in your task (CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH).", # Re-emphasize
+            "Then, use the EXACT keys: `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
             "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general (e.g., overall length) or no quote applies, use \"N/A - General Issue\".",
             "Separate each problem block with a line containing only \"---\".",
             "If NO problems are found, output ONLY the phrase: \"No significant problems found.\"",
@@ -227,7 +257,9 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
             prompt=prompt,
             temperature=config.TEMPERATURE_EVALUATION, 
             allow_fallback=True,
-            stream_to_disk=False
+            stream_to_disk=False,
+            frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION, # Added
+            presence_penalty=config.PRESENCE_PENALTY_EVALUATION    # Added
         )
         cleaned_evaluation_text = llm_interface.clean_model_response(raw_evaluation_text)
         no_issues_keywords = [
@@ -261,10 +293,12 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
                 "legacy_thematic_issues": "LLM call failed.", "legacy_narrative_depth_issues": "LLM call failed."
             }
         else:
+            # These legacy keys might still be useful for very quick high-level checks,
+            # but the primary source of truth is the parsed ProblemDetail list.
             legacy_consistency = "Potential consistency issues." if "consistency" in cleaned_evaluation_text.lower() else None
             legacy_plot = "Potential plot arc issues." if "plot_arc" in cleaned_evaluation_text.lower() else None
-            legacy_theme = "Potential thematic issues." if "thematic" in cleaned_evaluation_text.lower() else None
-            legacy_depth = "Potential narrative depth/length issues." if "narrative_depth" in cleaned_evaluation_text.lower() else None
+            legacy_theme = "Potential thematic issues." if "thematic" in cleaned_evaluation_text.lower() else None # "thematic_alignment" should map
+            legacy_depth = "Potential narrative depth/length issues." if "narrative_depth" in cleaned_evaluation_text.lower() else None # "narrative_depth_and_length" should map
             logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. LLM output (first 200 chars): '{cleaned_evaluation_text[:200]}...'")
             eval_output_dict = {
                 "problems_found_text_output": cleaned_evaluation_text,
@@ -305,7 +339,7 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
         elif len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
             needs_revision = True
             problem_details_list.append({
-                "issue_category": "narrative_depth",
+                "issue_category": "narrative_depth_and_length", # Standardized internal category
                 "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
                 "quote_from_original_text": "N/A - General Issue",
                 "quote_char_start": None, "quote_char_end": None,
@@ -336,7 +370,7 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
                 logger.warning(f"Could not perform coherence check for ch {chapter_number} (missing current or previous embedding).")
         else:
             logger.info("Skipping coherence check for Chapter 1.")
-            await current_embedding_task
+            await current_embedding_task # Still await it if it's chapter 1 to ensure it's done
 
         llm_eval_output_dict, llm_usage = await self._perform_llm_comprehensive_evaluation(
             novel_props, draft_text, chapter_number, plot_point_focus, plot_point_index, previous_chapters_context
@@ -353,15 +387,16 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
         if parsed_problems_from_llm:
             problem_details_list.extend(parsed_problems_from_llm)
             needs_revision = True
+            # Use INTERNAL_VALID_CATEGORIES for mapping to reasons if needed, or a more descriptive map
             category_map_to_reason = {
                 "consistency": "Consistency issues identified by LLM.",
                 "plot_arc": "Plot Arc deviation identified by LLM.",
-                "thematic": "Thematic issues identified by LLM.",
-                "narrative_depth": "Narrative Depth/Length issues identified by LLM.",
+                "thematic_alignment": "Thematic Alignment issues identified by LLM.",
+                "narrative_depth_and_length": "Narrative Depth/Length issues identified by LLM.",
                 "meta": "Meta/Uncategorized issues identified by LLM."
             }
             for prob in parsed_problems_from_llm:
-                reason = category_map_to_reason.get(prob["issue_category"])
+                reason = category_map_to_reason.get(prob["issue_category"]) # prob["issue_category"] is now normalized
                 if reason and reason not in reasons_for_revision_summary:
                     reasons_for_revision_summary.append(reason)
         elif llm_eval_text_output.strip() and "no significant problems found" not in llm_eval_text_output.lower():
@@ -405,3 +440,5 @@ SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discov
             "narrative_depth_issues": llm_eval_output_dict.get("legacy_narrative_depth_issues")
         }
         return final_eval_result, total_usage_data if total_usage_data["total_tokens"] > 0 else None
+
+    
