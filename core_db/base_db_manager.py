@@ -91,9 +91,9 @@ class Neo4jManagerSingleton:
                 raise
 
     async def create_db_schema(self):
-        self.logger.info("Creating/verifying Neo4j indexes and constraints, including vector index...")
+        self.logger.info("Creating/verifying Neo4j indexes and constraints, including vector index (using batch execution)...")
         
-        core_constraints = [
+        core_constraints_queries = [
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
             f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
             "CREATE CONSTRAINT entity_name_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE",
@@ -104,7 +104,7 @@ class Neo4jManagerSingleton:
             "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
             "CREATE CONSTRAINT valueNode_value_type_unique IF NOT EXISTS FOR (vn:ValueNode) REQUIRE (vn.value, vn.type) IS UNIQUE",
         ]
-        indexes = [
+        index_queries = [
             "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
             "CREATE INDEX statusEvent_chapter_updated IF NOT EXISTS FOR (s:StatusEvent) ON (s.chapter_updated)",
             "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
@@ -126,15 +126,35 @@ class Neo4jManagerSingleton:
         }}}}
         """
         
-        all_schema_ops = core_constraints + indexes + [vector_index_query]
-        for query in all_schema_ops:
-            try:
-                await self.execute_write_query(query)
-                if "VECTOR INDEX" in query:
-                    self.logger.info(f"Successfully created/verified vector index: {config.NEO4J_VECTOR_INDEX_NAME}")
-            except Exception as e:
-                self.logger.warning(f"Failed to apply schema operation '{query}': {e} (This might be okay if it already exists or due to concurrent setup).")
+        all_schema_ops_queries = core_constraints_queries + index_queries + [vector_index_query]
+        
+        # Prepare for batch execution: List of (query, params_dict) tuples
+        # For schema operations, params_dict is usually empty.
+        schema_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in all_schema_ops_queries
+        ]
+
+        try:
+            await self.execute_cypher_batch(schema_statements_with_params)
+            self.logger.info(f"Successfully executed batch of {len(schema_statements_with_params)} schema operations (indexes, constraints, vector index).")
+        except Exception as e:
+            # If batch fails, it's hard to know which one failed without more granular error reporting from the driver/DB for batch.
+            # We log the general error. Individual retries or checks might be needed for robustness in a production setting.
+            self.logger.error(f"Error during batch schema operation execution: {e}. Some schema elements might not be created/verified.", exc_info=True)
+            # Fallback or individual attempts could be added here if critical
+            self.logger.warning(
+                "Attempting to apply schema operations individually as a fallback due to batch failure. "
+                "This may result in some operations failing if they were the cause or if they depend on failed ones."
+            )
+            for query in all_schema_ops_queries:
+                try:
+                    await self.execute_write_query(query) # No params needed for these
+                    self.logger.info(f"Fallback: Successfully applied schema operation: '{query[:100]}...'")
+                except Exception as individual_e:
+                    self.logger.warning(f"Fallback: Failed to apply schema operation '{query[:100]}...': {individual_e} (This might be okay if it already exists or due to initial batch failure).")
+
         self.logger.info("Neo4j schema (indexes, constraints, vector index) verification process complete.")
+
 
     def embedding_to_list(self, embedding: Optional[np.ndarray]) -> Optional[List[float]]:
         if embedding is None:

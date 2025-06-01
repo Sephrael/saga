@@ -175,6 +175,34 @@ class PlannerAgent:
                     future_plot_context_parts.append(f"**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}\n")
         future_plot_context_str = "".join(future_plot_context_parts)
 
+        # --- Few-Shot Example for Scene Plan ---
+        few_shot_scene_plan_example_str = f"""
+SCENE: 1
+SUMMARY: Elara arrives at the Sunken Library, finding its entrance hidden and guarded by an ancient riddle.
+CHARACTERS INVOLVED: Elara Vance
+KEY DIALOGUE POINTS:
+- Elara (internal): "This riddle... it speaks of starlight and shadow. What reflects both?"
+- Elara (to herself, solving): "The water! The entrance must be beneath the lake's surface."
+SETTING DETAILS: A mist-shrouded, unnaturally still lake. Crumbling, moss-covered ruins of a tower are visible on a small island in the center.
+SCENE FOCUS ELEMENTS:
+- Elara's deductive reasoning to solve the riddle.
+- Building atmosphere of mystery and ancient magic around the library.
+CONTRIBUTION: Introduces the challenge of accessing the Sunken Library and showcases Elara's intellect.
+---
+SCENE: 2
+SUMMARY: Elara meets Master Kael, the library's ancient archivist, who tests her worthiness before revealing information about the Starfall Map.
+CHARACTERS INVOLVED: Elara Vance, Master Kael
+KEY DIALOGUE POINTS:
+- Kael: "Many seek what is lost. Few understand its price. Why do you search, child of the shifting stars?"
+- Elara: "I seek knowledge not for power, but to mend what was broken."
+- Kael: "A noble sentiment. The map's first secret lies in the reflection of true north..."
+SETTING DETAILS: Inside the Sunken Library's main chamber: vast, circular, dimly lit by glowing runes on the walls and bioluminescent moss. Water drips softly.
+SCENE FOCUS ELEMENTS:
+- The cryptic nature and wisdom of Master Kael.
+- The initial reveal of a clue related to the Starfall Map.
+CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (or gatekeeper) in Kael, advancing the plot point about finding the map.
+"""
+
         prompt_lines = [
             "/no_think",
             f"You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {config.TARGET_SCENES_MAX} detailed scenes** for Chapter {chapter_number} of a novel.",
@@ -216,6 +244,11 @@ class PlannerAgent:
             "",
             "Separate each complete scene block with a line containing only \"---\". If you don't use \"---\", ensure each scene starts clearly with \"SCENE: <number>\".",
             "",
+            "**Follow this example structure for your output precisely:**", # Made example more explicit
+            "```plaintext", # Added plaintext hint
+            few_shot_scene_plan_example_str.strip(),
+            "```",
+            "",
             "Output ONLY the scene plan text as described."
         ]
         prompt = "\n".join(prompt_lines)
@@ -224,7 +257,7 @@ class PlannerAgent:
         plan_raw_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_PLANNING, # MODIFIED
+            temperature=config.TEMPERATURE_PLANNING, 
             max_tokens=config.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True

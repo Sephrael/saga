@@ -1,7 +1,7 @@
       
 # data_access/kg_queries.py
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import config
 from core_db.base_db_manager import neo4j_manager
 
@@ -51,6 +51,61 @@ async def add_kg_triple_to_db(
         logger.debug(f"Neo4j: Added/Updated KG triple for Ch {chapter_added}: ({subj_s}, {pred_s}, {obj_s}). Prov: {is_provisional}, Conf: {confidence}")
     except Exception as e:
         logger.error(f"Neo4j: Error adding KG triple: ({subj_s}, {pred_s}, {obj_s}). Error: {e}", exc_info=True)
+
+async def add_kg_triples_batch_to_db(
+    triples_data: List[Tuple[str, str, str, int, float, bool]] # subj, pred, obj, chapter, confidence, provisional
+):
+    if not triples_data:
+        logger.info("Neo4j: add_kg_triples_batch_to_db: No triples to add.")
+        return
+
+    statements_with_params: List[Tuple[str, Dict[str, Any]]] = []
+    # This query is identical to the single add, as execute_cypher_batch handles running multiple statements in one transaction.
+    base_query = """
+    MERGE (s:Entity {name: $subject_param})
+    MERGE (o:Entity {name: $object_param})
+    MERGE (s)-[r:DYNAMIC_REL {
+        type: $predicate_param,
+        chapter_added: $chapter_added_param
+    }]->(o)
+    ON CREATE SET
+        r.is_provisional = $is_provisional_param,
+        r.confidence = $confidence_param,
+        r.created_at = timestamp(),
+        r.last_updated = timestamp()
+    ON MATCH SET
+        r.is_provisional = $is_provisional_param,
+        r.confidence = $confidence_param,
+        r.last_updated = timestamp()
+    """
+    for subj, pred, obj_val, chapter_added, confidence, is_provisional in triples_data:
+        subj_s, pred_s, obj_s = subj.strip(), pred.strip(), obj_val.strip()
+        if not all([subj_s, pred_s, obj_s]) or chapter_added < config.KG_PREPOPULATION_CHAPTER_NUM:
+            logger.warning(f"Neo4j (Batch): Invalid KG triple skipped: S='{subj_s}', P='{pred_s}', O='{obj_s}', Chap={chapter_added}")
+            continue
+        
+        parameters = {
+            "subject_param": subj_s,
+            "object_param": obj_s,
+            "predicate_param": pred_s,
+            "chapter_added_param": chapter_added,
+            "is_provisional_param": is_provisional,
+            "confidence_param": confidence
+        }
+        statements_with_params.append((base_query, parameters))
+
+    if not statements_with_params:
+        logger.info("Neo4j: add_kg_triples_batch_to_db: No valid triples to add after filtering.")
+        return
+
+    try:
+        await neo4j_manager.execute_cypher_batch(statements_with_params)
+        logger.info(f"Neo4j: Batch added/updated {len(statements_with_params)} KG triples.")
+    except Exception as e:
+        # Log first few problematic params for debugging, if any
+        first_few_params_str = str([p for _, p in statements_with_params[:3]]) if statements_with_params else "N/A"
+        logger.error(f"Neo4j: Error in batch adding KG triples. First few params: {first_few_params_str}. Error: {e}", exc_info=True)
+        raise # Re-raise to inform the caller
 
 async def query_kg_from_db(
     subject: Optional[str] = None,

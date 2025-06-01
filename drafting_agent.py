@@ -158,17 +158,17 @@ class DraftingAgent:
             "--- END HYBRID CONTEXT ---",
             "",
             "**Writing Instructions:**",
-            f"1. Write a compelling and engaging chapter, aiming for a substantial length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
-            "2. Your primary goal is to advance the current chapter's **Overall Plot Point Focus**. Do NOT attempt to resolve future plot points mentioned in the 'Overall Narrative Context'.",
-            "3. If a **Detailed Scene Plan** is provided, adhere to it closely. For each scene, pay particular attention to its specified 'Summary', 'Key Dialogue Points', 'Setting Details', and **especially its 'Scene Focus Elements'**. Use the 'Scene Focus Elements' to guide you in elaborating, adding depth, and expanding the narrative to make each scene substantial and contribute to the overall chapter length target.",
-            "4. Maintain consistency with all provided information (Story Bible, World Building, Character Profiles, Previous Context).",
-            "   - **Crucially, the `KEY RELIABLE KG FACTS` section within the `HYBRID CONTEXT` provides established canon that MUST be respected.**",
-            "   - The `SEMANTIC CONTEXT` section within the `HYBRID CONTEXT` should guide narrative flow, tone, and recall of recent events.",
-            f"5. Ensure a smooth narrative flow and vivid prose suitable for the genre '{plot_outline_data.get('genre', 'story')}'.",
-            "6. **Employ 'showing' over 'telling':** Use vivid descriptions, sensory details, character actions, internal monologues, and nuanced dialogue to convey information, atmosphere, and emotions.",
-            "7. **Fully develop dialogue exchanges:** Allow characters to express themselves naturally, incorporating pauses, subtext, emotional reactions, and non-verbal cues. Don't shy away from longer conversations if they serve character or plot.",
-            "8. **Thoroughly explore the protagonist's (and other key characters') thoughts, feelings, and internal reactions** to the unfolding events and interactions. Dedicate space to their internal processing.",
-            "9. **Output ONLY the chapter text itself.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
+            f"1. Write a compelling chapter of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
+            "2. Primary Goal: Advance this chapter's **Overall Plot Point Focus**. Avoid resolving future plot points from 'Overall Narrative Context'.",
+            "3. Scene Plan Adherence: If a **Detailed Scene Plan** is given, follow it meticulously, especially its 'Scene Focus Elements' to add depth and length.",
+            "4. Consistency: Maintain consistency with Story Bible, World Building, Character Profiles, and Previous Context.",
+            "   - KG Facts: `KEY RELIABLE KG FACTS` in `HYBRID CONTEXT` are **canon and MUST be respected**.",
+            "   - Semantic Context: Use `SEMANTIC CONTEXT` in `HYBRID CONTEXT` for narrative flow, tone, and recent event recall.",
+            f"5. Style: Ensure smooth narrative flow and vivid prose for the '{plot_outline_data.get('genre', 'story')}' genre.",
+            "6. Show, Don't Tell: Use vivid descriptions, sensory details, actions, internal thoughts, and dialogue to convey information and emotion.",
+            "7. Dialogue: Develop natural dialogue with subtext, emotion, and non-verbal cues. Longer conversations are acceptable if they serve purpose.",
+            "8. Internal Reactions: Thoroughly explore key characters' thoughts and feelings regarding events.",
+            "9. Output: **ONLY the chapter text.** No headers, titles, or meta-discussion.",
             "",
             f"--- BEGIN CHAPTER {chapter_number} TEXT ---"
         ]
@@ -178,7 +178,7 @@ class DraftingAgent:
         raw_llm_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_DRAFTING, # MODIFIED
+            temperature=config.TEMPERATURE_DRAFTING, 
             max_tokens=None, 
             allow_fallback=True,
             stream_to_disk=True
