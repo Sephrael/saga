@@ -241,8 +241,11 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 --- End of Example ---
 """
 
-    prompt_lines = [
-        "/no_think",
+    prompt_lines = []
+    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        prompt_lines.append("/no_think")
+    
+    prompt_lines.extend([
         f"You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled \"{_get_nested_prop_from_agent(agent, 'plot_outline', 'title', 'Untitled Novel')}\" about {protagonist_name}.",
         "**Novel Context:**",
         f"  - Genre: {_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'N/A')}",
@@ -279,7 +282,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         "6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any \"Replace with:\" prefixes. Just the raw text intended for replacement/insertion. (See example above for how to format the text).",
         "",
         f"--- BEGIN REPLACE_WITH TEXT (for the segment related to \"{original_quote_text_from_problem}\" or as a new passage if quote is \"N/A - General Issue\") ---"
-    ]
+    ])
     prompt = "\n".join(prompt_lines)
 
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10),' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10),' ')}...' Max Output Tokens: {max_patch_output_tokens}")
@@ -687,8 +690,11 @@ async def revise_chapter_draft_logic(
                 "and addresses any resulting narrative gaps or inconsistencies.)**\n"
             )
         
-        prompt_full_rewrite_lines = [
-            "/no_think",
+        prompt_full_rewrite_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_full_rewrite_lines.append("/no_think")
+        
+        prompt_full_rewrite_lines.extend([
             f"You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.",
             "**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**",
             "--- FEEDBACK START ---",
@@ -718,17 +724,11 @@ async def revise_chapter_draft_logic(
             "7.  Output ONLY the rewritten chapter text.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
             "",
             f"--- BEGIN REVISED CHAPTER {chapter_number} TEXT ---"
-        ]
+        ])
         prompt_full_rewrite = "\n".join(prompt_full_rewrite_lines)
 
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-        # MODIFIED: Get raw text for logging, then clean manually if needed
-        # However, since auto_clean_response is True by default, revised_llm_text_output will be cleaned.
-        # To get raw, we'd need to call with auto_clean_response=False for logging.
-        # For this change, we assume the first returned text is the one to use, already cleaned.
-        # The raw_llm_output to be saved should be the uncleaned version.
         
-        # Call once to get the raw output for logging
         raw_revised_llm_output_for_log, full_rewrite_usage = await llm_interface.async_call_llm(
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
@@ -738,7 +738,7 @@ async def revise_chapter_draft_logic(
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_REVISION,
             presence_penalty=config.PRESENCE_PENALTY_REVISION,
-            auto_clean_response=False # Get raw
+            auto_clean_response=False 
         )
         _add_usage(full_rewrite_usage)
 
@@ -747,7 +747,7 @@ async def revise_chapter_draft_logic(
             return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
         
         final_revised_text = llm_interface.clean_model_response(raw_revised_llm_output_for_log)
-        final_raw_llm_output = raw_revised_llm_output_for_log # Save the uncleaned version for the log
+        final_raw_llm_output = raw_revised_llm_output_for_log 
 
         logger.info(f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}.")
     elif not use_patched_text_as_final and not evaluation_result.get("needs_revision"):
@@ -759,7 +759,7 @@ async def revise_chapter_draft_logic(
         return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
     if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
-    if final_revised_text is not patched_text: # Only check similarity if it wasn't the patched text
+    if final_revised_text is not patched_text: 
         original_embedding_full_final, revised_embedding_full_final = await asyncio.gather(
             llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(final_revised_text)
         )

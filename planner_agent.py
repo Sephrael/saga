@@ -220,8 +220,11 @@ SCENE FOCUS ELEMENTS:
 CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (or gatekeeper) in Kael, advancing the plot point about finding the map.
 """
 
-        prompt_lines = [
-            "/no_think",
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+        
+        prompt_lines.extend([
             f"You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {config.TARGET_SCENES_MAX} detailed scenes** for Chapter {chapter_number} of a novel.",
             "This chapter is part of a larger narrative arc.",
             "",
@@ -267,11 +270,11 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
             "```",
             "",
             "Output ONLY the scene plan text as described."
-        ]
+        ])
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
-        # MODIFIED: cleaned_plan_text_from_llm directly from async_call_llm
+        
         cleaned_plan_text_from_llm, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
@@ -281,7 +284,7 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
             presence_penalty=config.PRESENCE_PENALTY_PLANNING,
-            auto_clean_response=True # Default
+            auto_clean_response=True 
         )
 
         parsed_scenes_list_of_dicts = self._parse_llm_scene_plan_output(cleaned_plan_text_from_llm, chapter_number)

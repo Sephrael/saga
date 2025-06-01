@@ -111,6 +111,9 @@ LLM_RETRY_ATTEMPTS: int = int(os.getenv("LLM_RETRY_ATTEMPTS", "3"))
 LLM_RETRY_DELAY_SECONDS: float = 3.0
 # Model to use as a fallback if the primary LLM call fails and fallback is allowed.
 FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL # Often a smaller, faster model.
+# Toggle for the "/no_think" directive in LLM prompts.
+ENABLE_LLM_NO_THINK_DIRECTIVE: bool = os.getenv("ENABLE_LLM_NO_THINK_DIRECTIVE", "True").lower() == "true"
+
 
 # Specific model assignments for different tasks
 # Model used for generating text (can be overridden by task-specific models below).
@@ -172,7 +175,7 @@ FREQUENCY_PENALTY_EVALUATION: float = float(os.getenv("FREQUENCY_PENALTY_EVALUAT
 PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "0.0"))
 # Knowledge Graph Extraction
 FREQUENCY_PENALTY_KG_EXTRACTION: float = float(os.getenv("FREQUENCY_PENALTY_KG_EXTRACTION", "0.0"))
-PRESENCE_PENALTY_KG_EXTRACTION: float = float(os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "0.0"))
+PRESENCE_PENALTY_KG_EXTRACTION: float = float(os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "1.5"))
 # Summarization
 FREQUENCY_PENALTY_SUMMARY: float = float(os.getenv("FREQUENCY_PENALTY_SUMMARY", "0.0"))
 PRESENCE_PENALTY_SUMMARY: float = float(os.getenv("PRESENCE_PENALTY_SUMMARY", "0.0"))

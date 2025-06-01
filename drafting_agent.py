@@ -128,8 +128,11 @@ class DraftingAgent:
                     future_plot_context_parts.append(f"\n**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}")
         future_plot_context_str = "".join(future_plot_context_parts)
 
-        prompt_lines = [
-            "/no_think",
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+        
+        prompt_lines.extend([
             f"You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled \"{plot_outline_data.get('title', 'Untitled Novel')}\".",
             "This chapter is part of a larger narrative arc.",
             "",
@@ -172,7 +175,7 @@ class DraftingAgent:
             "10. Output: **ONLY the chapter text.** No headers, titles, or meta-discussion.",
             "",
             f"--- BEGIN CHAPTER {chapter_number} TEXT ---"
-        ]
+        ])
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for Ch {chapter_number} draft. Plot Point {plot_point_index+1}/{total_plot_points_in_novel}. Target min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")

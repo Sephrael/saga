@@ -49,8 +49,11 @@ WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "tra
 @alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
 async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key: str, chapter_number: int) -> Tuple[str, Optional[Dict[str, int]]]:
     """ Summarizes chapter text using an LLM. Input `chapter_text_full_key` is the actual text. Returns summary and usage."""
-    prompt_lines = [
-        "/no_think",
+    prompt_lines = []
+    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        prompt_lines.append("/no_think")
+    
+    prompt_lines.extend([
         f"You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.", 
         "The summary should be 1-3 sentences long and capture the most crucial information.",
         "Focus on what changed or was revealed.",
@@ -61,7 +64,7 @@ async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key:
         "--- END TEXT ---",
         "",
         "Output ONLY the summary text. No extra commentary or \"Summary:\" prefix."
-    ]
+    ])
     prompt = "\n".join(prompt_lines)
 
     summary_cleaned, usage_data = await llm_interface.async_call_llm(
@@ -734,8 +737,11 @@ class KGMaintainerAgent:
         This method is cached. It takes hashable string inputs derived from novel_props,
         builds the prompt, makes the LLM call, and returns raw LLM output.
         """
-        prompt_lines = [
-            "/no_think",
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+        
+        prompt_lines.extend([
             "You are a comprehensive literary analyst and knowledge engineer.",
             f"Analyze **Complete Chapter {chapter_number} Text** (protagonist: {protagonist_name}) to extract information for three knowledge bases.",
             "Output ONLY plain text, structured as described. Use Title Case for keys like \"Description\", \"Traits\", \"Status\".",
@@ -784,7 +790,7 @@ class KGMaintainerAgent:
             "```",
             "",
             "Begin output now:"
-        ]
+        ])
         prompt = "\n".join(prompt_lines)
         logger.debug(f"KGMaintainer (Cached Call): PRE-LLM CALL for Ch {chapter_number}. Prompt first 300 chars:\n{prompt[:300]}")
         logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}) (cached).")

@@ -1,4 +1,3 @@
-      
 # initial_setup_logic.py
 import logging
 import json # Retain for fallback or other JSON operations
@@ -339,28 +338,34 @@ async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str,
             base_elements_for_outline["source_hint"] = "configured_or_user_markdown"
             prompt_core_elements_intro = f"Generate a novel concept based on (or incorporating):\n  - Genre: {base_elements_for_outline['genre']}\n  - Theme: {base_elements_for_outline['theme']}\n  - Initial Setting Idea: {base_elements_for_outline['setting_description']}\n  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
         
-        prompt = f"""/no_think
-You are a creative assistant specializing in crafting compelling narrative structures for full novels.
-{prompt_core_elements_intro}
-{context_from_user_input}
-Based on all the above, generate or complete the following plot outline fields.
-If user context provided a concrete value for a field, you MUST use it.
-If user context for a field is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, or if a list like 'Plot Points' needs more items, generate them creatively.
-Ensure the "Plot Points" section contains approximately {target_num_plot_points} distinct points that form a complete narrative arc. If the user provided some plot points, integrate them and add more to reach the target.
-The fields to ensure are complete:
-{llm_fields_to_generate_text}
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+        
+        prompt_lines.extend([
+            "You are a creative assistant specializing in crafting compelling narrative structures for full novels.",
+            f"{prompt_core_elements_intro}",
+            f"{context_from_user_input}",
+            "Based on all the above, generate or complete the following plot outline fields.",
+            "If user context provided a concrete value for a field, you MUST use it.",
+            f"If user context for a field is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, or if a list like 'Plot Points' needs more items, generate them creatively.",
+            f"Ensure the \"Plot Points\" section contains approximately {target_num_plot_points} distinct points that form a complete narrative arc. If the user provided some plot points, integrate them and add more to reach the target.",
+            "The fields to ensure are complete:",
+            f"{llm_fields_to_generate_text}",
+            "",
+            "Please output ONLY the plot elements as plain text, using the specified field names (e.g., \"Title:\", \"Protagonist Name:\").",
+            "For \"Plot Points\", use this EXACT format with each point on a new line prefixed by \"- \".",
+            f"Example of \"Plot Points\" for a {target_num_plot_points}-point outline:",
+            "Plot Points:",
+            "- Plot Point 1 description.",
+            "- Plot Point 2 description.",
+            "...",
+            f"- Plot Point {target_num_plot_points} description.",
+            "",
+            "Begin your output now using the requested field names:"
+        ])
+        prompt = "\n".join(prompt_lines)
 
-Please output ONLY the plot elements as plain text, using the specified field names (e.g., "Title:", "Protagonist Name:").
-For "Plot Points", use this EXACT format with each point on a new line prefixed by "- ".
-Example of "Plot Points" for a {target_num_plot_points}-point outline:
-Plot Points:
-- Plot Point 1 description.
-- Plot Point 2 description.
-...
-- Plot Point {target_num_plot_points} description.
-
-Begin your output now using the requested field names:
-"""
         logger.info(f"Calling LLM for plot outline generation/completion (to plain text), targeting ~{target_num_plot_points} plot points...")
         cleaned_outline_text, usage_data = await llm_interface.async_call_llm(
             model_name=config.INITIAL_SETUP_MODEL, 
@@ -553,27 +558,33 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
     if not has_world_user_context:
         user_world_context_str = "\n**User-Provided World Context:** No specific world preferences or fill-in requests were found; generate creatively.\n"
     
-    prompt = f"""/no_think
-You are an expert world-building assistant for novelists.
-Based on the provided novel concept and any existing user world context, generate or complete detailed world-building elements as PLAIN TEXT.
-If user context provided a concrete value for an element, you MUST use it.
-If user context for an element is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, generate it creatively.
+    prompt_lines = []
+    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        prompt_lines.append("/no_think")
+    
+    prompt_lines.extend([
+        "You are an expert world-building assistant for novelists.",
+        "Based on the provided novel concept and any existing user world context, generate or complete detailed world-building elements as PLAIN TEXT.",
+        "If user context provided a concrete value for an element, you MUST use it.",
+        f"If user context for an element is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, generate it creatively.",
+        "",
+        "**Novel Concept:**",
+        f"  - Title: {plot_title}",
+        f"  - Genre: {plot_genre}",
+        f"  - Core Setting Idea: {world_setting_desc}",
+        f"{user_world_context_str}",
+        "**Instructions for Output:**",
+        "1.  Structure your output using clear category headers (e.g., `Overview:`, `Locations:`, `Factions:`, `Systems:`, `Lore:`).",
+        "2.  For the `Overview:` category, provide a general description directly under an appropriate key like `Description:`.",
+        "3.  For other categories (like `Locations`, `Factions`), list each item on its own line starting with the item's name followed by a colon (e.g., `The Whispering Woods:` or `The Sunken City:`).",
+        "4.  Under each item, provide indented \"Key: Value\" pairs for its details. Use keys like `Description`, `Atmosphere`, `Goals`, `Rules`, `Key Elements`, `Traits`.",
+        "5.  For list-like details (e.g., `Goals` for a faction, `Rules` for a system), list each sub-item on a new line, prefixed with \"- \".",
+        "6.  Ensure comprehensive yet concise details. Aim for 2-4 items per category where applicable (except Overview).",
+        "",
+        "Begin your detailed world-building output now:"
+    ])
+    prompt = "\n".join(prompt_lines)
 
-**Novel Concept:**
-  - Title: {plot_title}
-  - Genre: {plot_genre}
-  - Core Setting Idea: {world_setting_desc}
-{user_world_context_str}
-**Instructions for Output:**
-1.  Structure your output using clear category headers (e.g., `Overview:`, `Locations:`, `Factions:`, `Systems:`, `Lore:`).
-2.  For the `Overview:` category, provide a general description directly under an appropriate key like `Description:`.
-3.  For other categories (like `Locations`, `Factions`), list each item on its own line starting with the item's name followed by a colon (e.g., `The Whispering Woods:` or `The Sunken City:`).
-4.  Under each item, provide indented "Key: Value" pairs for its details. Use keys like `Description`, `Atmosphere`, `Goals`, `Rules`, `Key Elements`, `Traits`.
-5.  For list-like details (e.g., `Goals` for a faction, `Rules` for a system), list each sub-item on a new line, prefixed with "- ".
-6.  Ensure comprehensive yet concise details. Aim for 2-4 items per category where applicable (except Overview).
-
-Begin your detailed world-building output now:
-"""
     logger.info("Generating/completing initial world-building data (to plain text) via LLM...")
     # MODIFIED: cleaned_world_text directly from async_call_llm
     cleaned_world_text, usage_data = await llm_interface.async_call_llm(

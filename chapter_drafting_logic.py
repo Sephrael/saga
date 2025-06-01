@@ -91,8 +91,11 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
 
     plot_outline_data = getattr(agent, 'plot_outline', agent.get('plot_outline_full', agent.get('plot_outline', {})))
 
-    prompt_lines = [
-        "/no_think",
+    prompt_lines = []
+    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        prompt_lines.append("/no_think")
+    
+    prompt_lines.extend([
         f"You are an expert novelist tasked with writing Chapter {chapter_number} of the novel titled \"{plot_outline_data.get('title', 'Untitled Novel')}\".",
         "**Story Bible / Core Information:**",
         f"  - Genre: {plot_outline_data.get('genre', 'N/A')}",
@@ -129,7 +132,7 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
         "9. **Output ONLY the chapter text itself.** Do NOT include \"Chapter X\" headers, titles, author commentary, or any meta-discussion.",
         "",
         f"--- BEGIN CHAPTER {chapter_number} TEXT ---"
-    ]
+    ])
     prompt = "\n".join(prompt_lines)
 
     logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")

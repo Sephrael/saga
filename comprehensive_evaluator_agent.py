@@ -191,8 +191,11 @@ QUOTE FROM ORIGINAL: With a flick of her wrist, Mariel teleported the entire par
 SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add significant costs, limitations, or consequences that align with or challenge the core theme in an interesting way, rather than negating it.
 """
         
-        prompt_lines = [
-            "/no_think",
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+
+        prompt_lines.extend([
             f"You are a Master Editor evaluating Chapter {chapter_number} of a novel titled \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
             "Analyze the **Complete Chapter Text** provided below.",
             "Your task is to identify specific issues related to these EXACT categories:", 
@@ -245,7 +248,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "```",
             "",
             "Begin your output now:"
-        ]
+        ])
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number}...")

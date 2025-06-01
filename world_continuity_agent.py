@@ -140,8 +140,11 @@ QUOTE FROM ORIGINAL: "I do not believe we have crossed paths before, young one,"
 SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her).
 """
 
-        prompt_lines = [
-            "/no_think",
+        prompt_lines = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+        
+        prompt_lines.extend([
             f"You are a World & Continuity Expert Editor for Chapter {chapter_number} of the novel \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
             "Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chapter Text** below. Focus on:",
             "- Contradictions with the Plot Outline summary.",
@@ -192,7 +195,7 @@ SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship 
             "```",
             "",
             "Begin output now:"
-        ]
+        ])
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number}...")
