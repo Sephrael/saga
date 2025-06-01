@@ -148,7 +148,7 @@ async def _generate_single_patch_instruction_llm(
     """
     plan_focus_section_parts: List[str] = []
     plot_point_focus, _ = _get_plot_point_info_from_agent(agent, chapter_number)
-    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 4
+    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         formatted_plan = _format_scene_plan_for_prompt_func(chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt)
@@ -215,7 +215,7 @@ async def _generate_single_patch_instruction_llm(
         original_snippet_tokens = llm_interface.count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL)
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
-        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 3)
+        max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2)
         max_patch_output_tokens = max(max_patch_output_tokens, 200)
         logger.info(f"Patch (Ch {chapter_number}, specific fix): Original snippet tokens: {original_snippet_tokens}. Max output tokens set to {max_patch_output_tokens}.")
     prompt_instruction_for_replacement_scope_str = "".join(prompt_instruction_for_replacement_scope_parts)
@@ -607,7 +607,7 @@ async def revise_chapter_draft_logic(
         )
         plan_focus_section_full_rewrite_parts: List[str] = []
         plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(agent, chapter_number)
-        max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 3
+        max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
             formatted_plan_fr = _format_scene_plan_for_prompt_func(chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite)
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)

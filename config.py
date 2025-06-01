@@ -285,7 +285,7 @@ LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 # Toggle for "unhinged plot mode" - generates more random/surprising plot elements if user input is minimal.
 UNHINGED_PLOT_MODE: bool = os.getenv("UNHINGED_PLOT_MODE", "False").lower() == "true"
 # Default genre if not supplied by user or unhinged mode.
-CONFIGURED_GENRE: str = "fantasy"
+CONFIGURED_GENRE: str = "gritty fantasy"
 # Default theme if not supplied by user or unhinged mode.
 CONFIGURED_THEME: str = "the cost of historical revisionism"
 # Default setting description if not supplied.
