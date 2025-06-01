@@ -1,3 +1,4 @@
+      
 # initial_setup_logic.py
 import logging
 import json # Retain for fallback or other JSON operations
@@ -361,7 +362,7 @@ Plot Points:
 Begin your output now using the requested field names:
 """
         logger.info(f"Calling LLM for plot outline generation/completion (to plain text), targeting ~{target_num_plot_points} plot points...")
-        raw_outline_text, usage_data = await llm_interface.async_call_llm(
+        cleaned_outline_text, usage_data = await llm_interface.async_call_llm(
             model_name=config.INITIAL_SETUP_MODEL, 
             prompt=prompt, 
             temperature=config.TEMPERATURE_INITIAL_SETUP, 
@@ -374,7 +375,6 @@ Begin your output now using the requested field names:
             accumulated_usage_data["completion_tokens"] += usage_data.get("completion_tokens", 0)
             accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
 
-        cleaned_outline_text = llm_interface.clean_model_response(raw_outline_text)
         parsed_llm_response = parse_key_value_block(
             cleaned_outline_text, current_plot_outline_key_map_for_llm_prompt, PLOT_OUTLINE_LIST_INTERNAL_KEYS
         )
@@ -575,20 +575,21 @@ If user context for an element is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or mis
 Begin your detailed world-building output now:
 """
     logger.info("Generating/completing initial world-building data (to plain text) via LLM...")
-    raw_world_data_text, usage_data = await llm_interface.async_call_llm(
+    # MODIFIED: cleaned_world_text directly from async_call_llm
+    cleaned_world_text, usage_data = await llm_interface.async_call_llm(
         model_name=config.INITIAL_SETUP_MODEL, 
         prompt=prompt, 
         temperature=config.TEMPERATURE_INITIAL_SETUP, 
         stream_to_disk=True,
         frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
-        presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP
+        presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP,
+        auto_clean_response=True # Default
     )
     if usage_data:
         accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
         accumulated_usage_data["completion_tokens"] += usage_data.get("completion_tokens", 0)
         accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
     
-    cleaned_world_text = llm_interface.clean_model_response(raw_world_data_text)
     logger.debug(f"Cleaned LLM world-building output (len: {len(cleaned_world_text)}):\nSTART_OF_WB_TEXT\n{cleaned_world_text}\nEND_OF_WB_TEXT")
 
     normalized_detail_key_map = {k.lower().replace(" ", "_"): v for k, v in WORLD_DETAIL_KEY_MAP_NORMALIZED_TO_INTERNAL.items()}

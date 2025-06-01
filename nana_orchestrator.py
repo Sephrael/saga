@@ -249,15 +249,6 @@ class NANA_Orchestrator:
             logger.info(f"Skipping KG pre-population: Plot outline source '{plot_source}' does not indicate it's ready for KG, and it's not a default plot.")
             return
 
-        # The prepopulate_kg_from_initial_data uses MERGE and should handle existing nodes gracefully.
-        # The main guard is now is_plot_ready_for_kg.
-        # If reset_neo4j.py was run, the graph will be empty anyway.
-        # If it's a continuation, MERGE operations in prepopulate will update.
-        # We no longer strictly need to check for NovelInfo node existence here to decide to skip,
-        # as the underlying prepopulation logic is designed to be idempotent or merging.
-        # However, if `save_core_novel_state_to_neo4j` (which creates NovelInfo) runs before this,
-        # it's fine.
-
         logger.info(f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---")
         await self.kg_maintainer_agent.prepopulate_kg_from_initial_data(
             self.plot_outline, self.character_profiles, self.world_building
@@ -341,20 +332,14 @@ class NANA_Orchestrator:
             logger.error(f"Error during de-duplication for Chapter {chapter_number}: {e}", exc_info=True)
             return text_to_dedup, 0
 
-    async def run_chapter_generation_process(self, novel_chapter_number: int) -> Optional[str]:
-        logger.info(f"=== NANA: Starting Novel Chapter {novel_chapter_number} Generation ===")
-        self._update_rich_display(chapter_num=novel_chapter_number, step="Starting Chapter")
-        
-        if not self.plot_outline or not self.plot_outline.get("plot_points") or not self.plot_outline.get("protagonist_name"):
-            logger.error(f"NANA: Cannot write Ch {novel_chapter_number}: Plot outline or critical plot data missing from orchestrator state.")
-            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Missing Plot Outline")
-            return None
+    async def _prepare_chapter_prerequisites(self, novel_chapter_number: int) -> Tuple[Optional[str], int, Optional[List[SceneDetail]], Optional[str]]:
+        """Handles plot point retrieval, scene planning, and hybrid context generation."""
+        self._update_rich_display(step=f"Ch {novel_chapter_number} - Preparing Prerequisites")
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(novel_chapter_number)
-        if plot_point_focus is None: 
-            logger.error(f"NANA: Ch {novel_chapter_number} generation halted: no concrete plot point focus could be determined (index {plot_point_index}).")
-            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Plot Point Focus")
-            return None
+        if plot_point_focus is None:
+            logger.error(f"NANA: Ch {novel_chapter_number} prerequisite check failed: no concrete plot point focus (index {plot_point_index}).")
+            return None, -1, None, None
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Planning Scenes")
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
@@ -363,36 +348,58 @@ class NANA_Orchestrator:
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
-            logger.warning(f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only for drafting.")
+            logger.warning(f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only.")
         await self._save_debug_output(novel_chapter_number, "scene_plan", chapter_plan if chapter_plan else "No plan generated.")
-        
+
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Generating Hybrid Context")
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(self.novel_props_cache, novel_chapter_number, chapter_plan)
         await self._save_debug_output(novel_chapter_number, "hybrid_context_for_draft", hybrid_context_for_draft)
-        
+
+        return plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft
+
+    async def _draft_initial_chapter_text(
+        self,
+        novel_chapter_number: int,
+        plot_point_focus: str, # Assumed not None by this point
+        hybrid_context_for_draft: str, # Assumed not None by this point
+        chapter_plan: Optional[List[SceneDetail]]
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Handles initial draft generation."""
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Drafting Initial Text")
         initial_draft_text, initial_raw_llm_text, draft_usage = await self.drafting_agent.draft_chapter(
-            self.novel_props_cache, novel_chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan 
+            self.novel_props_cache, novel_chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
         )
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Drafting", draft_usage)
+
         if not initial_draft_text:
             logger.error(f"NANA: Drafting Agent failed for Ch {novel_chapter_number}. No initial draft produced.")
             await self._save_debug_output(novel_chapter_number, "initial_draft_fail_raw_llm", initial_raw_llm_text or "Drafting Agent returned None for raw output.")
-            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Initial Draft")
-            return None
-        await self._save_debug_output(novel_chapter_number, "initial_draft", initial_draft_text)
+            return None, None
         
+        await self._save_debug_output(novel_chapter_number, "initial_draft", initial_draft_text)
+        return initial_draft_text, initial_raw_llm_text
+
+    async def _process_and_revise_draft(
+        self,
+        novel_chapter_number: int,
+        initial_draft_text: str,
+        initial_raw_llm_text: Optional[str],
+        plot_point_focus: str,
+        plot_point_index: int,
+        hybrid_context_for_draft: str,
+        chapter_plan: Optional[List[SceneDetail]]
+    ) -> Tuple[Optional[str], Optional[str], bool]:
+        """Handles the de-duplication, evaluation, and revision loop."""
         current_text_to_process: Optional[str] = initial_draft_text
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
-        is_from_flawed_source_for_kg = False 
-        de_duplication_occurred_this_chapter = False 
+        is_from_flawed_source_for_kg = False
+        de_duplication_occurred_this_chapter = False
 
-        max_revision_attempts = 1
-        for attempt in range(max_revision_attempts + 1): 
+        max_revision_attempts = 1 # Could be a config
+        for attempt in range(max_revision_attempts + 1):
             if current_text_to_process is None:
-                 logger.error(f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt + 1}. Aborting chapter.")
-                 self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Text lost before Cycle {attempt + 1}")
-                 return None
+                logger.error(f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt + 1}. Aborting chapter.")
+                return None, None, True # Mark as flawed if text lost
 
             self._update_rich_display(step=f"Ch {novel_chapter_number} - De-duplication Attempt {attempt + 1}")
             logger.info(f"NANA: Ch {novel_chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt + 1}")
@@ -400,8 +407,8 @@ class NANA_Orchestrator:
                 current_text_to_process, novel_chapter_number
             )
             if removed_char_count > 0:
-                de_duplication_occurred_this_chapter = True 
-                is_from_flawed_source_for_kg = True 
+                de_duplication_occurred_this_chapter = True
+                is_from_flawed_source_for_kg = True
                 logger.info(f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt+1}) removed {removed_char_count} characters. Text marked as potentially flawed for KG.")
                 current_text_to_process = deduplicated_text
                 await self._save_debug_output(novel_chapter_number, f"deduplicated_text_attempt_{attempt+1}", current_text_to_process)
@@ -413,7 +420,7 @@ class NANA_Orchestrator:
             
             eval_result_obj, eval_usage = await self.evaluator_agent.evaluate_chapter_draft(
                 self.novel_props_cache, current_text_to_process, novel_chapter_number,
-                plot_point_focus, plot_point_index, hybrid_context_for_draft 
+                plot_point_focus, plot_point_index, hybrid_context_for_draft
             )
             self._accumulate_tokens(f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt+1}", eval_usage)
             evaluation_result: EvaluationResult = eval_result_obj
@@ -428,8 +435,8 @@ class NANA_Orchestrator:
 
             if continuity_problems:
                 logger.warning(f"NANA: Ch {novel_chapter_number} (Attempt {attempt+1}) - World Continuity Agent found {len(continuity_problems)} issues.")
-                evaluation_result["problems_found"].extend(continuity_problems) 
-                if not evaluation_result["needs_revision"]: 
+                evaluation_result["problems_found"].extend(continuity_problems)
+                if not evaluation_result["needs_revision"]:
                     evaluation_result["needs_revision"] = True
                 unique_reasons = set(evaluation_result.get("reasons", []))
                 unique_reasons.add("Continuity issues identified by WorldContinuityAgent.")
@@ -438,20 +445,20 @@ class NANA_Orchestrator:
             if not evaluation_result["needs_revision"]:
                 logger.info(f"NANA: Ch {novel_chapter_number} draft passed evaluation (Attempt {attempt+1}). Text is considered good.")
                 self._update_rich_display(step=f"Ch {novel_chapter_number} - Passed Evaluation")
-                break 
-            else: 
-                is_from_flawed_source_for_kg = True 
+                break
+            else:
+                is_from_flawed_source_for_kg = True
                 logger.warning(f"NANA: Ch {novel_chapter_number} draft (Attempt {attempt+1}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons',[]))}")
                 if attempt >= max_revision_attempts:
                     logger.error(f"NANA: Ch {novel_chapter_number} - Max revision attempts ({max_revision_attempts+1}) reached. Proceeding with current draft, marked as flawed.")
                     self._update_rich_display(step=f"Ch {novel_chapter_number} - Max Revisions Reached (Flawed)")
-                    break 
+                    break
 
                 self._update_rich_display(step=f"Ch {novel_chapter_number} - Revision Attempt {attempt + 1}")
                 revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
-                    self, current_text_to_process, novel_chapter_number, 
+                    self, current_text_to_process, novel_chapter_number,
                     evaluation_result, hybrid_context_for_draft, chapter_plan,
-                    is_from_flawed_source=de_duplication_occurred_this_chapter 
+                    is_from_flawed_source=de_duplication_occurred_this_chapter
                 )
                 self._accumulate_tokens(f"Ch{novel_chapter_number}-Revision-Attempt{attempt+1}", revision_usage)
                 
@@ -463,52 +470,105 @@ class NANA_Orchestrator:
                 else:
                     logger.error(f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt+1} failed to produce usable text. Proceeding with previous draft, marked as flawed.")
                     self._update_rich_display(step=f"Ch {novel_chapter_number} - Revision Failed (Flawed)")
-                    break 
+                    break
         
-        if current_text_to_process is None: 
+        if current_text_to_process is None:
             logger.critical(f"NANA: Ch {novel_chapter_number} - current_text_to_process is None after revision loop. Aborting chapter.")
-            return None
-        
+            return None, None, True # Mark as flawed if text lost
+
         if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
              logger.warning(f"NANA: Final chosen text for Ch {novel_chapter_number} is short ({len(current_text_to_process)} chars). Marked as flawed for KG.")
              is_from_flawed_source_for_kg = True
+        
+        return current_text_to_process, current_raw_llm_output, is_from_flawed_source_for_kg
 
+    async def _finalize_and_save_chapter(
+        self,
+        novel_chapter_number: int,
+        final_text_to_process: str,
+        final_raw_llm_output: Optional[str],
+        is_from_flawed_source_for_kg: bool
+    ) -> Optional[str]:
+        """Handles summarization, embedding, DB/file saving, KG update, and state updates."""
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Summarizing")
-        chapter_summary, summary_usage = await self.kg_maintainer_agent.summarize_chapter(current_text_to_process, novel_chapter_number)
+        chapter_summary, summary_usage = await self.kg_maintainer_agent.summarize_chapter(final_text_to_process, novel_chapter_number)
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Summarization", summary_usage)
         await self._save_debug_output(novel_chapter_number, "final_summary", chapter_summary)
         
-        final_embedding = await llm_interface.async_get_embedding(current_text_to_process)
+        final_embedding = await llm_interface.async_get_embedding(final_text_to_process)
         if final_embedding is None:
             logger.error(f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only.")
-            await self._save_chapter_text_and_log(novel_chapter_number, current_text_to_process, current_raw_llm_output)
+            await self._save_chapter_text_and_log(novel_chapter_number, final_text_to_process, final_raw_llm_output)
             self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Embedding")
             return None
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Saving to DB")
         await chapter_queries.save_chapter_data_to_db(
-            novel_chapter_number, current_text_to_process, current_raw_llm_output or "N/A",
-            chapter_summary, final_embedding, is_from_flawed_source_for_kg 
+            novel_chapter_number, final_text_to_process, final_raw_llm_output or "N/A",
+            chapter_summary, final_embedding, is_from_flawed_source_for_kg
         )
-        await self._save_chapter_text_and_log(novel_chapter_number, current_text_to_process, current_raw_llm_output)
+        await self._save_chapter_text_and_log(novel_chapter_number, final_text_to_process, final_raw_llm_output)
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Updating KG")
         kg_merge_usage = await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.novel_props_cache, novel_chapter_number, current_text_to_process, is_from_flawed_source_for_kg
+            self.novel_props_cache, novel_chapter_number, final_text_to_process, is_from_flawed_source_for_kg
         )
         self._accumulate_tokens(f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage)
-        self.character_profiles = self.novel_props_cache['character_profiles'] 
-        self.world_building = self.novel_props_cache['world_building']   
-        self._update_novel_props_cache()
+        # self.novel_props_cache is updated in-place by extract_and_merge_knowledge
+        self.character_profiles = self.novel_props_cache['character_profiles']
+        self.world_building = self.novel_props_cache['world_building']
+        self._update_novel_props_cache() # Reflect changes from KG merge
 
-        self.chapter_count = max(self.chapter_count, novel_chapter_number) 
+        self.chapter_count = max(self.chapter_count, novel_chapter_number)
         
-        await self._save_core_novel_state_to_neo4j() 
+        await self._save_core_novel_state_to_neo4j() # Save potentially updated character/world profiles
 
-        status_message = "Successfully Generated" if not is_from_flawed_source_for_kg else "Generated (Marked with Flaws)"
-        logger.info(f"=== NANA: Finished Novel Chapter {novel_chapter_number} - {status_message} ===")
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - {status_message}")
-        return current_text_to_process
+        return final_text_to_process
+
+    async def run_chapter_generation_process(self, novel_chapter_number: int) -> Optional[str]:
+        logger.info(f"=== NANA: Starting Novel Chapter {novel_chapter_number} Generation ===")
+        self._update_rich_display(chapter_num=novel_chapter_number, step="Starting Chapter")
+        
+        if not self.plot_outline or not self.plot_outline.get("plot_points") or not self.plot_outline.get("protagonist_name"):
+            logger.error(f"NANA: Cannot write Ch {novel_chapter_number}: Plot outline or critical plot data missing.")
+            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Missing Plot Outline")
+            return None
+
+        prereq_result = await self._prepare_chapter_prerequisites(novel_chapter_number)
+        plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft = prereq_result
+        
+        if plot_point_focus is None or hybrid_context_for_draft is None: # plot_point_index might be -1 if focus is None
+            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Prerequisites Incomplete")
+            return None
+
+        initial_draft_text, initial_raw_llm_text = await self._draft_initial_chapter_text(
+            novel_chapter_number, plot_point_focus, hybrid_context_for_draft, chapter_plan
+        )
+        if initial_draft_text is None:
+            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - No Initial Draft")
+            return None
+        
+        processed_text, processed_raw_llm, is_flawed = await self._process_and_revise_draft(
+            novel_chapter_number, initial_draft_text, initial_raw_llm_text,
+            plot_point_focus, plot_point_index, hybrid_context_for_draft, chapter_plan
+        )
+        if processed_text is None:
+            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Revision/Processing Error")
+            return None
+            
+        final_text_result = await self._finalize_and_save_chapter(
+            novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+        )
+
+        if final_text_result:
+            status_message = "Successfully Generated" if not is_flawed else "Generated (Marked with Flaws)"
+            logger.info(f"=== NANA: Finished Novel Chapter {novel_chapter_number} - {status_message} ===")
+            self._update_rich_display(step=f"Ch {novel_chapter_number} - {status_message}")
+        else:
+            logger.error(f"=== NANA: Failed Novel Chapter {novel_chapter_number} - Finalization/Save Error ===")
+            self._update_rich_display(step=f"Ch {novel_chapter_number} Failed - Finalization Error")
+        
+        return final_text_result
 
     def _validate_critical_configs(self) -> bool:
         critical_str_configs = {
@@ -563,14 +623,10 @@ class NANA_Orchestrator:
                     logger.critical("NANA: Initial setup failed. Halting generation.")
                     self._update_rich_display(step="Initial Setup Failed - Halting")
                     return
-                # After initial setup, the state (self.plot_outline etc.) is updated.
-                # Re-run async_init_orchestrator to ensure novel_props_cache and chapter_count are correctly based on this new state.
-                # However, perform_initial_setup already saves to DB and updates the cache.
-                # A full re-init might not be needed, but we need to ensure the state is consistent.
-                self._update_novel_props_cache() # Ensure cache reflects potential changes from setup.
+                self._update_novel_props_cache() 
             
             await self._prepopulate_kg_if_needed() 
-            self._update_novel_props_cache() # Final update before generation loop
+            self._update_novel_props_cache() 
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
             

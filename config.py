@@ -154,19 +154,19 @@ LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.8")) # MODIFIED to get from e
 # Values typically between -2.0 and 2.0. Positive values penalize, negative values encourage.
 # Drafting
 FREQUENCY_PENALTY_DRAFTING: float = float(os.getenv("FREQUENCY_PENALTY_DRAFTING", "0.3"))
-PRESENCE_PENALTY_DRAFTING: float = float(os.getenv("PRESENCE_PENALTY_DRAFTING", "0.2"))
+PRESENCE_PENALTY_DRAFTING: float = float(os.getenv("PRESENCE_PENALTY_DRAFTING", "1.5"))
 # Revision
 FREQUENCY_PENALTY_REVISION: float = float(os.getenv("FREQUENCY_PENALTY_REVISION", "0.2"))
-PRESENCE_PENALTY_REVISION: float = float(os.getenv("PRESENCE_PENALTY_REVISION", "0.1"))
+PRESENCE_PENALTY_REVISION: float = float(os.getenv("PRESENCE_PENALTY_REVISION", "1.5"))
 # Patch Generation
 FREQUENCY_PENALTY_PATCH: float = float(os.getenv("FREQUENCY_PENALTY_PATCH", "0.2"))
-PRESENCE_PENALTY_PATCH: float = float(os.getenv("PRESENCE_PENALTY_PATCH", "0.1"))
+PRESENCE_PENALTY_PATCH: float = float(os.getenv("PRESENCE_PENALTY_PATCH", "1.5"))
 # Planning (less likely to need strong penalties, but configurable)
 FREQUENCY_PENALTY_PLANNING: float = float(os.getenv("FREQUENCY_PENALTY_PLANNING", "0.0"))
 PRESENCE_PENALTY_PLANNING: float = float(os.getenv("PRESENCE_PENALTY_PLANNING", "0.0"))
 # Initial Setup (e.g. plot outline)
 FREQUENCY_PENALTY_INITIAL_SETUP: float = float(os.getenv("FREQUENCY_PENALTY_INITIAL_SETUP", "0.1"))
-PRESENCE_PENALTY_INITIAL_SETUP: float = float(os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "0.1"))
+PRESENCE_PENALTY_INITIAL_SETUP: float = float(os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "1.5"))
 # Evaluation (least likely to need penalties, as it's analytical)
 FREQUENCY_PENALTY_EVALUATION: float = float(os.getenv("FREQUENCY_PENALTY_EVALUATION", "0.0"))
 PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "0.0"))
@@ -297,7 +297,7 @@ if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000:
 # Toggle for enabling dynamic state adaptation (e.g., LLM proposing 'MODIFY key: value' changes).
 ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Currently not env configurable.
 # Chapter number assigned to items from initial setup/prepopulation (e.g., KG facts from initial world/char setup).
-KG_PREPOPULATION_CHAPTER_NUM: int = 1
+KG_PREPOPULATION_CHAPTER_NUM: int = 0
 
 
 # --- De-duplication Configuration ---

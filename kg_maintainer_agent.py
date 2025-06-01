@@ -2,6 +2,7 @@
 import logging
 import re
 import asyncio
+import json # Added for stable serialization for cache key
 from typing import Dict, List, Optional, Any, Tuple
 
 from async_lru import alru_cache
@@ -63,14 +64,17 @@ async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key:
     ]
     prompt = "\n".join(prompt_lines)
 
-    summary_raw, usage_data = await llm_interface.async_call_llm(
+    summary_cleaned, usage_data = await llm_interface.async_call_llm(
         model_name=config.SMALL_MODEL,
         prompt=prompt,
         temperature=config.TEMPERATURE_SUMMARY, 
         max_tokens=config.MAX_SUMMARY_TOKENS,
-        stream_to_disk=False
+        stream_to_disk=False,
+        frequency_penalty=config.FREQUENCY_PENALTY_SUMMARY,
+        presence_penalty=config.PRESENCE_PENALTY_SUMMARY,
+        auto_clean_response=True 
     )
-    return llm_interface.clean_model_response(summary_raw).strip(), usage_data
+    return summary_cleaned.strip(), usage_data
 
 # --- State Modification Helpers ---
 def _apply_trait_modification(current_traits_list: List[str], modification_details_str: str) -> List[str]:
@@ -290,9 +294,6 @@ def _robust_merge_world_item_data_logic_internal(
 ) -> bool: # Returns True if target_dict was modified
     if not isinstance(target_dict, dict):
         logger.warning(f"World item '{item_name_for_log}' target_dict was not a dict. Initializing as new. Old: '{str(target_dict)[:100]}'")
-        # This function modifies target_dict in place. If it's not a dict, this is problematic.
-        # The caller should ensure target_dict is a dict before calling.
-        # For safety, let's not proceed if target_dict is not a dict.
         return False
 
     item_was_modified_this_call = False
@@ -310,7 +311,7 @@ def _robust_merge_world_item_data_logic_internal(
 
     for key, value_from_update in update_dict.items():
         if key in [provisional_marker_key, "modification_proposal"] or \
-           key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")): # Prevent direct write of these metadata keys
+           key.startswith(("updated_in_chapter_", "added_in_chapter_", "source_quality_chapter_")): 
             if key.startswith("elaboration_in_chapter_") and isinstance(value_from_update, str) and value_from_update.strip():
                  if target_dict.get(key) != value_from_update:
                     target_dict[key] = value_from_update
@@ -323,9 +324,8 @@ def _robust_merge_world_item_data_logic_internal(
             if not isinstance(current_value_in_target, dict):
                 target_dict[key] = {}
                 current_value_in_target = target_dict[key]
-                item_was_modified_this_call = True # New sub-dict created
+                item_was_modified_this_call = True 
 
-            # Recursive call for nested dicts
             if _robust_merge_world_item_data_logic_internal(
                 current_value_in_target, value_from_update, f"{item_name_for_log}.{key}", chapter_num, from_flawed_draft_source
             ):
@@ -335,34 +335,30 @@ def _robust_merge_world_item_data_logic_internal(
             if not isinstance(current_value_in_target, list):
                 target_dict[key] = []
                 current_value_in_target = target_dict[key]
-                item_was_modified_this_call = True # New list created
+                item_was_modified_this_call = True 
 
             initial_list_len = len(current_value_in_target)
-            current_list_set = set(current_value_in_target) # For efficient "not in" check
+            current_list_set = set(current_value_in_target) 
             added_to_list = False
             for item_in_list_update in value_from_update:
                 if item_in_list_update not in current_list_set:
                     current_value_in_target.append(item_in_list_update)
-                    current_list_set.add(item_in_list_update) # Keep set in sync
+                    current_list_set.add(item_in_list_update) 
                     added_to_list = True
             if added_to_list:
                 item_was_modified_this_call = True
-        elif value_from_update != current_value_in_target: # Simple value update
+        elif value_from_update != current_value_in_target: 
             target_dict[key] = value_from_update
             item_was_modified_this_call = True
 
     if item_was_modified_this_call:
-        # Ensure an "updated_in_chapter_X" key is set if not marked as "added_in_chapter_X"
-        # (added_in_chapter is set by the caller when item is first created)
         added_key_pattern = re.compile(r"added_in_chapter_(\d+)")
         is_already_marked_added = any(added_key_pattern.match(k) for k in target_dict)
 
         if not is_already_marked_added:
             update_marker = f"updated_in_chapter_{chapter_num}"
-            if not target_dict.get(update_marker): # Set only if not already true
+            if not target_dict.get(update_marker): 
                  target_dict[update_marker] = True
-                 # item_was_modified_this_call is already true if we are here
-
     return item_was_modified_this_call
 
 
@@ -394,7 +390,6 @@ def _merge_world_item_updates_into_state_internal(
 
         if category_key == "_overview_":
             item_log_name = "_overview_"
-            # For _overview_, target_category_dict is the item itself (which is world_building_dict_to_update[category_key])
             if _robust_merge_world_item_data_logic_internal(
                  target_category_dict, category_updates_dict, item_log_name, chapter_number, from_flawed_draft
             ):
@@ -411,15 +406,14 @@ def _merge_world_item_updates_into_state_internal(
             item_created_this_call = False
 
             if existing_item_data is None:
-                target_category_dict[item_name] = {} # Create new item entry
+                target_category_dict[item_name] = {} 
                 existing_item_data = target_category_dict[item_name]
-                existing_item_data[f"added_in_chapter_{chapter_number}"] = True # Mark as added
+                existing_item_data[f"added_in_chapter_{chapter_number}"] = True 
                 item_created_this_call = True
-                # items_affected_count will be incremented if robust_merge also finds modifications or if it's new
 
             if _robust_merge_world_item_data_logic_internal(
                 existing_item_data, item_update_details, item_log_name, chapter_number, from_flawed_draft
-            ) or item_created_this_call: # Count if modified OR if newly created
+            ) or item_created_this_call: 
                 items_affected_count += 1
 
     if items_affected_count > 0:
@@ -485,12 +479,11 @@ def _generate_relationships_cypher(char_name: str, relationships_dict: Dict[str,
             rel_type = rel_detail.upper().replace(" ", "_")
             rel_props_to_set = {"description": rel_detail}
 
-        # Ensure chapter_added and is_provisional are set for pre-population
         chap_added_val = profile_source_info.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}", config.KG_PREPOPULATION_CHAPTER_NUM)
         rel_props_to_set.setdefault("chapter_added", chap_added_val if isinstance(chap_added_val, int) else config.KG_PREPOPULATION_CHAPTER_NUM)
         rel_props_to_set.setdefault("is_provisional", profile_source_info.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft")
         
-        props_for_set_clause = {k: v for k, v in rel_props_to_set.items() if k not in ['type', 'chapter_added']} # Already in MERGE pattern
+        props_for_set_clause = {k: v for k, v in rel_props_to_set.items() if k not in ['type', 'chapter_added']} 
 
         statements.append((
             """
@@ -603,7 +596,7 @@ async def _prepopulate_kg_from_dicts_internal(
         if isinstance(profile.get("traits"), list):
             cypher_statements.extend(_generate_traits_cypher(char_name, profile["traits"]))
         if isinstance(profile.get("relationships"), dict):
-            cypher_statements.extend(_generate_relationships_cypher(char_name, profile["relationships"], profile)) # Pass profile for source info
+            cypher_statements.extend(_generate_relationships_cypher(char_name, profile["relationships"], profile)) 
         cypher_statements.extend(_generate_dev_events_cypher(char_name, profile))
 
     for category, items_or_overview in world_building.items():
@@ -723,18 +716,109 @@ class KGMaintainerAgent:
                                  item_details[elaboration_key_standard] = item_details.pop(specific_elab_key)
         return parsed_data
 
+    @alru_cache(maxsize=config.KG_TRIPLE_EXTRACTION_CACHE_SIZE)
+    async def _cached_llm_call_for_knowledge_extraction(
+        self,
+        protagonist_name: str,
+        current_profiles_plain_text: str,
+        current_world_plain_text: str,
+        candidate_entities_text_str: str,
+        chapter_text: str, # This is the main variable content
+        chapter_number: int,
+        dynamic_instr_char_str: str,
+        dynamic_instr_world_str: str,
+        common_predicates_str: str,
+        few_shot_example_output_str: str
+    ) -> Tuple[str, Optional[Dict[str, int]]]:
+        """
+        This method is cached. It takes hashable string inputs derived from novel_props,
+        builds the prompt, makes the LLM call, and returns raw LLM output.
+        """
+        prompt_lines = [
+            "/no_think",
+            "You are a comprehensive literary analyst and knowledge engineer.",
+            f"Analyze **Complete Chapter {chapter_number} Text** (protagonist: {protagonist_name}) to extract information for three knowledge bases.",
+            "Output ONLY plain text, structured as described. Use Title Case for keys like \"Description\", \"Traits\", \"Status\".",
+            "",
+            "**Reference Information (Current State Before This Chapter - for context, extract from THIS chapter's text):**",
+            "  **Character Profiles Snapshot:**\n  ```text\n", current_profiles_plain_text if current_profiles_plain_text.strip() else "N/A", "\n  ```",
+            "  **World Building Snapshot:**\n  ```text\n", current_world_plain_text if current_world_plain_text.strip() else "N/A", "\n  ```",
+            candidate_entities_text_str,
+            "",
+            f"**Complete Chapter {chapter_number} Text (Analyze this):**",
+            "--- BEGIN COMPLETE CHAPTER TEXT ---", chapter_text, "--- END COMPLETE CHAPTER TEXT ---",
+            "",
+            "**Output Format (CRITICAL - PLAIN TEXT ONLY, use exact section headers):**",
+            "`### CHARACTER UPDATES ###`",
+            "`### WORLD UPDATES ###`",
+            "`### KG TRIPLES ###`",
+            "",
+            "**1. `### CHARACTER UPDATES ###` Details:**",
+            "   `Character: [Name]`",
+            "   `Description: [Full description if new/changed]`",
+            "   `Traits: [Comma-separated list or list with '-' prefix]`",
+            "   `Status: [Current status]`",
+            "   `Relationships:` (Optional, each as `- Target: Type`)",
+            f"   `Development in Chapter {chapter_number}: [Summary of role/changes in THIS chapter]`",
+            "   `Modification Proposal: [Optional: MODIFY key: value_change]`",
+            f"   {dynamic_instr_char_str}",
+            "",
+            "**2. `### WORLD UPDATES ###` Details:**",
+            "   `Category: [locations | society | systems | lore | history | factions | _overview_]`",
+            "   For `_overview_`: `Description: [Overall world feel change/new general description]`",
+            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter]`",
+            "   For other categories: `Item: [Item Name]`",
+            "     `Description: [Full description if new/changed]` (Atmosphere for locations, Goals for factions, etc.)",
+            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter]`",
+            "     `Modification Proposal: [Optional: MODIFY key: value_change]`",
+            f"   {dynamic_instr_world_str}",
+            "",
+            "**3. `### KG TRIPLES ###` Details:**",
+            "   List each factual triple. Preferred format: `Subject | Predicate | Object`.",
+            "   (Other formats: `Subject: S, Predicate: P, Object: O` or `- [S, P, O]` are acceptable if consistent).",
+            f"   Use predicates like: {common_predicates_str}. Focus on NEW facts or significant CHANGES from THIS chapter.",
+            "",
+            "**Follow this example structure for your output precisely:**",
+            "```plaintext",
+            few_shot_example_output_str.strip(),
+            "```",
+            "",
+            "Begin output now:"
+        ]
+        prompt = "\n".join(prompt_lines)
+        logger.debug(f"KGMaintainer (Cached Call): PRE-LLM CALL for Ch {chapter_number}. Prompt first 300 chars:\n{prompt[:300]}")
+        logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}) (cached).")
+        
+        raw_extraction_text_from_llm, usage_data = await llm_interface.async_call_llm(
+            model_name=self.model_name, 
+            prompt=prompt, 
+            temperature=config.TEMPERATURE_KG_EXTRACTION, 
+            max_tokens=config.MAX_KG_TRIPLE_TOKENS,
+            allow_fallback=True, 
+            stream_to_disk=True,
+            frequency_penalty=config.FREQUENCY_PENALTY_KG_EXTRACTION,
+            presence_penalty=config.PRESENCE_PENALTY_KG_EXTRACTION,
+            auto_clean_response=False 
+        )
+        return raw_extraction_text_from_llm, usage_data
+
     async def _perform_unified_knowledge_extraction(
         self,
         novel_props: Dict[str, Any],
         chapter_text: str,
         chapter_number: int
     ) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
-        logger.info(f"KGMaintainerAgent performing unified knowledge extraction (plain text) for Chapter {chapter_number}...")
+        logger.debug(f"ENTERING _perform_unified_knowledge_extraction for Ch {chapter_number}. Chapter text length: {len(chapter_text)}")
+
         if not chapter_text:
-            logger.warning(f"Unified knowledge extraction skipped for Ch {chapter_number}: empty chapter text.")
+            logger.warning(f"Unified knowledge extraction SKIPPED for Ch {chapter_number}: empty chapter text.")
             return {"character_updates": {}, "world_updates": {}, "knowledge_triples": []}, None
 
+        # --- Start: Derive hashable inputs for the cached LLM call ---
         protagonist_name = novel_props.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+        
+        # These get_..._plain_text functions are async and perform internal logic based on novel_props.
+        # Their string outputs are hashable.
         current_profiles_plain_text = await get_filtered_character_profiles_for_prompt_plain_text(novel_props, chapter_number - 1)
         current_world_plain_text = await get_filtered_world_data_for_prompt_plain_text(novel_props, chapter_number - 1)
         candidate_entities_list = await heuristic_entity_spotter_for_kg(novel_props, chapter_text)
@@ -780,8 +864,6 @@ class KGMaintainerAgent:
             "has_description", "has_atmosphere", "has_rule", "has_history_event"
         ])
 
-        # --- Few-Shot Example for Output Structure ---
-        # This replaces the previous "Example of Expected Output Structure" string with a more explicit few-shot example.
         few_shot_example_output_str = f"""
 ### CHARACTER UPDATES ###
 Character: Elara Vance
@@ -822,73 +904,28 @@ Master Kael | located_in | Sunken Library
 Sunken Library | has_atmosphere | Ethereal
 Starfall Map | has_feature | Ancient Runes
 """
+        # --- End: Derive hashable inputs ---
 
-        prompt_lines = [
-            "/no_think",
-            "You are a comprehensive literary analyst and knowledge engineer.",
-            f"Analyze **Complete Chapter {chapter_number} Text** (protagonist: {protagonist_name}) to extract information for three knowledge bases.",
-            "Output ONLY plain text, structured as described. Use Title Case for keys like \"Description\", \"Traits\", \"Status\".",
-            "",
-            "**Reference Information (Current State Before This Chapter - for context, extract from THIS chapter's text):**",
-            "  **Character Profiles Snapshot:**\n  ```text\n", current_profiles_plain_text if current_profiles_plain_text.strip() else "N/A", "\n  ```",
-            "  **World Building Snapshot:**\n  ```text\n", current_world_plain_text if current_world_plain_text.strip() else "N/A", "\n  ```",
+        # Call the cached LLM interaction method
+        raw_extraction_text_from_llm, usage_data = await self._cached_llm_call_for_knowledge_extraction(
+            protagonist_name,
+            current_profiles_plain_text,
+            current_world_plain_text,
             candidate_entities_text_str,
-            "",
-            f"**Complete Chapter {chapter_number} Text (Analyze this):**",
-            "--- BEGIN COMPLETE CHAPTER TEXT ---", chapter_text, "--- END COMPLETE CHAPTER TEXT ---",
-            "",
-            "**Output Format (CRITICAL - PLAIN TEXT ONLY, use exact section headers):**",
-            "`### CHARACTER UPDATES ###`",
-            "`### WORLD UPDATES ###`",
-            "`### KG TRIPLES ###`",
-            "",
-            "**1. `### CHARACTER UPDATES ###` Details:**",
-            "   `Character: [Name]`",
-            "   `Description: [Full description if new/changed]`",
-            "   `Traits: [Comma-separated list or list with '-' prefix]`",
-            "   `Status: [Current status]`",
-            "   `Relationships:` (Optional, each as `- Target: Type`)",
-            f"   `Development in Chapter {chapter_number}: [Summary of role/changes in THIS chapter]`",
-            "   `Modification Proposal: [Optional: MODIFY key: value_change]`",
-            f"   {dynamic_instr_char_str}",
-            "",
-            "**2. `### WORLD UPDATES ###` Details:**",
-            "   `Category: [locations | society | systems | lore | history | factions | _overview_]`",
-            "   For `_overview_`: `Description: [Overall world feel change/new general description]`",
-            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter]`",
-            "   For other categories: `Item: [Item Name]`",
-            "     `Description: [Full description if new/changed]` (Atmosphere for locations, Goals for factions, etc.)",
-            f"     `Elaboration in Chapter {chapter_number}: [Context from THIS chapter]`",
-            "     `Modification Proposal: [Optional: MODIFY key: value_change]`",
-            f"   {dynamic_instr_world_str}",
-            "",
-            "**3. `### KG TRIPLES ###` Details:**",
-            "   List each factual triple. Preferred format: `Subject | Predicate | Object`.",
-            "   (Other formats: `Subject: S, Predicate: P, Object: O` or `- [S, P, O]` are acceptable if consistent).",
-            f"   Use predicates like: {common_predicates_str}. Focus on NEW facts or significant CHANGES from THIS chapter.",
-            "",
-            "**Follow this example structure for your output precisely:**", # Made example more explicit
-            "```plaintext", # Added plaintext hint for markdown
-            few_shot_example_output_str.strip(), # Use the refined example
-            "```",
-            "",
-            "Begin output now:"
-        ]
-        prompt = "\n".join(prompt_lines)
-
-        logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}).")
-        raw_extraction_text, usage_data = await llm_interface.async_call_llm(
-            model_name=self.model_name, 
-            prompt=prompt, 
-            temperature=config.TEMPERATURE_KG_EXTRACTION, 
-            max_tokens=config.MAX_KG_TRIPLE_TOKENS,
-            allow_fallback=True, 
-            stream_to_disk=True
+            chapter_text,
+            chapter_number,
+            dynamic_instr_char_str,
+            dynamic_instr_world_str,
+            common_predicates_str,
+            few_shot_example_output_str
         )
-        cleaned_extraction_text = llm_interface.clean_model_response(raw_extraction_text)
+        
+        logger.debug(f"KGMaintainer: RAW LLM Output for Ch {chapter_number} (length {len(raw_extraction_text_from_llm)} from cached call):\n>>>START_RAW_LLM_CH{chapter_number}>>>\n{raw_extraction_text_from_llm}\n<<<END_RAW_LLM_CH{chapter_number}<<<")
+        
+        text_to_parse = raw_extraction_text_from_llm 
+        logger.debug(f"KGMaintainer: TEXT TO PARSE for Ch {chapter_number} (length {len(text_to_parse)}):\n>>>START_PARSE_INPUT_CH{chapter_number}>>>\n{text_to_parse}\n<<<END_PARSE_INPUT_CH{chapter_number}<<<")
 
-        sections = re.split(r"^\s*###\s*([\w\s]+?)\s*###\s*$", cleaned_extraction_text, flags=re.IGNORECASE | re.MULTILINE)
-
+        sections = re.split(r"^\s*###\s*([\w\s]+?)\s*###\s*$", text_to_parse, flags=re.IGNORECASE | re.MULTILINE)
         parsed_sections: Dict[str, str] = {}
         current_section_name_normalized = None
         for i in range(1, len(sections)):
@@ -901,10 +938,16 @@ Starfall Map | has_feature | Ancient Runes
             elif current_section_name_normalized:
                 parsed_sections[current_section_name_normalized] = sections[i].strip()
                 current_section_name_normalized = None
+        
+        logger.debug(f"KGMaintainer: Sections parsed for Ch {chapter_number}: {list(parsed_sections.keys()) if parsed_sections else 'No sections found by split'}")
 
         char_updates_text = parsed_sections.get("character_updates", "")
         world_updates_text = parsed_sections.get("world_updates", "")
         kg_triples_text_block = parsed_sections.get("kg_triples", "")
+
+        logger.debug(f"KGMaintainer: Character updates text block for Ch {chapter_number} (length {len(char_updates_text)}):\n{char_updates_text[:500]}...")
+        logger.debug(f"KGMaintainer: World updates text block for Ch {chapter_number} (length {len(world_updates_text)}):\n{world_updates_text[:500]}...")
+        logger.debug(f"KGMaintainer: KG triples text block for Ch {chapter_number} (length {len(kg_triples_text_block)}):\n{kg_triples_text_block[:500]}...")
 
         char_updates_dict = self._parse_unified_character_updates(char_updates_text, chapter_number)
         world_updates_dict = self._parse_unified_world_updates(world_updates_text, chapter_number)
@@ -917,8 +960,8 @@ Starfall Map | has_feature | Ancient Runes
         }
         logger.info(f"Unified knowledge extraction for Ch {chapter_number} complete. Chars updated/new: {len(final_extraction['character_updates'])}, World cats affected: {len(final_extraction['world_updates'])}, KG Triples extracted: {len(final_extraction['knowledge_triples'])}.")
 
-        if not char_updates_dict and not world_updates_dict and not kg_triples_list and cleaned_extraction_text.strip():
-            logger.warning(f"Unified extraction for Ch {chapter_number} yielded no structured data despite non-empty LLM response. Raw LLM output snippet: '{cleaned_extraction_text[:500]}...'")
+        if not char_updates_dict and not world_updates_dict and not kg_triples_list and text_to_parse.strip():
+            logger.warning(f"Unified extraction for Ch {chapter_number} yielded no structured data despite non-empty LLM response. Raw LLM output snippet: '{text_to_parse[:500]}...'")
 
         return final_extraction, usage_data
 

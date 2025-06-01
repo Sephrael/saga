@@ -77,7 +77,7 @@ class DraftingAgent:
     ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, int]]]:
         """
         Generates the initial draft text for a chapter.
-        Returns the draft, raw LLM output, and LLM usage data.
+        Returns the draft (cleaned), raw LLM output, and LLM usage data.
         'agent_or_props' can be the NANA_Orchestrator instance or a novel_props dictionary.
         """
         if not plot_point_focus:
@@ -176,7 +176,9 @@ class DraftingAgent:
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for Ch {chapter_number} draft. Plot Point {plot_point_index+1}/{total_plot_points_in_novel}. Target min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-        raw_llm_text, usage_data = await llm_interface.async_call_llm(
+        
+        # Get raw text first for logging
+        raw_llm_text_for_log, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_DRAFTING,
@@ -184,17 +186,19 @@ class DraftingAgent:
             allow_fallback=True,
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
-            presence_penalty=config.PRESENCE_PENALTY_DRAFTING
+            presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
+            auto_clean_response=False # Get raw for logging
         )
-        if not raw_llm_text:
+        if not raw_llm_text_for_log:
             logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
             return None, None, usage_data
 
-        cleaned_text = llm_interface.clean_model_response(raw_llm_text)
+        # Now clean the raw text for processing
+        cleaned_text = llm_interface.clean_model_response(raw_llm_text_for_log)
 
         if not cleaned_text or len(cleaned_text) < 50:
-            logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
-            return None, raw_llm_text, usage_data
+            logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text_for_log[:200]}...'")
+            return None, raw_llm_text_for_log, usage_data
 
         if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
              logger.warning(
@@ -204,4 +208,4 @@ class DraftingAgent:
              )
 
         logger.info(f"Generated initial draft for ch {chapter_number} (Length: {len(cleaned_text)} chars).")
-        return cleaned_text, raw_llm_text, usage_data
+        return cleaned_text, raw_llm_text_for_log, usage_data

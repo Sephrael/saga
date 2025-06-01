@@ -170,7 +170,7 @@ async def _generate_single_patch_instruction_llm(
     length_expansion_instruction_header_parts: List[str] = []
     original_quote_text_from_problem = problem['quote_from_original_text']
 
-    if problem['issue_category'] == "narrative_depth" and \
+    if problem['issue_category'] == "narrative_depth_and_length" and \
        ("short" in problem['problem_description'].lower() or \
         "length" in problem['problem_description'].lower() or \
         "expand" in problem['suggested_fix_focus'].lower() or \
@@ -266,7 +266,9 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         original_chapter_text_snippet_for_llm,
         "--- END ORIGINAL TEXT SNIPPET ---",
         length_expansion_instruction_header_str,
-        few_shot_patch_example_str, 
+        "```plaintext", 
+        few_shot_patch_example_str.strip(), 
+        "```",
         "**Instructions for Generating Replacement Text:**",
         "1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.",
         "2.  Generate a `replace_with` text according to the following:",
@@ -282,7 +284,8 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10),' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10),' ')}...' Max Output Tokens: {max_patch_output_tokens}")
 
-    replace_with_text_raw, usage_data = await llm_interface.async_call_llm(
+    # MODIFIED: No longer call clean_model_response here, assuming async_call_llm does it by default
+    replace_with_text_cleaned, usage_data = await llm_interface.async_call_llm(
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
         temperature=config.TEMPERATURE_PATCH, 
@@ -291,13 +294,14 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         stream_to_disk=False,
         frequency_penalty=config.FREQUENCY_PENALTY_PATCH,
         presence_penalty=config.PRESENCE_PENALTY_PATCH
+        # auto_clean_response=True is default
     )
 
-    if not replace_with_text_raw:
+    if not replace_with_text_cleaned: # Check if it's None or empty string from LLM call
         logger.error(f"Patch LLM returned no content for Ch {chapter_number} problem: {problem['problem_description']}")
         return None, usage_data
 
-    replace_with_text_cleaned = llm_interface.clean_model_response(replace_with_text_raw)
+    # The text is already cleaned by async_call_llm if auto_clean_response=True (default)
     if not replace_with_text_cleaned.strip():
         logger.warning(f"Patch LLM returned empty after cleaning for Ch {chapter_number} problem: {problem['problem_description']}")
         return None, usage_data
@@ -360,7 +364,7 @@ async def _generate_patch_instructions_logic(
         )
         is_expansion_depth_issue_general = (
             p_item["quote_from_original_text"] == "N/A - General Issue" and
-            p_item["issue_category"] == "narrative_depth" and
+            p_item["issue_category"] == "narrative_depth_and_length" and # MODIFIED: Check normalized category
             ("short" in p_item['problem_description'].lower() or
              "length" in p_item['problem_description'].lower() or
              "expand" in p_item['suggested_fix_focus'].lower() or
@@ -528,7 +532,7 @@ async def revise_chapter_draft_logic(
     evaluation_result: EvaluationResult,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]],
-    is_from_flawed_source: bool = False # ADDED: To indicate if original_text might have gaps from de-dup
+    is_from_flawed_source: bool = False 
 ) -> Tuple[Optional[Tuple[str, str]], Optional[Dict[str, int]]]:
     cumulative_usage_data: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -561,7 +565,7 @@ async def revise_chapter_draft_logic(
         (p["quote_from_original_text"] != "N/A - General Issue" and p["quote_from_original_text"].strip() and \
          (p.get("sentence_char_start") is not None or p.get("quote_char_start") is not None) 
         ) or
-        (p["quote_from_original_text"] == "N/A - General Issue" and p["issue_category"] == "narrative_depth" and
+        (p["quote_from_original_text"] == "N/A - General Issue" and p["issue_category"] == "narrative_depth_and_length" and # MODIFIED: Check normalized category
          ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
           "expand" in p['suggested_fix_focus'].lower() or "depth" in p['problem_description'].lower()))
     ]
@@ -643,7 +647,7 @@ async def revise_chapter_draft_logic(
 
         length_issue_explicit_instruction_full_rewrite_parts: List[str] = []
         needs_expansion_from_problems = any(
-            (p['issue_category'] == 'narrative_depth' and
+            (p['issue_category'] == 'narrative_depth_and_length' and # MODIFIED: Check normalized category
              ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
               "expand" in p['suggested_fix_focus'].lower() or "depth" in p['problem_description'].lower()))
             for p in problems_to_fix
@@ -675,9 +679,8 @@ async def revise_chapter_draft_logic(
             all_problem_descriptions_parts.append("---\n")
         all_problem_descriptions_str = "".join(all_problem_descriptions_parts)
 
-        # MODIFIED: Add note about de-duplication if is_from_flawed_source is True
         deduplication_note = ""
-        if is_from_flawed_source: # This flag is passed from orchestrator, true if de-dup happened
+        if is_from_flawed_source: 
             deduplication_note = (
                 "\n**(Note: The 'Original Draft Snippet' below may have had repetitive content removed "
                 "prior to evaluation, or other flaws were present. Ensure your rewrite is cohesive "
@@ -689,10 +692,10 @@ async def revise_chapter_draft_logic(
             f"You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.",
             "**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**",
             "--- FEEDBACK START ---",
-            llm_interface.clean_model_response(revision_reason_str).strip(),
+            llm_interface.clean_model_response(revision_reason_str).strip(), # Ensure clean_model_response exists or remove
             "--- FEEDBACK END ---",
             all_problem_descriptions_str,
-            deduplication_note, # ADDED
+            deduplication_note, 
             length_issue_explicit_instruction_full_rewrite_str,
             plan_focus_section_full_rewrite_str,
             "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
@@ -706,7 +709,7 @@ async def revise_chapter_draft_logic(
             "",
             "**Revision Instructions:**",
             "1.  **ABSOLUTE PRIORITY:** Thoroughly address ALL issues listed in **Critique/Reason(s) for Revision** and **Detailed Issues to Address**. "
-            "If the original text had content removed (e.g., due to de-duplication) or other flaws as noted, pay special attention to ensuring a smooth, coherent narrative flow and filling any gaps logically.", # MODIFIED to be more general
+            "If the original text had content removed (e.g., due to de-duplication) or other flaws as noted, pay special attention to ensuring a smooth, coherent narrative flow and filling any gaps logically.", 
             "2.  **Rewrite the ENTIRE chapter.** Produce a fresh, coherent, and engaging narrative.",
             "3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite_str`, follow it closely. Otherwise, align with the `Original Chapter Focus`.",
             "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
@@ -719,7 +722,14 @@ async def revise_chapter_draft_logic(
         prompt_full_rewrite = "\n".join(prompt_full_rewrite_lines)
 
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-        revised_raw_llm_output_full, full_rewrite_usage = await llm_interface.async_call_llm(
+        # MODIFIED: Get raw text for logging, then clean manually if needed
+        # However, since auto_clean_response is True by default, revised_llm_text_output will be cleaned.
+        # To get raw, we'd need to call with auto_clean_response=False for logging.
+        # For this change, we assume the first returned text is the one to use, already cleaned.
+        # The raw_llm_output to be saved should be the uncleaned version.
+        
+        # Call once to get the raw output for logging
+        raw_revised_llm_output_for_log, full_rewrite_usage = await llm_interface.async_call_llm(
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
             temperature=config.TEMPERATURE_REVISION, 
@@ -727,14 +737,18 @@ async def revise_chapter_draft_logic(
             allow_fallback=True,
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_REVISION,
-            presence_penalty=config.PRESENCE_PENALTY_REVISION
+            presence_penalty=config.PRESENCE_PENALTY_REVISION,
+            auto_clean_response=False # Get raw
         )
         _add_usage(full_rewrite_usage)
-        if not revised_raw_llm_output_full:
+
+        if not raw_revised_llm_output_for_log:
             logger.error(f"Full rewrite LLM failed for ch {chapter_number} (returned empty). Original text will be kept if patching also failed.")
             return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
-        final_revised_text = llm_interface.clean_model_response(revised_raw_llm_output_full)
-        final_raw_llm_output = revised_raw_llm_output_full
+        
+        final_revised_text = llm_interface.clean_model_response(raw_revised_llm_output_for_log)
+        final_raw_llm_output = raw_revised_llm_output_for_log # Save the uncleaned version for the log
+
         logger.info(f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}.")
     elif not use_patched_text_as_final and not evaluation_result.get("needs_revision"):
         logger.info(f"No revision performed for Ch {chapter_number} (original deemed acceptable or patching ineffective but not critical as no revision was strictly needed).")

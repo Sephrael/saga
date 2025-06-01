@@ -62,17 +62,12 @@ class PlannerAgent:
         scene_blocks_text = split_text_into_blocks(cleaned_text_for_parsing, separator_regex_str=r'\n\s*---\s*\n')
         
         # Fallback split logic: if "---" isn't used effectively, try splitting by "SCENE:"
-        # This condition checks if the primary split resulted in 0 or 1 block that doesn't *start* like a scene.
-        # A single block might be valid if it's the only scene and starts with "SCENE:".
         first_block_is_scene_like = False
         if scene_blocks_text:
             first_block_is_scene_like = re.match(r"^\s*(SCENE|Scene Number):\s*\d+", scene_blocks_text[0].strip(), re.IGNORECASE) is not None
 
         if not scene_blocks_text or (len(scene_blocks_text) == 1 and not first_block_is_scene_like):
             logger.debug(f"Primary '---' split for Ch {chapter_number} yielded {len(scene_blocks_text)} blocks (first block scene-like: {first_block_is_scene_like}). Attempting fallback split by 'SCENE:' header.")
-            # Regex to capture "SCENE: <number>" and the text following it until the next "SCENE:" or end of string.
-            # (?s) is for DOTALL inline. (?:SCENE|Scene Number) matches either.
-            # Lookahead (?=(?:\s*(?:SCENE|Scene Number):\s*\d+|$)) ensures we split correctly.
             individual_scene_matches = re.finditer(r"(?s)((?:SCENE|Scene Number):\s*\d+.*?)(?=(?:\s*(?:SCENE|Scene Number):\s*\d+|$))", cleaned_text_for_parsing, re.IGNORECASE | re.MULTILINE)
             scene_blocks_text = [match.group(1).strip() for match in individual_scene_matches]
             if scene_blocks_text:
@@ -90,8 +85,6 @@ class PlannerAgent:
                 continue
             logger.debug(f"Parsing scene block {block_num+1} for Ch {chapter_number}:\n{block_content[:200]}...")
             
-            # Add a check to ensure "SCENE:" or "Scene Number:" is the first non-whitespace part
-            # This helps if the block separator was "---" but a block doesn't actually start with a scene header.
             if not re.match(r"^\s*(SCENE|Scene Number):\s*\d+", block_content.strip(), re.IGNORECASE):
                 logger.warning(f"Scene block {block_num+1} for Ch {chapter_number} does not start with a valid 'SCENE:' or 'Scene Number:' header. Skipping block. Content: '{block_content[:100]}...'")
                 continue
@@ -103,9 +96,7 @@ class PlannerAgent:
                 special_list_handling=SCENE_PLAN_SPECIAL_LIST_HANDLING
             )
 
-            # Validate 'scene_number' specifically
             if "scene_number" not in parsed_scene_dict or not isinstance(parsed_scene_dict["scene_number"], int):
-                # Try to extract from the raw block if parsing failed for the key
                 scene_num_match = re.match(r"^\s*(?:SCENE|Scene Number):\s*(\d+)", block_content.strip(), re.IGNORECASE)
                 if scene_num_match:
                     try:
@@ -125,7 +116,7 @@ class PlannerAgent:
             missing_keys = set(SCENE_PLAN_KEY_MAP.values()) - set(parsed_scene_dict.keys())
             if missing_keys:
                 logger.warning(f"Partial scene data parsed for Ch {chapter_number}, block {block_num+1} (Scene Num: {parsed_scene_dict.get('scene_number', 'N/A')}). Missing keys: {missing_keys}. Data: {parsed_scene_dict}")
-                for req_key in missing_keys: # Use the original required_keys_internal set for populating
+                for req_key in missing_keys: 
                     if req_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
                         parsed_scene_dict[req_key] = []
                     elif req_key == "scene_number": pass 
@@ -142,7 +133,6 @@ class PlannerAgent:
             logger.error(f"Failed to parse any valid scenes from LLM output for Ch {chapter_number}. Cleaned text for parsing: '{cleaned_text_for_parsing[:500]}...'")
             return None
         
-        # Sort scenes by scene_number just in case they were parsed out of order
         scenes_data.sort(key=lambda x: x.get("scene_number", float('inf')))
         
         return [scene for scene in scenes_data if isinstance(scene, dict)] # type: ignore
@@ -281,16 +271,19 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
-        plan_raw_text, usage_data = await llm_interface.async_call_llm(
+        # MODIFIED: cleaned_plan_text_from_llm directly from async_call_llm
+        cleaned_plan_text_from_llm, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_PLANNING, 
             max_tokens=config.MAX_PLANNING_TOKENS,
             allow_fallback=True,
-            stream_to_disk=True
+            stream_to_disk=True,
+            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
+            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
+            auto_clean_response=True # Default
         )
 
-        cleaned_plan_text_from_llm = llm_interface.clean_model_response(plan_raw_text)
         parsed_scenes_list_of_dicts = self._parse_llm_scene_plan_output(cleaned_plan_text_from_llm, chapter_number)
 
         if parsed_scenes_list_of_dicts:
@@ -305,7 +298,6 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
                     logger.warning(f"Scene {scene_dict.get('scene_number', i+1)} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}")
                     continue
                 
-                # Basic type validation based on SceneDetail
                 valid_types = (
                     isinstance(scene_dict.get("scene_number"), int) and
                     isinstance(scene_dict.get("summary"), str) and scene_dict.get("summary", "").strip() and

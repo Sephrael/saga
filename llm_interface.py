@@ -280,12 +280,13 @@ async def async_call_llm(
     max_tokens: Optional[int] = None,
     allow_fallback: bool = False,
     stream_to_disk: bool = False,
-    frequency_penalty: Optional[float] = None, # ADDED
-    presence_penalty: Optional[float] = None   # ADDED
+    frequency_penalty: Optional[float] = None,
+    presence_penalty: Optional[float] = None,
+    auto_clean_response: bool = True  # ADDED: New parameter with default True
 ) -> Tuple[str, Optional[Dict[str, int]]]:
     """
     Asynchronously calls the LLM (OpenAI-compatible API) with retry and optional model fallback.
-    Returns the LLM's text response as a string, and a dictionary containing token usage.
+    Returns the LLM's text response as a string (optionally cleaned), and a dictionary containing token usage.
     """
     if not model_name:
         logger.error("async_call_llm: model_name is required.")
@@ -309,13 +310,15 @@ async def async_call_llm(
         if is_fallback_attempt:
             if not allow_fallback or not config.FALLBACK_GENERATION_MODEL:
                 logger.warning(f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Aborting call.")
-                return "", current_usage_data
+                if auto_clean_response: # MODIFIED: Apply cleaning if requested, even on empty string
+                    final_text_response = clean_model_response(final_text_response)
+                return final_text_response, current_usage_data
             current_model_to_try = config.FALLBACK_GENERATION_MODEL
             logger.info(f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'.")
             prompt_token_count = count_tokens(prompt, current_model_to_try)
             current_usage_data = None # Reset usage for fallback model
 
-        payload: Dict[str, Any] = { # Explicitly type payload
+        payload: Dict[str, Any] = { 
             "model": current_model_to_try,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": effective_temperature,
@@ -323,7 +326,6 @@ async def async_call_llm(
             "max_tokens": effective_max_output_tokens
         }
 
-        # Add penalties if provided
         if frequency_penalty is not None:
             payload["frequency_penalty"] = frequency_penalty
         if presence_penalty is not None:
@@ -347,9 +349,8 @@ async def async_call_llm(
             try:
                 if stream_to_disk:
                     payload["stream"] = True
-                    # Ensure temp file is handled correctly
                     _tmp_fd, temp_file_path_for_stream = tempfile.mkstemp(suffix=".llmstream.txt", text=True)
-                    os.close(_tmp_fd) # Close the file descriptor as AsyncClient will open it
+                    os.close(_tmp_fd) 
                     
                     accumulated_stream_content = ""
                     stream_usage_data: Optional[Dict[str, int]] = None
@@ -372,7 +373,7 @@ async def async_call_llm(
                                                     content_piece = delta.get("content")
                                                     if content_piece:
                                                         accumulated_stream_content += content_piece
-                                                        tmp_f_write.write(content_piece) # Write to temp file
+                                                        tmp_f_write.write(content_piece) 
                                                     
                                                     if chunk_data["choices"][0].get("finish_reason") is not None:
                                                         potential_usage = chunk_data.get("usage")
@@ -386,21 +387,24 @@ async def async_call_llm(
                         final_text_response = accumulated_stream_content
                         current_usage_data = stream_usage_data
                         _log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=True)
-                        # No need to remove temp_file_path_for_stream here, finally block handles it
+                        if auto_clean_response: # MODIFIED: Apply cleaning if requested
+                            final_text_response = clean_model_response(final_text_response)
                         return final_text_response, current_usage_data
-                    except Exception as stream_err: # Catch errors during streaming
+                    except Exception as stream_err: 
                         last_exception_for_current_model = stream_err
                         logger.warning(f"Async LLM Stream ('{current_model_to_try}' Attempt {retry_attempt+1}): Error during stream: {stream_err}", exc_info=True)
-                        # Fall through to retry logic
                     finally:
                         if temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
                             try:
-                                with open(temp_file_path_for_stream, "r", encoding="utf-8") as f_read_final: # Ensure we have the latest content if error occurred mid-stream
-                                    final_text_response = f_read_final.read() # Capture whatever was written for debugging
-                                # os.remove(temp_file_path_for_stream) # Keep for debugging if error, remove on success (handled after return)
+                                # For debugging, keep the stream file on error, remove on success (done after successful return path)
+                                if last_exception_for_current_model is None: # Successful stream
+                                     os.remove(temp_file_path_for_stream)
+                                else: # Error during stream, ensure final_text_response has what was written for logging
+                                    with open(temp_file_path_for_stream, "r", encoding="utf-8") as f_read_final_err:
+                                        final_text_response = f_read_final_err.read()
                             except Exception as e_clean:
-                                logger.error(f"Error accessing/reading temp file {temp_file_path_for_stream} in stream success/finally: {e_clean}")
-                else:
+                                logger.error(f"Error handling temp file {temp_file_path_for_stream} in stream finally block: {e_clean}")
+                else: # Not streaming to disk
                     payload["stream"] = False
                     async with httpx.AsyncClient(timeout=600.0) as client:
                         api_response_obj = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
@@ -418,6 +422,8 @@ async def async_call_llm(
                         final_text_response = raw_text_non_stream
                         current_usage_data = response_data.get("usage")
                         _log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=False)
+                        if auto_clean_response: # MODIFIED: Apply cleaning if requested
+                            final_text_response = clean_model_response(final_text_response)
                         return final_text_response, current_usage_data
 
             except httpx.TimeoutException as e_timeout:
@@ -438,7 +444,7 @@ async def async_call_llm(
                          )
                     else:
                         logger.error(f"Async LLM ('{current_model_to_try}'): Client-side error {e_status.response.status_code}. Aborting retries for this model.")
-                    break # Break from retry loop for this model
+                    break 
             except httpx.RequestError as e_req:
                 last_exception_for_current_model = e_req
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): API request error (network/connection): {e_req}")
@@ -450,10 +456,10 @@ async def async_call_llm(
                     f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Failed to decode API JSON response: {e_json}. "
                     f"Response text snippet (if available): {response_text_snippet}"
                 )
-            except Exception as e_exc: # General catch-all for unexpected issues
+            except Exception as e_exc: 
                 last_exception_for_current_model = e_exc
                 logger.warning(f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt+1}): Unexpected error: {e_exc}", exc_info=True)
-            finally: # Ensure temp file is cleaned up if stream_to_disk was used and failed
+            finally: 
                 if stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream) and last_exception_for_current_model is not None:
                     try:
                         logger.info(f"Cleaning up temp stream file due to error: {temp_file_path_for_stream}")
@@ -461,34 +467,32 @@ async def async_call_llm(
                     except Exception as e_clean_err:
                         logger.error(f"Error cleaning up temp file {temp_file_path_for_stream} after failed LLM attempt: {e_clean_err}")
 
-            if retry_attempt < config.LLM_RETRY_ATTEMPTS - 1 and last_exception_for_current_model is not None : # Only sleep if there was an error
+            if retry_attempt < config.LLM_RETRY_ATTEMPTS - 1 and last_exception_for_current_model is not None : 
                 delay = config.LLM_RETRY_DELAY_SECONDS * (2 ** retry_attempt)
                 retry_reason = type(last_exception_for_current_model).__name__ if last_exception_for_current_model else "Unknown reason"
                 logger.info(f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds due to: {retry_reason}.")
                 await asyncio.sleep(delay)
-            elif last_exception_for_current_model is not None: # All retries for current model failed
+            elif last_exception_for_current_model is not None: 
                 logger.error(f"Async LLM ('{current_model_to_try}'): All {config.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}")
-            # If no exception, the inner try/except block for streaming/non-streaming would have returned.
+            
+        if last_exception_for_current_model is None:
+            pass 
 
-        # If last_exception_for_current_model is None here, it means the call was successful (returned from inside the loop).
-        # If it's not None, it means all retries for the current_model_to_try failed.
-        if last_exception_for_current_model is None: # Should have been returned already if successful
-            pass # Should not reach here if successful
-
-        is_fallback_attempt = True # Prepare for next iteration (or exit if this was already fallback)
+        is_fallback_attempt = True 
 
         if attempt_num_overall == 0 and isinstance(last_exception_for_current_model, httpx.HTTPStatusError) and \
            last_exception_for_current_model.response and 400 <= last_exception_for_current_model.response.status_code < 500:
             logger.error(f"Async LLM: Primary model '{model_name}' failed with client error. Checking fallback conditions.")
-            # Fallback logic will be handled by the loop condition and allow_fallback check at the start of the next iteration.
             
     logger.error(f"Async LLM: Call failed for '{model_name}' after all primary and potential fallback attempts. Returning last captured text ('{final_text_response[:50]}...') and usage.")
-    # Clean up temp file one last time if stream_to_disk was true and it still exists (e.g., if it failed on primary and fallback also failed)
     if stream_to_disk and temp_file_path_for_stream and os.path.exists(temp_file_path_for_stream):
         try:
             os.remove(temp_file_path_for_stream)
         except Exception as e_final_clean:
             logger.error(f"Error during final cleanup of temp file {temp_file_path_for_stream}: {e_final_clean}")
+    
+    if auto_clean_response: # MODIFIED: Apply cleaning if requested
+        final_text_response = clean_model_response(final_text_response)
             
     return final_text_response, current_usage_data
 

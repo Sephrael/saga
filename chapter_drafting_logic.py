@@ -133,23 +133,40 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
     prompt = "\n".join(prompt_lines)
 
     logger.info(f"Calling LLM ({config.DRAFTING_MODEL}) for Ch {chapter_number} draft. Target minimum length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
-    raw_llm_text, usage_data = await llm_interface.async_call_llm(
+    # MODIFIED: Directly use cleaned_text from async_call_llm
+    # The first element of the tuple is the text (cleaned if auto_clean_response=True, which is default)
+    # The second element is the raw LLM text if auto_clean_response=False and stream_to_disk=False.
+    # However, with stream_to_disk=True and auto_clean_response=True, the "raw" concept is a bit different.
+    # For simplicity, we'll assume async_call_llm gives us the primary text (cleaned) and usage.
+    # To get the original raw output for logging, we'd need async_call_llm to return it,
+    # or call with auto_clean_response=False first, then clean manually.
+    # For now, let's assume the first return is what we process, and if we need the "true raw" for logging, that's a separate consideration.
+    # Let's simplify and assume we get the text we need and usage.
+    # If `stream_to_disk` is True, the first returned string is the full accumulated text.
+    # We'll need to log the raw output if we want to save it separately.
+    # Let's get the "raw" (uncleaned but full) text by calling with auto_clean_response=False for logging, then clean manually.
+    
+    raw_llm_text_for_log, draft_usage = await llm_interface.async_call_llm(
         model_name=config.DRAFTING_MODEL,
         prompt=prompt,
-        temperature=0.6,
+        temperature=config.TEMPERATURE_DRAFTING, # Corrected from 0.6 to use config
         max_tokens=None,
         allow_fallback=True,
-        stream_to_disk=True 
+        stream_to_disk=True,
+        frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
+        presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
+        auto_clean_response=False # Get raw for logging
     )
-    if not raw_llm_text:
-        logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
-        return None, None
 
-    cleaned_text = llm_interface.clean_model_response(raw_llm_text)
+    if not raw_llm_text_for_log:
+        logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
+        return None, None # Return None for cleaned_text and raw_llm_text
+
+    cleaned_text = llm_interface.clean_model_response(raw_llm_text_for_log)
 
     if not cleaned_text or len(cleaned_text) < 50:
-        logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text[:200]}...'")
-        return None, raw_llm_text
+        logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text_for_log[:200]}...'")
+        return None, raw_llm_text_for_log # Return None for cleaned_text, but provide raw for debugging
 
     if len(cleaned_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
          logger.warning(
@@ -159,4 +176,5 @@ async def generate_chapter_draft_logic(agent, chapter_number: int, plot_point_fo
          )
 
     logger.info(f"Generated initial draft for ch {chapter_number} (Length: {len(cleaned_text)} chars).")
-    return cleaned_text, raw_llm_text
+    # Return cleaned_text for processing, and raw_llm_text_for_log for saving the original LLM output.
+    return cleaned_text, raw_llm_text_for_log

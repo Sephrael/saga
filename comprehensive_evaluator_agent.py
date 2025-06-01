@@ -1,4 +1,3 @@
-      
 # comprehensive_evaluator_agent.py
 import logging
 import asyncio
@@ -170,8 +169,6 @@ class ComprehensiveEvaluatorAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
-        # --- Few-Shot Example for Comprehensive Evaluation Output ---
-        # The LLM should use these exact category names in its output.
         few_shot_eval_example_str = f"""
 ISSUE CATEGORY: CONSISTENCY
 PROBLEM DESCRIPTION: Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.
@@ -198,11 +195,11 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "/no_think",
             f"You are a Master Editor evaluating Chapter {chapter_number} of a novel titled \"{novel_props.get('title', 'Untitled Novel')}\" (Protagonist: {protagonist_name_str}).",
             "Analyze the **Complete Chapter Text** provided below.",
-            "Your task is to identify specific issues related to these EXACT categories:", # Emphasize exact category names
+            "Your task is to identify specific issues related to these EXACT categories:", 
             "1.  **CONSISTENCY**",
             "2.  **PLOT_ARC**",
-            "3.  **THEMATIC_ALIGNMENT**", # Matches example
-            f"4.  **NARRATIVE_DEPTH_AND_LENGTH** (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters)", # Matches example
+            "3.  **THEMATIC_ALIGNMENT**", 
+            f"4.  **NARRATIVE_DEPTH_AND_LENGTH** (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters)", 
             "",
             "**Reference Information for CONSISTENCY Check (Summary Format):**",
             "  **Plot Outline Summary:**",
@@ -236,7 +233,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "",
             "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
             "Provide your evaluation as plain text. If problems are found, list each problem individually.",
-            "For `ISSUE CATEGORY:`, use one of the EXACT category names listed in your task (CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH).", # Re-emphasize
+            "For `ISSUE CATEGORY:`, use one of the EXACT category names listed in your task (CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH).", 
             "Then, use the EXACT keys: `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
             "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general (e.g., overall length) or no quote applies, use \"N/A - General Issue\".",
             "Separate each problem block with a line containing only \"---\".",
@@ -252,16 +249,18 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number}...")
-        raw_evaluation_text, usage_data = await llm_interface.async_call_llm(
+        # MODIFIED: cleaned_evaluation_text directly from async_call_llm
+        cleaned_evaluation_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_EVALUATION, 
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION, # Added
-            presence_penalty=config.PRESENCE_PENALTY_EVALUATION    # Added
+            frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION, 
+            presence_penalty=config.PRESENCE_PENALTY_EVALUATION,
+            auto_clean_response=True # Default, but explicit for clarity
         )
-        cleaned_evaluation_text = llm_interface.clean_model_response(raw_evaluation_text)
+        
         no_issues_keywords = [
             "no significant problems found", "no issues found", "no problems found",
             "no revision needed", "no changes needed", "all clear", "looks good",
@@ -269,7 +268,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "therefore, no revision is needed"
         ]
         is_likely_no_issues_text = False
-        if cleaned_evaluation_text.strip():
+        if cleaned_evaluation_text.strip(): # Already cleaned
             normalized_eval_text = cleaned_evaluation_text.lower().strip().replace('.', '')
             for keyword in no_issues_keywords:
                 normalized_keyword = keyword.lower().strip().replace('.', '')
@@ -286,19 +285,18 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
                 "legacy_thematic_issues": None, "legacy_narrative_depth_issues": None
             }
         elif not cleaned_evaluation_text.strip():
-            logger.error(f"Comprehensive evaluation LLM for Ch {chapter_number} returned empty text after cleaning. Raw input: '{raw_evaluation_text[:200]}...'")
+            # This case means async_call_llm returned empty even after potential cleaning
+            logger.error(f"Comprehensive evaluation LLM for Ch {chapter_number} returned empty text.")
             eval_output_dict = {
                 "problems_found_text_output": "Evaluation LLM call failed or returned empty.",
                 "legacy_consistency_issues": "LLM call failed.", "legacy_plot_arc_deviation": "LLM call failed.",
                 "legacy_thematic_issues": "LLM call failed.", "legacy_narrative_depth_issues": "LLM call failed."
             }
         else:
-            # These legacy keys might still be useful for very quick high-level checks,
-            # but the primary source of truth is the parsed ProblemDetail list.
             legacy_consistency = "Potential consistency issues." if "consistency" in cleaned_evaluation_text.lower() else None
             legacy_plot = "Potential plot arc issues." if "plot_arc" in cleaned_evaluation_text.lower() else None
-            legacy_theme = "Potential thematic issues." if "thematic" in cleaned_evaluation_text.lower() else None # "thematic_alignment" should map
-            legacy_depth = "Potential narrative depth/length issues." if "narrative_depth" in cleaned_evaluation_text.lower() else None # "narrative_depth_and_length" should map
+            legacy_theme = "Potential thematic issues." if "thematic" in cleaned_evaluation_text.lower() else None 
+            legacy_depth = "Potential narrative depth/length issues." if "narrative_depth" in cleaned_evaluation_text.lower() else None 
             logger.info(f"Comprehensive evaluation for Ch {chapter_number} complete. LLM output (first 200 chars): '{cleaned_evaluation_text[:200]}...'")
             eval_output_dict = {
                 "problems_found_text_output": cleaned_evaluation_text,
@@ -339,7 +337,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
         elif len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
             needs_revision = True
             problem_details_list.append({
-                "issue_category": "narrative_depth_and_length", # Standardized internal category
+                "issue_category": "narrative_depth_and_length", 
                 "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
                 "quote_from_original_text": "N/A - General Issue",
                 "quote_char_start": None, "quote_char_end": None,
@@ -370,7 +368,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
                 logger.warning(f"Could not perform coherence check for ch {chapter_number} (missing current or previous embedding).")
         else:
             logger.info("Skipping coherence check for Chapter 1.")
-            await current_embedding_task # Still await it if it's chapter 1 to ensure it's done
+            await current_embedding_task 
 
         llm_eval_output_dict, llm_usage = await self._perform_llm_comprehensive_evaluation(
             novel_props, draft_text, chapter_number, plot_point_focus, plot_point_index, previous_chapters_context
@@ -381,13 +379,11 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             total_usage_data["total_tokens"] += llm_usage.get("total_tokens", 0)
 
         llm_eval_text_output = llm_eval_output_dict.get("problems_found_text_output", "")
-        # Pass original_draft_text to the parser
         parsed_problems_from_llm = await self._parse_llm_evaluation_output(llm_eval_text_output, chapter_number, draft_text)
 
         if parsed_problems_from_llm:
             problem_details_list.extend(parsed_problems_from_llm)
             needs_revision = True
-            # Use INTERNAL_VALID_CATEGORIES for mapping to reasons if needed, or a more descriptive map
             category_map_to_reason = {
                 "consistency": "Consistency issues identified by LLM.",
                 "plot_arc": "Plot Arc deviation identified by LLM.",
@@ -396,7 +392,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
                 "meta": "Meta/Uncategorized issues identified by LLM."
             }
             for prob in parsed_problems_from_llm:
-                reason = category_map_to_reason.get(prob["issue_category"]) # prob["issue_category"] is now normalized
+                reason = category_map_to_reason.get(prob["issue_category"]) 
                 if reason and reason not in reasons_for_revision_summary:
                     reasons_for_revision_summary.append(reason)
         elif llm_eval_text_output.strip() and "no significant problems found" not in llm_eval_text_output.lower():
@@ -416,10 +412,9 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
         unique_reasons_summary = sorted(list(set(reasons_for_revision_summary)))
         validated_problem_details_list: List[ProblemDetail] = []
         for prob_item in problem_details_list:
-            # Log if quote_char_start is still None for a non-general quote AFTER spaCy processing attempt.
             if prob_item["quote_from_original_text"] not in ["N/A - General Issue", "N/A - LLM Output Parsing", "N/A - Malformed LLM Output"] \
                and prob_item["quote_char_start"] is None \
-               and prob_item["quote_from_original_text"].strip() and draft_text.strip(): # Ensure there was text to search in
+               and prob_item["quote_from_original_text"].strip() and draft_text.strip(): 
                  logger.warning(
                     f"CompEvaluator: Problem quote TEXT for Ch {chapter_number} ('{prob_item['quote_from_original_text'][:50]}...') present, "
                     f"but its offsets were NOT found by spaCy utils. Problem desc: {prob_item['problem_description']}"
@@ -440,5 +435,3 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "narrative_depth_issues": llm_eval_output_dict.get("legacy_narrative_depth_issues")
         }
         return final_eval_result, total_usage_data if total_usage_data["total_tokens"] > 0 else None
-
-    

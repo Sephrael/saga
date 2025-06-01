@@ -128,7 +128,6 @@ class WorldContinuityAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
-        # --- Few-Shot Example for Consistency Output ---
         few_shot_consistency_example_str = f"""
 ISSUE CATEGORY: consistency
 PROBLEM DESCRIPTION: The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.
@@ -197,15 +196,16 @@ SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship 
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number}...")
-        raw_consistency_text, usage_data = await llm_interface.async_call_llm(
+        # MODIFIED: cleaned_consistency_text directly from async_call_llm
+        cleaned_consistency_text, usage_data = await llm_interface.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_CONSISTENCY_CHECK, 
             allow_fallback=True,
-            stream_to_disk=False
+            stream_to_disk=False,
+            auto_clean_response=True # Default
         )
-        cleaned_consistency_text = llm_interface.clean_model_response(raw_consistency_text)
-        # Pass original_draft_text to the parser
+        
         consistency_problems = await self._parse_llm_consistency_output(cleaned_consistency_text, chapter_number, draft_text)
 
         logger.info(f"World/Continuity consistency check for Ch {chapter_number} found {len(consistency_problems)} problems.")
