@@ -1,4 +1,3 @@
-      
 # data_access/kg_queries.py
 import logging
 from typing import Optional, List, Dict, Any, Tuple
@@ -191,5 +190,3 @@ async def get_most_recent_value_from_db(
 
     logger.debug(f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, with include_provisional={include_provisional}.")
     return None
-
-    

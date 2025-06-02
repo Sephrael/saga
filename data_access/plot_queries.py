@@ -18,27 +18,27 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
     # Clear existing plot structure associated with this novel_id
     statements.append((
         """
-        MATCH (ni:NovelInfo {id: $novel_id_param})
-        OPTIONAL MATCH (ni)-[r_has_pp:HAS_PLOT_POINT]->(pp:PlotPoint)
+        MATCH (ni:NovelInfo:Entity {id: $novel_id_param})
+        OPTIONAL MATCH (ni)-[r_has_pp:HAS_PLOT_POINT]->(pp:PlotPoint:Entity)
         DETACH DELETE pp, r_has_pp
         """,
         {"novel_id_param": novel_id}
     ))
     # Delete the NovelInfo node itself to ensure a clean slate for its properties
     statements.append((
-        "MATCH (ni:NovelInfo {id: $novel_id_param}) DETACH DELETE ni",
+        "MATCH (ni:NovelInfo:Entity {id: $novel_id_param}) DETACH DELETE ni",
         {"novel_id_param": novel_id}
     ))
 
-    # Create/update NovelInfo node
+    # Create/update NovelInfo node with :Entity label
     novel_props_for_set = {k: v for k, v in plot_data.items() if not isinstance(v, (list, dict)) and v is not None}
     novel_props_for_set['id'] = novel_id
     statements.append((
-        "MERGE (ni:NovelInfo {id: $id_val}) SET ni = $props",
+        "MERGE (ni:Entity {id: $id_val}) SET ni:NovelInfo SET ni = $props", # MODIFIED
         {"id_val": novel_id, "props": novel_props_for_set}
     ))
 
-    # Create/update PlotPoint nodes and relationships
+    # Create/update PlotPoint nodes and relationships, with :Entity label
     plot_points_list_data = plot_data.get('plot_points', [])
     if isinstance(plot_points_list_data, list):
         for i, point_desc_str in enumerate(plot_points_list_data):
@@ -48,28 +48,28 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
                     "id": pp_id,
                     "sequence": i + 1,
                     "description": point_desc_str,
-                    "status": "pending"  # NEW: Set initial status
+                    "status": "pending"
                 }
                 statements.append((
-                    "MERGE (pp:PlotPoint {id: $id_val}) SET pp = $props",
+                    "MERGE (pp:Entity {id: $id_val}) SET pp:PlotPoint SET pp = $props", # MODIFIED
                     {"id_val": pp_id, "props": pp_props_for_set}
                 ))
                 statements.append((
                     """
-                    MATCH (ni:NovelInfo {id: $novel_id_param})
-                    MATCH (pp:PlotPoint {id: $pp_id_val})
+                    MATCH (ni:NovelInfo:Entity {id: $novel_id_param})
+                    MATCH (pp:PlotPoint:Entity {id: $pp_id_val})
                     MERGE (ni)-[:HAS_PLOT_POINT]->(pp)
-                    """,
+                    """, # MODIFIED
                     {"novel_id_param": novel_id, "pp_id_val": pp_id}
                 ))
                 if i > 0: # Link to previous plot point
                     prev_pp_id = f"{novel_id}_pp_{i}"
                     statements.append((
                         """
-                        MATCH (prev_pp:PlotPoint {id: $prev_pp_id_val})
-                        MATCH (curr_pp:PlotPoint {id: $pp_id_val})
+                        MATCH (prev_pp:PlotPoint:Entity {id: $prev_pp_id_val})
+                        MATCH (curr_pp:PlotPoint:Entity {id: $pp_id_val})
                         MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)
-                        """,
+                        """, # MODIFIED
                         {"prev_pp_id_val": prev_pp_id, "pp_id_val": pp_id}
                     ))
     try:
@@ -85,7 +85,7 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
     novel_id = config.MAIN_NOVEL_INFO_NODE_ID
     plot_data: Dict[str, Any] = {}
 
-    novel_info_query = "MATCH (ni:NovelInfo {id: $novel_id_param}) RETURN ni"
+    novel_info_query = "MATCH (ni:NovelInfo:Entity {id: $novel_id_param}) RETURN ni" # MODIFIED
     result = await neo4j_manager.execute_read_query(novel_info_query, {"novel_id_param": novel_id})
 
     if not result or not result[0] or not result[0].get('ni'):
@@ -96,10 +96,10 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
     plot_data.pop('id', None) # Remove internal ID from the returned dict
 
     plot_points_query = """
-    MATCH (ni:NovelInfo {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint)
+    MATCH (ni:NovelInfo:Entity {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity)
     RETURN pp.description AS description, pp.status AS status, pp.sequence AS sequence
     ORDER BY pp.sequence ASC
-    """
+    """ # MODIFIED
     pp_results = await neo4j_manager.execute_read_query(plot_points_query, {"novel_id_param": novel_id})
     
     # Store plot points as list of strings for compatibility with current Orchestrator state,

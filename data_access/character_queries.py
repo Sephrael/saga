@@ -12,6 +12,7 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
         logger.warning("save_character_profiles_to_db: profiles_data is empty. Nothing to save.")
         return False
 
+    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID # Define for use in linking query
     statements: List[Tuple[str, Dict[str, Any]]] = []
 
     # Comprehensive clearing of Character related data before rebuilding
@@ -20,6 +21,7 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
     statements.append(("MATCH (c:Character)-[r:HAS_TRAIT]->() DELETE r", {}))
     statements.append(("MATCH (c:Character)-[r:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent) DELETE r, dev", {}))
     statements.append(("MATCH (c1:Character)-[r:DYNAMIC_REL]-(c2:Character) DELETE r", {}))
+    statements.append(("MATCH (c:Character)-[r:HAS_CHARACTER]-(ni:NovelInfo) DELETE r", {})) # Clear link to NovelInfo
     # Detach and delete Character nodes (this also removes the :Entity label if it's the only one left after removing :Character)
     statements.append(("MATCH (c:Character) DETACH DELETE c", {})) # Should also delete :Entity if it only has :Character
     # Delete Trait nodes
@@ -43,6 +45,13 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
             character_node_query, 
             {"char_name_val": char_name, "props": char_props_for_set}
         ))
+        
+        # Link Character to NovelInfo node
+        statements.append((
+            "MATCH (ni:NovelInfo:Entity {id: $novel_id_param}), (c:Character:Entity {name: $char_name_val}) MERGE (ni)-[:HAS_CHARACTER]->(c)",
+            {"novel_id_param": novel_id_param, "char_name_val": char_name}
+        ))
+
 
         # Traits
         if isinstance(profile.get("traits"), list):
@@ -51,7 +60,7 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
                     statements.append((
                         """
                         MATCH (c:Character:Entity {name: $char_name_val}) 
-                        MERGE (t:Trait {name: $trait_name_val})
+                        MERGE (t:Entity:Trait {name: $trait_name_val})
                         MERGE (c)-[:HAS_TRAIT]->(t)
                         """,
                         {"char_name_val": char_name, "trait_name_val": trait_str}
@@ -111,7 +120,7 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
                     statements.append((
                         """
                         MATCH (c:Character:Entity {name: $char_name_val}) 
-                        CREATE (dev:DevelopmentEvent)
+                        CREATE (dev:Entity:DevelopmentEvent)
                         SET dev = $props
                         CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
                         """,
@@ -147,7 +156,7 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
         profile.pop('name', None) # Name is key, not property in dict
 
         # Fetch traits
-        traits_query = "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait) RETURN t.name AS trait_name"
+        traits_query = "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait:Entity) RETURN t.name AS trait_name" # MODIFIED
         trait_results = await neo4j_manager.execute_read_query(traits_query, {"char_name": char_name})
         profile["traits"] = [tr['trait_name'] for tr in trait_results] if trait_results else []
 
@@ -172,9 +181,9 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
 
         # Fetch development events
         dev_query = """
-        MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent)
+        MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
         RETURN dev.summary AS summary, dev.chapter_updated AS chapter, dev.is_provisional AS is_provisional
-        """
+        """ # MODIFIED
         dev_results = await neo4j_manager.execute_read_query(dev_query, {"char_name": char_name})
         if dev_results:
             for dev_rec in dev_results:
@@ -196,13 +205,13 @@ async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: 
     MATCH (c:Character:Entity {name: $char_name_param})
     
     // Get latest non-provisional development note if available
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent)
+    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent:Entity)
     WHERE dev_np.chapter_updated <= $chapter_limit_param AND (dev_np.is_provisional IS NULL OR dev_np.is_provisional = FALSE)
     WITH c, dev_np ORDER BY dev_np.chapter_updated DESC
     WITH c, HEAD(COLLECT(dev_np)) AS latest_non_provisional_dev_event
 
     // Get latest provisional development note if available (and more recent than non-provisional)
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_p:DevelopmentEvent)
+    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_p:DevelopmentEvent:Entity)
     WHERE dev_p.chapter_updated <= $chapter_limit_param AND dev_p.is_provisional = TRUE
     WITH c, latest_non_provisional_dev_event, dev_p ORDER BY dev_p.chapter_updated DESC
     WITH c, latest_non_provisional_dev_event, HEAD(COLLECT(dev_p)) AS latest_provisional_dev_event
@@ -218,7 +227,7 @@ async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: 
     OPTIONAL MATCH (c)-[prov_rel:DYNAMIC_REL]-(:Entity)
     WHERE prov_rel.chapter_added <= $chapter_limit_param AND prov_rel.is_provisional = TRUE
     
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(any_prov_dev:DevelopmentEvent)
+    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(any_prov_dev:DevelopmentEvent:Entity)
     WHERE any_prov_dev.chapter_updated <= $chapter_limit_param AND any_prov_dev.is_provisional = TRUE
     
     RETURN c.description AS description,
@@ -226,7 +235,7 @@ async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: 
            latest_dev_event.summary AS most_recent_development_note,
            (c.is_provisional = TRUE OR prov_rel IS NOT NULL OR any_prov_dev IS NOT NULL) AS is_provisional_overall
     LIMIT 1
-    """
+    """ # MODIFIED DevelopmentEvent to include :Entity
     params = {"char_name_param": char_name, "chapter_limit_param": chapter_limit}
     try:
         result = await neo4j_manager.execute_read_query(query, params)

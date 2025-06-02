@@ -240,41 +240,6 @@ def parse_hierarchical_structured_text(
     for line_num, line_text_original_case in enumerate(lines):
         line_stripped = line_text_original_case.strip()
 
-        # ++++++++++++++ CRITICAL DEBUGGING - ADD THIS BLOCK ++++++++++++++
-        if "**Overview:**" in line_stripped or "**Locations:**" in line_stripped or \
-           "**Factions:**" in line_stripped or "**Systems:**" in line_stripped or \
-           "**Lore:**" in line_stripped: # Focus on lines we expect to match
-
-            logger.critical(f"HParser CRITICAL DBG [{line_num+1}] For line_stripped='{repr(line_stripped)}':")
-            try:
-                # Log UTF-8 bytes
-                bytes_utf8 = line_stripped.encode('utf-8', 'replace')
-                logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Bytes (UTF-8): {bytes_utf8}")
-
-                # Log ordinals
-                ordinals = [ord(c) for c in line_stripped]
-                logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Ordinals: {ordinals}")
-
-                # Direct comparison to a known-good string
-                standard_overview = "**Overview:**"
-                if line_stripped == standard_overview:
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_overview}' PASSED.")
-                else:
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_overview}' FAILED.")
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]     Standard '{standard_overview}' ordinals: {[ord(c) for c in standard_overview]}")
-
-                standard_locations = "**Locations:**"
-                if line_stripped == standard_locations:
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_locations}' PASSED.")
-                elif "**Locations:**" in line_stripped: # Check if it's this one failing
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_locations}' FAILED.")
-                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]     Standard '{standard_locations}' ordinals: {[ord(c) for c in standard_locations]}")
-
-            except Exception as e_debug_deep:
-                logger.error(f"HParser CRITICAL DBG [{line_num+1}] Error during deep debug logging: {e_debug_deep}")
-        # ++++++++++++++ END OF CRITICAL DEBUGGING BLOCK ++++++++++++++
-
-        # Use the category_pattern passed to the function for the main logic
         category_match = category_pattern.match(line_stripped) 
         if category_match:
             matched_category_group = category_match.group(1) 

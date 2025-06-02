@@ -429,7 +429,7 @@ def _generate_novel_info_cypher(plot_outline: Dict[str, Any], novel_id: str) -> 
     statements = []
     novel_props = {k: v for k, v in plot_outline.items() if not isinstance(v, (list, dict)) and v is not None}
     novel_props['id'] = novel_id
-    statements.append(("MERGE (ni:NovelInfo {id: $id_val}) SET ni = $props_val",
+    statements.append(("MERGE (ni:Entity {id: $id_val}) SET ni:NovelInfo SET ni = $props_val", # MODIFIED
                        {"id_val": novel_id, "props_val": novel_props}))
     return statements
 
@@ -439,21 +439,22 @@ def _generate_plot_points_cypher(plot_points_list: List[str], novel_id: str) -> 
         if isinstance(desc, str):
             pp_id = f"{novel_id}_pp_{i+1}"
             pp_props = {"id": pp_id, "sequence": i + 1, "description": desc, "status": "pending"}
-            statements.append(("MERGE (pp:PlotPoint {id: $id_val}) SET pp = $props",
+            statements.append(("MERGE (pp:Entity {id: $id_val}) SET pp:PlotPoint SET pp = $props", # MODIFIED
                                {"id_val": pp_id, "props": pp_props}))
             statements.append((
-                "MATCH (ni:NovelInfo {id: $novel_id_val}) MATCH (pp:PlotPoint {id: $pp_id_val}) MERGE (ni)-[:HAS_PLOT_POINT]->(pp)",
+                "MATCH (ni:NovelInfo:Entity {id: $novel_id_val}) MATCH (pp:PlotPoint:Entity {id: $pp_id_val}) MERGE (ni)-[:HAS_PLOT_POINT]->(pp)", # MODIFIED
                 {"novel_id_val": novel_id, "pp_id_val": pp_id}
             ))
             if i > 0:
                 prev_pp_id = f"{novel_id}_pp_{i}"
                 statements.append((
-                    "MATCH (prev_pp:PlotPoint {id: $prev_pp_id_val}) MATCH (curr_pp:PlotPoint {id: $curr_pp_id_val}) MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)",
+                    "MATCH (prev_pp:PlotPoint:Entity {id: $prev_pp_id_val}) MATCH (curr_pp:PlotPoint:Entity {id: $curr_pp_id_val}) MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)", # MODIFIED
                     {"prev_pp_id_val": prev_pp_id, "curr_pp_id_val": pp_id}
                 ))
     return statements
 
 def _generate_character_node_cypher(char_name: str, char_props: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    # This is already correct as :Entity is set in save_character_profiles_to_db
     return ("MERGE (c:Entity {name: $char_name_val}) SET c:Character SET c += $props_val",
             {"char_name_val": char_name, "props_val": char_props})
 
@@ -462,7 +463,7 @@ def _generate_traits_cypher(char_name: str, traits_list: List[str]) -> List[Tupl
     for trait in traits_list:
         if isinstance(trait, str):
             statements.append((
-                "MATCH (c:Character:Entity {name: $char_name_val}) MERGE (t:Trait {name: $trait_name_val}) MERGE (c)-[:HAS_TRAIT]->(t)",
+                "MATCH (c:Character:Entity {name: $char_name_val}) MERGE (t:Entity:Trait {name: $trait_name_val}) MERGE (c)-[:HAS_TRAIT]->(t)", # MODIFIED
                 {"char_name_val": char_name, "trait_name_val": trait}
             ))
     return statements
@@ -511,8 +512,8 @@ def _generate_dev_events_cypher(char_name: str, profile_dict: Dict[str, Any]) ->
                 dev_event_props = {"summary": value_str, "chapter_updated": chap_num_int}
                 if profile_dict.get(f"source_quality_chapter_{chap_num_int}") == "provisional_from_unrevised_draft":
                     dev_event_props["is_provisional"] = True
-                statements.append((
-                    "MATCH (c:Character:Entity {name: $char_name_val}) CREATE (dev:DevelopmentEvent) SET dev = $props CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)",
+                statements.append(( # MODIFIED
+                    "MATCH (c:Character:Entity {name: $char_name_val}) CREATE (dev:Entity:DevelopmentEvent) SET dev = $props CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)",
                     {"char_name_val": char_name, "props": dev_event_props}
                 ))
             except ValueError:
@@ -525,7 +526,7 @@ def _generate_world_overview_cypher(overview_dict: Dict[str, Any], wc_id: str, o
         overview_props = {"id": wc_id, "overview_description": str(overview_dict.get("description", ""))}
         if overview_source_info.get(f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}") == "provisional_from_unrevised_draft":
             overview_props["is_provisional"] = True
-        statements.append(("MERGE (wc:WorldContainer {id: $id_val}) SET wc = $props_val",
+        statements.append(("MERGE (wc:Entity {id: $id_val}) SET wc:WorldContainer SET wc = $props_val", # MODIFIED
                            {"id_val": wc_id, "props_val": overview_props}))
     return statements
 
@@ -542,7 +543,7 @@ def _generate_world_element_node_cypher(we_id_str: str, category_str: str, item_
     if item_props_original.get(f"source_quality_chapter_{created_chap_num}") == "provisional_from_unrevised_draft":
         item_props_for_set['is_provisional'] = True
     
-    return ("MERGE (we:WorldElement {id: $id_val}) SET we = $props_val",
+    return ("MERGE (we:Entity {id: $id_val}) SET we:WorldElement SET we = $props_val", # MODIFIED
             {"id_val": we_id_str, "props_val": item_props_for_set})
 
 def _generate_world_list_properties_cypher(we_id_str: str, list_prop_key_str: str, list_value: List[Any]) -> List[Tuple[str, Dict[str, Any]]]:
@@ -553,8 +554,8 @@ def _generate_world_list_properties_cypher(we_id_str: str, list_prop_key_str: st
             if list_prop_key_str == "key_elements": rel_name_base = "KEY_ELEMENT"
             elif list_prop_key_str == "traits": rel_name_base = "TRAIT_ASPECT"
             rel_name_final = f"HAS_{rel_name_base}"
-            statements.append((
-                f"MATCH (we:WorldElement {{id: $we_id_val}}) MERGE (v:ValueNode {{value: $val_item_val, type: $value_node_type_val}}) MERGE (we)-[:{rel_name_final}]->(v)",
+            statements.append(( # MODIFIED
+                f"MATCH (we:WorldElement:Entity {{id: $we_id_val}}) MERGE (v:Entity:ValueNode {{value: $val_item_val, type: $value_node_type_val}}) MERGE (we)-[:{rel_name_final}]->(v)",
                 {"we_id_val": we_id_str, "val_item_val": val_item, "value_node_type_val": list_prop_key_str}
             ))
     return statements
@@ -568,8 +569,8 @@ def _generate_world_elaboration_events_cypher(we_id_str: str, item_name_str: str
                 elab_props = {"summary": value_val, "chapter_updated": chap_num_val}
                 if details_dict.get(f"source_quality_chapter_{chap_num_val}") == "provisional_from_unrevised_draft":
                     elab_props["is_provisional"] = True
-                statements.append((
-                    "MATCH (we:WorldElement {id: $we_id_val}) CREATE (we_elab:WorldElaborationEvent) SET we_elab = $props CREATE (we)-[:ELABORATED_IN_CHAPTER]->(we_elab)",
+                statements.append(( # MODIFIED
+                    "MATCH (we:WorldElement:Entity {id: $we_id_val}) CREATE (we_elab:Entity:WorldElaborationEvent) SET we_elab = $props CREATE (we)-[:ELABORATED_IN_CHAPTER]->(we_elab)",
                     {"we_id_val": we_id_str, "props": elab_props}
                 ))
             except ValueError:
@@ -584,6 +585,8 @@ async def _prepopulate_kg_from_dicts_internal(
     logger.info("Starting Knowledge Graph pre-population directly from initial data dicts...")
     cypher_statements: List[Tuple[str, Dict[str, Any]]] = []
     novel_id = config.MAIN_NOVEL_INFO_NODE_ID
+    main_wc_id = config.MAIN_WORLD_CONTAINER_NODE_ID
+
 
     if plot_outline:
         cypher_statements.extend(_generate_novel_info_cypher(plot_outline, novel_id))
@@ -595,6 +598,11 @@ async def _prepopulate_kg_from_dicts_internal(
         if not isinstance(profile, dict): continue
         char_props_for_set = {k: v for k, v in profile.items() if isinstance(v, (str, int, float, bool)) and v is not None}
         cypher_statements.append(_generate_character_node_cypher(char_name, char_props_for_set))
+        # Link Character to NovelInfo
+        cypher_statements.append((
+            "MATCH (ni:NovelInfo:Entity {id: $novel_id_val}), (c:Character:Entity {name: $char_name_val}) MERGE (ni)-[:HAS_CHARACTER]->(c)",
+            {"novel_id_val": novel_id, "char_name_val": char_name}
+        ))
         if isinstance(profile.get("traits"), list):
             cypher_statements.extend(_generate_traits_cypher(char_name, profile["traits"]))
         if isinstance(profile.get("relationships"), dict):
@@ -604,7 +612,12 @@ async def _prepopulate_kg_from_dicts_internal(
     for category, items_or_overview in world_building.items():
         if category == "_overview_":
             if isinstance(items_or_overview, dict):
-                cypher_statements.extend(_generate_world_overview_cypher(items_or_overview, config.MAIN_WORLD_CONTAINER_NODE_ID, items_or_overview))
+                cypher_statements.extend(_generate_world_overview_cypher(items_or_overview, main_wc_id, items_or_overview))
+                # Link WorldContainer to NovelInfo
+                cypher_statements.append((
+                    "MATCH (ni:NovelInfo:Entity {id: $novel_id_val}), (wc:WorldContainer:Entity {id: $wc_id_val}) MERGE (ni)-[:HAS_WORLD_META]->(wc)",
+                    {"novel_id_val": novel_id, "wc_id_val": main_wc_id}
+                ))
             continue
         if category in ["is_default", "source", "user_supplied_data"] or not isinstance(items_or_overview, dict):
             continue
@@ -613,6 +626,11 @@ async def _prepopulate_kg_from_dicts_internal(
             if not isinstance(details, dict) or item_name.startswith(("_", "source_quality_chapter_", "category_updated_in_chapter_")): continue
             we_id = f"{category}_{item_name}".replace(" ", "_").replace("'", "").lower()
             cypher_statements.append(_generate_world_element_node_cypher(we_id, category, item_name, details))
+            # Link WorldElement to its WorldContainer
+            cypher_statements.append((
+                "MATCH (wc:WorldContainer:Entity {id: $wc_id_val}), (we:WorldElement:Entity {id: $we_id_val}) MERGE (wc)-[:CONTAINS_ELEMENT]->(we)",
+                {"wc_id_val": main_wc_id, "we_id_val": we_id}
+            ))
             for list_prop_key in ["goals", "rules", "key_elements", "traits"]:
                 if isinstance(details.get(list_prop_key), list):
                     cypher_statements.extend(_generate_world_list_properties_cypher(we_id, list_prop_key, details[list_prop_key]))
@@ -783,6 +801,11 @@ class KGMaintainerAgent:
             "   List each factual triple. Preferred format: `Subject | Predicate | Object`.",
             "   (Other formats: `Subject: S, Predicate: P, Object: O` or `- [S, P, O]` are acceptable if consistent).",
             f"   Use predicates like: {common_predicates_str}. Focus on NEW facts or significant CHANGES from THIS chapter.",
+            "   **Crucially, try to link new entities to existing characters, locations, or factions from the reference information or previous chapter context.**",
+            "   For example, if a new 'Magic Sword' is found by 'Elara' in 'The Dark Cave', relevant triples would be:",
+            "   `Magic Sword | found_by | Elara Vance`",
+            "   `Magic Sword | located_in | The Dark Cave`",
+            "   Ensure predicates clearly define the relationships.",
             "",
             "**Follow this example structure for your output precisely:**",
             "```plaintext",
