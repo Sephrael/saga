@@ -16,7 +16,7 @@ from prompt_data_getters import (
     heuristic_entity_spotter_for_kg,
     get_filtered_world_data_for_prompt_plain_text
 )
-from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text, parse_kg_triples_from_text
+from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text, parse_kg_triples_from_text, WORLD_CATEGORY_HEADER_PATTERN, WORLD_ITEM_HEADER_PATTERN, WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,6 @@ CHAR_UPDATE_RELATIONSHIP_POST_PARSING_HANDLING = { # Not directly used by parse_
     "relationships": {"separator": ";", "item_format": "target:type"}
 }
 
-WORLD_UPDATE_CATEGORY_PATTERN = re.compile(r"^\s*Category:\s*([A-Za-z\s_]+?)\s*$", re.IGNORECASE | re.MULTILINE)
 WORLD_UPDATE_ITEM_PATTERN = re.compile(r"^\s*Item:\s*([A-Za-z0-9\s'\-]+?)\s*$", re.IGNORECASE | re.MULTILINE)
 WORLD_UPDATE_DETAIL_KEY_MAP = {
     "description": "description", "atmosphere": "atmosphere",
@@ -691,9 +690,10 @@ class KGMaintainerAgent:
 
     def _parse_unified_world_updates(self, text_block: str, chapter_number: int) -> Dict[str, Any]:
         parsed_data = parse_hierarchical_structured_text(
-            text_block,
-            WORLD_UPDATE_CATEGORY_PATTERN,
-            WORLD_UPDATE_ITEM_PATTERN,
+            text_block, # This is world_updates_text
+            WORLD_CATEGORY_HEADER_PATTERN, # This is your WORLD_CATEGORY_HEADER_PATTERN from parsing_utils
+            WORLD_ITEM_HEADER_PATTERN,     # The one with the colon
+            WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL, # The one for item name alone on line
             WORLD_UPDATE_DETAIL_KEY_MAP,
             WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
             overview_category_internal_key="_overview_"

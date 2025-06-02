@@ -11,9 +11,10 @@ class ParseError(Exception):
 
 # Default regex for splitting blocks (e.g., by "---")
 DEFAULT_BLOCK_SEPARATOR_REGEX = r'\n\s*---\s*\n'
-# Default regex for key-value lines (captures key, value)
-# Permissive key characters: Alphanumeric, space, underscore, parentheses, apostrophe, hyphen
-DEFAULT_KEY_VALUE_PATTERN = re.compile(r"^\s*([A-Za-z0-9\s_()'-]+?):\s*(.*)$")
+# MODIFIED: To handle optional bolding around keys
+DEFAULT_KEY_VALUE_PATTERN = re.compile(
+    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?:\s*(.*)$"
+)
 DEFAULT_LIST_ITEM_PREFIXES = ["- ", "* "]
 
 
@@ -22,10 +23,6 @@ def split_text_into_blocks(
     separator_regex_str: str = DEFAULT_BLOCK_SEPARATOR_REGEX,
     flags: int = re.MULTILINE
 ) -> List[str]:
-    """
-    Splits text into blocks using a regex separator.
-    Filters out empty blocks.
-    """
     if not text or not text.strip():
         return []
     blocks = re.split(separator_regex_str, text.strip(), flags=flags)
@@ -34,38 +31,17 @@ def split_text_into_blocks(
 
 def parse_key_value_block(
     block_text_or_lines: Union[str, List[str]],
-    key_map: Dict[str, str],
+    key_map: Dict[str, Union[str, Callable[[re.Match[str]], str]]],
     list_internal_keys: List[str],
     list_item_prefixes: Optional[List[str]] = None,
     key_value_pattern: Optional[Pattern[str]] = None,
-    special_list_handling: Optional[Dict[str, Dict[str, Any]]] = None, # E.g. {"characters_involved": {"separator": ","}}
+    special_list_handling: Optional[Dict[str, Dict[str, Any]]] = None,
     allow_unknown_keys: bool = False,
-    default_key_for_unmatched_lines: Optional[str] = None # If a line doesn't match K:V or list, append to this key's list
+    default_key_for_unmatched_lines: Optional[str] = None
 ) -> Dict[str, Any]:
-    """
-    Parses a block of text (or lines) into a dictionary based on key_map.
-    Handles simple key-value pairs and lists.
-
-    Args:
-        block_text_or_lines: The text block or list of lines to parse.
-        key_map: Maps normalized LLM display keys (lowercase, underscores for spaces)
-                 to internal canonical keys for the output dictionary.
-        list_internal_keys: A list of *internal* keys that should result in list values.
-        list_item_prefixes: Prefixes identifying list items (e.g., ["- ", "* "]).
-        key_value_pattern: Compiled regex to identify key-value lines. Must capture (key, value).
-        special_list_handling: Optional dict to define custom parsing for specific list keys.
-                               e.g., {"internal_key_name": {"separator": ","}} for comma-separated lists on one line.
-        allow_unknown_keys: If True, unmatched keys are logged but not added. If False (default), they are ignored.
-                             (Note: current implementation logs and ignores)
-        default_key_for_unmatched_lines: If a line is not a K:V, list item, or list header,
-                                         it will be appended to a list under this internal key.
-    Returns:
-        A dictionary with internal keys and parsed values.
-    """
     if list_item_prefixes is None: list_item_prefixes = DEFAULT_LIST_ITEM_PREFIXES
     if key_value_pattern is None: key_value_pattern = DEFAULT_KEY_VALUE_PATTERN
     if special_list_handling is None: special_list_handling = {}
-
 
     parsed_data: Dict[str, Any] = {}
     if default_key_for_unmatched_lines and default_key_for_unmatched_lines not in parsed_data:
@@ -73,203 +49,288 @@ def parse_key_value_block(
 
     active_list_internal_key: Optional[str] = None
     active_list_values: List[str] = []
-
     lines = block_text_or_lines.splitlines() if isinstance(block_text_or_lines, str) else block_text_or_lines
 
-    for line_num, line_text in enumerate(lines):
-        line = line_text.strip()
-        # Skip fully empty lines. Indented lines might be part of multi-line values (if supported).
-        if not line_text.strip() and not line_text: # Distinguish between empty and "   "
+    for line_num, line_text_original in enumerate(lines):
+        line_text_for_default_unmatched = line_text_original 
+        line_for_processing = line_text_original.strip()
+
+        if not line_for_processing: 
+            if active_list_internal_key:
+                active_list_values.append("") 
             continue
 
-        # Finalize active list if current line doesn't continue it and is not empty indented
-        is_list_item_line = any(line.startswith(p) for p in list_item_prefixes)
+        current_line_is_list_item_syntax = any(line_for_processing.startswith(p) for p in list_item_prefixes)
         
-        # If we have an active list, and this line is NOT a list item for it
-        if active_list_internal_key and not is_list_item_line:
-            # Check if this line STARTS a new known key or list header. If so, finalize.
-            # Otherwise, it might be a multi-line part of the *last* list item (not supported by this simple parser)
-            # or an unmatched line.
-            potential_new_key_match = key_value_pattern.match(line)
-            normalized_line_as_key_header = line.replace(":", "").strip().lower().replace(" ", "_")
-            is_new_known_key = potential_new_key_match and key_map.get(potential_new_key_match.group(1).strip().lower().replace(" ", "_"))
-            is_new_known_list_header = key_map.get(normalized_line_as_key_header) and key_map[normalized_line_as_key_header] in list_internal_keys
+        content_to_match_kv = line_for_processing
+        if current_line_is_list_item_syntax:
+            prefix_len_to_strip = next((len(p) for p in list_item_prefixes if line_for_processing.startswith(p)), 0)
+            content_to_match_kv = line_for_processing[prefix_len_to_strip:].lstrip() 
 
-            if is_new_known_key or is_new_known_list_header or not line_text.startswith("  "): # Finalize if new key or not indented
+        kv_match = key_value_pattern.match(content_to_match_kv)
+        
+        if active_list_internal_key and not current_line_is_list_item_syntax:
+            is_new_key_on_original_line = False
+            if not kv_match: 
+                original_line_kv_match = key_value_pattern.match(line_for_processing) 
+                if original_line_kv_match:
+                    key_from_original_line = original_line_kv_match.group(1).strip().lower().replace(" ", "_")
+                    if key_map.get(key_from_original_line) or \
+                       any(isinstance(k_map, re.Pattern) and k_map.match(original_line_kv_match.group(1).strip()) for k_map in key_map.keys()):
+                        is_new_key_on_original_line = True
+            
+            if is_new_key_on_original_line or (not line_text_original.startswith("  ") and not kv_match):
                 if active_list_internal_key in parsed_data:
                     parsed_data[active_list_internal_key].extend(active_list_values)
                 else:
                     parsed_data[active_list_internal_key] = active_list_values
                 active_list_internal_key = None
                 active_list_values = []
-
-        # Attempt to match "Key: Value"
-        kv_match = key_value_pattern.match(line)
+        
         if kv_match:
             key_from_llm_raw = kv_match.group(1).strip()
             value_from_llm = kv_match.group(2).strip()
-            
             normalized_key_from_llm = key_from_llm_raw.lower().replace(" ", "_")
-            internal_key = key_map.get(normalized_key_from_llm)
+            internal_key: Optional[str] = None
 
+            if normalized_key_from_llm in key_map and isinstance(key_map[normalized_key_from_llm], str):
+                internal_key = key_map[normalized_key_from_llm] # type: ignore
+            else:
+                for pattern_or_str_key, internal_target_or_func in key_map.items():
+                    if isinstance(pattern_or_str_key, re.Pattern) and pattern_or_str_key.match(key_from_llm_raw):
+                        if callable(internal_target_or_func):
+                            match_obj = pattern_or_str_key.match(key_from_llm_raw)
+                            if match_obj: internal_key = internal_target_or_func(match_obj)
+                        elif isinstance(internal_target_or_func, str):
+                            internal_key = internal_target_or_func
+                        break
+            
             if internal_key:
                 if internal_key in list_internal_keys:
                     active_list_internal_key = internal_key
-                    active_list_values = []
-                    parsed_data[internal_key] = [] # Initialize list
-
+                    active_list_values = [] 
+                    parsed_data[internal_key] = []
                     special_handling = special_list_handling.get(internal_key)
                     if special_handling and "separator" in special_handling and value_from_llm:
-                        # Custom separator for this list type (e.g., comma-separated characters_involved)
                         active_list_values.extend([v.strip() for v in value_from_llm.split(special_handling["separator"]) if v.strip()])
-                    elif value_from_llm: # Content on the same line as list key
-                        is_value_list_item = any(value_from_llm.startswith(p) for p in list_item_prefixes)
-                        if is_value_list_item:
-                            prefix_len = next((len(p) for p in list_item_prefixes if value_from_llm.startswith(p)), 0)
-                            active_list_values.append(value_from_llm[prefix_len:].strip())
-                        else: # Treat as a single item if not formatted as list item prefix
+                    elif value_from_llm: 
+                        is_value_list_item_formatted = any(value_from_llm.startswith(p) for p in list_item_prefixes)
+                        if is_value_list_item_formatted:
+                            val_prefix_len = next((len(p) for p in list_item_prefixes if value_from_llm.startswith(p)), 0)
+                            active_list_values.append(value_from_llm[val_prefix_len:].strip())
+                        else:
                             active_list_values.append(value_from_llm)
-                else: # Simple key-value
-                    # Potentially cast to int if specified in a more complex key_config (future)
-                    if internal_key == "scene_number": # Example: special handling
+                else: 
+                    if internal_key == "scene_number": 
                         try: parsed_data[internal_key] = int(value_from_llm)
                         except ValueError:
                             logger.warning(f"Parser: Invalid int value for '{internal_key}': '{value_from_llm}'. Storing as string.")
                             parsed_data[internal_key] = value_from_llm
                     else:
                         parsed_data[internal_key] = value_from_llm
-            else:
-                logger.debug(f"Parser: Unknown key '{key_from_llm_raw}' (normalized: '{normalized_key_from_llm}') in block.")
-                if default_key_for_unmatched_lines:
-                    parsed_data[default_key_for_unmatched_lines].append(line_text) # Add raw line
-        
-        # Handle list items for an active list key
-        elif is_list_item_line and active_list_internal_key:
-            prefix_len = next((len(p) for p in list_item_prefixes if line.startswith(p)), 0)
-            active_list_values.append(line[prefix_len:].strip())
-        
-        # Handle list header on its own line (e.g., "Key Dialogue Points:")
-        elif not is_list_item_line and not kv_match: # Not a K:V, not a list item
-            normalized_line_as_key_header = line.replace(":", "").strip().lower().replace(" ", "_")
-            internal_key_for_list_header = key_map.get(normalized_line_as_key_header)
+            elif default_key_for_unmatched_lines and not allow_unknown_keys:
+                parsed_data[default_key_for_unmatched_lines].append(line_text_for_default_unmatched)
+            elif allow_unknown_keys:
+                 parsed_data[key_from_llm_raw] = value_from_llm 
+                 logger.debug(f"Parser: Stored unknown key '{key_from_llm_raw}' because allow_unknown_keys is True.")
 
-            if internal_key_for_list_header and internal_key_for_list_header in list_internal_keys:
-                active_list_internal_key = internal_key_for_list_header
-                active_list_values = []
-                parsed_data[internal_key_for_list_header] = [] # Initialize
-            elif default_key_for_unmatched_lines:
-                 parsed_data[default_key_for_unmatched_lines].append(line_text) # Add raw line
-            # else: Line is not a known key, list item, or list header.
+        elif current_line_is_list_item_syntax and active_list_internal_key:
+            active_list_values.append(content_to_match_kv) 
+        
+        elif default_key_for_unmatched_lines: 
+             parsed_data[default_key_for_unmatched_lines].append(line_text_for_default_unmatched)
 
-    # Finalize any list at the end of the block
     if active_list_internal_key:
-        if active_list_internal_key in parsed_data:
+        if active_list_internal_key in parsed_data and isinstance(parsed_data[active_list_internal_key], list):
             parsed_data[active_list_internal_key].extend(active_list_values)
         else:
             parsed_data[active_list_internal_key] = active_list_values
     
-    # Ensure all list_internal_keys are indeed lists in the final dict
     for l_key in list_internal_keys:
         if l_key in parsed_data and not isinstance(parsed_data[l_key], list):
-            # This can happen if a list key had a single non-prefixed value on its line
-            # and no subsequent list items.
-            logger.debug(f"Parser: Converting single value for list key '{l_key}' to list: {parsed_data[l_key]}")
             parsed_data[l_key] = [parsed_data[l_key]]
-        elif l_key not in parsed_data: # Ensure list keys are present, even if empty
+        elif l_key not in parsed_data:
             parsed_data[l_key] = []
 
     return parsed_data
 
+_HIERARCHICAL_STRICT_WORLD_CATEGORIES = ["Overview", "Locations", "Factions", "Systems", "Lore", "History", "Society"]
+_COMPILED_CATEGORY_ALTERNATION = "|".join(cat for cat in _HIERARCHICAL_STRICT_WORLD_CATEGORIES)
+
+WORLD_CATEGORY_HEADER_PATTERN = re.compile(
+   r"^\s*(?:Category\s*:\s*)?(?:\*\*)?(" + _COMPILED_CATEGORY_ALTERNATION + r")(?:\*\*)?\s*:\s*$",
+   re.IGNORECASE | re.MULTILINE | re.UNICODE 
+)
+
+# Potential simplified pattern for testing if the main one mysteriously fails
+# This makes bolding mandatory and removes the optional "Category: " prefix
+SIMPLER_WORLD_CATEGORY_HEADER_PATTERN = re.compile(
+   r"^\s*\*\*(Overview|Locations|Factions|Systems|Lore|History|Society)\*\*\s*:\s*$", # Note: No optional (?:Category...)? and (?:\*\*)? are now just \*\*
+   re.IGNORECASE | re.UNICODE # Removed re.MULTILINE as it's applied per line
+)
+
+WORLD_ITEM_HEADER_PATTERN = re.compile(
+    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?:\s*(.*)$"
+)
+WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL = re.compile(
+    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?(?::\s*)?$"
+)
 
 def parse_hierarchical_structured_text(
     text_block: str,
-    category_pattern: Pattern[str],  # Regex to identify category. Group 1 must be cat name.
-    item_pattern: Pattern[str],      # Regex to identify item. Group 1 must be item name.
-    detail_key_map: Dict[str, str],
+    category_pattern: Pattern[str], 
+    item_pattern_with_content: Pattern[str],
+    item_pattern_name_only: Pattern[str],
+    detail_key_map: Dict[str, Union[str, Callable[[re.Match[str]], str]]],
     detail_list_internal_keys: List[str],
-    overview_category_internal_key: Optional[str] = "_overview_", # If a category should have its details parsed directly
+    overview_category_internal_key: Optional[str] = "_overview_",
     detail_list_item_prefixes: Optional[List[str]] = None,
     detail_key_value_pattern: Optional[Pattern[str]] = None
 ) -> Dict[str, Any]:
-    """
-    Parses text with a hierarchical structure: categories, items within categories,
-    and key-value details for each item. Adapted from initial_setup_logic.
-    """
     parsed_hier_data: Dict[str, Any] = {}
+    if not text_block.strip():
+        return parsed_hier_data
+        
     lines = text_block.splitlines()
 
+    current_category_llm_raw: Optional[str] = None
     current_category_internal: Optional[str] = None
     current_item_name: Optional[str] = None
     current_item_detail_lines: List[str] = []
 
-    def _finalize_current_item_details():
-        nonlocal current_category_internal, current_item_name, current_item_detail_lines
-        if current_category_internal and current_item_detail_lines:
+    effective_detail_kv_pattern = detail_key_value_pattern if detail_key_value_pattern is not None else DEFAULT_KEY_VALUE_PATTERN
+
+    def _finalize_current_item_or_overview_details():
+        nonlocal current_category_internal, current_item_name, current_item_detail_lines, current_category_llm_raw
+        if not current_category_internal:
+            if current_item_detail_lines:
+                 logger.warning(f"HParser: Orphaned detail lines found without active category: {current_item_detail_lines[:2]}")
+            current_item_detail_lines = [] 
+            current_item_name = None       
+            return
+
+        if current_item_detail_lines: 
+            item_or_overview_label = f"Item: '{current_item_name}'" if current_item_name else "Overview Details"
+            
             item_details_dict = parse_key_value_block(
                 current_item_detail_lines,
                 detail_key_map,
                 detail_list_internal_keys,
                 list_item_prefixes=detail_list_item_prefixes,
-                key_value_pattern=detail_key_value_pattern
+                key_value_pattern=effective_detail_kv_pattern
             )
-            if current_item_name: # Item within a regular category
-                if current_category_internal not in parsed_hier_data:
-                    parsed_hier_data[current_category_internal] = {}
-                # Ensure the category entry is a dictionary
-                if not isinstance(parsed_hier_data[current_category_internal], dict): 
-                    logger.warning(f"HierarchicalParser: Category '{current_category_internal}' was not a dict. Resetting. Previous value: {parsed_hier_data[current_category_internal]}")
-                    parsed_hier_data[current_category_internal] = {} 
-                # Corrected line:
-                parsed_hier_data[current_category_internal][current_item_name] = item_details_dict
-            elif current_category_internal == overview_category_internal_key: # Details for an overview category
-                if overview_category_internal_key not in parsed_hier_data:
-                    parsed_hier_data[overview_category_internal_key] = {}
-                # Ensure the overview category entry is a dictionary
-                if not isinstance(parsed_hier_data[overview_category_internal_key], dict):
-                    logger.warning(f"HierarchicalParser: Overview category '{overview_category_internal_key}' was not a dict. Resetting. Previous value: {parsed_hier_data[overview_category_internal_key]}")
-                    parsed_hier_data[overview_category_internal_key] = {}
-                parsed_hier_data[overview_category_internal_key].update(item_details_dict)
+            
+            target_dict_for_category = parsed_hier_data.setdefault(current_category_internal, {})
+            if not isinstance(target_dict_for_category, dict): 
+                logger.error(f"HParser: Target for category '{current_category_internal}' is not a dict after setdefault. This is unexpected. Forcing to dict.")
+                target_dict_for_category = {}
+                parsed_hier_data[current_category_internal] = target_dict_for_category
+
+            if item_details_dict: 
+                if current_item_name: 
+                    target_dict_for_category[current_item_name] = item_details_dict
+                elif current_category_internal == overview_category_internal_key: 
+                    target_dict_for_category.update(item_details_dict)
+                else:
+                    logger.warning(f"HParser: Finalizing details but no current_item_name and not overview category ('{current_category_internal}'). Details: {item_details_dict}")
         
-        current_item_name = None
-        current_item_detail_lines = []
+        current_item_name = None 
+        current_item_detail_lines = [] 
 
-    for line_text in lines:
-        line = line_text.strip()
-        if not line: continue # Skip empty lines
+    for line_num, line_text_original_case in enumerate(lines):
+        line_stripped = line_text_original_case.strip()
 
-        category_match = category_pattern.match(line)
+        # ++++++++++++++ CRITICAL DEBUGGING - ADD THIS BLOCK ++++++++++++++
+        if "**Overview:**" in line_stripped or "**Locations:**" in line_stripped or \
+           "**Factions:**" in line_stripped or "**Systems:**" in line_stripped or \
+           "**Lore:**" in line_stripped: # Focus on lines we expect to match
+
+            logger.critical(f"HParser CRITICAL DBG [{line_num+1}] For line_stripped='{repr(line_stripped)}':")
+            try:
+                # Log UTF-8 bytes
+                bytes_utf8 = line_stripped.encode('utf-8', 'replace')
+                logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Bytes (UTF-8): {bytes_utf8}")
+
+                # Log ordinals
+                ordinals = [ord(c) for c in line_stripped]
+                logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Ordinals: {ordinals}")
+
+                # Direct comparison to a known-good string
+                standard_overview = "**Overview:**"
+                if line_stripped == standard_overview:
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_overview}' PASSED.")
+                else:
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_overview}' FAILED.")
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]     Standard '{standard_overview}' ordinals: {[ord(c) for c in standard_overview]}")
+
+                standard_locations = "**Locations:**"
+                if line_stripped == standard_locations:
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_locations}' PASSED.")
+                elif "**Locations:**" in line_stripped: # Check if it's this one failing
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]   Direct == comparison with '{standard_locations}' FAILED.")
+                    logger.critical(f"HParser CRITICAL DBG [{line_num+1}]     Standard '{standard_locations}' ordinals: {[ord(c) for c in standard_locations]}")
+
+            except Exception as e_debug_deep:
+                logger.error(f"HParser CRITICAL DBG [{line_num+1}] Error during deep debug logging: {e_debug_deep}")
+        # ++++++++++++++ END OF CRITICAL DEBUGGING BLOCK ++++++++++++++
+
+        # Use the category_pattern passed to the function for the main logic
+        category_match = category_pattern.match(line_stripped) 
         if category_match:
-            _finalize_current_item_details() # Finalize any pending item from previous category
+            matched_category_group = category_match.group(1) 
             
-            cat_name_from_llm = category_match.group(1).strip()
-            current_category_internal = cat_name_from_llm.lower().replace(" ", "_") # Example normalization
-            
-            if current_category_internal == overview_category_internal_key:
-                current_item_name = None # Overview details are direct, not under items
-            logger.debug(f"HierarchicalParser: Switched to category '{current_category_internal}'.")
-            continue
+            _finalize_current_item_or_overview_details() 
+            current_category_llm_raw = matched_category_group.strip() 
+            current_category_internal = current_category_llm_raw.lower().replace(" ", "_") 
+            logger.debug(f"HParser: Line {line_num+1}: Switched to CATEGORY '{current_category_llm_raw}' (Internal: '{current_category_internal}')")
+            parsed_hier_data.setdefault(current_category_internal, {}) 
+            continue 
 
         if not current_category_internal:
-            logger.debug(f"HierarchicalParser: Skipping line, no active category: '{line}'")
             continue
 
-        if current_category_internal != overview_category_internal_key:
-            item_match = item_pattern.match(line)
-            if item_match:
-                _finalize_current_item_details() # Finalize previous item in the same category
-                current_item_name = item_match.group(1).strip()
-                current_item_detail_lines = []
-                logger.debug(f"HierarchicalParser: New item '{current_item_name}' in category '{current_category_internal}'.")
-                continue
-        
-        # If not a category or item header, it's a detail line
-        current_item_detail_lines.append(line_text) # Pass raw line with original indentation
+        is_overview_cat = (current_category_internal == overview_category_internal_key)
+        line_processed_as_item_header = False
 
-    _finalize_current_item_details() # Finalize the very last item
+        if not is_overview_cat: 
+            potential_item_name = None
+            content_as_detail_from_item_line = None 
+
+            item_match_wc = item_pattern_with_content.match(line_stripped)
+            if item_match_wc:
+                potential_item_name = item_match_wc.group(1).strip()
+                content_as_detail_from_item_line = item_match_wc.group(2).strip() 
+            else:
+                item_match_no = item_pattern_name_only.match(line_stripped)
+                if item_match_no:
+                    potential_item_name = item_match_no.group(1).strip()
+            
+            if potential_item_name:
+                normalized_potential_item_as_detail_key = potential_item_name.lower().replace(" ", "_")
+                is_actually_a_detail_key = False
+                if detail_key_map.get(normalized_potential_item_as_detail_key) or \
+                   any(isinstance(k_map, re.Pattern) and k_map.match(potential_item_name) for k_map in detail_key_map.keys()):
+                    is_actually_a_detail_key = True
+                
+                if not is_actually_a_detail_key:
+                    _finalize_current_item_or_overview_details() 
+                    current_item_name = potential_item_name
+                    current_item_detail_lines = [] 
+
+                    if content_as_detail_from_item_line: 
+                        current_item_detail_lines.append(line_text_original_case) 
+                    line_processed_as_item_header = True
+        
+        if line_processed_as_item_header:
+            continue 
+
+        if current_category_internal : 
+            current_item_detail_lines.append(line_text_original_case) 
+
+    _finalize_current_item_or_overview_details() 
     return parsed_hier_data
 
-
-# --- KG Triple Parsing with Strategy Pattern ---
+# --- KG Triple Parsing ---
 KG_LIST_FORMAT_PATTERN = re.compile(
     r"^\s*-\s*\[\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*\]\s*$",
     re.MULTILINE
@@ -293,10 +354,14 @@ def _parse_triple_pipe_format(line: str) -> Optional[Tuple[str, str, str]]:
     return match.groups() if match else None
 
 def _parse_triple_comma_format(line: str) -> Optional[Tuple[str, str, str]]:
-    if line.count(',') == 2:
-        parts = [part.strip() for part in line.split(',')]
-        if len(parts) == 3 and all(parts): # Ensure all parts are non-empty after strip
-            return tuple(parts) # type: ignore
+    if line.startswith("[") and line.endswith("]"): return None
+    if line.lower().startswith("subject:") : return None
+    parts = [part.strip() for part in line.split(',')]
+    if len(parts) == 3 and all(parts):
+        if any(p.count(' ') > 5 for p in parts): # Heuristic for too much text
+            if not (parts[0].istitle() or parts[0].isupper() or any(c.isdigit() for c in parts[0]) or len(parts[0].split()) <= 3):
+                return None
+        return tuple(parts) # type: ignore
     return None
 
 KG_TRIPLE_PARSING_STRATEGIES: List[Callable[[str], Optional[Tuple[str, str, str]]]] = [
@@ -307,39 +372,27 @@ KG_TRIPLE_PARSING_STRATEGIES: List[Callable[[str], Optional[Tuple[str, str, str]
 ]
 
 def parse_kg_triples_from_text(text_block: str) -> List[List[str]]:
-    """
-    Parses KG triples from a text block using a list of parsing strategies.
-    Supports various common LLM output formats for triples.
-    """
     triples: List[List[str]] = []
-    
     for line_content in text_block.splitlines():
         line = line_content.strip()
         if not line: continue
-
         parsed_spo: Optional[Tuple[str, str, str]] = None
         for strategy in KG_TRIPLE_PARSING_STRATEGIES:
             result = strategy(line)
             if result:
                 parsed_spo = result
                 break
-        
         if parsed_spo:
             s, p, o = parsed_spo
-            s_cleaned, p_cleaned, o_cleaned = s.strip(), p.strip(), o.strip()
-            # Further ensure they are not just quotes or brackets if those were part of the capture
-            s_cleaned = re.sub(r"^['\"\[\]]+|['\"\[\]]+$", "", s_cleaned)
-            p_cleaned = re.sub(r"^['\"\[\]]+|['\"\[\]]+$", "", p_cleaned)
-            o_cleaned = re.sub(r"^['\"\[\]]+|['\"\[\]]+$", "", o_cleaned)
-
+            s_cleaned = re.sub(r"^['\"\[\(]+|['\"\]\)]+$", "", s.strip()).strip()
+            p_cleaned = re.sub(r"^['\"\[\(]+|['\"\]\)]+$", "", p.strip()).strip()
+            o_cleaned = re.sub(r"^['\"\[\(]+|['\"\]\)]+$", "", o.strip()).strip()
             if s_cleaned and p_cleaned and o_cleaned:
                 triples.append([s_cleaned, p_cleaned, o_cleaned])
             else:
-                logger.warning(f"KG triple parsing: Skipped triple due to empty component after cleaning from line: '{line}'")
-        elif line: # Line was not empty but didn't match any pattern and wasn't parsed
+                logger.warning(f"KG triple parsing: Skipped triple due to empty component after cleaning from line: '{line}' -> S:'{s_cleaned}', P:'{p_cleaned}', O:'{o_cleaned}'")
+        elif line and not line.lower().startswith("###"):
             logger.debug(f"KG triple parsing: Could not parse line into a triple: '{line}'")
-            
-    if not triples and text_block.strip():
-        logger.warning(f"KG triple parsing: No triples extracted from non-empty text block: '{text_block[:200]}...'")
-        
+    if not triples and text_block.strip() and not text_block.lower().startswith(("no kg triples", "none")):
+        logger.warning(f"KG triple parsing: No triples extracted from non-empty text block: '{text_block[:200].replace(chr(10), ' ')}...'")
     return triples
