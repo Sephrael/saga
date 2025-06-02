@@ -3,7 +3,7 @@ import logging
 from typing import Tuple, Optional, List, Dict, Any
 
 import config
-import llm_interface
+from llm_interface import llm_service, count_tokens
 from type import SceneDetail
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -55,7 +55,7 @@ class DraftingAgent:
             # Test adding the new segment to the current plan parts
             temp_full_plan_text = "\n".join(current_plan_str_parts + [prospective_next_segment])
             
-            if llm_interface.count_tokens(temp_full_plan_text, model_name_for_tokens) > max_tokens_budget:
+            if count_tokens(temp_full_plan_text, model_name_for_tokens) > max_tokens_budget: # MODIFIED
                 current_plan_str_parts.append("... (plan truncated in prompt due to token limit)")
                 logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}. Stopped before scene {scene.get('scene_number', 'N/A')}.")
                 break
@@ -180,8 +180,7 @@ class DraftingAgent:
 
         logger.info(f"Calling LLM ({self.model_name}) for Ch {chapter_number} draft. Plot Point {plot_point_index+1}/{total_plot_points_in_novel}. Target min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
         
-        # Get raw text first for logging
-        raw_llm_text_for_log, usage_data = await llm_interface.async_call_llm(
+        raw_llm_text_for_log, usage_data = await llm_service.async_call_llm( 
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_DRAFTING,
@@ -190,14 +189,13 @@ class DraftingAgent:
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
             presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
-            auto_clean_response=False # Get raw for logging
+            auto_clean_response=False 
         )
         if not raw_llm_text_for_log:
             logger.error(f"LLM returned no content for Ch {chapter_number} draft (primary and potential fallback failed).")
             return None, None, usage_data
 
-        # Now clean the raw text for processing
-        cleaned_text = llm_interface.clean_model_response(raw_llm_text_for_log)
+        cleaned_text = llm_service.clean_model_response(raw_llm_text_for_log) # MODIFIED
 
         if not cleaned_text or len(cleaned_text) < 50:
             logger.error(f"Ch {chapter_number} draft has virtually no content after cleaning ({len(cleaned_text or '')} chars). Raw LLM output snippet: '{raw_llm_text_for_log[:200]}...'")

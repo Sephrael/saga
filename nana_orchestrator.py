@@ -8,7 +8,7 @@ import time # For Rich display updates
 from typing import Dict, Any, Optional, List, Tuple
 
 import config
-import llm_interface
+from llm_interface import llm_service # MODIFIED
 import utils # ADDED utils for deduplication and _is_fill_in
 from core_db.base_db_manager import neo4j_manager
 from data_access import (
@@ -495,7 +495,7 @@ class NANA_Orchestrator:
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Summarization", summary_usage)
         await self._save_debug_output(novel_chapter_number, "final_summary", chapter_summary)
         
-        final_embedding = await llm_interface.async_get_embedding(final_text_to_process)
+        final_embedding = await llm_service.async_get_embedding(final_text_to_process) # MODIFIED
         if final_embedding is None:
             logger.error(f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only.")
             await self._save_chapter_text_and_log(novel_chapter_number, final_text_to_process, final_raw_llm_output)

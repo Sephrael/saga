@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 
 import config
-import llm_interface
+from llm_interface import llm_service # MODIFIED
 import utils # MODIFIED: For spaCy functions
 from type import ProblemDetail
 from data_access import kg_queries
@@ -199,14 +199,13 @@ SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship 
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number}...")
-        # MODIFIED: cleaned_consistency_text directly from async_call_llm
-        cleaned_consistency_text, usage_data = await llm_interface.async_call_llm(
+        cleaned_consistency_text, usage_data = await llm_service.async_call_llm( 
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_CONSISTENCY_CHECK, 
             allow_fallback=True,
             stream_to_disk=False,
-            auto_clean_response=True # Default
+            auto_clean_response=True 
         )
         
         consistency_problems = await self._parse_llm_consistency_output(cleaned_consistency_text, chapter_number, draft_text)

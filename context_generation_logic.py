@@ -10,7 +10,7 @@ import asyncio
 from typing import List, Optional, Dict, Any 
 
 import config
-import llm_interface
+from llm_interface import llm_service, count_tokens, truncate_text_by_tokens # MODIFIED
 # import utils # numpy_cosine_similarity no longer needed here
 # from state_manager import state_manager # No longer directly used
 from data_access import chapter_queries # For chapter data and similarity search
@@ -62,7 +62,7 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
     else:
         logger.warning(f"No specific plot point found for ch {current_chapter_number}. Using generic semantic context query.")
 
-    query_embedding_np = await llm_interface.async_get_embedding(context_query_text)
+    query_embedding_np = await llm_service.async_get_embedding(context_query_text) 
     max_semantic_tokens = (config.MAX_CONTEXT_TOKENS * 2) // 3 
 
     if query_embedding_np is None:
@@ -82,22 +82,22 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
                 if content:
                     prefix = f"[Fallback Semantic Context from Chapter {i} ({ctype})]:\n"; suffix = "\n---\n"
                     full_content_part = f"{prefix}{content}{suffix}"
-                    part_tokens = llm_interface.count_tokens(full_content_part, config.DRAFTING_MODEL) 
+                    part_tokens = count_tokens(full_content_part, config.DRAFTING_MODEL) # MODIFIED
                     if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
                         context_parts_list.append(full_content_part)
                         total_tokens_accumulated += part_tokens
                     else:
                         remaining_tokens = max_semantic_tokens - total_tokens_accumulated
-                        if remaining_tokens > llm_interface.count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10: 
-                            truncated_content_part = llm_interface.truncate_text_by_tokens(
+                        if remaining_tokens > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10: # MODIFIED
+                            truncated_content_part = truncate_text_by_tokens( # MODIFIED
                                 full_content_part, config.DRAFTING_MODEL, remaining_tokens
                             )
                             context_parts_list.append(truncated_content_part)
                             total_tokens_accumulated += remaining_tokens
                         break 
         final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
-        final_tokens = llm_interface.count_tokens(final_semantic_context, config.DRAFTING_MODEL)
-        logger.info(f"Constructed fallback semantic context: {final_tokens} tokens.")
+        final_tokens_count = count_tokens(final_semantic_context, config.DRAFTING_MODEL) # MODIFIED
+        logger.info(f"Constructed fallback semantic context: {final_tokens_count} tokens.")
         return final_semantic_context
 
     similar_chapters_data = await chapter_queries.find_similar_chapters_in_db( 
@@ -151,15 +151,15 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
             prefix = f"[Semantic Context from Chapter {chap_num} (Similarity: {score_str}, Type: {ctype})]:\n"
             suffix = "\n---\n"
             full_content_part = f"{prefix}{content}{suffix}"
-            part_tokens = llm_interface.count_tokens(full_content_part, config.DRAFTING_MODEL)
+            part_tokens = count_tokens(full_content_part, config.DRAFTING_MODEL) # MODIFIED
 
             if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
                 context_parts_list.append(full_content_part)
                 total_tokens_accumulated += part_tokens
             else:
                 remaining_tokens = max_semantic_tokens - total_tokens_accumulated
-                if remaining_tokens > llm_interface.count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10:
-                    truncated_content_part = llm_interface.truncate_text_by_tokens(
+                if remaining_tokens > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10: # MODIFIED
+                    truncated_content_part = truncate_text_by_tokens( # MODIFIED
                         full_content_part, config.DRAFTING_MODEL, remaining_tokens
                     )
                     context_parts_list.append(truncated_content_part)
@@ -170,8 +170,8 @@ async def _generate_semantic_chapter_context_logic(agent_or_props: Any, current_
             logger.warning(f"Chapter {chap_num} (Sim: {score_str}) from vector search had no content (summary/text). Skipping.")
 
     final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
-    final_tokens = llm_interface.count_tokens(final_semantic_context, config.DRAFTING_MODEL)
-    logger.info(f"Constructed final SEMANTIC context: {final_tokens} tokens from {len(context_parts_list)} chapter snippets (via Neo4j vector search).")
+    final_tokens_count = count_tokens(final_semantic_context, config.DRAFTING_MODEL) # MODIFIED
+    logger.info(f"Constructed final SEMANTIC context: {final_tokens_count} tokens from {len(context_parts_list)} chapter snippets (via Neo4j vector search).")
     return final_semantic_context
 
 
@@ -213,13 +213,13 @@ async def generate_hybrid_chapter_context_logic(agent_or_props: Any, current_cha
         hybrid_context_parts.append("--- END KEY RELIABLE KG FACTS ---")
         
     final_hybrid_context = "\n".join(hybrid_context_parts).strip()
-    num_hybrid_tokens = llm_interface.count_tokens(final_hybrid_context, config.DRAFTING_MODEL) 
+    num_hybrid_tokens = count_tokens(final_hybrid_context, config.DRAFTING_MODEL) # MODIFIED
     if num_hybrid_tokens > config.MAX_CONTEXT_TOKENS:
         logger.warning(f"Hybrid context token count ({num_hybrid_tokens}) exceeds MAX_CONTEXT_TOKENS ({config.MAX_CONTEXT_TOKENS}). Truncating.")
-        final_hybrid_context = llm_interface.truncate_text_by_tokens(
+        final_hybrid_context = truncate_text_by_tokens( # MODIFIED
             final_hybrid_context, config.DRAFTING_MODEL, config.MAX_CONTEXT_TOKENS, 
             truncation_marker="\n... (Hybrid context truncated due to token limit)"
         )
-        num_hybrid_tokens = llm_interface.count_tokens(final_hybrid_context, config.DRAFTING_MODEL) 
+        num_hybrid_tokens = count_tokens(final_hybrid_context, config.DRAFTING_MODEL) # MODIFIED
     logger.info(f"Generated HYBRID context for Chapter {current_chapter_number}, Tokens (est.): {num_hybrid_tokens}.")
     return final_hybrid_context

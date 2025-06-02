@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from async_lru import alru_cache
 
 import config
-import llm_interface
+from llm_interface import llm_service # MODIFIED
 from core_db.base_db_manager import neo4j_manager # For execute_cypher_batch
 from data_access import kg_queries # For add_kg_triple_to_db and add_kg_triples_batch_to_db
 from prompt_data_getters import (
@@ -67,7 +67,7 @@ async def _llm_summarize_full_chapter_text_logic_internal(chapter_text_full_key:
     ])
     prompt = "\n".join(prompt_lines)
 
-    summary_cleaned, usage_data = await llm_interface.async_call_llm(
+    summary_cleaned, usage_data = await llm_service.async_call_llm( 
         model_name=config.SMALL_MODEL,
         prompt=prompt,
         temperature=config.TEMPERATURE_SUMMARY, 
@@ -795,7 +795,7 @@ class KGMaintainerAgent:
         logger.debug(f"KGMaintainer (Cached Call): PRE-LLM CALL for Ch {chapter_number}. Prompt first 300 chars:\n{prompt[:300]}")
         logger.info(f"Calling LLM ({self.model_name}) for unified knowledge extraction (Ch {chapter_number}) (cached).")
         
-        raw_extraction_text_from_llm, usage_data = await llm_interface.async_call_llm(
+        raw_extraction_text_from_llm, usage_data = await llm_service.async_call_llm( 
             model_name=self.model_name, 
             prompt=prompt, 
             temperature=config.TEMPERATURE_KG_EXTRACTION, 

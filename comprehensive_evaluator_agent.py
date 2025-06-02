@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 
 import config
-import llm_interface
+from llm_interface import llm_service # MODIFIED
 import utils # MODIFIED: For spaCy functions
 from type import EvaluationResult, ProblemDetail
 from data_access import chapter_queries
@@ -252,8 +252,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number}...")
-        # MODIFIED: cleaned_evaluation_text directly from async_call_llm
-        cleaned_evaluation_text, usage_data = await llm_interface.async_call_llm(
+        cleaned_evaluation_text, usage_data = await llm_service.async_call_llm( # MODIFIED
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_EVALUATION, 
@@ -261,7 +260,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             stream_to_disk=False,
             frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION, 
             presence_penalty=config.PRESENCE_PENALTY_EVALUATION,
-            auto_clean_response=True # Default, but explicit for clarity
+            auto_clean_response=True 
         )
         
         no_issues_keywords = [
@@ -271,7 +270,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             "therefore, no revision is needed"
         ]
         is_likely_no_issues_text = False
-        if cleaned_evaluation_text.strip(): # Already cleaned
+        if cleaned_evaluation_text.strip(): 
             normalized_eval_text = cleaned_evaluation_text.lower().strip().replace('.', '')
             for keyword in no_issues_keywords:
                 normalized_keyword = keyword.lower().strip().replace('.', '')
@@ -288,7 +287,6 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
                 "legacy_thematic_issues": None, "legacy_narrative_depth_issues": None
             }
         elif not cleaned_evaluation_text.strip():
-            # This case means async_call_llm returned empty even after potential cleaning
             logger.error(f"Comprehensive evaluation LLM for Ch {chapter_number} returned empty text.")
             eval_output_dict = {
                 "problems_found_text_output": "Evaluation LLM call failed or returned empty.",
@@ -349,7 +347,7 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             })
             reasons_for_revision_summary.append(f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
 
-        current_embedding_task = llm_interface.async_get_embedding(draft_text)
+        current_embedding_task = llm_service.async_get_embedding(draft_text) # MODIFIED
         if chapter_number > 1:
             prev_embedding = await chapter_queries.get_embedding_from_db(chapter_number - 1)
             current_embedding = await current_embedding_task

@@ -5,7 +5,7 @@ import asyncio
 from typing import List, Optional, Any, Dict, Tuple
 
 import config
-import llm_interface
+from llm_interface import llm_service
 from type import SceneDetail
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
@@ -275,7 +275,7 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
 
         logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
         
-        cleaned_plan_text_from_llm, usage_data = await llm_interface.async_call_llm(
+        cleaned_plan_text_from_llm, usage_data = await llm_service.async_call_llm( 
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_PLANNING, 

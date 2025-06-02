@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any, Optional, List, Tuple
 
 import config
-import llm_interface
+from llm_interface import llm_service
 import utils # For _is_fill_in
 from parsing_utils import parse_key_value_block, parse_hierarchical_structured_text # Retain for LLM output parsing
 from markdown_story_parser import load_and_parse_markdown_story_file # Use your new parser
@@ -367,13 +367,14 @@ async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str,
         prompt = "\n".join(prompt_lines)
 
         logger.info(f"Calling LLM for plot outline generation/completion (to plain text), targeting ~{target_num_plot_points} plot points...")
-        cleaned_outline_text, usage_data = await llm_interface.async_call_llm(
+        cleaned_outline_text, usage_data = await llm_service.async_call_llm( 
             model_name=config.INITIAL_SETUP_MODEL, 
             prompt=prompt, 
             temperature=config.TEMPERATURE_INITIAL_SETUP, 
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
-            presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP
+            presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP,
+            auto_clean_response=True 
         )
         if usage_data:
             accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
@@ -586,15 +587,14 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
     prompt = "\n".join(prompt_lines)
 
     logger.info("Generating/completing initial world-building data (to plain text) via LLM...")
-    # MODIFIED: cleaned_world_text directly from async_call_llm
-    cleaned_world_text, usage_data = await llm_interface.async_call_llm(
+    cleaned_world_text, usage_data = await llm_service.async_call_llm( 
         model_name=config.INITIAL_SETUP_MODEL, 
         prompt=prompt, 
         temperature=config.TEMPERATURE_INITIAL_SETUP, 
         stream_to_disk=True,
         frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
         presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP,
-        auto_clean_response=True # Default
+        auto_clean_response=True 
     )
     if usage_data:
         accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)

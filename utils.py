@@ -13,7 +13,7 @@ import asyncio
 from typing import Optional, Tuple, List, Union, Set, Any # Added Set, Any
 
 # Local application imports - ensure these paths are correct for your project
-import llm_interface
+from llm_interface import llm_service
 import spacy
 import config # For MARKDOWN_FILL_IN_PLACEHOLDER
 
@@ -172,7 +172,7 @@ async def find_semantically_closest_segment(
         logger.debug("find_semantically_closest_segment: original_doc or query_text is empty.")
         return None
 
-    query_embedding = await llm_interface.async_get_embedding(query_text)
+    query_embedding = await llm_service.async_get_embedding(query_text)
     if query_embedding is None:
         logger.warning(f"Could not get embedding for semantic search query: '{query_text[:60].replace(chr(10),' ')}...'")
         return None
@@ -188,7 +188,7 @@ async def find_semantically_closest_segment(
 
     segment_texts = [s[0] for s in segments_with_indices] # s[0] is stripped text
     
-    segment_embeddings_tasks = [llm_interface.async_get_embedding(seg_text) for seg_text in segment_texts]
+    segment_embeddings_tasks = [llm_service.async_get_embedding(seg_text) for seg_text in segment_texts]
     segment_embeddings_results = await asyncio.gather(*segment_embeddings_tasks, return_exceptions=True)
 
     for i, seg_embedding_or_exc in enumerate(segment_embeddings_results):
@@ -307,14 +307,14 @@ async def deduplicate_text_segments(
         if len(seg_text) < min_segment_length_chars:
             segments_to_build_final_text.append((seg_start, seg_end))
             if use_semantic_comparison: # Still get embedding for short segments if semantic is on
-                short_seg_embedding = await llm_interface.async_get_embedding(seg_text)
+                short_seg_embedding = await llm_service.async_get_embedding(seg_text)
                 if short_seg_embedding is not None:
                     kept_segment_info_for_semantic.append((seg_start, seg_end, short_seg_embedding))
             continue
 
         is_duplicate = False
         if use_semantic_comparison:
-            current_seg_embedding = await llm_interface.async_get_embedding(seg_text)
+            current_seg_embedding = await llm_service.async_get_embedding(seg_text)
             if current_seg_embedding is None:
                 logger.warning(f"De-duplication: Could not get embedding for segment (idx {i}, chars {seg_start}-{seg_end}). Keeping it.")
                 segments_to_build_final_text.append((seg_start, seg_end))

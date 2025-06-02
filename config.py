@@ -166,22 +166,22 @@ FREQUENCY_PENALTY_PATCH: float = float(os.getenv("FREQUENCY_PENALTY_PATCH", "0.2
 PRESENCE_PENALTY_PATCH: float = float(os.getenv("PRESENCE_PENALTY_PATCH", "1.5"))
 # Planning (less likely to need strong penalties, but configurable)
 FREQUENCY_PENALTY_PLANNING: float = float(os.getenv("FREQUENCY_PENALTY_PLANNING", "0.0"))
-PRESENCE_PENALTY_PLANNING: float = float(os.getenv("PRESENCE_PENALTY_PLANNING", "0.0"))
+PRESENCE_PENALTY_PLANNING: float = float(os.getenv("PRESENCE_PENALTY_PLANNING", "1.5"))
 # Initial Setup (e.g. plot outline)
 FREQUENCY_PENALTY_INITIAL_SETUP: float = float(os.getenv("FREQUENCY_PENALTY_INITIAL_SETUP", "0.1"))
 PRESENCE_PENALTY_INITIAL_SETUP: float = float(os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "1.5"))
 # Evaluation (least likely to need penalties, as it's analytical)
 FREQUENCY_PENALTY_EVALUATION: float = float(os.getenv("FREQUENCY_PENALTY_EVALUATION", "0.0"))
-PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "0.0"))
+PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "1.5"))
 # Knowledge Graph Extraction
 FREQUENCY_PENALTY_KG_EXTRACTION: float = float(os.getenv("FREQUENCY_PENALTY_KG_EXTRACTION", "0.0"))
 PRESENCE_PENALTY_KG_EXTRACTION: float = float(os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "1.5"))
 # Summarization
 FREQUENCY_PENALTY_SUMMARY: float = float(os.getenv("FREQUENCY_PENALTY_SUMMARY", "0.0"))
-PRESENCE_PENALTY_SUMMARY: float = float(os.getenv("PRESENCE_PENALTY_SUMMARY", "0.0"))
+PRESENCE_PENALTY_SUMMARY: float = float(os.getenv("PRESENCE_PENALTY_SUMMARY", "1.5"))
 # Consistency Check
 FREQUENCY_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("FREQUENCY_PENALTY_CONSISTENCY_CHECK", "0.0"))
-PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("PRESENCE_PENALTY_CONSISTENCY_CHECK", "0.0"))
+PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("PRESENCE_PENALTY_CONSISTENCY_CHECK", "1.5"))
 
 
 # --- Output and File Paths ---

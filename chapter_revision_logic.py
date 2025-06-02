@@ -10,7 +10,7 @@ import re
 from typing import Tuple, Optional, List, Dict, Any
 
 import config
-import llm_interface
+from llm_interface import llm_service, count_tokens, truncate_text_by_tokens
 # import drafting_agent # No longer directly instantiating DraftingAgent here.
 import utils # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
@@ -35,13 +35,13 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
     if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
     
     plan_text_parts_list = [] 
-    current_tokens = 0
+    current_tokens_count = 0
     header = "**Detailed Scene Plan (Stubbed - MUST BE FOLLOWED CLOSELY):**\n"
-    header_tokens = llm_interface.count_tokens(header, model_name_for_tokens)
+    header_tokens_count = count_tokens(header, model_name_for_tokens) # MODIFIED
 
-    if header_tokens > max_tokens_budget: return "... (plan header too long for budget)"
+    if header_tokens_count > max_tokens_budget: return "... (plan header too long for budget)"
     plan_text_parts_list.append(header)
-    current_tokens += header_tokens
+    current_tokens_count += header_tokens_count
 
     for scene_idx, scene in enumerate(chapter_plan):
         scene_text_parts_inner = [
@@ -51,12 +51,12 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
         if scene_idx < len(chapter_plan) -1 : scene_text_parts_inner.append("-" * 10)
         scene_text = "\n".join(scene_text_parts_inner) + "\n"
 
-        scene_tokens = llm_interface.count_tokens(scene_text, model_name_for_tokens)
-        if current_tokens + scene_tokens > max_tokens_budget:
+        scene_tokens_count = count_tokens(scene_text, model_name_for_tokens) # MODIFIED
+        if current_tokens_count + scene_tokens_count > max_tokens_budget:
             plan_text_parts_list.append("... (plan truncated in prompt due to token limit)\n")
             break
         plan_text_parts_list.append(scene_text)
-        current_tokens += scene_tokens
+        current_tokens_count += scene_tokens_count
     return "".join(plan_text_parts_list)
 
 
@@ -218,7 +218,7 @@ async def _generate_single_patch_instruction_llm(
             "Otherwise, aim for a length comparable to the original segment, plus necessary additions for the fix. "
             "Avoid excessive unrelated expansion beyond the scope of the problem for this segment.**"
         )
-        original_snippet_tokens = llm_interface.count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL)
+        original_snippet_tokens = count_tokens(original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL) # MODIFIED
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
         max_patch_output_tokens = min(max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2) 
@@ -287,8 +287,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 
     logger.info(f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10),' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10),' ')}...' Max Output Tokens: {max_patch_output_tokens}")
 
-    # MODIFIED: No longer call clean_model_response here, assuming async_call_llm does it by default
-    replace_with_text_cleaned, usage_data = await llm_interface.async_call_llm(
+    replace_with_text_cleaned, usage_data = await llm_service.async_call_llm( # MODIFIED
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
         temperature=config.TEMPERATURE_PATCH, 
@@ -296,15 +295,14 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         allow_fallback=True,
         stream_to_disk=False,
         frequency_penalty=config.FREQUENCY_PENALTY_PATCH,
-        presence_penalty=config.PRESENCE_PENALTY_PATCH
-        # auto_clean_response=True is default
+        presence_penalty=config.PRESENCE_PENALTY_PATCH,
+        auto_clean_response=True
     )
 
-    if not replace_with_text_cleaned: # Check if it's None or empty string from LLM call
+    if not replace_with_text_cleaned: 
         logger.error(f"Patch LLM returned no content for Ch {chapter_number} problem: {problem['problem_description']}")
         return None, usage_data
 
-    # The text is already cleaned by async_call_llm if auto_clean_response=True (default)
     if not replace_with_text_cleaned.strip():
         logger.warning(f"Patch LLM returned empty after cleaning for Ch {chapter_number} problem: {problem['problem_description']}")
         return None, usage_data
@@ -367,7 +365,7 @@ async def _generate_patch_instructions_logic(
         )
         is_expansion_depth_issue_general = (
             p_item["quote_from_original_text"] == "N/A - General Issue" and
-            p_item["issue_category"] == "narrative_depth_and_length" and # MODIFIED: Check normalized category
+            p_item["issue_category"] == "narrative_depth_and_length" and 
             ("short" in p_item['problem_description'].lower() or
              "length" in p_item['problem_description'].lower() or
              "expand" in p_item['suggested_fix_focus'].lower() or
@@ -568,7 +566,7 @@ async def revise_chapter_draft_logic(
         (p["quote_from_original_text"] != "N/A - General Issue" and p["quote_from_original_text"].strip() and \
          (p.get("sentence_char_start") is not None or p.get("quote_char_start") is not None) 
         ) or
-        (p["quote_from_original_text"] == "N/A - General Issue" and p["issue_category"] == "narrative_depth_and_length" and # MODIFIED: Check normalized category
+        (p["quote_from_original_text"] == "N/A - General Issue" and p["issue_category"] == "narrative_depth_and_length" and 
          ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
           "expand" in p['suggested_fix_focus'].lower() or "depth" in p['problem_description'].lower()))
     ]
@@ -603,7 +601,7 @@ async def revise_chapter_draft_logic(
         if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH * 0.7:
             logger.warning(f"Patched draft for ch {chapter_number} is quite short ({len(patched_text)} chars). May still fall back to full rewrite if major issues remain.")
         sim_original_embedding, sim_patched_embedding = await asyncio.gather(
-            llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(patched_text)
+            llm_service.async_get_embedding(original_text), llm_service.async_get_embedding(patched_text) 
         )
         if sim_original_embedding is not None and sim_patched_embedding is not None:
             similarity_score = utils.numpy_cosine_similarity(sim_original_embedding, sim_patched_embedding)
@@ -630,7 +628,7 @@ async def revise_chapter_draft_logic(
 
         logger.info(f"Proceeding with full chapter rewrite for Ch {chapter_number}.")
         max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
-        original_snippet = llm_interface.truncate_text_by_tokens(
+        original_snippet = truncate_text_by_tokens( # MODIFIED
             original_text, config.REVISION_MODEL, max_original_snippet_tokens,
             truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)"
         )
@@ -650,7 +648,7 @@ async def revise_chapter_draft_logic(
 
         length_issue_explicit_instruction_full_rewrite_parts: List[str] = []
         needs_expansion_from_problems = any(
-            (p['issue_category'] == 'narrative_depth_and_length' and # MODIFIED: Check normalized category
+            (p['issue_category'] == 'narrative_depth_and_length' and 
              ("short" in p['problem_description'].lower() or "length" in p['problem_description'].lower() or
               "expand" in p['suggested_fix_focus'].lower() or "depth" in p['problem_description'].lower()))
             for p in problems_to_fix
@@ -698,7 +696,7 @@ async def revise_chapter_draft_logic(
             f"You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.",
             "**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**",
             "--- FEEDBACK START ---",
-            llm_interface.clean_model_response(revision_reason_str).strip(), # Ensure clean_model_response exists or remove
+            llm_service.clean_model_response(revision_reason_str).strip(), # MODIFIED
             "--- FEEDBACK END ---",
             all_problem_descriptions_str,
             deduplication_note, 
@@ -729,7 +727,7 @@ async def revise_chapter_draft_logic(
 
         logger.info(f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars.")
         
-        raw_revised_llm_output_for_log, full_rewrite_usage = await llm_interface.async_call_llm(
+        raw_revised_llm_output_for_log, full_rewrite_usage = await llm_service.async_call_llm( # MODIFIED
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
             temperature=config.TEMPERATURE_REVISION, 
@@ -746,7 +744,7 @@ async def revise_chapter_draft_logic(
             logger.error(f"Full rewrite LLM failed for ch {chapter_number} (returned empty). Original text will be kept if patching also failed.")
             return None, cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
         
-        final_revised_text = llm_interface.clean_model_response(raw_revised_llm_output_for_log)
+        final_revised_text = llm_service.clean_model_response(raw_revised_llm_output_for_log) # MODIFIED
         final_raw_llm_output = raw_revised_llm_output_for_log 
 
         logger.info(f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}.")
@@ -761,7 +759,7 @@ async def revise_chapter_draft_logic(
         logger.warning(f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.")
     if final_revised_text is not patched_text: 
         original_embedding_full_final, revised_embedding_full_final = await asyncio.gather(
-            llm_interface.async_get_embedding(original_text), llm_interface.async_get_embedding(final_revised_text)
+            llm_service.async_get_embedding(original_text), llm_service.async_get_embedding(final_revised_text) # MODIFIED
         )
         if original_embedding_full_final is not None and revised_embedding_full_final is not None:
             similarity_score_full_final = utils.numpy_cosine_similarity(original_embedding_full_final, revised_embedding_full_final)

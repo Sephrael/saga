@@ -1,7 +1,7 @@
 # utils/parsing_utils.py
 import re
 import logging
-from typing import List, Dict, Any, Optional, Union, Pattern
+from typing import List, Dict, Any, Optional, Union, Pattern, Callable, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -269,47 +269,63 @@ def parse_hierarchical_structured_text(
     return parsed_hier_data
 
 
+# --- KG Triple Parsing with Strategy Pattern ---
+KG_LIST_FORMAT_PATTERN = re.compile(
+    r"^\s*-\s*\[\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*\]\s*$",
+    re.MULTILINE
+)
+KG_KV_FORMAT_PATTERN = re.compile(
+    r"^\s*Subject:\s*(.+?)\s*[,;]\s*Predicate:\s*(.+?)\s*[,;]\s*Object:\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE
+)
+KG_PIPE_FORMAT_PATTERN = re.compile(r"^\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*$", re.MULTILINE)
+
+def _parse_triple_list_format(line: str) -> Optional[Tuple[str, str, str]]:
+    match = KG_LIST_FORMAT_PATTERN.match(line)
+    return match.groups() if match else None
+
+def _parse_triple_kv_format(line: str) -> Optional[Tuple[str, str, str]]:
+    match = KG_KV_FORMAT_PATTERN.match(line)
+    return match.groups() if match else None
+
+def _parse_triple_pipe_format(line: str) -> Optional[Tuple[str, str, str]]:
+    match = KG_PIPE_FORMAT_PATTERN.match(line)
+    return match.groups() if match else None
+
+def _parse_triple_comma_format(line: str) -> Optional[Tuple[str, str, str]]:
+    if line.count(',') == 2:
+        parts = [part.strip() for part in line.split(',')]
+        if len(parts) == 3 and all(parts): # Ensure all parts are non-empty after strip
+            return tuple(parts) # type: ignore
+    return None
+
+KG_TRIPLE_PARSING_STRATEGIES: List[Callable[[str], Optional[Tuple[str, str, str]]]] = [
+    _parse_triple_list_format,
+    _parse_triple_kv_format,
+    _parse_triple_pipe_format,
+    _parse_triple_comma_format,
+]
+
 def parse_kg_triples_from_text(text_block: str) -> List[List[str]]:
     """
-    Parses KG triples from a text block.
+    Parses KG triples from a text block using a list of parsing strategies.
     Supports various common LLM output formats for triples.
     """
     triples: List[List[str]] = []
     
-    # Format: - [Subject, Predicate, Object] (with optional quotes)
-    list_format_pattern = re.compile(
-        r"^\s*-\s*\[\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*\]\s*$",
-        re.MULTILINE
-    )
-    # Format: Subject: S, Predicate: P, Object: O (or using ';')
-    key_value_format_pattern = re.compile(
-        r"^\s*Subject:\s*(.+?)\s*[,;]\s*Predicate:\s*(.+?)\s*[,;]\s*Object:\s*(.+?)\s*$",
-        re.IGNORECASE | re.MULTILINE
-    )
-    # Format: S | P | O
-    pipe_format_pattern = re.compile(r"^\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*$", re.MULTILINE)
-
     for line_content in text_block.splitlines():
         line = line_content.strip()
         if not line: continue
 
-        s, p, o = None, None, None
+        parsed_spo: Optional[Tuple[str, str, str]] = None
+        for strategy in KG_TRIPLE_PARSING_STRATEGIES:
+            result = strategy(line)
+            if result:
+                parsed_spo = result
+                break
         
-        list_match = list_format_pattern.match(line)
-        if list_match: s, p, o = list_match.groups()
-        else:
-            kv_match = key_value_format_pattern.match(line)
-            if kv_match: s, p, o = kv_match.groups()
-            else:
-                pipe_match = pipe_format_pattern.match(line)
-                if pipe_match: s, p, o = pipe_match.groups()
-                # Fallback for simple comma-separated, if exactly two commas and not empty parts
-                elif line.count(',') == 2:
-                    parts = [part.strip() for part in line.split(',')]
-                    if len(parts) == 3 and all(parts): # Ensure all parts are non-empty after strip
-                        s, p, o = parts
-        
-        if s and p and o:
+        if parsed_spo:
+            s, p, o = parsed_spo
             s_cleaned, p_cleaned, o_cleaned = s.strip(), p.strip(), o.strip()
             # Further ensure they are not just quotes or brackets if those were part of the capture
             s_cleaned = re.sub(r"^['\"\[\]]+|['\"\[\]]+$", "", s_cleaned)
