@@ -1,0 +1,22 @@
+--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
+[Semantic Context from Chapter 2 (Similarity: 0.826, Type: Provisional Summary)]:
+Sága discovers a hidden chamber within Eternis containing evidence of the Council's secret crimes, revealing the station as a prison built to suppress the planet and control its people through a sentient star. She uncovers data showing the Council's manipulation of the star's energy and their cover-up of destruction. Confronted by a former ally, Kael, she resolves to seek out the Reclaimers and expose the truth, despite the dangers involved.
+---
+
+[Semantic Context from Chapter 1 (Similarity: 0.826, Type: Provisional Summary)]:
+Sága, a former engineer, discovers hidden records in Eternis that reveal the station was built to siphon energy from a star, causing harm to the planet below, not salvation. She confronts scavengers who warn her that the Council fears her findings and wants her to stop seeking the truth. Realizing she can't turn back, Sága resolves to uncover the full story, no longer just a scavenger but someone determined to fight for the truth.
+---
+
+[Semantic Context from Chapter 3 (Similarity: 0.837, Type: Summary)]:
+Sága discovers a data crystal containing the truth about the Council's manipulation of Eternis and its sentient star, leading her to join the Reclaimers in their mission to expose the lies. She confronts Kael, a former friend now an enforcer, and decides to continue fighting against the Council's control. The crystal becomes a symbol of her new purpose as she prepares to reveal the hidden truth.
+---
+
+[Semantic Context from Chapter 4 (Similarity: 0.846, Type: Provisional Summary)]:
+Sága discovers the Hidden Chamber contains ancient murals and data panels revealing the truth about the Council's manipulation of the star, which was not just a power source but a sentient being enslaved for centuries. She realizes she has been complicit in the Council's lies and decides to join the Reclaimers, vowing to carry the truth forward despite the risks, as the star's consciousness is now aware of her choice and the Council's control is threatened.
+---
+--- END SEMANTIC CONTEXT ---
+
+
+--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
+No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+--- END KEY RELIABLE KG FACTS ---

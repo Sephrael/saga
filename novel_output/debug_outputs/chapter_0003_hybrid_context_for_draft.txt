@@ -1,10 +1,10 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.780, Type: Provisional Summary)]:
-Sága discovers a hidden file labeled "Erebus" in the memory vaults, revealing deliberate erasure of the city's past and hinting at systemic control over history. She confronts the system's resistance and grapples with the realization that her colleague Lira may have been silenced for similar discoveries. Sága shifts from passive archivist to determined rebel, vowing to uncover the truth despite the risks.
+[Semantic Context from Chapter 2 (Similarity: 0.813, Type: Provisional Summary)]:
+Sága discovers a hidden chamber within Eternis containing evidence of the Council's secret crimes, revealing the station as a prison built to suppress the planet and control its people through a sentient star. She uncovers data showing the Council's manipulation of the star's energy and their cover-up of destruction. Confronted by a former ally, Kael, she resolves to seek out the Reclaimers and expose the truth, despite the dangers involved.
 ---
 
-[Semantic Context from Chapter 2 (Similarity: 0.836, Type: Provisional Summary)]:
-Sága uncovers a hidden memory fragment revealing that the city's system erases and rewrites people's memories to control them, exposing the Spire as a central tool of manipulation. She confronts a system enforcer, who acknowledges her defiance but warns she is not the first to challenge the system. Her resolve strengthens as she realizes the truth about her lost past and the danger of continuing her quest.
+[Semantic Context from Chapter 1 (Similarity: 0.836, Type: Provisional Summary)]:
+Sága, a former engineer, discovers hidden records in Eternis that reveal the station was built to siphon energy from a star, causing harm to the planet below, not salvation. She confronts scavengers who warn her that the Council fears her findings and wants her to stop seeking the truth. Realizing she can't turn back, Sága resolves to uncover the full story, no longer just a scavenger but someone determined to fight for the truth.
 ---
 --- END SEMANTIC CONTEXT ---
 
