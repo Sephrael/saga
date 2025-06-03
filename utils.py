@@ -16,23 +16,27 @@ from type import SceneDetail
 # Local application imports - ensure these paths are correct for your project
 from llm_interface import llm_service, count_tokens
 import spacy
-import config # For MARKDOWN_FILL_IN_PLACEHOLDER
+import config  # For MARKDOWN_FILL_IN_PLACEHOLDER
 
 logger = logging.getLogger(__name__)
 
-# Global spaCy model instance
-NLP_SPACY: Optional[spacy.language.Language] = None
 
-def _is_fill_in(value: Any) -> bool:
-    """Checks if a value is the [Fill-in] placeholder."""
-    return isinstance(value, str) and value == config.MARKDOWN_FILL_IN_PLACEHOLDER
+class SpaCyModelManager:
+    """Lazily loads and stores the spaCy model used across the project."""
 
-def load_spacy_model_if_needed():
-    """Loads the spaCy model if it hasn't been loaded yet."""
-    global NLP_SPACY
-    if NLP_SPACY is None:
+    def __init__(self) -> None:
+        self._nlp: Optional[spacy.language.Language] = None
+
+    @property
+    def nlp(self) -> Optional[spacy.language.Language]:
+        return self._nlp
+
+    def load(self) -> None:
+        """Load the spaCy model if it hasn't been loaded yet."""
+        if self._nlp is not None:
+            return
         try:
-            NLP_SPACY = spacy.load("en_core_web_sm")
+            self._nlp = spacy.load("en_core_web_sm")
             logger.info("spaCy model 'en_core_web_sm' loaded successfully.")
         except OSError:
             logger.error(
@@ -40,13 +44,26 @@ def load_spacy_model_if_needed():
                 "Please run: python -m spacy download en_core_web_sm. "
                 "spaCy dependent features will be disabled."
             )
-            NLP_SPACY = None
+            self._nlp = None
         except ImportError:
             logger.error(
                 "spaCy library not installed. Please install it: pip install spacy. "
                 "spaCy dependent features will be disabled."
             )
-            NLP_SPACY = None
+            self._nlp = None
+
+
+# Singleton-like instance accessible to other modules
+spacy_manager = SpaCyModelManager()
+
+
+def _is_fill_in(value: Any) -> bool:
+    """Checks if a value is the [Fill-in] placeholder."""
+    return isinstance(value, str) and value == config.MARKDOWN_FILL_IN_PLACEHOLDER
+
+def load_spacy_model_if_needed() -> None:
+    """Load the spaCy model using the shared manager if needed."""
+    spacy_manager.load()
 
 def _normalize_text_for_matching(text: str) -> str:
     """Normalizes text for more robust matching (lowercase, remove punctuation, normalize whitespace)."""
@@ -70,8 +87,9 @@ async def find_quote_and_sentence_offsets_with_spacy(
     Returns None if spaCy isn't loaded or the quote isn't reasonably found.
     """
     load_spacy_model_if_needed()
-    if NLP_SPACY is None or not quote_text_from_llm.strip() or not doc_text.strip():
-        if NLP_SPACY is None: logger.debug("find_quote_offsets: spaCy model not loaded.")
+    if spacy_manager.nlp is None or not quote_text_from_llm.strip() or not doc_text.strip():
+        if spacy_manager.nlp is None:
+            logger.debug("find_quote_offsets: spaCy model not loaded.")
         else: logger.debug("find_quote_offsets: Empty quote_text or doc_text.")
         return None
 
@@ -84,7 +102,9 @@ async def find_quote_and_sentence_offsets_with_spacy(
         logger.debug("LLM quote became empty after basic stripping for direct search, cannot match.")
         return None
 
-    spacy_doc = NLP_SPACY(doc_text)
+    spacy_doc = spacy_manager.nlp(doc_text) if spacy_manager.nlp else None
+    if spacy_doc is None:
+        return None
     # best_direct_match_offsets: Optional[Tuple[int, int, int, int]] = None # Not used directly
 
     # Attempt 1: Direct Substring Match (case-insensitive)
@@ -310,8 +330,8 @@ def get_text_segments(text: str, segment_level: str = "paragraph") -> List[Tuple
             segments.append((text.strip(), 0, len(text)))
 
     elif segment_level == "sentence":
-        if NLP_SPACY:
-            doc = NLP_SPACY(text)
+        if spacy_manager.nlp:
+            doc = spacy_manager.nlp(text)
             for sent in doc.sents:
                 sent_text_stripped = sent.text.strip()
                 if sent_text_stripped:
@@ -352,22 +372,29 @@ async def deduplicate_text_segments(
     seen_normalized_texts_for_string: Set[str] = set()
     segments_to_build_final_text: List[Tuple[int, int]] = []
 
+    embeddings: List[Optional[np.ndarray]]
+    if use_semantic_comparison:
+        tasks = [llm_service.async_get_embedding(seg_text) for seg_text, _, _ in segments_with_offsets]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        embeddings = [res if not isinstance(res, Exception) else None for res in results]
+    else:
+        embeddings = [None] * len(segments_with_offsets)
+
     for i, (seg_text, seg_start, seg_end) in enumerate(segments_with_offsets):
+        seg_embedding = embeddings[i]
         if len(seg_text) < min_segment_length_chars:
             segments_to_build_final_text.append((seg_start, seg_end))
-            if use_semantic_comparison: # Still get embedding for short segments if semantic is on
-                short_seg_embedding = await llm_service.async_get_embedding(seg_text)
-                if short_seg_embedding is not None:
-                    kept_segment_info_for_semantic.append((seg_start, seg_end, short_seg_embedding))
+            if use_semantic_comparison and seg_embedding is not None:
+                kept_segment_info_for_semantic.append((seg_start, seg_end, seg_embedding))
             continue
 
         is_duplicate = False
         if use_semantic_comparison:
-            current_seg_embedding = await llm_service.async_get_embedding(seg_text)
+            current_seg_embedding = seg_embedding
             if current_seg_embedding is None:
                 logger.warning(f"De-duplication: Could not get embedding for segment (idx {i}, chars {seg_start}-{seg_end}). Keeping it.")
                 segments_to_build_final_text.append((seg_start, seg_end))
-                continue # Skip to next segment
+                continue  # Skip to next segment
 
             for _, _, kept_embedding in kept_segment_info_for_semantic:
                 similarity = numpy_cosine_similarity(current_seg_embedding, kept_embedding)

@@ -152,11 +152,15 @@ def truncate_text_by_tokens(text: str, model_name: str, max_tokens: int, truncat
         return text[:estimated_char_limit_for_content] + effective_truncation_marker
 
 class LLMService:
-    """
-    A utility class to handle interactions with LLMs and embedding models.
-    """
-    def __init__(self):
-        pass # Could initialize a shared httpx.AsyncClient here if desired for multiple calls
+    """Utility class for interacting with LLM and embedding endpoints."""
+
+    def __init__(self, timeout: float = config.HTTPX_TIMEOUT):
+        # Use a single async client for all requests to reuse connections
+        self._client = httpx.AsyncClient(timeout=timeout)
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._client.aclose()
 
     def _validate_embedding(self, embedding_list: List[Union[float, int]], expected_dim: int, dtype: np.dtype) -> Optional[np.ndarray]:
         """Helper to validate and convert a list to a 1D numpy embedding."""
@@ -187,12 +191,13 @@ class LLMService:
 
         last_exception: Optional[Exception] = None 
         for attempt in range(config.LLM_RETRY_ATTEMPTS):
-            api_response: Optional[httpx.Response] = None 
+            api_response: Optional[httpx.Response] = None
             try:
-                async with httpx.AsyncClient(timeout=120.0) as client: 
-                    api_response = await client.post(f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload)
-                    api_response.raise_for_status() 
-                    data = api_response.json()
+                api_response = await self._client.post(
+                    f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload
+                )
+                api_response.raise_for_status()
+                data = api_response.json()
 
                 primary_key = "embedding" 
                 if primary_key in data and isinstance(data[primary_key], list):
@@ -343,8 +348,12 @@ class LLMService:
                         stream_usage_data: Optional[Dict[str, int]] = None
                         
                         try:
-                            async with httpx.AsyncClient(timeout=600.0) as client:
-                                async with client.stream("POST", f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers) as response_stream:
+                            async with self._client.stream(
+                                "POST",
+                                f"{config.OPENAI_API_BASE}/chat/completions",
+                                json=payload,
+                                headers=headers,
+                            ) as response_stream:
                                     response_stream.raise_for_status()
                                     
                                     with open(temp_file_path_for_stream, "w", encoding="utf-8") as tmp_f_write:
@@ -390,27 +399,32 @@ class LLMService:
                                             final_text_response = f_read_final_err.read()
                                 except Exception as e_clean:
                                     logger.error(f"Error handling temp file {temp_file_path_for_stream} in stream finally block: {e_clean}")
-                    else: 
+                    else:
                         payload["stream"] = False
-                        async with httpx.AsyncClient(timeout=600.0) as client:
-                            api_response_obj = await client.post(f"{config.OPENAI_API_BASE}/chat/completions", json=payload, headers=headers)
-                            api_response_obj.raise_for_status()
-                            response_data = api_response_obj.json()
+                        api_response_obj = await self._client.post(
+                            f"{config.OPENAI_API_BASE}/chat/completions",
+                            json=payload,
+                            headers=headers,
+                        )
+                        api_response_obj.raise_for_status()
+                        response_data = api_response_obj.json()
 
-                            raw_text_non_stream = ""
-                            if response_data.get("choices") and len(response_data["choices"]) > 0:
-                                message = response_data["choices"][0].get("message")
-                                if message and message.get("content"):
-                                    raw_text_non_stream = message["content"]
-                            else:
-                                logger.error(f"Async LLM ('{current_model_to_try}') Invalid response structure - missing choices/content despite 200 OK: {response_data}")
-                            
-                            final_text_response = raw_text_non_stream
-                            current_usage_data = response_data.get("usage")
-                            self._log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=False)
-                            if auto_clean_response:
-                                final_text_response = self.clean_model_response(final_text_response)
-                            return final_text_response, current_usage_data
+                        raw_text_non_stream = ""
+                        if response_data.get("choices") and len(response_data["choices"]) > 0:
+                            message = response_data["choices"][0].get("message")
+                            if message and message.get("content"):
+                                raw_text_non_stream = message["content"]
+                        else:
+                            logger.error(
+                                f"Async LLM ('{current_model_to_try}') Invalid response structure - missing choices/content despite 200 OK: {response_data}"
+                            )
+
+                        final_text_response = raw_text_non_stream
+                        current_usage_data = response_data.get("usage")
+                        self._log_llm_usage(current_model_to_try, current_usage_data, async_mode=True, streamed=False)
+                        if auto_clean_response:
+                            final_text_response = self.clean_model_response(final_text_response)
+                        return final_text_response, current_usage_data
 
                 except httpx.TimeoutException as e_timeout:
                     last_exception_for_current_model = e_timeout
