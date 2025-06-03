@@ -1,0 +1,26 @@
+--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
+[Semantic Context from Chapter 4 (Similarity: 0.717, Type: Provisional Summary)]:
+Kaelen discovers a hidden message revealing the Loop's true nature as a prison rather than a sanctuary, prompting him to seek the Veil Nexus to break free. He gathers a group of outcasts who have also questioned the Loop's reality, forming an unlikely alliance to escape its grasp. As they navigate through time fractures toward the Nexus, Kaelen realizes he is no longer alone in his mission, and together they aim to rewrite their fate.
+---
+
+[Semantic Context from Chapter 5 (Similarity: 0.772, Type: Provisional Summary)]:
+The team discovers the Veil of Drift Space Station's airlock marked with coordinates and the word *Skyfall*, linking it to the Loop and hinting at its origins. They uncover a time anchor and a message revealing the Loop was intentionally created as a failsafe, not an accident, and that the crew's final act was an attempt to contain it. Kaelen resolves to confront the past, leading them toward the Drift Nexus to seek the truth behind the Loop's design.
+---
+
+[Semantic Context from Chapter 3 (Similarity: 0.786, Type: Provisional Summary)]:
+Kaelen discovers Project Echo's hidden data in a sealed vault, revealing his crew's sacrifice and the Loop's true nature as a prison designed to control time. The message warns of a failing system and the need to find the Veil Nexus before it collapses, shifting his role from an archivist to a determined seeker of truth. He now carries the weight of his past but is resolved to break the cycle and reclaim his identity.
+---
+
+[Semantic Context from Chapter 6 (Similarity: 0.789, Type: Provisional Summary)]:
+The team discovers that *Echo’s Wake* is an ancient construct tied to the Lunar Loop Colony Eternity, which is designed to preserve and test time rather than trap it. They confront the reality that they are not just visitors but participants in a trial meant to judge their resolve. Kaelen realizes he is the key to breaking the Loop, and the team decides to face the past instead of fleeing from it, embracing the possibility of rewriting their fate.
+---
+
+[Semantic Context from Chapter 2 (Similarity: 0.810, Type: Provisional Summary)]:
+Kaelen discovers a hidden message from his presumed-dead crew within the derelict signal relay, revealing Project Echo as a survival mission tied to the Lunar Loop Colony Eternity. The archive exposes the Loop as a deliberate time mechanism designed to preserve humanity, not an accident, and implicates the Chrono Syndicate as its curators. Kaelen confronts a mysterious figure who reveals he was never meant to be alone and that the Veil Nexus holds the key to understanding the truth, forcing him to face his past and embrace a new purpose.
+---
+--- END SEMANTIC CONTEXT ---
+
+
+--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
+No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+--- END KEY RELIABLE KG FACTS ---

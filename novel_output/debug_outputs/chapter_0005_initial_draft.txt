@@ -1,169 +1,153 @@
-Sága’s breath was shallow as she stepped into the Archive. The air was thick with dust and a strange, electric scent that clung to her skin like a second layer. She had heard whispers of this place—how it was hidden deep within Eternis, beyond the reach of the Council's patrols, where only those who truly sought the truth could find their way. But now, standing in its dim light, she felt as though she had entered a tomb. The walls were lined with towering shelves, each one crammed with tomes and data tablets that glowed faintly, as if they still held some sliver of the star’s consciousness within them. Shadows stretched long across the floor, and every step echoed in the silence like a warning.
+The Veil of Drift Space Station Complex hung like a ghost in the void, its skeletal frame barely holding together against the relentless pull of time and space. It was not just the decay of metal and glass that made it feel abandoned—it was the silence. A silence so profound it pressed against the ears, as if the station itself had forgotten how to make noise. The team moved cautiously through the debris field, their visors reflecting the cold, distant light of a nearby star. There was no wind here, no sound of engines or life-support systems, only the faint hum of static and the occasional crackle of something still alive in the wreckage.
 
-Lyra was already there, her hands gripping the edge of an ancient console, her eyes scanning the shifting inscriptions on its surface. She had found something—something that would change everything. Sága hesitated at the threshold, her heart pounding in her chest. The Archive wasn’t just a place; it was a relic of the past, a prison for knowledge that the Council had deemed too dangerous to share. And yet, here she was, standing in its heart with Lyra, who had risked everything to bring her here.
+Jax led the way with a scanner clamped to his wrist, its red interface flickering erratically. "This place is worse than I expected," he muttered, his voice barely audible over the suit comms. "The readings are all scrambled. Some systems might be from the 21st century, others from centuries after."
 
-“I thought you’d never come,” Lyra said without looking up. Her voice was low, almost reverent. “I found something.”
+Kaelen Voss watched him from a few meters behind, his mind racing with the implications. The station had been part of Earth’s last great interstellar trade route—before the Fall. Before everything went wrong. He had spent years studying fragments of this place, piecing together its history through whispers and half-remembered transmissions. Now, standing in its ruins, he felt a strange mix of awe and dread.
 
-Sága stepped forward, her boots crunching over the brittle dust on the floor. She could feel the weight of what she was about to see pressing down on her like a storm. “What is it?” she asked, her voice barely above a whisper.
+Mira crouched beside a rusted control panel, brushing dust from its surface with the tip of her glove. "We need to find an airlock," she said, her voice sharp but measured. "If we’re going to get inside, it’s got to be something that still works."
 
-Lyra turned, her expression unreadable. “Proof that your mentor wasn’t just another Council loyalist.”
+Lira stood at the edge of the debris field, her eyes scanning the endless expanse of space. "The Loop isn’t just a place," she said quietly. "It's an idea. And this station… it might be the first step in understanding what they did to us."
 
-Sága’s stomach twisted. The name had been spoken so often in the past weeks—whispered by scavengers, muttered by Kael, and now here, echoing through the Archive like a curse. She had spent so long believing that he was one of them, that his work had been part of the Council’s grand design to bring progress. But Lyra’s words cut through that illusion like a blade.
+Tarek, who had been silent since they entered the field, finally spoke. His mechanical arm whirred softly as he adjusted its grip on a nearby console. "We don’t know what we’re walking into," he said. "But if this is connected to the Loop, then it’s either a trap or a clue."
 
-She followed Lyra deeper into the chamber, past rows of books whose spines were cracked and faded, their pages curling in on themselves like the remains of something once alive. The walls pulsed with faint blue light, as if the Archive itself was breathing. Sága’s fingers brushed against one of the data tablets, and the inscriptions shifted, rearranging themselves into a message that had not been there before.
+The airlock was hidden behind layers of collapsed bulkheads and shattered windows. Its surface was covered in rust, but beneath the grime, Kaelen could see faint markings—coordinates, symbols, and a single word: *Skyfall.*
 
-Lyra reached out and touched it. “This is his work,” she said. “He wasn’t just an engineer. He was trying to stop them.”
+He knelt beside it, running his fingers over the corroded metal. "This is where we start," he said, his voice steady despite the weight of what lay ahead.
 
-Sága stared at the tablet, her mind racing. She had always believed that the Council’s narrative of progress was the only truth worth knowing. That Eternis was a beacon of hope, a place where people could rise above their pasts and build something better. But now, with Lyra’s hand on the console, she felt the weight of that belief slipping away.
+Jax frowned. "That’s not just any coordinates. That’s the same one from the file we found in Chapter 1."
 
-She turned to Lyra, her voice raw with disbelief. “That’s impossible. The Council would have killed him if he tried to resist.”
+Mira crossed her arms. "So maybe that's why they were tracking it. Maybe *Skyfall* was a way to stop the Loop, or maybe it was part of what caused it."
 
-Lyra didn’t answer immediately. Instead, she pulled a crystalline disk from a shelf and placed it on the console. It hummed softly, like a heartbeat. “He didn’t resist,” she said at last. “He tried to save us. But they found out. They silenced him before he could act.”
+Kaelen exhaled slowly, his breath fogging slightly in the cold air. He had spent so long trying to understand the Loop, and now he was standing at its edge, literally. The thought unsettled him more than he cared to admit.
 
-Sága’s fingers trembled as she reached for the disk. She had spent years scavenging through Eternis, sifting through its ruins for scraps of information, always believing that the truth was buried beneath layers of lies and propaganda. But now, this—this was something else. This was a confession. A record of what the Council had done in secret.
+As they entered the airlock, a low groan echoed through the station’s interior. The doors hissed open, revealing a corridor that stretched into darkness. Flickering lights from old emergency systems cast long shadows across the floor, and the air was thick with the scent of ozone and something older—something metallic and ancient.
 
-She looked up at Lyra, her eyes wide with something between fear and awe. “Why did you bring me here?”
+They moved forward, their boots crunching against broken glass and debris. Every step felt like entering a tomb, not just for the station but for whatever had happened here. Kaelen’s thoughts drifted to his crew, to the last transmission he had received before they vanished into the Loop. He still remembered it—the static, the distorted voice, the warning that had been cut off mid-sentence.
 
-Lyra met her gaze, steady and unyielding. “Because you’re the only one who can carry this forward.”
+He pushed those memories aside and focused on the present.
 
-Sága’s chest tightened. She had always been a scavenger, someone who took what she could and moved on. But now, standing in the Archive with Lyra, she felt the pull of something deeper. The weight of her mentor’s work, the cost of his silence, the knowledge that the Council had spent centuries rewriting history to maintain their control.
+The control room was vast, its walls lined with flickering holograms that displayed data long since corrupted. The central console stood like a monolith in the center of the room, its surface covered in dust and grime. Kaelen approached it carefully, his fingers hovering just above the controls.
 
-She reached for the disk again, but this time, she hesitated. “What if I’m not ready?”
+"This thing’s still running," he said, his voice barely above a whisper. "Somehow."
 
-Lyra shook her head. “You’re already ready. You just don’t know it yet.”
+Jax stepped closer, eyes scanning the interface. "It’s not just running—it’s *trying* to run. The systems are fragmented, like they were cut off mid-operation."
 
-Sága swallowed hard. She had no choice now. The truth was too close, and the Council’s lies were too heavy to ignore.
+Mira knelt beside the console, her hands moving over its surface with practiced precision. "There’s a signal here," she said, her tone more certain now. "Not just any signal—this is a time anchor. It’s been waiting for something to trigger it."
 
----
+Kaelen looked up at her, his expression unreadable. "Then we need to figure out what it was looking for."
 
-The data panels in the Archive’s central chamber flickered with a life of their own, as if they remembered the hands that had once touched them. Lyra moved through the room with practiced ease, her fingers tracing patterns on the ancient glass, pulling up holographic projections of events that had been erased from history. Sága watched in silence, her heart pounding as she saw images of Eternis not as a sanctuary, but as a prison.
+Lira stood near the wall, studying the holographic displays that flickered between static and distorted images. "These logs… they’re not just records of the crew’s last moments. They’re warnings. Something happened here, and they tried to stop it."
 
-She had seen enough to know that the Council’s narrative was a lie. That they had built Eternis not to save the planet below, but to control it. To siphon its life force through the star and bind it to their will. And now, she saw her mentor in those projections—his face lined with exhaustion, his hands stained with dust and oil as he worked tirelessly to uncover the Council’s secrets.
+Tarek crouched beside one of the broken terminals, his mechanical fingers tapping against the surface. "The Loop isn’t just a loop," he said. "It’s a cage. And someone—*something*—built it."
 
-“He tried to save us,” Sága whispered, her voice barely audible over the hum of the panels. “But they stopped him.”
+Kaelen felt the weight of those words settle in his chest. He had always believed the Loop was an accident, a consequence of humanity’s reckless use of time technology. But now, with every piece of data they uncovered, that belief began to crack.
 
-Lyra nodded, her eyes fixed on the screen. “He left this for us. A final message, a warning.”
+He reached out and touched the console, feeling a faint pulse beneath his fingertips. "We need to find the signal," he said, his voice steady. "If we can understand what it is, maybe we can understand why they were tracking it."
 
-Sága stepped closer, her breath catching as she read the words that had been etched into the crystal’s surface. They were written in a language she barely recognized, but the meaning was clear.
+Jax nodded, but there was something in his eyes—a flicker of doubt. "You sure about that? We don’t even know if this place is still connected to the Loop."
 
-_"The Council has built their empire on lies. The star is not a power source—it is a living being, bound to this station by chains of light and shadow. If you seek the truth, do not look for it in the stars above. Look within yourself. The choice is yours, but know this: once you take this path, there is no turning back."_
+Kaelen didn’t answer immediately. He just stared at the console, at the faint traces of data still clinging to its surface.
 
-Sága’s hands clenched into fists. She had always believed that knowledge was a weapon, that understanding the past could shape the future. But now she saw the cost of that knowledge—the silence, the erasure, the lives lost in the name of progress.
+"Because if we don’t," he said finally, "then we’re just chasing ghosts."
 
-She turned to Lyra, her voice shaking with emotion. “He knew. He knew everything.”
+The team moved deeper into the station, following a path that led them through a series of collapsed corridors and forgotten labs. The walls were lined with rusted equipment and broken consoles, their surfaces marred by time and decay. Some panels still glowed faintly, casting an eerie light over the wreckage.
 
-Lyra’s expression was grim. “And he tried to stop them. But they didn’t let him finish his work.”
+They reached what looked like a central hub, its floor littered with fragments of old schematics and data files. A large, dusty map projected onto the wall in front of them, its coordinates shifting erratically as if struggling to stay anchored in time.
 
-Sága felt a surge of anger rise within her, sharp and bitter. She had spent so long living under the Council’s rule, believing in their promises of betterment and prosperity. Now, that belief was shattered. And yet, she couldn’t deny the truth in Lyra’s words.
+"This is it," Mira said, her voice tinged with both excitement and apprehension. "The signal’s origin. It’s not just a point on a chart—it’s a location that exists in multiple timelines."
 
-She looked down at the data tablet once more, its inscriptions shifting as if responding to her presence. “What do we do now?”
+Jax leaned against the wall, his expression darkening. "So we’re following a trail that leads us somewhere *else*? Somewhere we might not be able to return from?"
 
-Lyra hesitated. “We take this to the Reclaimers.”
+Kaelen looked at the map, his mind racing through possibilities. The coordinates were familiar—too familiar. They matched the ones in the file he had found earlier, the same ones that had haunted him since the beginning.
 
-Sága frowned. “You think they’ll believe me? I’ve spent so long being a scavenger, not a rebel.”
+"It’s a risk," he admitted, "but if we don’t follow it, we’ll never know what happened here."
 
-Lyra smiled faintly. “That’s exactly why you’re here. You have the last piece of the puzzle. The Council will never let this go quietly. They’ll do anything to keep their lies intact.”
+Lira stepped forward, her gaze fixed on the map. "The Loop isn’t just a prison," she said. "It’s a message. A warning. And this—this is the key to understanding it."
 
-Sága felt a cold weight settle in her chest. She had no illusions about what was coming next. The Council wouldn’t just let them walk away with this knowledge. They would come for them, and they would come hard.
+Tarek crossed his arms, his mechanical fingers twitching slightly. "Then we’d better be careful what we unlock."
 
-But she couldn’t stop now. Not after everything she had seen. Not after the truth had been laid bare before her.
+Kaelen exhaled, feeling the weight of responsibility settle on his shoulders. He had spent so long running from the truth, hiding in the archives and letting others do the work. But now, standing in the heart of this forgotten station, he realized that the past wasn’t something to escape—it was something to face.
 
-She took a deep breath, steadying herself. “Then I’ll do what I can.”
+He reached for the console again, fingers brushing against its surface as if trying to remember how it felt. The system hummed faintly beneath his touch, and for a moment, he could almost hear the voices of the crew—faint, distant, like echoes in the dark.
 
-Lyra nodded, her eyes shining with something that looked like hope. “That’s all we need.”
+The team gathered around him, their eyes reflecting the same uncertainty and determination. They were no longer just scavengers or wanderers; they were something more. A group of people who had found a way to break free from the chains of time, even if it meant risking everything.
 
----
+"We go," Kaelen said finally. "Together."
 
-The corridor was narrow and cold, its walls lined with rusted machinery and flickering lights that cast long shadows across the floor. Sága moved carefully, her boots echoing in the silence as they passed through the ruins of Eternis. She had spent years navigating these halls, scavenging for scraps of forgotten knowledge, but tonight felt different.
+Jax smirked, though there was no real humor in it. "I like that. We’re not just chasing ghosts anymore—we’re making history."
 
-The Council’s enforcers were out. She could feel their presence in the air, a low hum that vibrated through the metal beneath her feet. Kael had warned her about this—about how the Council would not let them take what they had found. And now, as she and Lyra pressed deeper into the station, she knew they weren’t alone.
+Mira nodded, her sharp eyes scanning the map once more. "The signal’s origin is marked here. It leads us to the Drift Nexus."
 
-She reached out to Lyra, her voice barely above a whisper. “We need to be careful.”
+Lira tilted her head slightly. "That’s where the Veil of Drift converges. If we follow it, we might find something—something that could change everything."
 
-Lyra nodded, her hand gripping Sága’s shoulder. “I know. But we have no choice. The Hidden Chamber is the only place where the truth can be preserved. If we don’t get there before they do, everything will be lost.”
+Tarek adjusted his arm, the gears inside whirring softly. "And if we don’t? If we go in and get caught in the same loop?"
 
-Sága swallowed hard. “What if they find us?”
+Kaelen didn’t answer right away. He simply looked at the map, at the coordinates that had been etched into its surface like a scar.
 
-Lyra’s eyes met hers, steady and unyielding. “Then we’ll face them. But I think you already know that.”
+"We have to try," he said. "Because if we don’t, then who will?"
 
-They moved quickly, their footsteps muffled by the thick dust that had settled over the station like a shroud. The air was heavy with the scent of ozone and decay, and every shadow seemed to stretch toward them, as if watching.
+The team moved as one, their footsteps echoing through the hollow corridors of the station. The air felt heavier now, as if time itself was pressing down on them. Every step brought them closer to something they had no idea what it would be.
 
-As they neared the Hidden Chamber, Sága felt a strange pull in her chest, like something ancient was awakening within her. She had always believed that the star was just a source of power, but now she saw it differently. It wasn’t just energy—it was life, memory, and something far greater than either of them could comprehend.
+As they passed through a narrow passageway, the lights flickered more erratically, casting long shadows that seemed to move on their own. Kaelen’s breath caught in his throat as he heard something—a voice, faint but unmistakable.
 
-She reached for the key Lyra had given her, a small crystalline shard that pulsed with light. “This is all he left us,” she said, her voice tinged with sorrow. “He must have known they’d find this. He left it for us to finish what he started.”
+"Kaelen… you’re not alone."
 
-Lyra’s grip on Sága’s shoulder tightened. “He didn’t just leave it. He gave it to you. That means something.”
+He turned sharply, but no one was there. The voice had come from the console, from the data itself. He felt a chill run down his spine, though the temperature hadn’t changed.
 
-Sága looked at the key in her hand, its surface warm against her palm. It felt like a fragment of something larger, something that had been waiting for her all along.
+Lira stepped forward, her eyes wide. "Did you hear that?"
 
-They reached the entrance to the Hidden Chamber, a massive door etched with symbols that pulsed faintly in the dim light. Lyra stepped forward, placing the key into a slot on the door’s surface. The moment it clicked in, the door groaned open, revealing a vast, circular chamber bathed in blue light.
+Kaelen nodded slowly. "It’s… not just static. It’s a message."
 
-Inside, the air was thick with tension. Sága could feel the weight of history pressing down on her, the echoes of countless lives lost to the Council’s lies. She stepped inside, her breath catching as she saw what lay before them—ancient data crystals and storage units that seemed to hum with a life of their own.
+Mira frowned. "From who?"
 
-Lyra moved toward one of the units, her fingers brushing against its surface. “This is it,” she said, her voice barely above a whisper. “Everything we need.”
+"I don’t know," Kaelen admitted. "But it feels like someone is trying to reach me."
 
-Sága followed her, her eyes scanning the chamber for any sign of danger. She had expected to find guards or traps, but instead, she found something far more unsettling—images of the past, of Eternis as it once was, before the Council had taken control.
+Jax exhaled sharply, his usual cynicism giving way to something more serious. "Then we’d better be careful what we’re looking for."
 
-She saw cities rising from the dust, people living in harmony with the star rather than enslaving it. She saw her mentor standing among them, not as a tool of the Council, but as a voice of truth. And she saw the moment he had been silenced, his work erased, his name forgotten.
+They continued their journey, the station’s systems groaning as they passed through its final corridors. The walls shimmered faintly, as if time itself was trying to hold them back. Kaelen felt a strange pull in his chest, like the Loop was reaching out to him again.
 
-Her chest tightened. This was more than just evidence—it was a reckoning.
+But this time, he wasn’t running.
 
-She turned to Lyra, her voice trembling. “He didn’t just want us to expose them. He wanted us to understand what they did.”
+He was moving forward.
 
-Lyra nodded slowly. “And now we do.”
+The airlock at the end of the corridor opened with a slow groan, revealing another chamber—this one more intact than the last. The walls were lined with consoles and data terminals, their screens flickering with half-formed messages and corrupted files.
 
-Sága looked at the data crystal in her hand, its light pulsing like a heartbeat. She had spent so long believing that the Council’s narrative was the only truth worth knowing, but now she saw it for what it was—a lie, a weapon, and a prison.
+Kaelen stepped inside, his eyes scanning the room for anything that might help them find the signal. He found it quickly: a terminal at the center of the chamber, its interface glowing faintly with a single line of text—*Project Echo: The Signal is Waiting.*
 
-She took a deep breath, steadying herself. “Then I’ll carry this forward.”
+He reached out, fingers trembling slightly as he activated the console. A holographic projection formed in front of him, displaying a series of coordinates that pulsed like a heartbeat.
 
-Lyra smiled faintly. “That’s all we need.”
+"This is it," he said, his voice steady now. "This is where we need to go."
 
-As they moved deeper into the chamber, Sága felt something shift within her. The weight of her past—the guilt, the fear, the uncertainty—was still there, but now it was tempered by something else: purpose.
+Lira stepped closer, her gaze fixed on the projection. "It’s not just a location—it’s a point in time. A convergence point."
 
-She had spent so long running from the truth, hiding in the shadows of Eternis, scavenging for scraps of knowledge that didn’t belong to her. But now, she was part of something greater. She was no longer just a scavenger; she was a revolutionary.
+Mira frowned. "That means there are multiple versions of this place across different timelines. We could end up anywhere if we don’t take care."
 
-And the Council would not let her go quietly.
+Tarek adjusted his mechanical arm, his expression grim. "Then we need to be precise with our timing."
 
----
+Jax smirked again, though it didn’t quite reach his eyes. "Precision is overrated. What matters is getting there before the Loop eats us alive."
 
-The chamber’s silence was broken by the sound of footsteps—measured, deliberate. Sága and Lyra froze, their eyes darting toward the entrance as figures emerged from the shadows. Council enforcers, clad in dark armor that gleamed with a cold light, stepped into the room with weapons drawn.
+Kaelen looked at each of them in turn, feeling the weight of their words settle around him like a storm. He had spent so long being afraid of this moment, of what he might find if he faced the truth.
 
-Kael stood among them, his expression unreadable as he locked eyes with Sága. He had always been a presence in her life, a man who had once been her friend and now her enemy.
+But now, standing here with them, he felt something shift inside him. Not just acceptance—but resolve.
 
-“Sága,” he said, his voice calm but edged with something deeper—something like regret. “You’ve come far.”
+"We don’t have time to be afraid," he said finally. "We’ve come too far."
 
-Sága’s grip tightened around the data crystal. “I’ve seen the truth, Kael. And I won’t let it be buried again.”
+The team nodded, though their expressions remained tense. The station was no longer just a place of ruins—it was a battleground between memory and reality, between the past and the future.
 
-Kael exhaled slowly, as if weighing his next words carefully. “Then you don’t understand what you’re getting into.”
+Kaelen turned back to the console, his fingers moving with purpose as he deciphered the final message left behind by the crew who had once called this place home.
 
-Lyra stepped forward, her voice firm. “We understand more than you do.”
+*"The Loop is not an accident. It was created to preserve what we could not save. But if you are reading this, then you have found something we never meant for you to see."*
 
-Kael’s eyes flicked to Lyra, then back to Sága. “You were never meant to find this.”
+He looked up at them, his eyes filled with a mix of sorrow and determination.
 
-Sága felt a surge of anger rise within her, but she forced herself to remain calm. “Then why did my mentor leave it for me?”
+"This isn’t just about breaking the Loop," he said. "It’s about understanding why it was built in the first place."
 
-Kael hesitated, and for a moment, Sága saw something in his expression—something that made her heart sink. He wasn’t just an enforcer; he had once been part of the resistance.
+Lira met his gaze, her expression unreadable. "Then we need to ask the right questions."
 
-“I thought I could change things,” Kael said finally. “But the Council is too powerful. They’ve rewritten history so many times, they control everything. Even the stars.”
+Kaelen nodded. "And I think we’ve just found the first one."
 
-Sága’s jaw clenched. “Then you should have joined us instead of working for them.”
+The team moved forward, their footsteps echoing through the chamber as they prepared for what lay ahead. The signal was waiting, and with it came a new path—one that would lead them beyond the Veil of Drift, into the unknown.
 
-Kael’s lips pressed into a thin line. “I tried. But I failed.”
+But Kaelen knew now that he wasn’t alone in this journey. He had found a group of people who believed in something more than survival. They believed in truth, in change, and in the possibility of a future that hadn’t been decided yet.
 
-Lyra stepped closer, her voice low and steady. “You didn’t fail. You were just too late.”
-
-Kael looked at Sága, his gaze piercing. “And now you’re standing where I stood. Will you be the one to break their hold, or will you become another failure?”
-
-Sága’s heart pounded in her chest. She had no answer for him—not yet. But she knew that whatever choice she made, it would define who she was.
-
-She looked down at the data crystal, its light pulsing against her palm like a promise. “I’ve already made my choice.”
-
-Kael studied her for a long moment, then nodded slowly. “Then I’ll have to stop you.”
-
-The enforcers moved in, their weapons gleaming in the dim light of the chamber. Sága and Lyra stood their ground, the weight of the truth pressing down on them like a storm.
-
-But Sága knew that this was only the beginning. The Council would not let her walk away with this knowledge. They would kill her if they had to.
-
-And she was ready.
-
-She stepped forward, her voice steady and filled with resolve. “Then let’s see what you’re willing to do.”
+And for the first time in years, he felt like he could face it.

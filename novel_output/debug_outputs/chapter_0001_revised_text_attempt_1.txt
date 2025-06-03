@@ -1,119 +1,89 @@
-Sága moved through the corridors of Eternis with a quiet urgency, her boots crunching against the brittle floor panels that had once been pristine but now lay in splinters and dust. The station was no longer what it had been. She could feel it in the way the air tasted stale and metallic, the way gravity tugged at her limbs like a child’s hand trying to pull her down. It wasn’t just broken—it was decaying, unraveling with every passing day, as though time itself had given up on it.
+Kaelen Voss moved through the maintenance corridor of the Veil Of Drift with a quiet precision, his boots echoing against the metal floor like the distant toll of a funeral bell. The station had been abandoned for years—long enough that even the dust had grown thick and settled into patterns that looked almost intentional. He was alone in this place, save for the hum of old machinery and the flickering lights that seemed to pulse with a rhythm all their own. It wasn’t just the silence that unsettled him; it was the way time here felt like it had paused, or worse, forgotten.
 
-She adjusted the straps of her pack, which clung to her shoulders like a second skin. Inside, she carried tools scavenged from the ruins: a rusted wrench, a cracked scanner, and a journal—its pages filled with sketches and notes from her past life as an engineer. That life had been one of purpose and precision, but now it felt like a ghost haunting her steps. The memory of her former self still clung to her, whispering in the back of her mind like a song she couldn’t quite remember.
+He had been assigned to this station as part of a reassignment from the Scavenger Wars, a decision he hadn’t fought. The Veil Of Drift had once been a hub for interstellar trade and research, but now it was a graveyard of technology and dreams. His job was simple: catalog the remnants of lost human knowledge before they were lost forever. He had spent months sifting through archives that crumbled beneath his fingers, transcribing logs from ships that no longer sailed, and preserving fragments of history that might otherwise be erased by time.
 
-The station’s lights flickered erratically, casting long shadows that stretched across the walls like claws. Sága had once worked in these very corridors, ensuring that the intricate systems kept Eternis aloft, humming with power. But now, every system seemed to be on the verge of collapse. The gravity fields were unstable, and she had learned to move carefully—like a dancer avoiding sharp edges.
+But today, something felt different.
 
-She paused near a bulkhead that had long since been sealed. A faint hum echoed from beyond it, something mechanical and old, like the heartbeat of a dying thing. She traced her fingers along the metal, feeling its warmth despite the cold air around her. It was strange, how the station still held onto some semblance of life even as everything else crumbled.
+The corridor led to a section he hadn’t accessed in over a year—a sealed data vault buried deep within the station’s core. It had been marked as inactive, its access blocked by outdated security protocols that no longer made sense. He hesitated at the entrance, his gloved hand brushing against the cold metal door. A faint static crackled through the air, like a whisper from somewhere beyond reach.
 
-She had been here before—many times. But now, she felt different. Not just because she had become a scavenger, but because she no longer trusted the stories they told about Eternis. The Council’s narrative of progress and salvation had always been a fragile thing, like glass in a storm. And Sága had helped shatter it.
+He pulled out a small interface device from his belt and scanned the lock. The system wasn’t just broken; it was ancient. The kind of code that hadn’t been used since Earth’s systems collapsed in 2147. He frowned, but there was no time to dwell on the implications. His duty was clear, even if the station itself seemed to resist it.
 
-The weight of that truth pressed on her chest. She had once believed in the grand design, in the idea that Eternis was a beacon of hope for the planet below. That the star’s energy was a gift, a miracle granted to those who sought it. But now, every time she looked up at the distant glow of the star, she felt its pull as something unnatural, like a hand reaching down from the void to drag her into its depths.
+With a few quick keystrokes and a deep breath, he bypassed the lock. The door hissed open, revealing a dimly lit chamber lined with servers that looked like relics from another era. Faded blueprints clung to the walls, their edges curled with age, while holographic displays flickered erratically, casting long shadows across the floor. It was eerie in a way that made his skin crawl—like the station itself was trying to remember something it had long since forgotten.
 
-She moved on, past towering columns that had once held great halls but were now collapsed or broken. The dust was thick here, swirling in the dim light of failing energy cells. She coughed, feeling the sharp sting of it in her throat. This place was a tomb, and she was walking through its corridors like a ghost.
+He stepped inside and activated the main terminal. The screen blinked to life, revealing a cascade of corrupted files. Some were labeled with dates from before the Fall of Earth, others with names he didn’t recognize. His fingers hovered over the keys, and for a moment, he felt like an intruder in a place that had never meant to be found.
 
-As she passed a maintenance hatch, something caught her eye. It wasn’t part of the usual layout—too small, too close to the floor. The metal was dulled by time, but not completely rusted. She crouched down, brushing away the dust with careful fingers, and found a seam in the panel that hadn’t been there before.
+Then, as if drawn by some unseen force, his eyes landed on a single file marked **"Operation Skyfall."**
 
-Her pulse quickened. This wasn’t just a random hatch—it was hidden. And that meant something. Maybe it had been sealed for a reason. Or maybe it had been forgotten.
+He hadn’t heard of it before. Not in the records he had reviewed, nor in any of the mission logs he had transcribed. A strange name for a mission that had been erased from history—or perhaps it had never existed at all.
 
-She pressed her hand against the panel, feeling the faintest vibration beneath her fingertips. A soft click echoed through the chamber, and then the panel slid open with a hiss of air and creak of metal. Inside was a narrow passage, barely wide enough to fit through. She hesitated for only a moment before stepping in.
+Curiosity flared, though it was an unfamiliar emotion for him. He had spent so long avoiding the past, burying himself in the remnants of what once was. But something about this file felt like it belonged to him. As if it were a message meant for his eyes alone.
 
-The air was colder here, almost like it had been sealed away from the rest of the station. The walls were lined with old wiring and faded labels, some still legible, others just smudges of ink and time. She moved forward, her flashlight cutting through the darkness. It wasn’t long before she reached a small chamber, its ceiling low and its floor uneven.
+He opened the file and found only static at first, a jumble of corrupted data that made no sense. Then, slowly, the screen began to clear, revealing fragments of text and images—some of them recognizable, others not. A mission log, incomplete but enough to suggest something had gone terribly wrong. The coordinates were vague, the time stamps inconsistent. But there was one phrase repeated throughout the file: **"The Loop is not what it seems."**
 
-In the center was a control console, half-buried in dust and decay. The interface was flickering, like a dying star itself. But as she brushed away more of the grime, she saw something that made her breath catch—holographic projections, fragments of data still active despite the station’s collapse.
+His breath caught.
 
-She reached out, hesitating for only a second before activating the console. A soft hum filled the air, and then a single line of text appeared in the center of the chamber:
+He had heard that phrase before, in the whispers of the Wastelands, in the echoes that clung to the edges of forgotten ruins. The Keepers Of The Loop spoke of it as a warning, a riddle from an ancient time. But here, in the depths of the Veil Of Drift, it felt like a message from someone who had been lost.
 
-**“The star is not a gift, but a burden.”**
+He leaned closer, his fingers tracing the screen’s surface as he tried to make sense of what he was seeing. The mission had vanished during a deep-space exploration in the early 21st century—before the Fall. Before Earth became a shadow in the sky. He couldn’t help but wonder who had been on that mission and why they had left no trace.
 
-Her fingers trembled as she read on. The logs were old, but they still held weight. They spoke of Eternis being built not to harness the star’s energy for progress, but to siphon it away—away from the planet below. The Council had promised that this energy would bring prosperity, that it would be a miracle for all. But in reality, it was an act of theft.
+A flicker of static caught his attention, and for a moment, he thought he saw movement in the corner of his eye. The lights in the vault dimmed slightly, as if something had stirred. He turned sharply, but the corridor was empty. Just dust and silence.
 
-She read more, her mind racing. The star’s light was borrowed, its life stolen. And with every pulse of energy siphoned, the world beneath Eternis was slowly unraveling. It wasn’t just a failing structure—it was a wound on the planet itself.
+He shook his head, dismissing the thought. It was just the station’s systems playing tricks on him.
 
-A cold realization settled over her. She had helped build this lie. She had once been one of the engineers who maintained the systems that kept the star’s energy flowing, unaware of the cost. Now, standing in this hidden chamber, she felt like a traitor to everything she had once believed in.
+Still, the message lingered in his mind. He had spent years avoiding it, but now it was reaching out to him with answers he didn’t know how to accept.
 
-She reached for the scanner in her pack and began recording what she found. Each line of text was a shard of truth, a piece of history that had been buried beneath layers of deception. She wasn’t sure where this information would lead, but it was clear now—this station was not a miracle. It was a prison.
+As he began to sift through the remaining files, hoping to find more clues, a low hum filled the chamber. It was faint at first, like the sound of distant machinery, but then it grew louder—steady, rhythmic, and unsettling. Kaelen’s heart quickened. He had heard that sound before, in the archives of the Lunar Loop Colony Eternity.
 
-As she worked, the console flickered again, and another log appeared. This one was more personal. A voice, dry and worn with age, spoke through the projection:
+He wasn’t sure how he knew that, but it felt like a warning.
 
-**“They told us the star would bring salvation. But I’ve seen what it does. Every time we draw power from it, something gives in return. The planet is dying beneath us, and they don’t care.”**
+The hum was coming from deeper within the vault. As if the station itself were reacting to his presence.
 
-Sága’s hands clenched into fists. She had known something was wrong, but this—this made it undeniable. The Council wasn’t just lying about the star’s energy; they were using it as a weapon, manipulating history to justify their actions.
+He moved toward the source, his boots making soft clicks against the floor. The air grew heavier, charged with something unseen. Then, without warning, the lights in the vault flickered and died, plunging him into darkness.
 
-She moved deeper into the chamber, her flashlight catching on something in the corner. A small door, sealed with old locks and rusted hinges. She had no idea what was behind it, but the feeling that she was being watched made her heart race.
+For a moment, he was alone.
 
-She pressed her ear against the metal, listening for any sound beyond the hum of the console. Nothing. Just silence.
+But then, a voice—soft, distorted, and filled with urgency—echoed through the chamber.
 
-With a deep breath, she pushed the door open. Inside was another chamber, smaller than the last but just as heavy with history. The walls were lined with data tablets, some still glowing faintly, others cracked and dark. In the center stood a single pedestal, its surface worn and uneven.
+_"Do not look too deep. The Loop is watching."_
 
-On it lay a small device—a personal log recorder, its screen flickering with static. She reached for it, her fingers brushing against the cold metal. As she activated it, the screen stabilized, and a voice filled the room, steady and clear despite the years of neglect.
+Kaelen froze. His fingers tightened around the interface device as his pulse pounded in his ears. He had no idea where the voice had come from, but it felt like it was coming from inside him, or perhaps from the station itself.
 
-**“This is Engineer Veyra. I was part of the original team that installed the star’s conduits. We were told we were saving the world, but I know the truth now. The Council has been lying to us all along. The energy they draw from the star is not a gift—it’s a curse. And every time we use it, we leave behind something worse.”**
+He forced himself to move, to press forward. The vault’s systems were failing, and he needed to understand what he had found before it was too late.
 
-Sága’s breath caught in her throat. She had never heard of Veyra before, but the words felt like they had been carved into her soul.
+The next thing he knew, the lights flickered back on, casting an eerie glow over the terminal. The message was still there, but now it felt different—like it had been waiting for him to return.
 
-She continued to listen as the log played on, describing how the planet below was slowly being consumed by the energy siphoned from the star. How the Council had erased all records of this truth, rewriting history so that Eternis would be seen as a miracle rather than a catastrophe.
+He leaned in closer, his breath shallow as he stared at the screen. The words were clearer now, and with them came a sense of something long buried. Something that didn’t just belong to the past, but to the present, and perhaps even the future.
 
-**“I tried to warn them. I tried to stop it. But they wouldn’t listen. They said we were building the future, and if we did our job, we’d be remembered as heroes.”**
+_"We did not vanish. We were taken. The Loop is not safe. It is a trap."_
 
-The words echoed in Sága’s mind, and for the first time since she had left her position on the Council’s team, she felt something stir within her—not guilt, but anger.
+He stared at the message, his mind racing through the implications. If this was from Operation Skyfall, then they had discovered something about the Lunar Loop that the Keepers had never wanted to be known. And if they had been taken, then what happened to them?
 
-She closed the log and stepped back. The chamber was silent now, but the weight of what she had just learned pressed down on her like a mountain.
+His fingers hovered over the keyboard once more, but this time he wasn’t sure if he was ready. He had spent years avoiding the past, and now it was reaching out to him with answers he didn’t know how to accept.
 
-As she turned to leave, a sound behind her made her freeze. A low, guttural whisper—just loud enough to be heard in the stillness.
+The hum returned, louder now, almost like a heartbeat. It pulsed through the air, reverberating in his chest. He felt it in his bones, as if the station were trying to tell him something.
 
-“Sága,” it said.
+He closed his eyes and let the sound wash over him. When he opened them again, the screen had changed—no longer showing the corrupted logs of Operation Skyfall, but a single line of text that read:
 
-She spun around, flashlight beam cutting through the darkness. Three figures stood at the threshold of the chamber, their faces obscured by masks and hoods. They were scavengers like her, but they carried themselves with a different kind of authority—like they knew something she didn’t.
+**"Project Echo."**
 
-“Who are you?” she asked, voice steady despite the fear curling in her gut.
+He didn’t know what it meant, but he knew it was important. He reached for the interface device and tried to access deeper layers of the archive. The system resisted at first, then suddenly responded with a surge of data.
 
-The leader stepped forward, his face still hidden. “We know what you’re looking for.”
+The screen flickered again, revealing a set of coordinates—star systems that had long since been lost to time fractures and forgotten by all but the most desperate scavengers. It was a place that didn’t exist on any known map, yet it felt like it should.
 
-Sága’s heart pounded. She had expected to be alone in this discovery, but now it seemed like others had been watching her all along. “And what do you want with me?”
+He stared at the coordinates, his mind churning with questions. Who had left them? Why? And what did they mean?
 
-He tilted his head slightly, as if considering the question. “You’ve seen things that shouldn’t have been seen. You’re not the first. But you might be the last.”
+Before he could process the full weight of what he had found, a deep tremor ran through the station. It wasn’t just a vibration; it was a warning, like the ground beneath him was shifting. The lights flickered violently, and for a moment, he thought the entire system might collapse.
 
-She didn’t understand, but she wasn’t about to ask questions now. Her fingers curled around the scanner in her pack.
+He scrambled to his feet, heart pounding as alarms blared from unseen speakers. The hum from *The Keeper* grew louder, almost deafening now. He wasn’t sure if it was part of the system or something else entirely.
 
-“I need answers,” she said, her voice quiet but firm.
+But then, just as quickly as it had started, the tremor stopped. The lights steadied, and the station fell back into its usual silence—except for the faint crackle of static that filled the air like a promise.
 
-The leader nodded, his expression unreadable. “Then you’ll need more than just this chamber. There are others like it—places where the truth has been buried. And we’ve been waiting for someone to find them.”
+Kaelen knew he wasn’t alone in this place anymore. Something had changed. Something had awakened.
 
-Sága’s mind raced. She had always thought of Eternis as a place of decay, but now she saw it differently. It wasn’t just a structure—it was a machine, and she had been one of its cogs.
+He looked down at the terminal again, his fingers trembling as he reached for the keyboard. He needed to understand what he had found. He needed to know why it had taken so long for him to see it.
 
-She took a step back, her flashlight trembling slightly in her hand. “Why are you telling me this?”
+And more than anything, he needed to know if it was still too late to stop whatever was coming.
 
-The leader’s voice was low, almost like a whisper. “Because the Council is not as powerful as they claim to be. They fear what you’ve found, and they fear what others might find if they follow your path.”
+The coordinates were a message. A warning. And perhaps, a key.
 
-She looked at him, searching for any sign of deception. But there was none. Just a quiet determination in his eyes.
-
-“What do you want from me?” she asked again.
-
-He stepped closer, his presence looming like a shadow. “We want you to stop looking. We want you to leave this place and forget what you’ve seen.”
-
-Sága’s breath caught in her throat. The words struck her like a hammer. She had come here seeking truth, but now it seemed that others wanted to bury it.
-
-“I can’t do that,” she said, her voice barely above a whisper. “Not after everything I’ve learned.”
-
-The leader studied her for a moment, then exhaled slowly. “Then you’re not just a scavenger anymore. You’re something more.”
-
-She didn’t know what that meant, but the weight of his words made her feel like she had crossed a threshold.
-
-“I’ll keep going,” she said finally. “If I leave this here, someone else will find it. Maybe they’ll do something about it.”
-
-The leader nodded again, and then he turned away, motioning for his companions to follow. “Then you’re not just another ghost in the ruins. You’re a threat to them.”
-
-As they disappeared into the darkness, Sága stood alone once more, but this time, she felt something shift inside her. She was no longer just a scavenger searching for scraps. She was a woman who had uncovered a truth that could change everything.
-
-She turned back to the console and began documenting what she had found, not just for herself, but for anyone who might one day find this place and realize the cost of their progress.
-
-The star’s light above her still burned, but now it felt like a warning rather than a promise. And Sága, for the first time in years, felt like she was ready to fight—not just to survive, but to change the story.
-
-She took one last look at the chamber and stepped back into the passageway, her boots echoing against the metal floor. The weight of her discoveries pressed on her mind, but so did the pull of something deeper—something she hadn’t felt in a long time. A sense of purpose. A need to uncover the truth.
-
-She knew she couldn’t go back now. Not after what she had seen.
-
-As she walked, the dust swirled around her like an invisible current, and the station’s gravity seemed to shift slightly, as if it were trying to pull her back. But Sága was no longer afraid of the unknown. She had spent too long in the shadows of Eternis, believing in its lies.
-
-Now, she would walk into the light—no matter what it revealed.
+He took a deep breath and typed the command that would unlock the final layer of the archive.

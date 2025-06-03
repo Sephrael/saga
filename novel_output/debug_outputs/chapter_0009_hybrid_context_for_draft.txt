@@ -1,0 +1,26 @@
+--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
+[Semantic Context from Chapter 7 (Similarity: 0.756, Type: Provisional Summary)]:
+The team discovers Lunar Loop Colony Eternity is not abandoned but a living construct, a simulation or prison designed to test them. They realize the Loop isn't just a time anomaly but an intentional failsafe, and they face a critical choice: break free and risk losing their memories or remain trapped in an eternal cycle. Kaelen decides to confront the Loop, accepting responsibility for his past and embracing the unknown.
+---
+
+[Semantic Context from Chapter 2 (Similarity: 0.795, Type: Provisional Summary)]:
+Kaelen discovers a hidden message from his presumed-dead crew within the derelict signal relay, revealing Project Echo as a survival mission tied to the Lunar Loop Colony Eternity. The archive exposes the Loop as a deliberate time mechanism designed to preserve humanity, not an accident, and implicates the Chrono Syndicate as its curators. Kaelen confronts a mysterious figure who reveals he was never meant to be alone and that the Veil Nexus holds the key to understanding the truth, forcing him to face his past and embrace a new purpose.
+---
+
+[Semantic Context from Chapter 5 (Similarity: 0.806, Type: Provisional Summary)]:
+The team discovers the Veil of Drift Space Station's airlock marked with coordinates and the word *Skyfall*, linking it to the Loop and hinting at its origins. They uncover a time anchor and a message revealing the Loop was intentionally created as a failsafe, not an accident, and that the crew's final act was an attempt to contain it. Kaelen resolves to confront the past, leading them toward the Drift Nexus to seek the truth behind the Loop's design.
+---
+
+[Semantic Context from Chapter 8 (Similarity: 0.815, Type: Provisional Summary)]:
+Kaelen discovers the Lunar Loop Colony Eternity is a deliberate construct designed to trap people in an endless cycle of repetition, revealing it as a simulation created by the Chrono Syndicate to preserve human memory. He realizes the Loop's true purpose is a test of will and identity, and that breaking it could either free or destroy those within. With Tarek's support, he prepares to activate the core, acknowledging the profound moral and existential cost of his decision.
+---
+
+[Semantic Context from Chapter 3 (Similarity: 0.822, Type: Provisional Summary)]:
+Kaelen discovers Project Echo's hidden data in a sealed vault, revealing his crew's sacrifice and the Loop's true nature as a prison designed to control time. The message warns of a failing system and the need to find the Veil Nexus before it collapses, shifting his role from an archivist to a determined seeker of truth. He now carries the weight of his past but is resolved to break the cycle and reclaim his identity.
+---
+--- END SEMANTIC CONTEXT ---
+
+
+--- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
+No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+--- END KEY RELIABLE KG FACTS ---
