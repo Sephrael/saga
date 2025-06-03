@@ -14,7 +14,7 @@ from typing import Optional, Tuple, List, Union, Set, Any  # Added Set, Any
 from type import SceneDetail
 
 # Local application imports - ensure these paths are correct for your project
-from llm_interface import llm_service
+from llm_interface import llm_service, count_tokens
 import spacy
 import config # For MARKDOWN_FILL_IN_PLACEHOLDER
 

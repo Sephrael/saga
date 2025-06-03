@@ -954,8 +954,9 @@ New Sword | located_in | Sunken Library
         
         logger.debug(f"KGMaintainer: RAW LLM Output for Ch {chapter_number} (length {len(raw_extraction_text_from_llm)} from cached call):\n>>>START_RAW_LLM_CH{chapter_number}>>>\n{raw_extraction_text_from_llm}\n<<<END_RAW_LLM_CH{chapter_number}<<<")
         
-        text_to_parse = raw_extraction_text_from_llm 
-        logger.debug(f"KGMaintainer: TEXT TO PARSE for Ch {chapter_number} (length {len(text_to_parse)}):\n>>>START_PARSE_INPUT_CH{chapter_number}>>>\n{text_to_parse}\n<<<END_PARSE_INPUT_CH{chapter_number}<<<")
+        cleaned_llm_output = llm_service.clean_model_response(raw_extraction_text_from_llm) # Apply cleaning
+        text_to_parse = cleaned_llm_output
+        logger.debug(f"KGMaintainer: CLEANED TEXT TO PARSE for Ch {chapter_number} (length {len(text_to_parse)}):\n>>>START_PARSE_INPUT_CH{chapter_number}>>>\n{text_to_parse}\n<<<END_PARSE_INPUT_CH{chapter_number}<<<")
 
         sections = re.split(r"^\s*###\s*([\w\s]+?)\s*###\s*$", text_to_parse, flags=re.IGNORECASE | re.MULTILINE)
         parsed_sections: Dict[str, str] = {}
@@ -993,7 +994,7 @@ New Sword | located_in | Sunken Library
         logger.info(f"Unified knowledge extraction for Ch {chapter_number} complete. Chars updated/new: {len(final_extraction['character_updates'])}, World cats affected: {len(final_extraction['world_updates'])}, KG Triples extracted: {len(final_extraction['knowledge_triples'])}.")
 
         if not char_updates_dict and not world_updates_dict and not kg_triples_list and text_to_parse.strip():
-            logger.warning(f"Unified extraction for Ch {chapter_number} yielded no structured data despite non-empty LLM response. Raw LLM output snippet: '{text_to_parse[:500]}...'")
+            logger.warning(f"Unified extraction for Ch {chapter_number} yielded no structured data despite non-empty LLM response. Cleaned LLM output snippet: '{text_to_parse[:500]}...'")
 
         return final_extraction, usage_data
 
