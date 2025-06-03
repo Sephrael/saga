@@ -32,32 +32,7 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
             logger.error(f"Error calling _format_scene_plan_for_prompt via agent.drafting_agent: {e}. Using fallback.")
     
     logger.warning("_get_formatted_scene_plan_from_agent_or_fallback: Using fallback scene plan formatting logic.")
-    if not chapter_plan: return "Scene plan formatting unavailable or plan empty (stub)."
-    
-    plan_text_parts_list = [] 
-    current_tokens_count = 0
-    header = "**Detailed Scene Plan (Stubbed - MUST BE FOLLOWED CLOSELY):**\n"
-    header_tokens_count = count_tokens(header, model_name_for_tokens) # MODIFIED
-
-    if header_tokens_count > max_tokens_budget: return "... (plan header too long for budget)"
-    plan_text_parts_list.append(header)
-    current_tokens_count += header_tokens_count
-
-    for scene_idx, scene in enumerate(chapter_plan):
-        scene_text_parts_inner = [
-            f"Scene Number: {scene.get('scene_number', 'N/A')}",
-            f"  Summary: {scene.get('summary', 'No summary')}"
-        ]
-        if scene_idx < len(chapter_plan) -1 : scene_text_parts_inner.append("-" * 10)
-        scene_text = "\n".join(scene_text_parts_inner) + "\n"
-
-        scene_tokens_count = count_tokens(scene_text, model_name_for_tokens) # MODIFIED
-        if current_tokens_count + scene_tokens_count > max_tokens_budget:
-            plan_text_parts_list.append("... (plan truncated in prompt due to token limit)\n")
-            break
-        plan_text_parts_list.append(scene_text)
-        current_tokens_count += scene_tokens_count
-    return "".join(plan_text_parts_list)
+    return utils.format_scene_plan_for_prompt(chapter_plan, model_name_for_tokens, max_tokens_budget)
 
 
 def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:

@@ -5,6 +5,7 @@ from typing import Tuple, Optional, List, Dict, Any
 import config
 from llm_interface import llm_service, count_tokens
 from type import SceneDetail
+import utils
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
@@ -18,54 +19,10 @@ class DraftingAgent:
         self.model_name = model_name
         logger.info(f"DraftingAgent initialized with model: {self.model_name}")
 
+
     def _format_scene_plan_for_prompt(self, chapter_plan: List[SceneDetail], model_name_for_tokens: str, max_tokens_budget: int) -> str:
-        """
-        Formats the chapter plan (list of SceneDetail dicts) into plain text for the LLM prompt, respecting token limits.
-        (Logic from chapter_drafting_logic.py _format_scene_plan_for_prompt function)
-        """
-        if not chapter_plan:
-            return "No detailed scene plan available."
-
-        plan_text_lines = ["**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**"]
-        # total_plan_text_so_far = "\n".join(plan_text_lines) + "\n" # Initial calculation before loop
-
-        # Build the plan string incrementally
-        current_plan_str_parts = [plan_text_lines[0]] # Start with header
-
-        for scene_idx, scene in enumerate(chapter_plan):
-            scene_lines_parts = [
-                f"Scene Number: {scene.get('scene_number', 'N/A')}",
-                f"  Summary: {scene.get('summary', 'N/A')}",
-                f"  Characters Involved: {', '.join(scene.get('characters_involved', [])) if scene.get('characters_involved') else 'None'}",
-                "  Key Dialogue Points:"
-            ]
-            for point in scene.get('key_dialogue_points', []):
-                scene_lines_parts.append(f"    - {point}")
-            scene_lines_parts.append(f"  Setting Details: {scene.get('setting_details', 'N/A')}")
-            scene_lines_parts.append("  Scene Focus Elements:")
-            for focus_el in scene.get('scene_focus_elements', []):
-                scene_lines_parts.append(f"    - {focus_el}")
-            scene_lines_parts.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
-            
-            if scene_idx < len(chapter_plan) -1 :
-                scene_lines_parts.append("-" * 20)
-            
-            # Check token count before adding this scene's text to the cumulative plan
-            prospective_next_segment = "\n".join(scene_lines_parts)
-            # Test adding the new segment to the current plan parts
-            temp_full_plan_text = "\n".join(current_plan_str_parts + [prospective_next_segment])
-            
-            if count_tokens(temp_full_plan_text, model_name_for_tokens) > max_tokens_budget: # MODIFIED
-                current_plan_str_parts.append("... (plan truncated in prompt due to token limit)")
-                logger.warning(f"Chapter plan was token-truncated for the drafting prompt. Max tokens for plan: {max_tokens_budget}. Stopped before scene {scene.get('scene_number', 'N/A')}.")
-                break
-            
-            current_plan_str_parts.append(prospective_next_segment) # Add the segment if it fits
-            
-        if len(current_plan_str_parts) <= 1 : # Only header means no scenes were added
-            return "No detailed scene plan available or plan was too long to include any scenes."
-            
-        return "\n".join(current_plan_str_parts)
+        """Wrapper around utils.format_scene_plan_for_prompt."""
+        return utils.format_scene_plan_for_prompt(chapter_plan, model_name_for_tokens, max_tokens_budget)
 
     async def draft_chapter(
         self,
