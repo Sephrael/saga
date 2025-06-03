@@ -112,7 +112,7 @@ class ComprehensiveEvaluatorAgent:
             if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip():
                 problem_meta["quote_from_original_text"] = "N/A - General Issue"
                 logger.debug(f"Problem block {block_num+1} for Ch {chapter_number} is 'N/A - General Issue' or empty quote.")
-            elif utils.NLP_SPACY is not None and original_draft_text.strip():
+            elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
                 offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(original_draft_text, quote_text_from_llm)
                 if offsets_tuple:
                     q_start, q_end, s_start, s_end = offsets_tuple

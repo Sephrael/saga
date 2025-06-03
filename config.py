@@ -109,6 +109,8 @@ NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT) # Ofte
 LLM_RETRY_ATTEMPTS: int = int(os.getenv("LLM_RETRY_ATTEMPTS", "3"))
 # Initial delay in seconds before retrying a failed LLM call (uses exponential backoff).
 LLM_RETRY_DELAY_SECONDS: float = 3.0
+# Default timeout (in seconds) for async HTTP requests made via httpx.
+HTTPX_TIMEOUT: float = float(os.getenv("HTTPX_TIMEOUT", "600.0"))
 # Model to use as a fallback if the primary LLM call fails and fallback is allowed.
 FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL # Often a smaller, faster model.
 # Toggle for the "/no_think" directive in LLM prompts.
