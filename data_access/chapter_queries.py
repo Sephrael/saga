@@ -110,14 +110,14 @@ async def find_similar_chapters_in_db(
         return []
 
     exclude_clause = ""
-    params_dict: Dict[str, Any] = { # Explicitly type params_dict
+    params_dict: Dict[str, Any] = { 
         "index_name_param": config.NEO4J_VECTOR_INDEX_NAME,
         "limit_param": limit + (1 if current_chapter_to_exclude is not None else 0),
         "queryVector_param": query_embedding_list
     }
     if current_chapter_to_exclude is not None:
         exclude_clause = "WHERE c.number <> $current_chapter_to_exclude_param "
-        params_dict["current_chapter_to_exclude_param"] = current_chapter_to_exclude # Add to dict
+        params_dict["current_chapter_to_exclude_param"] = current_chapter_to_exclude 
 
     similarity_query = f"""
     CALL db.index.vector.queryNodes($index_name_param, $limit_param, $queryVector_param)
@@ -132,7 +132,7 @@ async def find_similar_chapters_in_db(
     """
     similar_chapters_data: List[Dict[str, Any]] = []
     try:
-        results = await neo4j_manager.execute_read_query(similarity_query, params_dict) # Pass typed dict
+        results = await neo4j_manager.execute_read_query(similarity_query, params_dict) 
         if results:
             for record in results:
                 if current_chapter_to_exclude is not None and record.get("chapter_number") == current_chapter_to_exclude:

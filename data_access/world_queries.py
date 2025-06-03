@@ -20,6 +20,8 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
     # Clear existing world structure
     statements.append(("MATCH (we:WorldElement) DETACH DELETE we", {}))
     statements.append(("MATCH (wev:WorldElaborationEvent) DETACH DELETE wev", {}))
+    statements.append(("MATCH (wc:WorldContainer {id: $wc_id_param})-[r_cont:CONTAINS_ELEMENT]->() DELETE r_cont", {"wc_id_param": wc_id_param}))
+    statements.append(("MATCH (ni:NovelInfo {id: $novel_id_param})-[r_meta:HAS_WORLD_META]->(wc:WorldContainer {id: $wc_id_param}) DELETE r_meta", {"novel_id_param": novel_id_param, "wc_id_param": wc_id_param}))
     statements.append(("MATCH (wc:WorldContainer {id: $wc_id_param}) DETACH DELETE wc", {"wc_id_param": wc_id_param}))
     statements.append(("MATCH (vn:ValueNode) DETACH DELETE vn", {}))
 
@@ -37,7 +39,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                      wc_props["is_provisional"] = True
 
                 statements.append((
-                    "MERGE (wc:Entity {id: $id_val}) SET wc:WorldContainer SET wc = $props", # MODIFIED
+                    "MERGE (wc:Entity {id: $id_val}) SET wc:WorldContainer SET wc = $props", 
                     {"id_val": wc_id_param, "props": wc_props }
                 ))
                 # Link WorldContainer to NovelInfo
@@ -79,7 +81,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                 item_props_for_set['is_provisional'] = True
 
             statements.append((
-                "MERGE (we:Entity {id: $id_val}) SET we:WorldElement SET we = $props", # MODIFIED
+                "MERGE (we:Entity {id: $id_val}) SET we:WorldElement SET we = $props", 
                 {"id_val": we_id_str, "props": item_props_for_set}
             ))
             # Link WorldElement to its WorldContainer
@@ -98,7 +100,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                             if list_prop_key_str == "key_elements": rel_name_internal_str = "HAS_KEY_ELEMENT"
                             elif list_prop_key_str == "traits": rel_name_internal_str = "HAS_TRAIT_ASPECT"
                             
-                            statements.append(( # MODIFIED
+                            statements.append((
                                 f"""
                                 MATCH (we:WorldElement:Entity {{id: $we_id_val}})
                                 MERGE (v:Entity:ValueNode {{value: $val_item_value, type: $value_node_type}})
@@ -119,7 +121,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                         if details_dict.get(provisional_elab_key) == "provisional_from_unrevised_draft":
                             elab_props["is_provisional"] = True
                         
-                        statements.append(( # MODIFIED
+                        statements.append((
                             f"""
                             MATCH (we:WorldElement:Entity {{id: $we_id_val}})
                             CREATE (we_elab:Entity:WorldElaborationEvent)
@@ -147,7 +149,7 @@ async def get_world_building_from_db() -> Dict[str, Any]:
     wc_id_param = config.MAIN_WORLD_CONTAINER_NODE_ID
 
     # Load overview
-    overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc.overview_description AS desc, wc.is_provisional AS is_provisional" # MODIFIED
+    overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc.overview_description AS desc, wc.is_provisional AS is_provisional"
     overview_res = await neo4j_manager.execute_read_query(overview_query, {"wc_id_param": wc_id_param})
     if overview_res and overview_res[0] and overview_res[0].get('desc') is not None:
         world_data["_overview_"]["description"] = overview_res[0]['desc']
@@ -156,7 +158,7 @@ async def get_world_building_from_db() -> Dict[str, Any]:
 
 
     # Load WorldElements
-    we_query = "MATCH (we:WorldElement:Entity) RETURN we" # MODIFIED
+    we_query = "MATCH (we:WorldElement:Entity) RETURN we"
     we_results = await neo4j_manager.execute_read_query(we_query)
     
     standard_categories = ["locations", "society", "systems", "lore", "history", "factions"]
@@ -192,9 +194,9 @@ async def get_world_building_from_db() -> Dict[str, Any]:
             elif list_prop_key == "traits": rel_name_query = "HAS_TRAIT_ASPECT"
 
             list_values_query = """
-            MATCH (:WorldElement:Entity {{id: $we_id_param})-[:%s]->(v:ValueNode:Entity {{type: $value_node_type_param}})
+            MATCH (:WorldElement:Entity {id: $we_id_param})-[:%s]->(v:ValueNode:Entity {type: $value_node_type_param})
             RETURN v.value AS item_value
-            """ % rel_name_query # MODIFIED ValueNode
+            """ % rel_name_query
             
             list_val_res = await neo4j_manager.execute_read_query(
                 list_values_query,
@@ -203,9 +205,9 @@ async def get_world_building_from_db() -> Dict[str, Any]:
             item_detail[list_prop_key] = [res_item['item_value'] for res_item in list_val_res] if list_val_res else []
 
         elab_query = """
-        MATCH (:WorldElement:Entity {{id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+        MATCH (:WorldElement:Entity {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
         RETURN elab.summary AS summary, elab.chapter_updated AS chapter, elab.is_provisional AS is_provisional
-        """ # MODIFIED WorldElaborationEvent
+        """
         elab_results = await neo4j_manager.execute_read_query(elab_query, {"we_id_param": we_id})
         if elab_results:
             for elab_rec in elab_results:
@@ -235,7 +237,7 @@ async def get_world_elements_for_snippet_from_db(category: str, chapter_limit: i
            is_item_provisional_overall AS is_provisional
     ORDER BY we.name ASC 
     LIMIT $item_limit_param
-    """ # MODIFIED labels
+    """
     params = {"category_param": category, "chapter_limit_param": chapter_limit, "item_limit_param": item_limit}
     items = []
     try:

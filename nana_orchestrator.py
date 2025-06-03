@@ -178,21 +178,42 @@ class NANA_Orchestrator:
         self._update_rich_display(step="Orchestrator Initialized")
 
     async def _save_core_novel_state_to_neo4j(self):
-        logger.info("NANA: Saving core novel state (plot, characters, world) to Neo4j...")
-        tasks = [
-            plot_queries.save_plot_outline_to_db(self.plot_outline),
-            character_queries.save_character_profiles_to_db(self.character_profiles),
-            world_queries.save_world_building_to_db(self.world_building)
+        logger.info("NANA: Saving core novel state (plot, characters, world) to Neo4j sequentially...")
+        save_operations = [
+            ("plot_outline", plot_queries.save_plot_outline_to_db, self.plot_outline),
+            ("character_profiles", character_queries.save_character_profiles_to_db, self.character_profiles),
+            ("world_building", world_queries.save_world_building_to_db, self.world_building)
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
         success_count = 0
-        for i, res in enumerate(results):
-            item_name = ["plot_outline", "character_profiles", "world_building"][i]
-            if isinstance(res, Exception): logger.error(f"Failed to save {item_name} to Neo4j: {res}", exc_info=res)
-            elif res is True: success_count += 1
-            else: logger.warning(f"Unexpected return value from save_{item_name}: {res}")
-        if success_count == len(tasks): logger.info("All core state objects saved to Neo4j successfully.")
-        else: logger.warning(f"Only {success_count}/{len(tasks)} core state objects saved successfully.")
+        all_succeeded = True
+
+        for name, save_func, data_to_save in save_operations:
+            try:
+                logger.info(f"Attempting to save {name}...")
+                # Ensure data_to_save is not None and is a dict, provide empty dict if not
+                if data_to_save is None or not isinstance(data_to_save, dict):
+                    logger.warning(f"Data for {name} is None or not a dict, using empty dict for save operation.")
+                    current_data_to_save = {}
+                else:
+                    current_data_to_save = data_to_save
+
+                result = await save_func(current_data_to_save)
+                if result is True:
+                    success_count += 1
+                    logger.info(f"Successfully saved {name} to Neo4j.")
+                else:
+                    all_succeeded = False
+                    logger.warning(f"Save operation for {name} returned an unexpected value: {result}")
+            except Exception as e:
+                all_succeeded = False
+                logger.error(f"Failed to save {name} to Neo4j: {e}", exc_info=True)
+        
+        if all_succeeded:
+            logger.info("All core state objects saved to Neo4j successfully.")
+        else:
+            logger.warning(f"Only {success_count}/{len(save_operations)} core state objects saved successfully.")
+
 
     async def perform_initial_setup(self):
         self._update_rich_display(step="Performing Initial Setup")
