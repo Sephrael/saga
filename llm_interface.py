@@ -533,9 +533,7 @@ class LLMService:
         if len(cleaned_text) < len(text_before_think_removal): 
             logger.debug(f"clean_model_response: Removed content associated with <think>/similar tags. Length before: {len(text_before_think_removal)}, after: {len(cleaned_text)}.")
 
-        cleaned_text = re.sub(r'```(?:[a-zA-Z0-9]+)?\s*.*?\s*```', '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
-        cleaned_text = re.sub(r'^```\s*\n', '', cleaned_text, flags=re.MULTILINE) 
-        cleaned_text = re.sub(r'\n\s*```$', '', cleaned_text, flags=re.MULTILINE)
+        cleaned_text = re.sub(r"```(?:[a-zA-Z0-9_-]+)?\s*(.*?)\s*```", r"\1", cleaned_text, flags=re.DOTALL)
 
         cleaned_text = re.sub(r'^\s*Chapter \d+\s*[:\-—]?\s*(.*?)\s*$', r'\1', cleaned_text, flags=re.MULTILINE | re.IGNORECASE).strip()
         
