@@ -10,7 +10,8 @@ import numpy as np
 import logging
 import re
 import asyncio
-from typing import Optional, Tuple, List, Union, Set, Any # Added Set, Any
+from typing import Optional, Tuple, List, Union, Set, Any  # Added Set, Any
+from type import SceneDetail
 
 # Local application imports - ensure these paths are correct for your project
 from llm_interface import llm_service
@@ -215,8 +216,56 @@ async def find_semantically_closest_segment(
     else:
         logger.info(f"No suitable semantic match found (above threshold {min_similarity_threshold}) "
                     f"for query '{query_text[:60].replace(chr(10),' ')}...'. Highest sim was {highest_similarity:.2f}.")
-        
+
     return best_match_info
+
+def format_scene_plan_for_prompt(
+    chapter_plan: List[SceneDetail],
+    model_name_for_tokens: str,
+    max_tokens_budget: int,
+) -> str:
+    """Formats a chapter plan into plain text for LLM prompts respecting token limits."""
+    if not chapter_plan:
+        return "No detailed scene plan available."
+
+    plan_lines = ["**Detailed Scene Plan (MUST BE FOLLOWED CLOSELY):**"]
+    current_plan_parts = [plan_lines[0]]
+
+    for scene_idx, scene in enumerate(chapter_plan):
+        scene_lines = [
+            f"Scene Number: {scene.get('scene_number', 'N/A')}",
+            f"  Summary: {scene.get('summary', 'N/A')}",
+            f"  Characters Involved: {', '.join(scene.get('characters_involved', [])) if scene.get('characters_involved') else 'None'}",
+            "  Key Dialogue Points:",
+        ]
+        for point in scene.get('key_dialogue_points', []):
+            scene_lines.append(f"    - {point}")
+        scene_lines.append(f"  Setting Details: {scene.get('setting_details', 'N/A')}")
+        scene_lines.append("  Scene Focus Elements:")
+        for focus_el in scene.get('scene_focus_elements', []):
+            scene_lines.append(f"    - {focus_el}")
+        scene_lines.append(f"  Contribution: {scene.get('contribution', 'N/A')}")
+
+        if scene_idx < len(chapter_plan) - 1:
+            scene_lines.append("-" * 20)
+
+        scene_segment = "\n".join(scene_lines)
+        prospective_plan = "\n".join(current_plan_parts + [scene_segment])
+
+        if count_tokens(prospective_plan, model_name_for_tokens) > max_tokens_budget:
+            current_plan_parts.append("... (plan truncated in prompt due to token limit)")
+            logger.warning(
+                f"Chapter plan was token-truncated for the prompt. Max tokens for plan: {max_tokens_budget}. "
+                f"Stopped before scene {scene.get('scene_number', 'N/A')}."
+            )
+            break
+
+        current_plan_parts.append(scene_segment)
+
+    if len(current_plan_parts) <= 1:
+        return "No detailed scene plan available or plan was too long to include any scenes."
+
+    return "\n".join(current_plan_parts)
 
 # --- De-duplication Logic ---
 
