@@ -4,97 +4,136 @@ import time
 from core_db.base_db_manager import Neo4jManagerSingleton # Use the singleton
 import config # To get default URI, user, pass if not provided via args
 import asyncio # Required to call async methods
+from typing import List, Dict, Any # Added for type hints
 
 # Create an instance of the manager to use its methods
-# This is okay for a script like this, as it will be a single instance for the script's lifetime.
 neo4j_manager_instance = Neo4jManagerSingleton()
 
 
 async def reset_neo4j_database_async(uri, user, password, confirm=False):
     """
-    Asynchronously resets a Neo4j database by removing all nodes and relationships.
+    Asynchronously resets a Neo4j database by:
+    1. Removing all nodes and relationships.
+    2. Dropping ALL user-defined constraints.
+    3. Dropping ALL user-defined indexes.
     """
     if not confirm:
-        response = input("⚠️ WARNING: This will delete ALL data in the Neo4j database. Continue? (y/N): ")
+        response = input(
+            "⚠️ WARNING: This will delete ALL data, ALL user-defined constraints, and ALL user-defined indexes "
+            "in the Neo4j database. This is a destructive operation. Continue? (y/N): "
+        )
         if response.lower() not in ['y', 'yes']:
             print("Operation cancelled.")
             return False
     
-    # Override config if args are provided
     effective_uri = uri or config.NEO4J_URI
     effective_user = user or config.NEO4J_USER
     effective_password = password or config.NEO4J_PASSWORD
 
-    # Temporarily set config for the neo4j_manager if args differ, or ensure it uses them
-    # A cleaner way would be to pass these to connect() if it supported it,
-    # or have a temporary context for the manager. For this script, direct override is simpler.
     original_uri, original_user, original_pass = config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD
     config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = effective_uri, effective_user, effective_password
 
     try:
         print(f"Connecting to Neo4j database at {effective_uri}...")
-        await neo4j_manager_instance.connect() # Connects using current config values
+        await neo4j_manager_instance.connect()
 
         async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
-            # Test connection and get initial count
             result = await session.run("MATCH (n) RETURN count(n) as count")
             single_result = await result.single()
             node_count = single_result["count"] if single_result else 0
             print(f"Current database has {node_count} nodes.")
         
-        print("Resetting database...")
+        print("Resetting database data (nodes and relationships)...")
         start_time = time.time()
         
-        # Batching delete operations might be more performant on very large databases
-        # but for a full reset, separate deletes are clear.
-        # Consider `CALL apoc.periodic.iterate` for huge databases if APOC is available.
-        
-        # Detach delete all nodes (which also deletes their relationships)
-        # This is generally more robust than deleting relationships then nodes separately.
-        # Using batches to avoid overly large transactions if the DB is huge.
+        nodes_deleted_total = 0
         while True:
             async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
-                result = await session.run("MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch")
+                tx = await session.begin_transaction()
+                result = await tx.run("MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch")
                 single_result_batch = await result.single()
+                await tx.commit()
                 deleted_in_batch = single_result_batch["deleted_nodes_batch"] if single_result_batch else 0
+                nodes_deleted_total += deleted_in_batch
                 if deleted_in_batch == 0:
-                    break # No more nodes to delete
+                    break
                 print(f"   Deleted {deleted_in_batch} nodes in this batch...")
-        
-        # Additionally, clear out any remaining schema like indexes (constraints are harder to drop programmatically without knowing names)
-        # For a true "reset to factory", one might need to drop and recreate the database itself,
-        # but DETACH DELETE n handles all data.
-        # Dropping indexes and constraints might be desired for a full reset.
-        # Example: Dropping a specific known index (vector index)
-        try:
-            async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
-                await session.run(f"DROP INDEX {config.NEO4J_VECTOR_INDEX_NAME} IF EXISTS")
-                print(f"Dropped vector index '{config.NEO4J_VECTOR_INDEX_NAME}' if it existed.")
-        except Exception as e_index:
-            print(f"Note: Could not drop vector index '{config.NEO4J_VECTOR_INDEX_NAME}' (may not exist or other issue): {e_index}")
+        print(f"   Total {nodes_deleted_total} nodes deleted.")
 
+        print("Attempting to drop ALL user-defined constraints...")
+        async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+            constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
+            constraints_to_drop: List[str] = [record["name"] for record in await constraints_result.data() if record["name"]]
+            
+            if not constraints_to_drop:
+                print("   No user-defined constraints found to drop.")
+            else:
+                for constraint_name in constraints_to_drop:
+                    try:
+                        print(f"   Attempting to drop constraint: {constraint_name}")
+                        tx = await session.begin_transaction()
+                        await tx.run(f"DROP CONSTRAINT {constraint_name} IF EXISTS")
+                        await tx.commit()
+                        print(f"      Dropped constraint '{constraint_name}' (or it didn't exist).")
+                    except Exception as e_constraint:
+                        if tx and not tx.closed(): # type: ignore
+                            await tx.rollback()
+                        print(f"   Note: Could not drop constraint '{constraint_name}': {e_constraint}")
+        
+        print("Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)...")
+        async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+            # Query for indexes, trying to filter out system ones if possible (type might not always be 'SYSTEM_LOOKUP')
+            # The most reliable way is usually by name patterns if system indexes have those, or by excluding known types.
+            # For now, we will attempt to drop all that are not of type 'LOOKUP' for node_label_property which could be old schema index.
+            # And also not 'RANGE' or 'POINT' unless we are sure SAGA doesn't use them (it mostly uses BTREE for properties and VECTOR).
+            # A simpler approach for a full reset is to try dropping all and let `IF EXISTS` handle it.
+            indexes_result = await session.run("SHOW INDEXES YIELD name, type")
+            indexes_to_drop_info: List[Dict[str, Any]] = await indexes_result.data()
+
+            if not indexes_to_drop_info:
+                print("   No user-defined indexes found to drop.")
+            else:
+                for index_info in indexes_to_drop_info:
+                    index_name = index_info.get("name")
+                    index_type = index_info.get("type", "").upper() # VECTOR, BTREE, TEXT, FULLTEXT, POINT, RANGE, LOOKUP
+
+                    # Heuristic: Avoid dropping system/lookup indexes that Neo4j might manage internally for constraints.
+                    # Typically, SAGA creates BTREE (for property indexes) and VECTOR indexes.
+                    # Other types might be from older versions or manual creation.
+                    # `tokenLookup` is often for fulltext schema indexes.
+                    if index_name and "tokenLookup" not in index_name.lower() and "system" not in index_type.lower():
+                        try:
+                            print(f"   Attempting to drop index: {index_name} (type: {index_type})")
+                            tx = await session.begin_transaction()
+                            await tx.run(f"DROP INDEX {index_name} IF EXISTS")
+                            await tx.commit()
+                            print(f"      Dropped index '{index_name}' (or it didn't exist).")
+                        except Exception as e_index:
+                            if tx and not tx.closed(): # type: ignore
+                                await tx.rollback()
+                            print(f"   Note: Could not drop index '{index_name}': {e_index}")
+                    elif index_name:
+                         print(f"   Skipping potential system/lookup index: {index_name} (type: {index_type})")
 
         elapsed_time = time.time() - start_time
-        print(f"✅ Database data reset complete in {elapsed_time:.2f} seconds.")
-        print(f"   Note: Constraints might need manual dropping/recreation if a full schema reset is desired.")
-        print(f"   The SAGA system will attempt to recreate necessary constraints and indexes on its next run.")
+        print(f"✅ Database data, all user-defined constraints, and relevant user-defined indexes reset/dropped in {elapsed_time:.2f} seconds.")
+        print(f"   The SAGA system will attempt to recreate its necessary schema on the next run.")
         
         return True
         
     except Exception as e:
-        print(f"❌ Error resetting database: {e}")
+        print(f"❌ Error resetting database: {e}", exc_info=True)
         return False
     
     finally:
         if neo4j_manager_instance.driver:
             await neo4j_manager_instance.close()
             print("Connection closed.")
-        # Restore original config values if they were changed
         config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = original_uri, original_user, original_pass
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Reset a Neo4j database by removing all data (nodes and relationships).")
+    parser = argparse.ArgumentParser(description="Reset a Neo4j database by removing all data, user constraints, and user indexes.")
     parser.add_argument("--uri", default=None, help=f"Neo4j connection URI (default: {config.NEO4J_URI})")
     parser.add_argument("--user", default=None, help=f"Neo4j username (default: {config.NEO4J_USER})")
     parser.add_argument("--password", default=None, help=f"Neo4j password (default: {config.NEO4J_PASSWORD})")
@@ -102,7 +141,6 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # Run the async function
     asyncio.run(reset_neo4j_database_async(
         uri=args.uri,
         user=args.user,

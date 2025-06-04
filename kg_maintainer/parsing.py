@@ -1,5 +1,4 @@
-"""Utilities for parsing text blocks into structured data for knowledge graph updates."""
-
+# kg_maintainer/parsing.py
 from typing import Dict
 import re
 from parsing_utils import (
@@ -96,9 +95,14 @@ def parse_unified_world_updates(text_block: str, chapter_number: int) -> Dict[st
     )
 
     results: Dict[str, Dict[str, WorldItem]] = {}
-    for category_name, items in parsed_data.items():
+    for category_name_from_parser, items in parsed_data.items():
+        # Category name from parser (e.g. "Locations", "_overview_")
+        # This becomes the 'category' argument for WorldItem.from_dict
+        # The WorldItem model itself will normalize this for ID generation if needed,
+        # but stores the passed category_name_from_parser as its .category attribute.
+        
         elaboration_key_standard = f"elaboration_in_chapter_{chapter_number}"
-        if category_name == "_overview_":
+        if category_name_from_parser == "_overview_":
             if items and isinstance(items, dict) and any(k != "modification_proposal" for k in items):
                 specific_elab_key = next((k for k in items if k.lower() == elaboration_key_standard.lower()), None)
                 if not specific_elab_key:
@@ -107,20 +111,67 @@ def parse_unified_world_updates(text_block: str, chapter_number: int) -> Dict[st
                     )
                 elif specific_elab_key != elaboration_key_standard and items.get(specific_elab_key):
                     items[elaboration_key_standard] = items.pop(specific_elab_key)
-                results[category_name] = {"_overview_": WorldItem.from_dict(category_name, "_overview_", items)}
+                # For overview, item_name is fixed, category is fixed.
+                results[category_name_from_parser] = {"_overview_": WorldItem.from_dict(category_name_from_parser, "_overview_", items)}
         elif isinstance(items, dict):
             cat_dict: Dict[str, WorldItem] = {}
-            for item_name, item_details in items.items():
+            for item_name_from_parser, item_details in items.items():
+                # item_name_from_parser is the display name like "The Red Key", "K"
+                # This becomes the 'name' argument for WorldItem.from_dict
+                # WorldItem model normalizes this for ID generation, stores original as .name
+                if not item_name_from_parser or not isinstance(item_name_from_parser, str) or not item_name_from_parser.strip():
+                    continue # Skip items with no valid name
+
                 if isinstance(item_details, dict):
                     if any(k != "modification_proposal" for k in item_details):
                         specific_elab_key = next((k for k in item_details if k.lower() == elaboration_key_standard.lower()), None)
                         if not specific_elab_key:
                             item_details[elaboration_key_standard] = (
-                                f"Item '{item_name}' in category '{category_name}' was mentioned or interacted with in Chapter {chapter_number}."
+                                f"Item '{item_name_from_parser}' in category '{category_name_from_parser}' was mentioned or interacted with in Chapter {chapter_number}."
                             )
                         elif specific_elab_key != elaboration_key_standard and item_details.get(specific_elab_key):
                             item_details[elaboration_key_standard] = item_details.pop(specific_elab_key)
-                    cat_dict[item_name] = WorldItem.from_dict(category_name, item_name, item_details)
+                    
+                    try:
+                        # Pass the category_name_from_parser and item_name_from_parser as they are.
+                        # WorldItem.from_dict will handle ID generation based on normalized versions.
+                        world_item_instance = WorldItem.from_dict(category_name_from_parser, item_name_from_parser, item_details)
+                        # The key in cat_dict should be the canonical ID to prevent overwrites if LLM gives "K" and "k"
+                        # which both normalize to the same WorldItem.id.
+                        # If two items from LLM output result in the same WorldItem.id, the later one's details will
+                        # overwrite the former's *at this parsing stage*. This merge is simple.
+                        cat_dict[world_item_instance.id] = world_item_instance
+                    except ValueError as e:
+                        # This can happen if WorldItem.from_dict raises error for empty name/category
+                        # (though we tried to pre-filter item_name_from_parser)
+                        logger.error(f"Skipping world item due to validation error during WorldItem creation: {e}. Category: '{category_name_from_parser}', Item Name from LLM: '{item_name_from_parser}'")
+
+
             if cat_dict:
-                results[category_name] = cat_dict
+                # Convert cat_dict from {id: WorldItem} to {name: WorldItem} for consistency with old structure,
+                # though this assumes names within a category (after WorldItem.from_dict name storage) are unique.
+                # If two items had different IDs but ended up with same .name and .category, one would be lost here.
+                # Better to keep cat_dict as {id: WorldItem} and let persist_world handle it.
+                # For now, to minimize changes to merge.py, we'll keep the old structure,
+                # but this could be a source of issues if two items get same ID but their original parsed names were different.
+                
+                # Let's change results to store by ID, and merge logic will need to adapt.
+                # No, merge_world_item_updates expects Dict[str, Dict[str, WorldItem]] where inner key is name.
+                # This means `parse_unified_world_updates` needs to ensure the keys of its *output* dictionary
+                # (for a given category) are unique display names.
+                # If two LLM items generate the same WorldItem.id (meaning they are the same logical item),
+                # then `cat_dict[world_item_instance.id] = world_item_instance` already handles merging them
+                # (last one wins).
+                # The final `results[category_name_from_parser]` should then be built using `world_item_instance.name` as key.
+                
+                final_cat_dict_by_name: Dict[str, WorldItem] = {}
+                for item_instance in cat_dict.values(): # cat_dict values are unique WorldItem instances by id
+                    if item_instance.name in final_cat_dict_by_name:
+                        logger.warning(f"During final structuring of parsed world items for category '{category_name_from_parser}', "
+                                       f"duplicate display name '{item_instance.name}' encountered for different IDs. "
+                                       f"ID {item_instance.id} will overwrite previous for this name. This implies an issue in LLM name consistency or parsing if IDs were meant to be different.")
+                    final_cat_dict_by_name[item_instance.name] = item_instance
+                
+                if final_cat_dict_by_name:
+                    results[category_name_from_parser] = final_cat_dict_by_name
     return results

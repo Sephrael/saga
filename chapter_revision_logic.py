@@ -1,3 +1,4 @@
+      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
@@ -11,27 +12,21 @@ from typing import Tuple, Optional, List, Dict, Any
 
 import config
 from llm_interface import llm_service, count_tokens, truncate_text_by_tokens
-# import drafting_agent # No longer directly instantiating DraftingAgent here.
-import utils # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy
+import utils # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
 from type import SceneDetail, ProblemDetail, PatchInstruction, EvaluationResult
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed() # Ensure spaCy model is loaded when this module is imported
 
 def _get_formatted_scene_plan_from_agent_or_fallback(
-    agent: Any, # This 'agent' is the orchestrator
+    # agent: Any, # This 'agent' is the orchestrator - No longer needed for this specific function
     chapter_plan: List[SceneDetail],
     model_name_for_tokens: str,
     max_tokens_budget: int
 ) -> str:
-    """Attempts to get formatted scene plan from agent (orchestrator, which might hold a drafting_agent instance or its methods) or uses a fallback."""
-    if hasattr(agent, 'drafting_agent') and hasattr(agent.drafting_agent, '_format_scene_plan_for_prompt'):
-        try:
-            return agent.drafting_agent._format_scene_plan_for_prompt(chapter_plan, model_name_for_tokens, max_tokens_budget)
-        except Exception as e:
-            logger.error(f"Error calling _format_scene_plan_for_prompt via agent.drafting_agent: {e}. Using fallback.")
-    
-    logger.warning("_get_formatted_scene_plan_from_agent_or_fallback: Using fallback scene plan formatting logic.")
+    """Formats a chapter plan into plain text for LLM prompts using the central utility."""
+    # The previous attempt to call agent.drafting_agent._format_scene_plan_for_prompt was incorrect
+    # as DraftingAgent does not have this method. The utility is in utils.py.
     return utils.format_scene_plan_for_prompt(chapter_plan, model_name_for_tokens, max_tokens_budget)
 
 
@@ -131,7 +126,7 @@ async def _generate_single_patch_instruction_llm(
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
         formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback( 
-            agent, chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt
+            chapter_plan, config.PATCH_GENERATION_MODEL, max_plan_tokens_for_patch_prompt # Removed agent argument
         )
         plan_focus_section_parts.append(formatted_plan)
         if "plan truncated" in formatted_plan:
@@ -611,8 +606,8 @@ async def revise_chapter_draft_logic(
         plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(agent, chapter_number)
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(
-                agent, chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite
+            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback( # Removed agent argument
+                chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite
             )
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
             if "plan truncated" in formatted_plan_fr:
@@ -749,3 +744,5 @@ async def revise_chapter_draft_logic(
 
     logger.info(f"Revision process for ch {chapter_number} produced a candidate text (Length: {len(final_revised_text)} chars).")
     return (final_revised_text, final_raw_llm_output), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
+
+    
