@@ -1,4 +1,11 @@
 # nana_orchestrator.py
+"""Central orchestration loop for the Saga story generator.
+
+This module coordinates initial setup, chapter generation, and knowledge graph
+updates.  It interacts with multiple agents to draft and revise chapters while
+persisting relevant state to the Neo4j knowledge graph.  The project is
+distributed under the Apache-2.0 license; see the LICENSE file for details.
+"""
 import logging
 import logging.handlers
 import os

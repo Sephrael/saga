@@ -30,10 +30,17 @@ def generate_character_node_cypher(profile: CharacterProfile) -> List[Tuple[str,
 
 
 def generate_world_element_node_cypher(item: WorldItem) -> Tuple[str, Dict[str, Any]]:
-    """Create Cypher for a single world element node."""
+    """Create Cypher for a single world element node.
+
+    Neo4j enforces a global uniqueness constraint on ``Entity.name``. To avoid
+    conflicts when a world element shares its name with another entity
+    (e.g. a character), we merge on ``name`` and simply set ``id`` as a
+    property.
+    """
+
     props = item.to_dict()
     props.update({"name": item.name, "category": item.category})
     return (
-        "MERGE (we:Entity {id: $id}) SET we:WorldElement SET we = $props",
-        {"id": item.id, "props": props},
+        "MERGE (we:Entity {name: $name}) SET we:WorldElement SET we += $props",
+        {"name": item.name, "props": props},
     )

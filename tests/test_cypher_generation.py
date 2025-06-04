@@ -16,4 +16,4 @@ def test_generate_world_element_node_cypher():
     item = WorldItem("places_city", "Places", "City", properties={"description": "Metropolis"})
     stmt, params = generate_world_element_node_cypher(item)
     assert "MERGE (we:Entity" in stmt
-    assert params["id"] == "places_city"
+    assert params["name"] == "City"
