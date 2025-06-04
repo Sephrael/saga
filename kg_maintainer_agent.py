@@ -6,7 +6,10 @@ license; see the LICENSE file for details.
 """
 
 import logging
-from typing import Dict
+from typing import Dict, Optional, Tuple
+
+from async_lru import alru_cache
+from llm_interface import llm_service
 
 import config
 from core_db.base_db_manager import neo4j_manager
@@ -22,6 +25,42 @@ from kg_maintainer import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
+async def _llm_summarize_full_chapter_text(
+    chapter_text: str, chapter_number: int
+) -> Tuple[str, Optional[Dict[str, int]]]:
+    """Summarize full chapter text via the configured LLM."""
+    prompt_lines = []
+    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        prompt_lines.append("/no_think")
+    prompt_lines.extend(
+        [
+            f"You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.",
+            "The summary should be 1-3 sentences long and capture the most crucial information.",
+            "Focus on what changed or was revealed.",
+            "",
+            "Full Chapter Text:",
+            "--- BEGIN TEXT ---",
+            chapter_text,
+            "--- END TEXT ---",
+            "",
+            "Output ONLY the summary text. No extra commentary or \"Summary:\" prefix.",
+        ]
+    )
+    prompt = "\n".join(prompt_lines)
+    summary, usage_data = await llm_service.async_call_llm(
+        model_name=config.SMALL_MODEL,
+        prompt=prompt,
+        temperature=config.TEMPERATURE_SUMMARY,
+        max_tokens=config.MAX_SUMMARY_TOKENS,
+        stream_to_disk=False,
+        frequency_penalty=config.FREQUENCY_PENALTY_SUMMARY,
+        presence_penalty=config.PRESENCE_PENALTY_SUMMARY,
+        auto_clean_response=True,
+    )
+    return summary.strip(), usage_data
 
 
 class KGMaintainerAgent:
@@ -68,4 +107,28 @@ class KGMaintainerAgent:
                 statements.append(generate_world_element_node_cypher(item))
         if statements:
             await neo4j_manager.execute_cypher_batch(statements)
+
+    async def summarize_chapter(
+        self, chapter_text: Optional[str], chapter_number: int
+    ) -> Tuple[Optional[str], Optional[Dict[str, int]]]:
+        """Summarize the provided chapter text using an LLM."""
+        if not chapter_text or len(chapter_text) < 50:
+            logger.warning(
+                "Chapter %s text too short for summarization (%d chars).",
+                chapter_number,
+                len(chapter_text or ""),
+            )
+            return None, None
+        cleaned_summary, usage = await _llm_summarize_full_chapter_text(
+            chapter_text, chapter_number
+        )
+        if cleaned_summary:
+            logger.info(
+                "Generated summary for ch %d: '%s...'",
+                chapter_number,
+                cleaned_summary[:100].strip(),
+            )
+            return cleaned_summary, usage
+        logger.warning("Failed to generate a valid summary for ch %d via LLM.", chapter_number)
+        return None, usage
 
