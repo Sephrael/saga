@@ -107,7 +107,7 @@ class KGMaintainerAgent:
         statements = []
         for cat_items in world.values():
             for item in cat_items.values():
-                statements.append(generate_world_element_node_cypher(item))
+                statements.extend(generate_world_element_node_cypher(item))
         if statements:
             await neo4j_manager.execute_cypher_batch(statements)
 
