@@ -198,7 +198,7 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
 
 async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: int) -> Optional[Dict[str, Any]]:
     query = f"""
-    MATCH (c:Character:Entity {name: $char_name_param})
+    MATCH (c:Character:Entity {{name: $char_name_param}})
     
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent:Entity)
     WHERE dev_np.chapter_updated <= $chapter_limit_param AND (dev_np.is_provisional IS NULL OR dev_np.is_provisional = FALSE)
@@ -234,7 +234,8 @@ async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: 
         if result and result[0]:
             record = result[0]
             dev_note = record.get("most_recent_development_note")
-            if dev_note is None: dev_note = "N/A"
+            if dev_note is None:
+                dev_note = "N/A"
 
             return {
                 "description": record.get("description"),
