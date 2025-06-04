@@ -1,4 +1,3 @@
-      
 # initial_setup_logic.py
 import logging
 import json # Retain for fallback or other JSON operations
@@ -703,7 +702,7 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
     try:
         # This import will fail if markdown_story_parser.py (containing parse_markdown_to_dict) is not available
         # and parse_markdown_to_dict hasn't been moved/redefined.
-        from markdown_story_parser import parse_markdown_to_dict
+        from markdown_story_parser import parse_markdown_to_dict 
         parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
         logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
     except ImportError:
