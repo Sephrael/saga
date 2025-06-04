@@ -158,8 +158,8 @@ _HIERARCHICAL_STRICT_WORLD_CATEGORIES = ["Overview", "Locations", "Factions", "S
 _COMPILED_CATEGORY_ALTERNATION = "|".join(cat for cat in _HIERARCHICAL_STRICT_WORLD_CATEGORIES)
 
 WORLD_CATEGORY_HEADER_PATTERN = re.compile(
-   r"^\s*(?:Category\s*:\s*)?(?:\*\*)?(" + _COMPILED_CATEGORY_ALTERNATION + r")(?:\*\*)?\s*:\s*$",
-   re.IGNORECASE | re.MULTILINE | re.UNICODE 
+   r"^\s*(?:Category\s*:\s*)?(?:\*\*)?(" + _COMPILED_CATEGORY_ALTERNATION + r")(?:\*\*)?\s*:?\s*$",
+   re.IGNORECASE | re.MULTILINE | re.UNICODE
 )
 
 # Potential simplified pattern for testing if the main one mysteriously fails
@@ -170,10 +170,10 @@ SIMPLER_WORLD_CATEGORY_HEADER_PATTERN = re.compile(
 )
 
 WORLD_ITEM_HEADER_PATTERN = re.compile(
-    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?:\s*(.*)$"
+    r"^\s*(?:Item\s*:\s*)?(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?\s*:?\s*(.*)$"
 )
 WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL = re.compile(
-    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?(?::\s*)?$"
+    r"^\s*(?:Item\s*:\s*)?(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?\s*:?\s*$"
 )
 
 def parse_hierarchical_structured_text(
