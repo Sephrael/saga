@@ -11,18 +11,7 @@ class ParseError(Exception):
     """Custom exception for parsing errors."""
     pass
 
-# Default regex for splitting blocks (e.g., by "---")
-DEFAULT_BLOCK_SEPARATOR_REGEX = r'\n\s*---\s*\n'
-
-def split_text_into_blocks(
-    text: str,
-    separator_regex_str: str = DEFAULT_BLOCK_SEPARATOR_REGEX,
-    flags: int = re.MULTILINE
-) -> List[str]:
-    if not text or not text.strip():
-        return []
-    blocks = re.split(separator_regex_str, text.strip(), flags=flags)
-    return [block.strip() for block in blocks if block and block.strip()]
+# DEFAULT_BLOCK_SEPARATOR_REGEX and split_text_into_blocks removed as they are no longer used.
 
 # --- New RDF Triple Parsing using rdflib ---
 

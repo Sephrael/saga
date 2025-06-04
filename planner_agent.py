@@ -14,7 +14,8 @@ from prompt_data_getters import (
 )
 # from state_manager import state_manager # No longer directly used
 from data_access import chapter_queries # For get_chapter_data_from_db
-from parsing_utils import split_text_into_blocks, parse_key_value_block
+# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
+import json # Added for JSON parsing
 
 logger = logging.getLogger(__name__)
 
@@ -29,113 +30,100 @@ SCENE_PLAN_KEY_MAP = {
     "contribution": "contribution"
 }
 SCENE_PLAN_LIST_INTERNAL_KEYS = ["key_dialogue_points", "scene_focus_elements", "characters_involved"]
-SCENE_PLAN_SPECIAL_LIST_HANDLING = {
-    "characters_involved": {"separator": ","}
-}
+# SCENE_PLAN_SPECIAL_LIST_HANDLING removed as JSON should provide lists directly.
 
 class PlannerAgent:
     def __init__(self, model_name: str = config.PLANNING_MODEL):
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
 
-    def _parse_llm_scene_plan_output(self, text: str, chapter_number: int) -> Optional[List[SceneDetail]]:
+    def _parse_llm_scene_plan_output(self, json_text: str, chapter_number: int) -> Optional[List[SceneDetail]]:
         """
-        Parses plain text scene plan output from LLM using generalized parsing utilities.
+        Parses JSON scene plan output from LLM.
+        Expects a JSON array of scene objects.
         """
-        scenes_data: List[Dict[str, Any]] = []
-        if not text or not text.strip():
-            logger.warning(f"Plain text scene plan for Ch {chapter_number} is empty. No scenes parsed.")
+        if not json_text or not json_text.strip():
+            logger.warning(f"JSON scene plan for Ch {chapter_number} is empty. No scenes parsed.")
             return None
 
-        # Pre-process: Remove potential markdown code block wrappers if LLM added them
-        cleaned_text_for_parsing = text
-        code_block_match = re.match(r"^\s*```(?:plaintext)?\s*\n(.*?)\n\s*```\s*$", text, re.DOTALL | re.IGNORECASE)
-        if code_block_match:
-            logger.debug(f"Removing markdown code block wrapper from scene plan output for Ch {chapter_number}.")
-            cleaned_text_for_parsing = code_block_match.group(1).strip()
-        
-        if not cleaned_text_for_parsing.strip():
-            logger.warning(f"Scene plan text became empty after removing code block wrapper for Ch {chapter_number}.")
-            return None
-
-        # Primary split by "---"
-        scene_blocks_text = split_text_into_blocks(cleaned_text_for_parsing, separator_regex_str=r'\n\s*---\s*\n')
-        
-        # Fallback split logic: if "---" isn't used effectively, try splitting by "SCENE:"
-        first_block_is_scene_like = False
-        if scene_blocks_text:
-            first_block_is_scene_like = re.match(r"^\s*(SCENE|Scene Number):\s*\d+", scene_blocks_text[0].strip(), re.IGNORECASE) is not None
-
-        if not scene_blocks_text or (len(scene_blocks_text) == 1 and not first_block_is_scene_like):
-            logger.debug(f"Primary '---' split for Ch {chapter_number} yielded {len(scene_blocks_text)} blocks (first block scene-like: {first_block_is_scene_like}). Attempting fallback split by 'SCENE:' header.")
-            individual_scene_matches = re.finditer(r"(?s)((?:SCENE|Scene Number):\s*\d+.*?)(?=(?:\s*(?:SCENE|Scene Number):\s*\d+|$))", cleaned_text_for_parsing, re.IGNORECASE | re.MULTILINE)
-            scene_blocks_text = [match.group(1).strip() for match in individual_scene_matches]
-            if scene_blocks_text:
-                logger.info(f"Fallback split for Ch {chapter_number} by 'SCENE:' header yielded {len(scene_blocks_text)} potential scene blocks.")
+        try:
+            parsed_data = json.loads(json_text)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode JSON scene plan for Ch {chapter_number}: {e}. Text: {json_text[:500]}...")
+            # Try to find a JSON array within the text if LLM wrapped it
+            match = re.search(r'\[\s*\{.*\}\s*\]', json_text, re.DOTALL)
+            if match:
+                logger.info("Found a JSON array within the malformed JSON string. Attempting to parse that.")
+                try:
+                    parsed_data = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    logger.error(f"Still failed to parse extracted JSON array for Ch {chapter_number}.")
+                    return None
             else:
-                logger.warning(f"Fallback split by 'SCENE:' header for Ch {chapter_number} also yielded no blocks. Original text snippet: '{cleaned_text_for_parsing[:300]}...'")
+                return None
 
 
-        if not scene_blocks_text:
-            logger.warning(f"No scene blocks found for Ch {chapter_number} after attempting primary and fallback splits.")
+        if not isinstance(parsed_data, list):
+            logger.warning(f"Parsed scene plan for Ch {chapter_number} is not a list as expected. Type: {type(parsed_data)}. Data: {str(parsed_data)[:300]}")
             return None
 
-        for block_num, block_content in enumerate(scene_blocks_text):
-            if not block_content.strip():
-                continue
-            logger.debug(f"Parsing scene block {block_num+1} for Ch {chapter_number}:\n{block_content[:200]}...")
-            
-            if not re.match(r"^\s*(SCENE|Scene Number):\s*\d+", block_content.strip(), re.IGNORECASE):
-                logger.warning(f"Scene block {block_num+1} for Ch {chapter_number} does not start with a valid 'SCENE:' or 'Scene Number:' header. Skipping block. Content: '{block_content[:100]}...'")
+        if not parsed_data: # Empty list
+            logger.warning(f"Parsed scene plan for Ch {chapter_number} is an empty list.")
+            return None
+
+        scenes_data: List[SceneDetail] = []
+        for i, scene_item in enumerate(parsed_data):
+            if not isinstance(scene_item, dict):
+                logger.warning(f"Scene item {i+1} in Ch {chapter_number} is not a dictionary. Skipping. Item: {str(scene_item)[:100]}")
                 continue
 
-            parsed_scene_dict = parse_key_value_block(
-                block_text_or_lines=block_content,
-                key_map=SCENE_PLAN_KEY_MAP,
-                list_internal_keys=SCENE_PLAN_LIST_INTERNAL_KEYS,
-                special_list_handling=SCENE_PLAN_SPECIAL_LIST_HANDLING
-            )
+            # Map keys from JSON to SceneDetail keys, defaulting to original if not in map
+            # Prefer LLM to output keys matching SceneDetail directly.
+            processed_scene_dict: Dict[str, Any] = {}
+            for llm_key, value in scene_item.items():
+                internal_key = SCENE_PLAN_KEY_MAP.get(llm_key.lower().replace(" ", "_"), llm_key)
+                processed_scene_dict[internal_key] = value
 
-            if "scene_number" not in parsed_scene_dict or not isinstance(parsed_scene_dict["scene_number"], int):
-                scene_num_match = re.match(r"^\s*(?:SCENE|Scene Number):\s*(\d+)", block_content.strip(), re.IGNORECASE)
-                if scene_num_match:
-                    try:
-                        parsed_scene_dict["scene_number"] = int(scene_num_match.group(1))
-                        logger.info(f"Successfully regex-extracted scene_number {parsed_scene_dict['scene_number']} for block {block_num+1} Ch {chapter_number}.")
-                    except ValueError:
-                         logger.warning(f"Regex extracted non-integer scene_number '{scene_num_match.group(1)}' for block {block_num+1} Ch {chapter_number}.")
-                
-                if "scene_number" not in parsed_scene_dict or not isinstance(parsed_scene_dict["scene_number"], int):
-                    assigned_scene_num = len(scenes_data) + 1
-                    logger.warning(
-                        f"Scene block {block_num+1} in Ch {chapter_number} missing or invalid 'scene_number' after primary parse and regex fallback. "
-                        f"Assigning sequential: {assigned_scene_num}. Parsed value: {parsed_scene_dict.get('scene_number')}"
-                    )
-                    parsed_scene_dict["scene_number"] = assigned_scene_num
+            # Validate essential keys and types
+            scene_num = processed_scene_dict.get("scene_number")
+            if not isinstance(scene_num, int):
+                logger.warning(f"Scene {i+1} in Ch {chapter_number} has invalid or missing 'scene_number'. Assigning {i+1}. Value: {scene_num}")
+                processed_scene_dict["scene_number"] = i + 1 # Assign sequential if missing/invalid
             
-            missing_keys = set(SCENE_PLAN_KEY_MAP.values()) - set(parsed_scene_dict.keys())
-            if missing_keys:
-                logger.warning(f"Partial scene data parsed for Ch {chapter_number}, block {block_num+1} (Scene Num: {parsed_scene_dict.get('scene_number', 'N/A')}). Missing keys: {missing_keys}. Data: {parsed_scene_dict}")
-                for req_key in missing_keys: 
-                    if req_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
-                        parsed_scene_dict[req_key] = []
-                    elif req_key == "scene_number": pass 
-                    else: parsed_scene_dict[req_key] = "N/A - Missing from LLM output"
-            
+            summary = processed_scene_dict.get("summary")
+            if not isinstance(summary, str) or not summary.strip():
+                logger.warning(f"Scene {scene_num} in Ch {chapter_number} has invalid or missing 'summary'. Skipping.")
+                continue
+
+            # Ensure list types for specific fields
             for list_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
-                if not isinstance(parsed_scene_dict.get(list_key), list):
-                    logger.warning(f"Scene {parsed_scene_dict.get('scene_number', 'N/A')} in Ch {chapter_number} has non-list for '{list_key}'. Correcting. Value: {parsed_scene_dict.get(list_key)}")
-                    parsed_scene_dict[list_key] = [str(parsed_scene_dict.get(list_key))] if parsed_scene_dict.get(list_key) else []
+                val = processed_scene_dict.get(list_key)
+                if isinstance(val, str): # If LLM gave comma-separated string
+                    processed_scene_dict[list_key] = [v.strip() for v in val.split(',') if v.strip()]
+                elif not isinstance(val, list):
+                    processed_scene_dict[list_key] = [str(val)] if val is not None else []
 
-            scenes_data.append(parsed_scene_dict)
+
+            # Fill missing optional keys with defaults
+            for key_internal_name in SCENE_PLAN_KEY_MAP.values():
+                if key_internal_name not in processed_scene_dict:
+                    if key_internal_name in SCENE_PLAN_LIST_INTERNAL_KEYS:
+                        processed_scene_dict[key_internal_name] = []
+                    else:
+                        processed_scene_dict[key_internal_name] = "N/A - Missing from LLM JSON"
+            
+            # Ensure all SceneDetail keys are present, even if some were not in SCENE_PLAN_KEY_MAP
+            # This is important if SceneDetail has more fields than the map covers.
+            # For now, assuming SCENE_PLAN_KEY_MAP covers all required fields of SceneDetail.
+            
+            scenes_data.append(processed_scene_dict) # type: ignore
 
         if not scenes_data:
-            logger.error(f"Failed to parse any valid scenes from LLM output for Ch {chapter_number}. Cleaned text for parsing: '{cleaned_text_for_parsing[:500]}...'")
+            logger.warning(f"No valid scenes parsed from JSON for Ch {chapter_number}.")
             return None
         
         scenes_data.sort(key=lambda x: x.get("scene_number", float('inf')))
-        
-        return [scene for scene in scenes_data if isinstance(scene, dict)] # type: ignore
+        return scenes_data
 
     async def plan_chapter_scenes(
         self,
@@ -193,33 +181,43 @@ class PlannerAgent:
                     future_plot_context_parts.append(f"**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}\n")
         future_plot_context_str = "".join(future_plot_context_parts)
 
-        few_shot_scene_plan_example_str = f"""
-SCENE: 1
-SUMMARY: Elara arrives at the Sunken Library, finding its entrance hidden and guarded by an ancient riddle.
-CHARACTERS INVOLVED: Elara Vance
-KEY DIALOGUE POINTS:
-- Elara (internal): "This riddle... it speaks of starlight and shadow. What reflects both?"
-- Elara (to herself, solving): "The water! The entrance must be beneath the lake's surface."
-SETTING DETAILS: A mist-shrouded, unnaturally still lake. Crumbling, moss-covered ruins of a tower are visible on a small island in the center.
-SCENE FOCUS ELEMENTS:
-- Elara's deductive reasoning to solve the riddle.
-- Building atmosphere of mystery and ancient magic around the library.
-CONTRIBUTION: Introduces the challenge of accessing the Sunken Library and showcases Elara's intellect.
----
-SCENE: 2
-SUMMARY: Elara meets Master Kael, the library's ancient archivist, who tests her worthiness before revealing information about the Starfall Map.
-CHARACTERS INVOLVED: Elara Vance, Master Kael
-KEY DIALOGUE POINTS:
-- Kael: "Many seek what is lost. Few understand its price. Why do you search, child of the shifting stars?"
-- Elara: "I seek knowledge not for power, but to mend what was broken."
-- Kael: "A noble sentiment. The map's first secret lies in the reflection of true north..."
-SETTING DETAILS: Inside the Sunken Library's main chamber: vast, circular, dimly lit by glowing runes on the walls and bioluminescent moss. Water drips softly.
-SCENE FOCUS ELEMENTS:
-- The cryptic nature and wisdom of Master Kael.
-- The initial reveal of a clue related to the Starfall Map.
-CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (or gatekeeper) in Kael, advancing the plot point about finding the map.
+        # This whole block will replace the existing few_shot_scene_plan_example_str
+        few_shot_scene_plan_example_str = """
+[
+  {
+    "scene_number": 1,
+    "summary": "Elara arrives at the Sunken Library, finding its entrance hidden and guarded by an ancient riddle.",
+    "characters_involved": ["Elara Vance"],
+    "key_dialogue_points": [
+      "Elara (internal): \\"This riddle... it speaks of starlight and shadow. What reflects both?\\"",
+      "Elara (to herself, solving): \\"The water! The entrance must be beneath the lake's surface.\\""
+    ],
+    "setting_details": "A mist-shrouded, unnaturally still lake. Crumbling, moss-covered ruins of a tower are visible on a small island in the center.",
+    "scene_focus_elements": [
+      "Elara's deductive reasoning to solve the riddle.",
+      "Building atmosphere of mystery and ancient magic around the library."
+    ],
+    "contribution": "Introduces the challenge of accessing the Sunken Library and showcases Elara's intellect."
+  },
+  {
+    "scene_number": 2,
+    "summary": "Elara meets Master Kael, the library's ancient archivist, who tests her worthiness before revealing information about the Starfall Map.",
+    "characters_involved": ["Elara Vance", "Master Kael"],
+    "key_dialogue_points": [
+      "Kael: \\"Many seek what is lost. Few understand its price. Why do you search, child of the shifting stars?\\"",
+      "Elara: \\"I seek knowledge not for power, but to mend what was broken.\\"",
+      "Kael: \\"A noble sentiment. The map's first secret lies in the reflection of true north...\\""
+    ],
+    "setting_details": "Inside the Sunken Library's main chamber: vast, circular, dimly lit by glowing runes on the walls and bioluminescent moss. Water drips softly.",
+    "scene_focus_elements": [
+      "The cryptic nature and wisdom of Master Kael.",
+      "The initial reveal of a clue related to the Starfall Map."
+    ],
+    "contribution": "Elara gains a crucial piece of information and a potential ally (or gatekeeper) in Kael, advancing the plot point about finding the map."
+  }
+]
 """
-
+        # Note: The user/developer needs to update the actual LLM prompt to request JSON.
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
@@ -253,29 +251,26 @@ CONTRIBUTION: Elara gains a crucial piece of information and a potential ally (o
             "**Task:**",
             f"Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}.",
             "These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.",
-            "For each scene in the plan, provide the following information using clear labels (case-insensitive keys are fine, but use these display names):",
-            "- `SCENE:` (Sequential number for the scene within this chapter, or `Scene Number:`)",
-            "- `SUMMARY:`",
-            "- `CHARACTERS INVOLVED:` (Comma-separated list)",
-            "- `KEY DIALOGUE POINTS:` (List, each on a new line starting with \"- \")",
-            "- `SETTING DETAILS:`",
-            "- `SCENE FOCUS ELEMENTS:` (List, each on a new line starting with \"- \")",
-            "- `CONTRIBUTION:`",
+            "**Task:**",
+            f"Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}, formatted as a JSON array of scene objects.",
+            "These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.",
+            "Each scene object in the JSON array must have the following keys: "
+            "\\"scene_number\\" (integer), \\"summary\\" (string), \\"characters_involved\\" (array of strings), "
+            "\\"key_dialogue_points\\" (array of strings), \\"setting_details\\" (string), "
+            "\\"scene_focus_elements\\" (array of strings), \\"contribution\\" (string).",
             "",
-            "Separate each complete scene block with a line containing only \"---\". If you don't use \"---\", ensure each scene starts clearly with \"SCENE: <number>\" or \"Scene Number: <number>\".",
-            "",
-            "**Follow this example structure for your output precisely:**",
-            "```plaintext",
+            "**Follow this example structure for your JSON output precisely:**",
+            "```json",
             few_shot_scene_plan_example_str.strip(),
             "```",
             "",
-            "Output ONLY the scene plan text as described."
+            "Output ONLY the JSON array of scene objects."
         ])
         prompt = "\n".join(prompt_lines)
 
-        logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
+        logger.info(f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index+1}/{total_plot_points_in_novel}.")
         
-        cleaned_plan_text_from_llm, usage_data = await llm_service.async_call_llm( 
+        cleaned_plan_text_from_llm, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_PLANNING, 
