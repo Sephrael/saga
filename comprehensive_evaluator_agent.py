@@ -185,7 +185,7 @@ class ComprehensiveEvaluatorAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
-        # Updated few-shot example to JSON format
+        # This whole block will replace the existing few_shot_eval_example_str
         few_shot_eval_example_str = """
 [
   {
@@ -254,10 +254,10 @@ class ComprehensiveEvaluatorAgent:
             "--- END COMPLETE CHAPTER TEXT ---",
             "",
             "**Output Format (CRITICAL - JSON ONLY):**",
-            "Provide your evaluation as a JSON array of problem objects. Each object must have these keys: \\"issue_category\\", \\"problem_description\\", \\"quote_from_original_text\\", \\"suggested_fix_focus\\".",
+            "Provide your evaluation as a JSON array of problem objects. Each object must have these keys: "issue_category", "problem_description", "quote_from_original_text", "suggested_fix_focus".",
             "For `issue_category`, use one of the EXACT category names: CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH.",
-            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \\"N/A - General Issue\\".",
-            "If NO problems are found, output an empty JSON array `[]` or a JSON object like `{\\"status\\": \\"No significant problems found\\"}`.",
+            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".",
+            "If NO problems are found, output an empty JSON array `[]` or a JSON object like `{"status": "No significant problems found"}`.",
             "",
             "**Follow this example structure for your JSON output precisely:**",
             "```json",
