@@ -17,3 +17,14 @@ def test_generate_world_element_node_cypher():
     stmt, params = generate_world_element_node_cypher(item)
     assert "MERGE (we:Entity" in stmt
     assert params["name"] == "City"
+
+
+def test_generate_world_element_node_cypher_nested_props():
+    item = WorldItem(
+        "places_forest",
+        "Places",
+        "Echo Forest",
+        properties={"history": {"echo_keepers": "Keepers"}},
+    )
+    _, params = generate_world_element_node_cypher(item)
+    assert isinstance(params["props"]["history"], str)
