@@ -6,13 +6,16 @@ license; see the LICENSE file for details.
 """
 
 import logging
-from typing import Dict, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache
 from llm_interface import llm_service
 
 import config
 from core_db.base_db_manager import neo4j_manager
+from data_access import kg_queries
+from parsing_utils import parse_kg_triples_from_text
 from kg_maintainer import (
     CharacterProfile,
     WorldItem,
@@ -131,4 +134,145 @@ class KGMaintainerAgent:
             return cleaned_summary, usage
         logger.warning("Failed to generate a valid summary for ch %d via LLM.", chapter_number)
         return None, usage
+
+    async def _llm_extract_updates(
+        self, novel_props: Dict[str, Any], chapter_text: str, chapter_number: int
+    ) -> Tuple[str, Optional[Dict[str, int]]]:
+        """Call the LLM to extract structured updates from chapter text."""
+        prompt_lines: List[str] = []
+        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+            prompt_lines.append("/no_think")
+
+        protagonist = novel_props.get("protagonist_name", config.DEFAULT_PROTAGONIST_NAME)
+        prompt_lines.extend(
+            [
+                "You analyze the following chapter text and extract updates for the knowledge graph.",
+                f"Protagonist: {protagonist}",
+                "Output plain text in three sections using these headers exactly:",
+                "### CHARACTER UPDATES ###",
+                "### WORLD UPDATES ###",
+                "### KG TRIPLES ###",
+                "Provide character updates using the format 'Character: Name' followed by key/value lines.",
+                "World updates are grouped by 'Category: <name>' then 'Item: <item name>' blocks.",
+                "List KG triples one per line using 'Subject | Predicate | Object'.",
+                "--- BEGIN CHAPTER TEXT ---",
+                chapter_text,
+                "--- END CHAPTER TEXT ---",
+            ]
+        )
+        prompt = "\n".join(prompt_lines)
+        text, usage = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=prompt,
+            temperature=config.TEMPERATURE_KG_EXTRACTION,
+            max_tokens=config.MAX_KG_TRIPLE_TOKENS,
+            allow_fallback=True,
+            stream_to_disk=False,
+            frequency_penalty=config.FREQUENCY_PENALTY_KG_EXTRACTION,
+            presence_penalty=config.PRESENCE_PENALTY_KG_EXTRACTION,
+            auto_clean_response=True,
+        )
+        return text, usage
+
+    async def extract_and_merge_knowledge(
+        self,
+        novel_props: Dict[str, Any],
+        chapter_number: int,
+        chapter_text: str,
+        is_from_flawed_draft: bool = False,
+    ) -> Optional[Dict[str, int]]:
+        """Extract knowledge from chapter text, merge into state, and persist."""
+        if not chapter_text:
+            logger.warning(
+                "Skipping knowledge extraction for chapter %s: no text provided.",
+                chapter_number,
+            )
+            return None
+
+        logger.info(
+            "KGMaintainerAgent extracting knowledge for chapter %d", chapter_number
+        )
+
+        raw_text, usage = await self._llm_extract_updates(
+            novel_props, chapter_text, chapter_number
+        )
+
+        sections = re.split(r"^\s*###\s*([\w\s]+?)\s*###\s*$", raw_text, flags=re.IGNORECASE | re.MULTILINE)
+        parsed: Dict[str, str] = {}
+        current = None
+        for i in range(1, len(sections)):
+            if i % 2 == 1:
+                header = sections[i].strip().lower()
+                if "character" in header:
+                    current = "character_updates"
+                elif "world" in header:
+                    current = "world_updates"
+                elif "kg" in header:
+                    current = "kg_triples"
+                else:
+                    current = None
+            elif current:
+                parsed[current] = sections[i].strip()
+                current = None
+
+        char_updates = self.parse_character_updates(
+            parsed.get("character_updates", ""), chapter_number
+        )
+        world_updates = self.parse_world_updates(
+            parsed.get("world_updates", ""), chapter_number
+        )
+        kg_triples = parse_kg_triples_from_text(parsed.get("kg_triples", ""))
+
+        # Convert current novel state into dataclasses
+        current_profiles: Dict[str, CharacterProfile] = {}
+        for name, data in novel_props.get("character_profiles", {}).items():
+            if isinstance(data, CharacterProfile):
+                current_profiles[name] = data
+            elif isinstance(data, dict):
+                current_profiles[name] = CharacterProfile.from_dict(name, data)
+
+        current_world: Dict[str, Dict[str, WorldItem]] = {}
+        for cat, items in novel_props.get("world_building", {}).items():
+            if not isinstance(items, dict):
+                continue
+            cat_dict: Dict[str, WorldItem] = {}
+            for item_name, item_data in items.items():
+                if isinstance(item_data, WorldItem):
+                    cat_dict[item_name] = item_data
+                elif isinstance(item_data, dict):
+                    cat_dict[item_name] = WorldItem.from_dict(cat, item_name, item_data)
+            if cat_dict:
+                current_world[cat] = cat_dict
+
+        self.merge_updates(
+            current_profiles,
+            current_world,
+            char_updates,
+            world_updates,
+            chapter_number,
+            is_from_flawed_draft,
+        )
+
+        await self.persist_profiles(char_updates)
+        await self.persist_world(world_updates)
+
+        if kg_triples:
+            triples_data = [
+                (s, p, o, chapter_number, 1.0, is_from_flawed_draft)
+                for s, p, o in kg_triples
+            ]
+            await kg_queries.add_kg_triples_batch_to_db(triples_data)
+
+        novel_props["character_profiles"] = {
+            name: prof.to_dict() for name, prof in current_profiles.items()
+        }
+        novel_props["world_building"] = {
+            cat: {n: item.to_dict() for n, item in items.items()}
+            for cat, items in current_world.items()
+        }
+
+        logger.info(
+            "Knowledge extraction and merge complete for chapter %d", chapter_number
+        )
+        return usage
 

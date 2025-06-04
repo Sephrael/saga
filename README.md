@@ -21,7 +21,7 @@ SAGA, with its NANA engine, is an ambitious project designed to autonomously cra
 *   **`ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality.
 *   **`WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories within the narrative.
 *   **`ChapterRevisionLogic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.
-*   **`KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It extracts new information, summarizes chapters, and pre-populates the graph with initial story data.
+*   **`KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, pre-populates the graph with initial story data, and exposes an `extract_and_merge_knowledge` method to parse new chapters and persist updates.
 *   **`kg_maintainer` utilities:** Provide dataclass models and helper functions for parsing, merging, and generating Cypher statements used by `KGMaintainerAgent`.
 
 SAGA constructs a dynamic, interconnected understanding of the story's world, characters, and plot. This evolving knowledge, stored and queried from a Neo4j graph database, enables the system to maintain greater consistency, depth, and narrative cohesion as the story unfolds over many chapters.
