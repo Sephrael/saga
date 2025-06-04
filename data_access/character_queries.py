@@ -4,6 +4,11 @@ import logging
 from typing import Dict, Any, List, Tuple, Optional
 import config
 from core_db.base_db_manager import neo4j_manager
+from kg_constants import (
+    KG_REL_CHAPTER_ADDED,
+    KG_NODE_CHAPTER_UPDATED,
+    KG_IS_PROVISIONAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +85,8 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
                     rel_props_for_set = {"description": rel_detail}
                 
                 source_chapter_key = f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
-                rel_props_for_set.setdefault("chapter_added", profile.get(source_chapter_key, config.KG_PREPOPULATION_CHAPTER_NUM))
-                rel_props_for_set.setdefault("is_provisional", profile.get(source_chapter_key) == "provisional_from_unrevised_draft")
+                rel_props_for_set.setdefault(KG_REL_CHAPTER_ADDED, profile.get(source_chapter_key, config.KG_PREPOPULATION_CHAPTER_NUM))
+                rel_props_for_set.setdefault(KG_IS_PROVISIONAL, profile.get(source_chapter_key) == "provisional_from_unrevised_draft")
 
                 statements.append((
                     """
@@ -107,11 +112,11 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
                     chap_num_int = int(key.split("_")[-1])
                     dev_event_props = {
                         "summary": value_str,
-                        "chapter_updated": chap_num_int
+                        KG_NODE_CHAPTER_UPDATED: chap_num_int,
                     }
                     provisional_dev_key = f"source_quality_chapter_{chap_num_int}"
                     if profile.get(provisional_dev_key) == "provisional_from_unrevised_draft":
-                        dev_event_props["is_provisional"] = True
+                        dev_event_props[KG_IS_PROVISIONAL] = True
                     
                     statements.append((
                         """
@@ -192,8 +197,8 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
     return profiles_data
 
 async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: int) -> Optional[Dict[str, Any]]:
-    query = """
-    MATCH (c:Character:Entity {name: $char_name_param})
+    query = f"""
+    MATCH (c:Character:Entity {{name: $char_name_param}})
     
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent:Entity)
     WHERE dev_np.chapter_updated <= $chapter_limit_param AND (dev_np.is_provisional IS NULL OR dev_np.is_provisional = FALSE)
@@ -212,24 +217,25 @@ async def get_character_info_for_snippet_from_db(char_name: str, chapter_limit: 
          END AS latest_dev_event
 
     OPTIONAL MATCH (c)-[prov_rel:DYNAMIC_REL]-(:Entity)
-    WHERE prov_rel.chapter_added <= $chapter_limit_param AND prov_rel.is_provisional = TRUE
+    WHERE prov_rel.{KG_REL_CHAPTER_ADDED} <= $chapter_limit_param AND prov_rel.{KG_IS_PROVISIONAL} = TRUE
     
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(any_prov_dev:DevelopmentEvent:Entity)
-    WHERE any_prov_dev.chapter_updated <= $chapter_limit_param AND any_prov_dev.is_provisional = TRUE
+    WHERE any_prov_dev.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param AND any_prov_dev.{KG_IS_PROVISIONAL} = TRUE
     
     RETURN c.description AS description,
            c.status AS current_status,
            latest_dev_event.summary AS most_recent_development_note,
            (c.is_provisional = TRUE OR prov_rel IS NOT NULL OR any_prov_dev IS NOT NULL) AS is_provisional_overall
     LIMIT 1
-    """ 
+    """
     params = {"char_name_param": char_name, "chapter_limit_param": chapter_limit}
     try:
         result = await neo4j_manager.execute_read_query(query, params)
         if result and result[0]:
             record = result[0]
             dev_note = record.get("most_recent_development_note")
-            if dev_note is None: dev_note = "N/A"
+            if dev_note is None:
+                dev_note = "N/A"
 
             return {
                 "description": record.get("description"),

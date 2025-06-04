@@ -1,4 +1,11 @@
 # nana_orchestrator.py
+"""Central orchestration loop for the Saga story generator.
+
+This module coordinates initial setup, chapter generation, and knowledge graph
+updates.  It interacts with multiple agents to draft and revise chapters while
+persisting relevant state to the Neo4j knowledge graph.  The project is
+distributed under the Apache-2.0 license; see the LICENSE file for details.
+"""
 import logging
 import logging.handlers
 import os
@@ -16,14 +23,14 @@ from data_access import (
     character_queries,
     world_queries,
     chapter_queries,
-    kg_queries
 )
-from type import EvaluationResult, SceneDetail, ProblemDetail, AgentStateData
+from type import EvaluationResult, SceneDetail
 
 from comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from planner_agent import PlannerAgent
 from drafting_agent import DraftingAgent
 from kg_maintainer_agent import KGMaintainerAgent
+from kg_maintainer import CharacterProfile, WorldItem
 from world_continuity_agent import WorldContinuityAgent
 
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
@@ -270,10 +277,29 @@ class NANA_Orchestrator:
             logger.info(f"Skipping KG pre-population: Plot outline source '{plot_source}' does not indicate it's ready for KG, and it's not a default plot.")
             return
 
-        logger.info(f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---")
-        await self.kg_maintainer_agent.prepopulate_kg_from_initial_data(
-            self.plot_outline, self.character_profiles, self.world_building
+        logger.info(
+            f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---"
         )
+
+        profile_objs = {
+            name: CharacterProfile.from_dict(name, data)
+            for name, data in self.character_profiles.items()
+            if isinstance(data, dict)
+        }
+
+        world_objs: Dict[str, Dict[str, WorldItem]] = {}
+        for cat, items in self.world_building.items():
+            if not isinstance(items, dict):
+                continue
+            cat_dict: Dict[str, WorldItem] = {}
+            for item_name, item_data in items.items():
+                if isinstance(item_data, dict):
+                    cat_dict[item_name] = WorldItem.from_dict(cat, item_name, item_data)
+            if cat_dict:
+                world_objs[cat] = cat_dict
+
+        await self.kg_maintainer_agent.persist_profiles(profile_objs)
+        await self.kg_maintainer_agent.persist_world(world_objs)
         logger.info("   Knowledge Graph pre-population step complete.")
         self._update_rich_display(step="KG Pre-population Complete")
 

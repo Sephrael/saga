@@ -3,6 +3,11 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
+from kg_constants import (
+    KG_IS_PROVISIONAL,
+    KG_NODE_CREATED_CHAPTER,
+)
+
 @dataclass
 class CharacterProfile:
     """Structured information about a character."""
@@ -46,16 +51,25 @@ class WorldItem:
     @classmethod
     def from_dict(cls, category: str, name: str, data: Dict[str, Any]) -> "WorldItem":
         item_id = data.get("id", f"{category}_{name}")
-        created_chapter = int(data.get("created_chapter", 0))
-        is_provisional = bool(data.get("is_provisional", False))
-        props = {k: v for k, v in data.items() if k not in {"id", "created_chapter", "is_provisional"}}
+
+        created_chapter = int(data.get(KG_NODE_CREATED_CHAPTER, 0))
+        is_provisional = bool(data.get(KG_IS_PROVISIONAL, False))
+        props = {
+            k: v
+            for k, v in data.items()
+            if k not in {"id", KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL}
+        }
+
         return cls(item_id, category, name, created_chapter, is_provisional, props)
 
     def to_dict(self) -> Dict[str, Any]:
         data = {
             "id": self.id,
+            KG_NODE_CREATED_CHAPTER: self.created_chapter,
+            KG_IS_PROVISIONAL: self.is_provisional,
             "created_chapter": self.created_chapter,
             "is_provisional": self.is_provisional,
+
         }
         data.update(self.properties)
         return data

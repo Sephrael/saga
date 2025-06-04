@@ -3,6 +3,10 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 import config
 from core_db.base_db_manager import neo4j_manager
+from kg_constants import (
+    KG_REL_CHAPTER_ADDED,
+    KG_IS_PROVISIONAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +24,20 @@ async def add_kg_triple_to_db(
         return
 
     # Refined: Use direct MERGE with ON CREATE / ON MATCH for relationship upsert
-    query = """
-    MERGE (s:Entity {name: $subject_param})
-    MERGE (o:Entity {name: $object_param})
-    MERGE (s)-[r:DYNAMIC_REL {
+    query = f"""
+    MERGE (s:Entity {{name: $subject_param}})
+    MERGE (o:Entity {{name: $object_param}})
+    MERGE (s)-[r:DYNAMIC_REL {{
         type: $predicate_param,
-        chapter_added: $chapter_added_param 
-    }]->(o)
+        {KG_REL_CHAPTER_ADDED}: $chapter_added_param
+    }}]->(o)
     ON CREATE SET
-        r.is_provisional = $is_provisional_param,
+        r.{KG_IS_PROVISIONAL} = $is_provisional_param,
         r.confidence = $confidence_param,
         r.created_at = timestamp(),
         r.last_updated = timestamp()
     ON MATCH SET
-        r.is_provisional = $is_provisional_param,
+        r.{KG_IS_PROVISIONAL} = $is_provisional_param,
         r.confidence = $confidence_param,
         r.last_updated = timestamp()
     """
@@ -60,20 +64,20 @@ async def add_kg_triples_batch_to_db(
 
     statements_with_params: List[Tuple[str, Dict[str, Any]]] = []
     # This query is identical to the single add, as execute_cypher_batch handles running multiple statements in one transaction.
-    base_query = """
-    MERGE (s:Entity {name: $subject_param})
-    MERGE (o:Entity {name: $object_param})
-    MERGE (s)-[r:DYNAMIC_REL {
+    base_query = f"""
+    MERGE (s:Entity {{name: $subject_param}})
+    MERGE (o:Entity {{name: $object_param}})
+    MERGE (s)-[r:DYNAMIC_REL {{
         type: $predicate_param,
-        chapter_added: $chapter_added_param
-    }]->(o)
+        {KG_REL_CHAPTER_ADDED}: $chapter_added_param
+    }}]->(o)
     ON CREATE SET
-        r.is_provisional = $is_provisional_param,
+        r.{KG_IS_PROVISIONAL} = $is_provisional_param,
         r.confidence = $confidence_param,
         r.created_at = timestamp(),
         r.last_updated = timestamp()
     ON MATCH SET
-        r.is_provisional = $is_provisional_param,
+        r.{KG_IS_PROVISIONAL} = $is_provisional_param,
         r.confidence = $confidence_param,
         r.last_updated = timestamp()
     """
@@ -128,22 +132,22 @@ async def query_kg_from_db(
         conditions.append("o.name = $object_param")
         parameters["object_param"] = obj_val.strip()
     if chapter_limit is not None:
-        conditions.append("r.chapter_added <= $chapter_limit_param")
+        conditions.append(f"r.{KG_REL_CHAPTER_ADDED} <= $chapter_limit_param")
         parameters["chapter_limit_param"] = chapter_limit
     if not include_provisional:
         # Check for explicit FALSE, or if the property doesn't exist (older data might not have it)
-        conditions.append("(r.is_provisional = FALSE OR r.is_provisional IS NULL)")
+        conditions.append(f"(r.{KG_IS_PROVISIONAL} = FALSE OR r.{KG_IS_PROVISIONAL} IS NULL)")
 
 
     where_clause = ""
     if conditions:
         where_clause = " WHERE " + " AND ".join(conditions)
 
-    return_clause = """
+    return_clause = f"""
     RETURN s.name AS subject, r.type AS predicate, o.name AS object,
-           r.chapter_added AS chapter_added, r.confidence AS confidence, r.is_provisional AS is_provisional
+           r.{KG_REL_CHAPTER_ADDED} AS {KG_REL_CHAPTER_ADDED}, r.confidence AS confidence, r.{KG_IS_PROVISIONAL} AS {KG_IS_PROVISIONAL}
     """
-    order_clause = " ORDER BY r.chapter_added DESC, r.confidence DESC"
+    order_clause = f" ORDER BY r.{KG_REL_CHAPTER_ADDED} DESC, r.confidence DESC"
     limit_clause_str = "" # Renamed to avoid conflict
     if limit_results is not None and limit_results > 0:
         limit_clause_str = f" LIMIT {int(limit_results)}"

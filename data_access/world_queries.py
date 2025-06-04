@@ -3,6 +3,11 @@ import logging
 from typing import Dict, Any, List, Tuple, Optional
 import config
 from core_db.base_db_manager import neo4j_manager
+from kg_constants import (
+    KG_NODE_CREATED_CHAPTER,
+    KG_NODE_CHAPTER_UPDATED,
+    KG_IS_PROVISIONAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,7 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                 }
                 source_chapter_key = f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
                 if items_dict_value_from_world_data.get(source_chapter_key) == "provisional_from_unrevised_draft":
-                     wc_props["is_provisional"] = True
+                     wc_props[KG_IS_PROVISIONAL] = True
 
                 statements.append((
                     "MERGE (wc:Entity {id: $id_val}) SET wc:WorldContainer SET wc = $props", 
@@ -76,9 +81,9 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
             if details_dict.get(source_quality_key_for_creation) == "provisional_from_unrevised_draft":
                 is_item_provisional = True
             
-            item_props_for_set['created_chapter'] = created_chap_num
+            item_props_for_set[KG_NODE_CREATED_CHAPTER] = created_chap_num
             if is_item_provisional:
-                item_props_for_set['is_provisional'] = True
+                item_props_for_set[KG_IS_PROVISIONAL] = True
 
             statements.append((
                 "MERGE (we:Entity {id: $id_val}) SET we:WorldElement SET we = $props", 
@@ -115,11 +120,11 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
                         chap_num_val = int(key_str.split("_")[-1])
                         elab_props = {
                             "summary": value_val,
-                            "chapter_updated": chap_num_val
+                            KG_NODE_CHAPTER_UPDATED: chap_num_val,
                         }
                         provisional_elab_key = f"source_quality_chapter_{chap_num_val}"
                         if details_dict.get(provisional_elab_key) == "provisional_from_unrevised_draft":
-                            elab_props["is_provisional"] = True
+                            elab_props[KG_IS_PROVISIONAL] = True
                         
                         statements.append((
                             f"""
@@ -153,7 +158,7 @@ async def get_world_building_from_db() -> Dict[str, Any]:
     overview_res = await neo4j_manager.execute_read_query(overview_query, {"wc_id_param": wc_id_param})
     if overview_res and overview_res[0] and overview_res[0].get('desc') is not None:
         world_data["_overview_"]["description"] = overview_res[0]['desc']
-        if overview_res[0].get('is_provisional'): 
+        if overview_res[0].get(KG_IS_PROVISIONAL):
             world_data["_overview_"][f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"] = "provisional_from_unrevised_draft"
 
 
@@ -183,9 +188,9 @@ async def get_world_building_from_db() -> Dict[str, Any]:
         item_detail = dict(we_node) 
         item_detail.pop('id', None); item_detail.pop('name', None); item_detail.pop('category', None)
 
-        created_chapter_num = item_detail.pop('created_chapter', config.KG_PREPOPULATION_CHAPTER_NUM)
+        created_chapter_num = item_detail.pop(KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM)
         item_detail[f"added_in_chapter_{created_chapter_num}"] = True 
-        if item_detail.pop('is_provisional', False): 
+        if item_detail.pop(KG_IS_PROVISIONAL, False):
             item_detail[f"source_quality_chapter_{created_chapter_num}"] = "provisional_from_unrevised_draft"
         
         for list_prop_key in ["goals", "rules", "key_elements", "traits"]:
@@ -204,9 +209,9 @@ async def get_world_building_from_db() -> Dict[str, Any]:
             )
             item_detail[list_prop_key] = [res_item['item_value'] for res_item in list_val_res] if list_val_res else []
 
-        elab_query = """
-        MATCH (:WorldElement:Entity {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-        RETURN elab.summary AS summary, elab.chapter_updated AS chapter, elab.is_provisional AS is_provisional
+        elab_query = f"""
+        MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+        RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS {KG_IS_PROVISIONAL}
         """
         elab_results = await neo4j_manager.execute_read_query(elab_query, {"we_id_param": we_id})
         if elab_results:
@@ -222,15 +227,15 @@ async def get_world_building_from_db() -> Dict[str, Any]:
     return world_data
 
 async def get_world_elements_for_snippet_from_db(category: str, chapter_limit: int, item_limit: int) -> List[Dict[str, Any]]:
-    query = """
-    MATCH (we:WorldElement:Entity {category: $category_param})
-    WHERE (we.created_chapter IS NULL OR we.created_chapter <= $chapter_limit_param) 
+    query = f"""
+    MATCH (we:WorldElement:Entity {{category: $category_param}})
+    WHERE (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)
 
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-    WHERE elab.chapter_updated <= $chapter_limit_param AND elab.is_provisional = TRUE
+    WHERE elab.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param AND elab.{KG_IS_PROVISIONAL} = TRUE
     
     WITH we, COLLECT(DISTINCT elab) AS provisional_elaborations 
-    WITH we, ( (we.is_provisional = TRUE AND (we.created_chapter IS NULL OR we.created_chapter <= $chapter_limit_param) ) OR size(provisional_elaborations) > 0) AS is_item_provisional_overall
+    WITH we, ( (we.{KG_IS_PROVISIONAL} = TRUE AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param) ) OR size(provisional_elaborations) > 0) AS is_item_provisional_overall
     
     RETURN we.name AS name,
            we.description AS description, 
