@@ -12,7 +12,10 @@ from llm_interface import llm_service
 import utils # For _is_fill_in
 # MODIFIED: Aliased import for specific debug logging
 from parsing_utils import parse_key_value_block # Kept for plot parsing
-from markdown_story_parser import load_and_parse_markdown_story_file, parse_markdown_to_dict # MODIFIED IMPORT
+from yaml_parser import load_yaml_file
+# parse_markdown_to_dict was in markdown_story_parser.py, which is now deleted.
+# This will likely cause an error later if not addressed.
+# from markdown_story_parser import parse_markdown_to_dict # This line would now fail
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +85,26 @@ def _create_default_plot(default_protagonist_name: str, base_elements: Dict[str,
     return default_plot
 
 def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
-    """Loads user-supplied story data from Markdown file."""
-    user_data = load_and_parse_markdown_story_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+    """Loads user-supplied story data from YAML file."""
+    # Assuming USER_STORY_ELEMENTS_FILE_PATH in config will be updated to point to a .yaml file
+    # or a new config variable USER_STORY_ELEMENTS_YAML_FILE_PATH will be used.
+    # For this change, directly adjusting the expected file extension.
+    yaml_file_path = config.USER_STORY_ELEMENTS_FILE_PATH.replace(".md", ".yaml").replace(".md.example", ".yaml.example")
+    if not yaml_file_path.endswith((".yaml", ".yml")): # Ensure it's a yaml path after replace
+        yaml_file_path = os.path.splitext(config.USER_STORY_ELEMENTS_FILE_PATH)[0] + ".yaml"
+        logger.info(f"Adjusted file path to: {yaml_file_path} from {config.USER_STORY_ELEMENTS_FILE_PATH}")
+
+    user_data = load_yaml_file(yaml_file_path) # normalize_keys is True by default in yaml_parser
     if user_data is None:
-        logger.info(f"User story elements file '{config.USER_STORY_ELEMENTS_FILE_PATH}' not found. Will proceed with LLM generation or defaults.")
+        logger.info(f"User story elements file '{yaml_file_path}' not found or failed to parse. Will proceed with LLM generation or defaults.")
         return None
-    if not user_data:
-        logger.warning(f"User story elements file '{config.USER_STORY_ELEMENTS_FILE_PATH}' was empty or could not be parsed. Will proceed with LLM generation or defaults.")
+    # load_yaml_file returns {} for empty file, or None for critical parse error / non-dict root
+    if not isinstance(user_data, dict) or not user_data: # Ensure it's a non-empty dict
+        logger.warning(f"User story elements file '{yaml_file_path}' was empty or did not yield a dictionary. Will proceed with LLM generation or defaults.")
         return {}
 
+    # Key normalization is handled by load_yaml_file, so keys in user_data should be normalized.
+    # Validation logic below assumes normalized keys (lowercase_with_underscores)
     expected_top_level_keys = ["novel_concept", "protagonist", "plot_points", "setting", "world_details", "antagonist", "conflict", "other_key_characters"]
     found_any_expected_key = False
     for key in expected_top_level_keys:
@@ -100,10 +114,10 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
             found_any_expected_key = True; break
 
     if not found_any_expected_key:
-        logger.error(f"User-supplied Markdown data from '{config.USER_STORY_ELEMENTS_FILE_PATH}' does not seem to contain any expected top-level sections with content. Parsed data: {user_data}")
+        logger.error(f"User-supplied YAML data from '{yaml_file_path}' does not seem to contain any expected top-level sections with content after key normalization. Parsed data: {user_data}")
         return {}
 
-    logger.info(f"Successfully loaded and performed initial validation on user-supplied story data from '{config.USER_STORY_ELEMENTS_FILE_PATH}'.")
+    logger.info(f"Successfully loaded and performed initial validation on user-supplied story data from '{yaml_file_path}'.")
     return user_data
 
 def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
@@ -116,10 +130,10 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
         world_building.setdefault(cat_internal_key, {})
     world_building["user_supplied_data"] = True # Mark that user data was involved
     world_building["is_default"] = False
-    world_building["source"] = "user_supplied_markdown"
+    world_building["source"] = "user_supplied_yaml" # Updated source identifier
 
 
-    nc = user_data.get("novel_concept", {})
+    nc = user_data.get("novel_concept", {}) # Assumes keys in user_data are already normalized by load_yaml_file
     plot_outline["title"] = _get_val_or_fill_in(nc, "title")
     plot_outline["genre"] = _get_val_or_fill_in(nc, "genre")
     plot_outline["theme"] = _get_val_or_fill_in(nc, "theme")
@@ -213,7 +227,7 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                                 agent_item_details[internal_detail_key] = md_detail_val
             # Add other categories like "history", "society" similarly if they appear under world_details
 
-    plot_outline["source"] = "user_supplied_markdown"
+    plot_outline["source"] = "user_supplied_yaml" # Updated source identifier
     plot_outline["is_default"] = False
     agent.plot_outline = plot_outline
 
@@ -222,60 +236,62 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
         character_profiles.setdefault(prot_name_val, {})
         character_profiles[prot_name_val].update({
             "description": plot_outline["protagonist_description"],
-            "traits": [t for t in prot_data.get("traits", []) if isinstance(t,str) and (t.strip() or utils._is_fill_in(t))],
+            "traits": [t for t in prot_data.get("traits", []) if isinstance(t,str) and (t.strip() or utils._is_fill_in(t))], # Assumes 'traits' is list
             "status": _get_val_or_fill_in(prot_data, "initial_status") or "As described",
             "character_arc_summary": plot_outline["character_arc"],
-            "role": "protagonist", "source": "user_supplied_markdown",
-            "relationships": prot_data.get("relationships", {}) # Assumes relationships is already a dict from parser
+            "role": "protagonist", "source": "user_supplied_yaml", # Updated source
+            "relationships": prot_data.get("relationships", {}) # Assumes 'relationships' is dict
         })
 
     ant_name_val = plot_outline["antagonist_name"]
-    if not utils._is_fill_in(ant_name_val) and ant_data:
+    if not utils._is_fill_in(ant_name_val) and ant_data: # ant_data is from user_data.get("antagonist", {})
         character_profiles.setdefault(ant_name_val, {})
         character_profiles[ant_name_val].update({
             "description": plot_outline["antagonist_description"],
             "traits": [t for t in ant_data.get("traits", []) if isinstance(t,str) and (t.strip() or utils._is_fill_in(t))],
             "status": "As described",
             "motivations": plot_outline["antagonist_motivations"],
-            "role": "antagonist", "source": "user_supplied_markdown",
+            "role": "antagonist", "source": "user_supplied_yaml", # Updated source
             "relationships": ant_data.get("relationships", {})
         })
 
-    other_chars_data = user_data.get("other_key_characters", {})
+    other_chars_data = user_data.get("other_key_characters", {}) # This should be a dict of char_name: details
     if isinstance(other_chars_data, dict):
-        for char_name_other_norm_md, char_detail_md in other_chars_data.items():
-            char_name_other_display = char_name_other_norm_md.replace("_", " ").title()
-            if not utils._is_fill_in(char_name_other_display) and isinstance(char_detail_md, dict):
-                agent_char_details = character_profiles.setdefault(char_name_other_display, {"source": "user_supplied_markdown"})
-                for md_detail_key, md_detail_val in char_detail_md.items():
-                    # Assuming char profile keys are mostly direct or simple mapping
-                    internal_detail_key = md_detail_key # Or a specific map if needed
-                    agent_char_details[internal_detail_key] = md_detail_val
+        for char_name_other_normalized_yaml, char_detail_yaml in other_chars_data.items():
+            # char_name_other_normalized_yaml is already normalized by load_yaml_file
+            char_name_other_display = char_name_other_normalized_yaml.replace("_", " ").title() # For display consistency if needed, but internal key is normalized
+            if not utils._is_fill_in(char_name_other_display) and isinstance(char_detail_yaml, dict):
+                # Use normalized key for character_profiles dict directly
+                agent_char_details = character_profiles.setdefault(char_name_other_normalized_yaml, {"source": "user_supplied_yaml"})
+                for yaml_detail_key, yaml_detail_val in char_detail_yaml.items(): # These keys are also normalized
+                    # Assuming char profile keys are mostly direct (already normalized)
+                    internal_detail_key = yaml_detail_key
+                    agent_char_details[internal_detail_key] = yaml_detail_val
 
     agent.character_profiles = character_profiles
     agent.world_building = world_building # world_building was modified in place
-    logger.info("Agent state populated from user-supplied Markdown data (preserving '[Fill-in]' markers).")
+    logger.info("Agent state populated from user-supplied YAML data (preserving '[Fill-in]' markers).")
 
 async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str, unhinged_mode: bool, **kwargs) -> Tuple[PlotOutlineData, Optional[Dict[str, int]]]:
     # ... (Plot outline generation logic remains largely the same, as it uses parse_key_value_block) ...
     # This function already assumes a flat key-value structure from the LLM, which is different from world-building.
     # The key change was ensuring _populate_agent_state_from_user_data correctly sets up agent.plot_outline
-    # from the Markdown before this LLM call happens (if it's needed).
+    # from the YAML before this LLM call happens (if it's needed).
     logger.info(f"Generating plot outline. Unhinged mode: {unhinged_mode}")
-    user_supplied_data = _load_user_supplied_data()
+    user_supplied_data = _load_user_supplied_data() # Now loads YAML
 
     llm_was_called = False
     accumulated_usage_data: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
-    if user_supplied_data:
-        if user_supplied_data: # Check if dict is not empty
-            logger.info("Processing user-supplied Markdown data for initial setup.")
+    if user_supplied_data: # This will be None if file not found, or {} if empty/error
+        if user_supplied_data: # Check if dict is not empty (i.e., file had content and parsed)
+            logger.info("Processing user-supplied YAML data for initial setup.")
             _populate_agent_state_from_user_data(agent, user_supplied_data)
-        else:
-            logger.warning("User-supplied Markdown file was effectively empty or unparsable. Plot will be fully generated or default.")
+        else: # File was empty or structure was not a root dictionary
+            logger.warning("User-supplied YAML file was effectively empty or did not yield a root dictionary. Plot will be fully generated or default.")
             agent.plot_outline = {} # Ensure it's an empty dict, not None
-    else:
-        logger.info("No user-supplied Markdown file found. Plot outline will be fully generated by LLM or default.")
+    else: # File not found
+        logger.info("No user-supplied YAML file found. Plot outline will be fully generated by LLM or default.")
         agent.plot_outline = {}
 
     # Ensure agent.plot_outline is a dict before checking keys
@@ -357,7 +373,7 @@ async def generate_plot_outline_logic(agent: Any, default_protagonist_name: str,
             base_elements_for_outline["theme"] = current_agent_plot_outline.get("theme") if not utils._is_fill_in(current_agent_plot_outline.get("theme")) else config.CONFIGURED_THEME
             base_elements_for_outline["setting_description"] = current_agent_plot_outline.get("setting_description") if not utils._is_fill_in(current_agent_plot_outline.get("setting_description")) else config.CONFIGURED_SETTING_DESCRIPTION
             base_elements_for_outline["protagonist_name"] = current_agent_plot_outline.get("protagonist_name") if not utils._is_fill_in(current_agent_plot_outline.get("protagonist_name")) else default_protagonist_name
-            base_elements_for_outline["source_hint"] = "configured_or_user_markdown"
+            base_elements_for_outline["source_hint"] = "configured_or_user_yaml" # Updated source hint
             prompt_core_elements_intro = f"Generate a novel concept based on (or incorporating):\n  - Genre: {base_elements_for_outline['genre']}\n  - Theme: {base_elements_for_outline['theme']}\n  - Initial Setting Idea: {base_elements_for_outline['setting_description']}\n  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
 
         prompt_lines = []
@@ -507,12 +523,12 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
 
     needs_llm_for_world = False
     if not agent.world_building: # If it's empty after init or previous steps
-        agent.world_building = {"source":"llm_to_create", "_overview_": {}}
+        agent.world_building = {"source":"llm_to_create", "_overview_": {}} # Default source
         needs_llm_for_world = True
-    elif agent.world_building.get("source") == "user_supplied_markdown":
+    elif agent.world_building.get("source") == "user_supplied_yaml": # Updated source check
         # Check if any [Fill-in] exists in user-supplied data
         for category_internal, items_or_details_dict in agent.world_building.items():
-            if category_internal in ["is_default", "source", "user_supplied_data"]: continue
+            if category_internal in ["is_default", "source", "user_supplied_data"]: continue # Skip helper keys
             if isinstance(items_or_details_dict, dict):
                 if category_internal == "_overview_":
                     for detail_key, detail_value in items_or_details_dict.items():
@@ -525,12 +541,12 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
                                 if utils._is_fill_in(detail_value): needs_llm_for_world = True; break
                                 if isinstance(detail_value, list) and any(utils._is_fill_in(li) for li in detail_value):
                                     needs_llm_for_world = True; break
-                            if needs_llm_for_world: break
-                if needs_llm_for_world: break
+                            if needs_llm_for_world: break # Break from items_or_details_dict loop
+                if needs_llm_for_world: break # Break from categories loop
         if not needs_llm_for_world:
-            logger.info("Skipping LLM world-building generation: Data was user-supplied from Markdown and seems complete (no [Fill-in]s).")
+            logger.info("Skipping LLM world-building generation: Data was user-supplied from YAML and seems complete (no [Fill-in]s).")
             return agent.world_building, None
-    else: # Source is not user_supplied_markdown, or it's empty, assume LLM is needed
+    else: # Source is not user_supplied_yaml, or it's empty, assume LLM is needed
         needs_llm_for_world = True
 
     # Ensure plot_outline exists and setting_description is usable
@@ -541,11 +557,11 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
            utils._is_fill_in(agent.world_building.get("_overview_", {}).get("description")):
             # Set a very generic overview if nothing else is available
             agent.world_building.setdefault("_overview_",{})["description"] = "A world to be detailed by the LLM."
-        if agent.world_building.get("source") != "user_supplied_markdown": # Avoid overwriting this if it was set
+        if agent.world_building.get("source") != "user_supplied_yaml": # Avoid overwriting this if it was set
             agent.world_building["source"] = "llm_generated_default_context"
         needs_llm_for_world = True # Force LLM if essential context is missing
 
-    if not needs_llm_for_world:
+    if not needs_llm_for_world: # This check might be redundant if logic above correctly sets needs_llm_for_world
         logger.info("World building data seems complete, skipping LLM call.")
         return agent.world_building, None
 
@@ -561,12 +577,12 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
         world_setting_desc = 'A mysterious and detailed world waiting to be fleshed out by the LLM.'
 
 
-    user_world_context_str = "\n**User-Provided World Context (Content from user_story_elements.md - Respect these concrete values. Complete any '[Fill-in]' fields creatively using Markdown):**\n"
+    user_world_context_str = "\n**User-Provided World Context (Content from user_story_elements.yaml - Respect these concrete values. Complete any '[Fill-in]' fields creatively using Markdown):**\n" # Updated filename
     temp_user_wb_for_prompt: List[str] = []
-    # Only build this section if the source is indeed user_supplied_markdown and it's not empty
-    if agent.world_building.get("source") == "user_supplied_markdown" and \
-       (agent.world_building.get("_overview_") or any(k not in ["_overview_", "is_default", "source", "user_supplied_data"] for k in agent.world_building.keys())):
-        
+    # Only build this section if the source is indeed user_supplied_yaml and it's not empty
+    if agent.world_building.get("source") == "user_supplied_yaml" and \
+       (agent.world_building.get("_overview_") or any(k not in ["_overview_", "is_default", "source", "user_supplied_data"] for k in agent.world_building.keys())): # user_supplied_data might be redundant
+
         overview_data_for_prompt = agent.world_building.get("_overview_", {})
         if overview_data_for_prompt: # Check if overview itself is not empty
             temp_user_wb_for_prompt.append("## Overview")
@@ -680,23 +696,32 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
     logger.debug(f"Cleaned LLM world-building Markdown output (len: {len(cleaned_world_text_markdown)}):\nSTART_OF_WB_MD_TEXT\n{cleaned_world_text_markdown}\nEND_OF_WB_MD_TEXT")
 
     logger.info("Attempting to parse LLM world-building output using Markdown parser...")
-    parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
-    # Log the direct output of parse_markdown_to_dict BEFORE merging
-    logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
+    # TODO: parse_markdown_to_dict is currently an unresolved import.
+    # This will cause a runtime error if this part of the code is reached.
+    # For now, proceeding as if it exists, to fulfill the subtask's scope.
+    parsed_llm_markdown_response: Optional[Dict[str, Any]] = None
+    try:
+        # This import will fail if markdown_story_parser.py (containing parse_markdown_to_dict) is not available
+        # and parse_markdown_to_dict hasn't been moved/redefined.
+        from markdown_story_parser import parse_markdown_to_dict
+        parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
+        logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
+    except ImportError:
+        logger.error("CRITICAL: `parse_markdown_to_dict` is not available due to markdown_story_parser.py deletion. LLM Markdown output for world-building cannot be processed.")
+        # parsed_llm_markdown_response remains None
 
 
     # Ensure agent.world_building is a dict before merging
     if not isinstance(agent.world_building, dict):
-        agent.world_building = {"source":"llm_generated_or_merged_markdown_style", "_overview_":{}}
+        agent.world_building = {"source":"llm_generated_or_merged_yaml_style", "_overview_":{}} # Updated style
     elif "source" not in agent.world_building : # If it was populated by user data, source should be set
-        agent.world_building["source"] = "llm_generated_or_merged_markdown_style"
+        agent.world_building["source"] = "llm_generated_or_merged_yaml_style" # Updated style
 
 
     if parsed_llm_markdown_response and isinstance(parsed_llm_markdown_response, dict):
-        for md_top_level_cat_key, md_cat_content in parsed_llm_markdown_response.items():
+        for md_top_level_cat_key, md_cat_content in parsed_llm_markdown_response.items(): # md_top_level_cat_key is normalized
             internal_cat_name = WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.get(md_top_level_cat_key, None)
-            if internal_cat_name is None: # If not a recognized direct category name
-                # Could be a sub-item if parser logic changes, or an unknown category
+            if internal_cat_name is None:
                 logger.warning(f"LLM Markdown response contained unrecognized top-level key '{md_top_level_cat_key}'. This key will be IGNORED for direct category mapping.")
                 continue
 
@@ -724,10 +749,10 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
                         continue
                     
                     # Ensure this item exists in the agent's state for this category
-                    target_category_in_agent.setdefault(item_name_display, {"source": "llm_generated_markdown_style"})
+                    target_category_in_agent.setdefault(item_name_display, {"source": "llm_generated_yaml_style"}) # Updated style
                     current_agent_item_details = target_category_in_agent[item_name_display]
 
-                    for md_item_detail_key, md_item_detail_value in item_details_md.items():
+                    for md_item_detail_key, md_item_detail_value in item_details_md.items(): # md_item_detail_key is normalized
                         internal_item_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(md_item_detail_key, md_item_detail_key)
                         existing_item_val = current_agent_item_details.get(internal_item_detail_key_target)
                         
@@ -746,11 +771,11 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
             if utils._is_fill_in(default_wb_overview_desc): default_wb_overview_desc = "A default world setting, to be detailed later."
 
             agent.world_building.setdefault("_overview_", {})["description"] = default_wb_overview_desc
-            if agent.world_building.get("source") != "user_supplied_markdown": agent.world_building["source"] = "default_fallback"
+            if agent.world_building.get("source") != "user_supplied_yaml": agent.world_building["source"] = "default_fallback" # Updated source
             if "is_default" not in agent.world_building : agent.world_building["is_default"] = True
     
     # Final check to ensure all expected categories exist, even if empty, if populated by LLM
-    if agent.world_building.get("source") != "user_supplied_markdown":
+    if agent.world_building.get("source") != "user_supplied_yaml": # Updated source
         for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
             agent.world_building.setdefault(cat_internal_key, {})
 

@@ -2,6 +2,8 @@
 import re
 import logging
 from typing import List, Dict, Any, Optional, Union, Pattern, Callable, Tuple
+from rdflib import Graph, URIRef, Literal, BNode
+from rdflib.namespace import RDF, RDFS
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +13,7 @@ class ParseError(Exception):
 
 # Default regex for splitting blocks (e.g., by "---")
 DEFAULT_BLOCK_SEPARATOR_REGEX = r'\n\s*---\s*\n'
-# MODIFIED: To handle optional bolding around keys
-DEFAULT_KEY_VALUE_PATTERN = re.compile(
-    r"^\s*(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?:\s*(.*)$"
-)
-DEFAULT_LIST_ITEM_PREFIXES = ["- ", "* "]
+# DEFAULT_KEY_VALUE_PATTERN and DEFAULT_LIST_ITEM_PREFIXES removed as they were exclusive to parse_key_value_block
 
 
 def split_text_into_blocks(
@@ -199,159 +197,12 @@ def parse_key_value_block(
         else: # If key is missing entirely
             parsed_data[l_key] = []
 
-    return parsed_data
-
-_HIERARCHICAL_STRICT_WORLD_CATEGORIES = ["Overview", "Locations", "Factions", "Systems", "Lore", "History", "Society"]
-_COMPILED_CATEGORY_ALTERNATION = "|".join(cat for cat in _HIERARCHICAL_STRICT_WORLD_CATEGORIES)
-
-WORLD_CATEGORY_HEADER_PATTERN = re.compile(
-   r"^\s*(?:Category\s*:\s*)?(?:\*\*)?(" + _COMPILED_CATEGORY_ALTERNATION + r")(?:\*\*)?\s*:?\s*$",
-   re.IGNORECASE | re.MULTILINE | re.UNICODE
-)
-
-SIMPLER_WORLD_CATEGORY_HEADER_PATTERN = re.compile(
-   r"^\s*\*\*(Overview|Locations|Factions|Systems|Lore|History|Society)\*\*\s*:\s*$",
-   re.IGNORECASE | re.UNICODE
-)
-
-WORLD_ITEM_HEADER_PATTERN = re.compile(
-    r"^\s*(?:Item\s*:\s*)?(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?\s*:?\s*(.*)$"
-)
-WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL = re.compile(
-    r"^\s*(?:Item\s*:\s*)?(?:\*\*)?([A-Za-z0-9\s_()'.\"\-]+?)(?:\*\*)?\s*:?\s*$"
-)
-
-def parse_hierarchical_structured_text(
-    text_block: str,
-    category_pattern: Pattern[str],
-    item_pattern_with_content: Pattern[str],
-    item_pattern_name_only: Pattern[str],
-    detail_key_map: Dict[str, Union[str, Callable[[re.Match[str]], str]]],
-    detail_list_internal_keys: List[str],
-    overview_category_internal_key: Optional[str] = "_overview_",
-    detail_list_item_prefixes: Optional[List[str]] = None,
-    detail_key_value_pattern: Optional[Pattern[str]] = None
-) -> Dict[str, Any]:
-    parsed_hier_data: Dict[str, Any] = {}
-    if not text_block.strip():
-        return parsed_hier_data
-
-    lines = text_block.splitlines()
-
-    current_category_llm_raw: Optional[str] = None
-    current_category_internal: Optional[str] = None
-    current_item_name: Optional[str] = None
-    current_item_detail_lines: List[str] = []
-
-    effective_detail_kv_pattern = detail_key_value_pattern if detail_key_value_pattern is not None else DEFAULT_KEY_VALUE_PATTERN
-
-    def _finalize_current_item_or_overview_details():
-        nonlocal current_category_internal, current_item_name, current_item_detail_lines, current_category_llm_raw
-        if not current_category_internal:
-            if current_item_detail_lines:
-                 logger.debug(f"HParser: Orphaned detail lines found without active category: {current_item_detail_lines[:2]}")
-            current_item_detail_lines = []
-            current_item_name = None
-            return
-
-        if current_item_detail_lines:
-            item_details_dict = parse_key_value_block(
-                current_item_detail_lines,
-                detail_key_map,
-                detail_list_internal_keys,
-                list_item_prefixes=detail_list_item_prefixes,
-                key_value_pattern=effective_detail_kv_pattern
-            )
-
-            target_dict_for_category = parsed_hier_data.setdefault(current_category_internal, {})
-            if not isinstance(target_dict_for_category, dict):
-                logger.error(f"HParser: Target for category '{current_category_internal}' is not a dict. Forcing to dict.")
-                target_dict_for_category = {}
-                parsed_hier_data[current_category_internal] = target_dict_for_category
-
-            if item_details_dict:
-                if current_item_name:
-                    target_dict_for_category[current_item_name] = item_details_dict
-                elif current_category_internal == overview_category_internal_key:
-                    target_dict_for_category.update(item_details_dict)
-                else:
-                    logger.warning(f"HParser: Finalizing details for category '{current_category_internal}' but no current_item_name and not overview. Details: {item_details_dict}")
-
-        current_item_name = None
-        current_item_detail_lines = []
-
-    for line_num, line_text_original_case in enumerate(lines):
-        line_stripped = line_text_original_case.strip()
-
-        category_match = category_pattern.match(line_stripped)
-        if category_match:
-            matched_category_group = category_match.group(1)
-
-            _finalize_current_item_or_overview_details()
-            current_category_llm_raw = matched_category_group.strip()
-            current_category_internal = current_category_llm_raw.lower().replace(" ", "_")
-            logger.debug(f"HParser: Line {line_num+1}: Switched to CATEGORY '{current_category_llm_raw}' (Internal: '{current_category_internal}')")
-            parsed_hier_data.setdefault(current_category_internal, {})
-            continue
-
-        if not current_category_internal:
-            if line_stripped: # Content before any category header
-                logger.debug(f"HParser: Line {line_num+1}: Ignoring pre-category content: '{line_stripped}'")
-            continue
-
-        is_overview_cat = (current_category_internal == overview_category_internal_key)
-        line_processed_as_item_header = False
-
-        if not is_overview_cat:
-            potential_item_name = None
-            content_as_detail_from_item_line = None
-
-            item_match_wc = item_pattern_with_content.match(line_text_original_case) # Match on original to preserve leading spaces for detail lines
-            if item_match_wc:
-                potential_item_name = item_match_wc.group(1).strip()
-                content_as_detail_from_item_line = item_match_wc.group(2).strip() # This is content on the same line as item name
-            else:
-                item_match_no = item_pattern_name_only.match(line_stripped)
-                if item_match_no:
-                    potential_item_name = item_match_no.group(1).strip()
-
-            if potential_item_name:
-                # Check if this "item name" is actually a detail key for the current_item_name (if any)
-                # This avoids treating "Description: Bla" under "Item: Foo" as a new item "Description"
-                normalized_potential_item_as_detail_key = potential_item_name.lower().replace(" ", "_")
-                is_actually_a_detail_key = False
-                if detail_key_map.get(normalized_potential_item_as_detail_key) or \
-                   any(isinstance(k_map, re.Pattern) and k_map.match(potential_item_name) for k_map in detail_key_map.keys()):
-                    is_actually_a_detail_key = True
-
-                if not is_actually_a_detail_key:
-                    _finalize_current_item_or_overview_details()
-                    current_item_name = potential_item_name
-                    current_item_detail_lines = [] # Reset for new item
-                    logger.debug(f"HParser: Line {line_num+1}: Switched to ITEM '{current_item_name}' in category '{current_category_internal}'")
-
-                    if content_as_detail_from_item_line:
-                        # This line IS the item header AND has content for it
-                        # Need to pass it to parse_key_value_block as if it's a detail line.
-                        # This requires constructing a fake "key: value" string for that content.
-                        # For now, we'll just add it to current_item_detail_lines if it's not empty.
-                        # The key would be implicit. This part is tricky.
-                        # Let's assume the content_as_detail_from_item_line is the "description" if no explicit key is there.
-                        # A simpler approach: if item_pattern_with_content matched, the group(2) is the first line of details.
-                        current_item_detail_lines.append(item_match_wc.group(1).strip() + ": " + content_as_detail_from_item_line) # Reconstruct as a K:V line for parsing
-
-                    line_processed_as_item_header = True
-
-        if line_processed_as_item_header:
-            continue
-
-        if current_category_internal: # Add line to current item's details or overview's details
-            current_item_detail_lines.append(line_text_original_case)
-
-    _finalize_current_item_or_overview_details()
-    return parsed_hier_data
+# parse_key_value_block and parse_hierarchical_structured_text removed.
+# Associated constants also removed.
 
 # --- KG Triple Parsing ---
+# Note: The KG triple parsing functions below might need review if they were indirectly using the removed utilities.
+# For this subtask, only parse_key_value_block and parse_hierarchical_structured_text and their *exclusive* constants are removed.
 KG_LIST_FORMAT_PATTERN = re.compile(
     r"^\s*-\s*\[\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*,\s*['\"]?([^,'\"\[\]]+?)['\"]?\s*\]\s*$",
     re.MULTILINE
@@ -511,3 +362,107 @@ def parse_kg_triples_from_text(text_block: str) -> List[Dict[str, Any]]:
     if not triples and text_block.strip() and not text_block.lower().startswith(("no kg triples", "none", "###")):
         logger.warning(f"KG triple parsing: No structured triples extracted from non-empty text block: '{text_block[:200].replace(chr(10), ' ')}...'")
     return triples
+
+# --- New RDF Triple Parsing using rdflib ---
+
+def _get_entity_type_and_name_from_uri(uri_ref: URIRef, base_uri: str) -> Dict[str, Optional[str]]:
+    logger_func = logging.getLogger(__name__) # Avoid conflict with module-level logger
+    uri_str = str(uri_ref)
+    name = None
+
+    if uri_str.startswith(base_uri):
+        name_part = uri_str[len(base_uri):]
+        name = name_part.split('/')[-1].replace('_', ' ')
+    else:
+        name = uri_str.split('/')[-1].split('#')[-1].replace('_', ' ')
+
+    type_str = None
+    if not base_uri.endswith('/'): base_uri_slash = base_uri + '/'
+    else: base_uri_slash = base_uri
+
+    if uri_str.startswith(f'{base_uri_slash}Character/'):
+        type_str = 'Character'
+    elif uri_str.startswith(f'{base_uri_slash}Location/'):
+        type_str = 'Location'
+    elif uri_str.startswith(f'{base_uri_slash}WorldElement/'):
+        type_str = 'WorldElement'
+    elif uri_str.startswith(f'{base_uri_slash}Item/'):
+        type_str = 'Item'
+    elif uri_str.startswith(f'{base_uri_slash}Faction/'):
+        type_str = 'Faction'
+    elif uri_str.startswith(f'{base_uri_slash}Concept/'):
+        type_str = 'Concept'
+
+    if type_str is None and name and name[0].isupper() and f'{base_uri_slash}{name.replace(" ", "_")}' == uri_str :
+            logger_func.debug(f"URI {uri_str} resulted in name '{name}' which could be a type itself.")
+
+    return {"type": type_str, "name": name}
+
+def parse_rdf_triples_with_rdflib(text_block: str, rdf_format: str = "turtle", base_uri: str = "http://example.org/saga/") -> List[Dict[str, Any]]:
+    logger_func = logging.getLogger(__name__) # Avoid conflict with module-level logger
+    triples_list: List[Dict[str, Any]] = []
+    if not text_block.strip():
+        return triples_list
+
+    if not base_uri.endswith('/'):
+        context_base_uri = base_uri + '/'
+    else:
+        context_base_uri = base_uri
+
+    g = Graph()
+    try:
+        g.parse(data=text_block, format=rdf_format, publicID=context_base_uri)
+    except Exception as e:
+        logger_func.error(f"Failed to parse RDF text with rdflib (format: {rdf_format}): {e}", exc_info=True)
+        logger_func.error(f"Problematic RDF text block was:\n{text_block[:500]}...")
+        return triples_list
+
+    for s, p, o in g:
+        predicate_name_parts = str(p).split('/')[-1].split('#')[-1]
+        predicate_str = predicate_name_parts.replace('_', ' ')
+
+        s_details = _get_entity_type_and_name_from_uri(s, context_base_uri) if isinstance(s, URIRef) else {"type": "BNode" if isinstance(s, BNode) else "Literal", "name": str(s)}
+
+        # Attempt to get type from rdf:type triple for subject
+        for _, _, s_rdf_type_obj in g.triples((s, RDF.type, None)):
+            if isinstance(s_rdf_type_obj, URIRef):
+                s_details["type"] = str(s_rdf_type_obj).split('/')[-1].split('#')[-1].replace('_', ' ')
+                break
+
+        object_entity_payload: Optional[Dict[str, Optional[str]]] = None
+        object_literal_payload: Optional[str] = None
+        is_literal_object = False
+
+        if isinstance(o, Literal):
+            is_literal_object = True
+            object_literal_payload = str(o)
+        elif isinstance(o, URIRef):
+            object_entity_payload = _get_entity_type_and_name_from_uri(o, context_base_uri)
+            # Attempt to get type from rdf:type triple for object
+            for _, _, o_rdf_type_obj in g.triples((o, RDF.type, None)):
+                if isinstance(o_rdf_type_obj, URIRef):
+                    # Ensure object_entity_payload is not None before assigning to its key
+                    if object_entity_payload is None: object_entity_payload = {} # Should not happen if o is URIRef and _get_entity... works
+                    object_entity_payload["type"] = str(o_rdf_type_obj).split('/')[-1].split('#')[-1].replace('_', ' ')
+                    break
+        elif isinstance(o, BNode):
+            object_entity_payload = {"type": "BNode", "name": str(o)}
+        else:
+            logger_func.warning(f"Unexpected object type: {type(o)} for object {o}")
+            continue
+
+        if not s_details.get("name") or not predicate_str:
+            logger_func.warning(f"Skipping triple due to missing subject name or predicate: S={s_details}, P={predicate_str}, O_lit={object_literal_payload}, O_ent={object_entity_payload}")
+            continue
+        if not is_literal_object and (not object_entity_payload or not object_entity_payload.get("name")):
+            logger_func.warning(f"Skipping triple due to missing object entity name: S={s_details}, P={predicate_str}, O_ent={object_entity_payload}")
+            continue
+
+        triples_list.append({
+            "subject": s_details,
+            "predicate": predicate_str,
+            "object_entity": object_entity_payload,
+            "object_literal": object_literal_payload,
+            "is_literal_object": is_literal_object
+        })
+    return triples_list

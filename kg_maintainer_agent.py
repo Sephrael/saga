@@ -9,7 +9,7 @@ from llm_interface import llm_service
 import config
 from core_db.base_db_manager import neo4j_manager
 from data_access import kg_queries
-from parsing_utils import parse_kg_triples_from_text # MODIFIED: Corrected import
+from parsing_utils import parse_rdf_triples_with_rdflib
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import models, parsing, merge, cypher_generation
@@ -264,7 +264,7 @@ class KGMaintainerAgent:
         )
         
         # Use the corrected function name for structured triple parsing
-        parsed_triples_structured = parse_kg_triples_from_text(parsed_sections.get("kg_triples", ""))
+        parsed_triples_structured = parse_rdf_triples_with_rdflib(parsed_sections.get("kg_triples", ""), rdf_format="turtle")
 
 
         logger.info(f"Chapter {chapter_number} LLM Extraction: "
