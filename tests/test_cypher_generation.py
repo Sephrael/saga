@@ -32,3 +32,7 @@ def test_generate_world_element_node_cypher_nested_props():
     stmts = generate_world_element_node_cypher(item)
     params = stmts[0][1]
     assert isinstance(params["props"]["history"], str)
+
+    stmt, params = generate_world_element_node_cypher(item)
+    assert "MERGE (we:Entity" in stmt
+    assert params["id"] == "places_city"

@@ -21,6 +21,7 @@ def generate_character_node_cypher(profile: CharacterProfile) -> List[Tuple[str,
             {"name": profile.name, "props": basic_props},
         )
     )
+
     statements.append(
         (
             "MATCH (ni:NovelInfo:Entity {id: $novel_id})"
@@ -29,6 +30,7 @@ def generate_character_node_cypher(profile: CharacterProfile) -> List[Tuple[str,
             {"novel_id": config.MAIN_NOVEL_INFO_NODE_ID, "name": profile.name},
         )
     )
+
     if profile.traits:
         for trait in profile.traits:
             statements.append(
@@ -73,3 +75,12 @@ def generate_world_element_node_cypher(item: WorldItem) -> List[Tuple[str, Dict[
     ]
 
     return statements
+
+def generate_world_element_node_cypher(item: WorldItem) -> Tuple[str, Dict[str, Any]]:
+    """Create Cypher for a single world element node."""
+    props = item.to_dict()
+    props.update({"name": item.name, "category": item.category})
+    return (
+        "MERGE (we:Entity {id: $id}) SET we:WorldElement SET we = $props",
+        {"id": item.id, "props": props},
+    )

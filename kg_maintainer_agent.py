@@ -16,6 +16,7 @@ import config
 from core_db.base_db_manager import neo4j_manager
 from data_access import kg_queries
 from parsing_utils import parse_kg_triples_from_text
+
 from kg_maintainer import (
     CharacterProfile,
     WorldItem,
@@ -279,3 +280,6 @@ class KGMaintainerAgent:
 
 __all__ = ["KGMaintainerAgent"]
 
+                statements.append(generate_world_element_node_cypher(item))
+        if statements:
+            await neo4j_manager.execute_cypher_batch(statements)
