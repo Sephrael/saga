@@ -1,23 +1,21 @@
 # planner_agent.py
+# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
+import json  # Added for JSON parsing
 import logging
 import re
-import asyncio
-from typing import List, Optional, Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import config
-from llm_interface import llm_service
-from type import SceneDetail
-from prompt_data_getters import (
-    get_character_state_snippet_for_prompt,
-    get_world_state_snippet_for_prompt,
-    get_reliable_kg_facts_for_drafting_prompt,
-)
 
 # from state_manager import state_manager # No longer directly used
 from data_access import chapter_queries  # For get_chapter_data_from_db
-
-# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
-import json  # Added for JSON parsing
+from llm_interface import llm_service
+from prompt_data_getters import (
+    get_character_state_snippet_for_prompt,
+    get_reliable_kg_facts_for_drafting_prompt,
+    get_world_state_snippet_for_prompt,
+)
+from type import SceneDetail
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +152,9 @@ class PlannerAgent:
             scenes_data.append(processed_scene_dict)  # type: ignore
 
         if not scenes_data:
-            logger.warning(f"No valid scenes parsed from JSON for Ch {chapter_number}.")
+            logger.warning(
+                f"No valid scenes parsed from JSON for Ch {chapter_number}."
+            )
             return None
 
         scenes_data.sort(key=lambda x: x.get("scene_number", float("inf")))
@@ -193,7 +193,9 @@ class PlannerAgent:
             )
             if prev_chap_data:
                 prev_summary = prev_chap_data.get("summary")
-                prev_is_provisional = prev_chap_data.get("is_provisional", False)
+                prev_is_provisional = prev_chap_data.get(
+                    "is_provisional", False
+                )
                 summary_prefix = (
                     "[Provisional Summary from Prev Ch] "
                     if prev_is_provisional and prev_summary
@@ -224,10 +226,14 @@ class PlannerAgent:
             novel_props, chapter_number, None
         )
         character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(novel_props, chapter_number)
+            await get_character_state_snippet_for_prompt(
+                novel_props, chapter_number
+            )
         )
-        world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
-            novel_props, chapter_number
+        world_state_snippet_plain_text = (
+            await get_world_state_snippet_for_prompt(
+                novel_props, chapter_number
+            )
         )
 
         future_plot_context_parts: List[str] = []
@@ -244,7 +250,10 @@ class PlannerAgent:
                 )
             if plot_point_index + 2 < total_plot_points_in_novel:
                 next_next_pp_text = all_plot_points[plot_point_index + 2]
-                if isinstance(next_next_pp_text, str) and next_next_pp_text.strip():
+                if (
+                    isinstance(next_next_pp_text, str)
+                    and next_next_pp_text.strip()
+                ):
                     future_plot_context_parts.append(
                         f"**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}\n"
                     )
@@ -345,7 +354,10 @@ class PlannerAgent:
             f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
         )
 
-        cleaned_plan_text_from_llm, usage_data = await llm_service.async_call_llm(
+        (
+            cleaned_plan_text_from_llm,
+            usage_data,
+        ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_PLANNING,
@@ -370,8 +382,12 @@ class PlannerAgent:
                     )
                     continue
                 required_scene_keys_internal = set(SCENE_PLAN_KEY_MAP.values())
-                if not required_scene_keys_internal.issubset(scene_dict.keys()):
-                    missing_k = required_scene_keys_internal - set(scene_dict.keys())
+                if not required_scene_keys_internal.issubset(
+                    scene_dict.keys()
+                ):
+                    missing_k = required_scene_keys_internal - set(
+                        scene_dict.keys()
+                    )
                     logger.warning(
                         f"Scene {scene_dict.get('scene_number', i + 1)} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}"
                     )
@@ -385,7 +401,9 @@ class PlannerAgent:
                     and isinstance(scene_dict.get("key_dialogue_points"), list)
                     and isinstance(scene_dict.get("setting_details"), str)
                     and scene_dict.get("setting_details", "").strip()
-                    and isinstance(scene_dict.get("scene_focus_elements"), list)
+                    and isinstance(
+                        scene_dict.get("scene_focus_elements"), list
+                    )
                     and isinstance(scene_dict.get("contribution"), str)
                     and scene_dict.get("contribution", "").strip()
                 )
