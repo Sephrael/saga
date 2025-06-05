@@ -141,4 +141,3 @@ def test_parse_world_updates_empty_or_invalid_json():
 # - Handling of completely unexpected structures in the JSON from LLM
 # - Test for the default elaboration notes more thoroughly.
 
-```
