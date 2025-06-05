@@ -12,13 +12,44 @@ from kg_constants import (
 logger = logging.getLogger(__name__)
 
 def _get_cypher_labels(entity_type: Optional[str]) -> str:
-    """Helper to create a Cypher label string (e.g., :Character:Entity)."""
+    """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
+
+    entity_label_suffix = ":Entity" # All nodes get this
+    specific_labels_parts = []
+
     if entity_type and entity_type.strip():
-        specific_type = "".join(c for c in entity_type.strip().capitalize() if c.isalnum()) # Sanitize
-        if not specific_type: return ":Entity" # Fallback if type becomes empty after sanitizing
-        if specific_type == "Entity": return ":Entity"
-        return f":{specific_type}:Entity"
-    return ":Entity"
+        # Use original type for semantic checks (like "Person") before sanitization for label syntax
+        original_type_capitalized = entity_type.strip().capitalize()
+
+        # Sanitize for Cypher label (alphanumeric)
+        sanitized_specific_type = "".join(c for c in original_type_capitalized if c.isalnum())
+
+        if sanitized_specific_type and sanitized_specific_type != "Entity":
+            # Add the sanitized specific type label unless it's "Character" (which is handled next)
+            if sanitized_specific_type != "Character":
+                specific_labels_parts.append(f":{sanitized_specific_type}")
+
+            # Add :Character label if the original type was "Person" OR
+            # if the sanitized type is "Character" itself.
+            if original_type_capitalized == "Person" or sanitized_specific_type == "Character":
+                # Add :Character if not already added (e.g. if original was "Character")
+                if ":Character" not in specific_labels_parts:
+                    specific_labels_parts.append(":Character")
+
+    # Order: :Character (if present), then other specific labels (e.g., :Person), then :Entity
+    # Remove duplicates and establish order
+    final_ordered_labels = []
+    if ":Character" in specific_labels_parts:
+        final_ordered_labels.append(":Character")
+
+    for label in specific_labels_parts:
+        if label not in final_ordered_labels:
+            final_ordered_labels.append(label)
+
+    if not final_ordered_labels:
+        return entity_label_suffix # Just ":Entity"
+
+    return "".join(final_ordered_labels) + entity_label_suffix
 
 async def add_kg_triples_batch_to_db(
     structured_triples_data: List[Dict[str, Any]],
