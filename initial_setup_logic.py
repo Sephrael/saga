@@ -10,7 +10,7 @@ import config
 from llm_interface import llm_service
 import utils # For _is_fill_in
 # MODIFIED: Aliased import for specific debug logging
-from parsing_utils import parse_key_value_block # Kept for plot parsing
+# from parsing_utils import parse_key_value_block # Kept for plot parsing # REMOVED this import
 from yaml_parser import load_yaml_file
 # parse_markdown_to_dict was in markdown_story_parser.py, which is now deleted.
 # This will likely cause an error later if not addressed.
@@ -53,6 +53,110 @@ WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL = {
     "structure": "structure" # For society/factions from LLM output
 }
 WORLD_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits", "key_beliefs", "key_events", "key_figures", "features"] # Added features
+
+def parse_key_value_block(text_block: str, key_map: Dict[str, str], list_keys_internal: List[str]) -> Dict[str, Any]:
+    """
+    Parses a block of text where keys are followed by values, potentially multi-line.
+    Special handling for keys that expect a list of items (e.g., "Plot Points:").
+    """
+    parsed_data: Dict[str, Any] = {}
+    lines = text_block.strip().splitlines()
+    
+    current_internal_key: Optional[str] = None
+    current_value_lines: List[str] = []
+
+    display_key_to_internal_map: Dict[str, str] = {}
+    for norm_display_key, internal_key_val in key_map.items():
+        display_key_for_llm_title = norm_display_key.replace('_', ' ').title() + ":"
+        display_key_to_internal_map[display_key_for_llm_title] = internal_key_val
+        
+        # Add lowercase version as well for more robust matching if LLM doesn't follow title case
+        display_key_for_llm_lower = norm_display_key.replace('_', ' ') + ":"
+        if display_key_for_llm_lower not in display_key_to_internal_map : # Avoid overwriting preferred Title Case
+            display_key_to_internal_map[display_key_for_llm_lower] = internal_key_val
+        
+        # Add version without colon if LLM forgets it sometimes
+        display_key_for_llm_title_no_colon = norm_display_key.replace('_', ' ').title()
+        if display_key_for_llm_title_no_colon not in display_key_to_internal_map:
+             display_key_to_internal_map[display_key_for_llm_title_no_colon] = internal_key_val
+
+
+    sorted_llm_keys_for_matching = sorted(display_key_to_internal_map.keys(), key=len, reverse=True)
+
+    def process_previous_key_value():
+        nonlocal current_internal_key, current_value_lines
+        if current_internal_key and current_value_lines:
+            if current_internal_key in list_keys_internal:
+                list_items = [
+                    line.strip()[2:].strip() for line in current_value_lines 
+                    if line.strip().startswith("- ")
+                ]
+                if list_items:
+                    parsed_data[current_internal_key] = list_items
+                elif any(line.strip() for line in current_value_lines): # If lines were collected but not valid list items
+                    # Fallback: treat as a single string if list parsing fails but content exists
+                    logger.warning(f"List key '{current_internal_key}' had non-empty lines but no valid items starting with '- '. Collected: {current_value_lines}. Treating as single string.")
+                    full_text = "\n".join(current_value_lines).strip()
+                    if full_text: # Only assign if there's actual text
+                        parsed_data[current_internal_key] = full_text
+            else: # For non-list keys
+                full_text = "\n".join(current_value_lines).strip()
+                if full_text: # Only assign if there's actual text
+                    parsed_data[current_internal_key] = full_text
+        current_value_lines = []
+
+    for line_content in lines:
+        line_stripped_for_key_check = line_content.strip()
+        matched_new_key = False
+        
+        for llm_output_key_format in sorted_llm_keys_for_matching:
+            # Check if the line STARTS with the key format (potentially with or without colon)
+            if line_stripped_for_key_check.startswith(llm_output_key_format):
+                process_previous_key_value()
+                current_internal_key = display_key_to_internal_map[llm_output_key_format]
+                
+                value_on_same_line = line_stripped_for_key_check[len(llm_output_key_format):].strip()
+                if value_on_same_line:
+                    current_value_lines.append(value_on_same_line)
+                
+                matched_new_key = True
+                break 
+        
+        if not matched_new_key and current_internal_key:
+            # This line is a continuation of the previous key's value or a list item
+            if current_internal_key in list_keys_internal:
+                if line_stripped_for_key_check.startswith("- "):
+                    current_value_lines.append(line_stripped_for_key_check)
+                # If it's a list key but line doesn't start with "- ", and it's not empty,
+                # it could be a malformed list item or start of something else.
+                # For robustness, only add lines starting with "- " to list_keys.
+                # If LLM just lists things without "-", current_value_lines will capture them,
+                # and the fallback logic in process_previous_key_value might treat it as a string.
+                elif line_stripped_for_key_check: # If line is not empty and not a list item marker
+                     pass # Don't add non-list-item lines to list_keys collections unless explicitly part of prior value.
+
+            else: # Not a list key, append as part of a multi-line string
+                current_value_lines.append(line_content) # Preserve original indents for multiline strings
+
+    process_previous_key_value()
+
+    for _, internal_key_to_ensure in key_map.items():
+        if internal_key_to_ensure not in parsed_data or not parsed_data[internal_key_to_ensure]:
+            # If key is missing, or its value is empty (e.g. empty string/list from parsing)
+            if internal_key_to_ensure in list_keys_internal:
+                parsed_data[internal_key_to_ensure] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+            else:
+                parsed_data[internal_key_to_ensure] = config.MARKDOWN_FILL_IN_PLACEHOLDER
+        elif internal_key_to_ensure in list_keys_internal:
+            if not isinstance(parsed_data[internal_key_to_ensure], list):
+                logger.warning(f"List key '{internal_key_to_ensure}' was parsed as non-list: '{parsed_data[internal_key_to_ensure]}'. Forcing to list.")
+                val_str = str(parsed_data[internal_key_to_ensure]).strip()
+                parsed_data[internal_key_to_ensure] = [val_str] if val_str else [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+            elif not parsed_data[internal_key_to_ensure]: # If it's an empty list
+                parsed_data[internal_key_to_ensure] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+
+
+    return parsed_data
 
 def _get_val_or_fill_in(data_dict: Optional[Dict[str, Any]], key: str, default_is_fill_in: bool = True) -> Any:
     if data_dict is None:
@@ -780,5 +884,3 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
 
 
     return agent.world_building, accumulated_usage_data if llm_was_called else None
-
-    
