@@ -1,9 +1,9 @@
 # drafting_agent.py
 import logging
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import config
-from llm_interface import llm_service, count_tokens, truncate_text_by_tokens
+from llm_interface import count_tokens, llm_service
 from type import SceneDetail  # Assuming SceneDetail is defined in type.py
 from utils import (
     format_scene_plan_for_prompt,
@@ -29,7 +29,9 @@ class DraftingAgent:
         Generates the initial draft for a chapter based on plot focus, context, and scene plan.
         Returns: (draft_text, raw_llm_output, usage_data)
         """
-        logger.info(f"DraftingAgent: Generating draft for Chapter {chapter_number}...")
+        logger.info(
+            f"DraftingAgent: Generating draft for Chapter {chapter_number}..."
+        )
 
         protagonist_name = novel_props.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
