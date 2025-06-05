@@ -10,7 +10,7 @@ import numpy as np
 import logging
 import re
 import asyncio
-from typing import Optional, Tuple, List, Union, Set, Any  # Added Set, Any
+from typing import Optional, Tuple, List, Set, Any
 from type import SceneDetail
 
 # Local application imports - ensure these paths are correct for your project
