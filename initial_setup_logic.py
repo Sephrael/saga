@@ -12,9 +12,6 @@ import utils # For _is_fill_in
 # MODIFIED: Aliased import for specific debug logging
 # from parsing_utils import parse_key_value_block # Kept for plot parsing # REMOVED this import
 from yaml_parser import load_yaml_file
-# parse_markdown_to_dict was in markdown_story_parser.py, which is now deleted.
-# This will likely cause an error later if not addressed.
-# from markdown_story_parser import parse_markdown_to_dict # This line would now fail
 
 logger = logging.getLogger(__name__)
 
@@ -839,27 +836,17 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
 
     logger.debug(f"Cleaned LLM world-building JSON output (len: {len(cleaned_world_text_json)}):\nSTART_OF_WB_JSON_TEXT\n{cleaned_world_text_json}\nEND_OF_WB_JSON_TEXT") # Updated log message
 
-    logger.info("Attempting to parse LLM world-building output using JSON parser...") # Updated log message
-    # TODO: parse_markdown_to_dict is currently an unresolved import.
-    # This will cause a runtime error if this part of the code is reached.
-    # For now, proceeding as if it exists, to fulfill the subtask's scope.
-    parsed_llm_json_response: Optional[Dict[str, Any]] = None # Renamed variable
+    logger.info("Attempting to parse LLM world-building output using JSON parser...")
+    parsed_llm_json_response: Optional[Dict[str, Any]] = None
     try:
-        # This import will fail if markdown_story_parser.py (containing parse_markdown_to_dict) is not available
-        # and parse_markdown_to_dict hasn't been moved/redefined.
-        # from markdown_story_parser import parse_markdown_to_dict # This line will be replaced
-        # parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
-        # logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
-
-        # NEW JSON PARSING:
-        parsed_llm_json_response = json.loads(cleaned_world_text_json) # Use json.loads for JSON
-        logger.debug(f"DIRECT Output of json.loads for LLM response: {json.dumps(parsed_llm_json_response, indent=2)}")
-
-    except ImportError: # This specific except block might become irrelevant if parse_markdown_to_dict is no longer called here.
-        logger.error("CRITICAL: `parse_markdown_to_dict` is not available due to markdown_story_parser.py deletion. LLM Markdown output for world-building cannot be processed.")
-        # parsed_llm_json_response remains None
+        parsed_llm_json_response = json.loads(cleaned_world_text_json)
+        logger.debug(
+            f"DIRECT Output of json.loads for LLM response: {json.dumps(parsed_llm_json_response, indent=2)}"
+        )
     except json.JSONDecodeError as e:
-        logger.error(f"CRITICAL: Failed to decode JSON from LLM output. Error: {e}. Raw text was: {cleaned_world_text_json}")
+        logger.error(
+            f"CRITICAL: Failed to decode JSON from LLM output. Error: {e}. Raw text was: {cleaned_world_text_json}"
+        )
         parsed_llm_json_response = None
 
 
