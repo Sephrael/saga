@@ -7,7 +7,6 @@ Context data for prompts is now formatted as plain text.
 
 import logging
 import asyncio
-import re
 from typing import Tuple, Optional, List, Dict, Any
 
 import config
@@ -182,24 +181,24 @@ async def _generate_single_patch_instruction_llm(
         or original_quote_text_from_problem == "N/A - General Issue"
     ):
         length_expansion_instruction_header_parts.append(
-            f"\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** "
+            "\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** "
         )
         length_expansion_instruction_header_parts.append(
-            f"The 'replace_with' text MUST be significantly longer and more detailed. "
+            "The 'replace_with' text MUST be significantly longer and more detailed. "
         )
         length_expansion_instruction_header_parts.append(
-            f"Add descriptive details, character thoughts, dialogue, actions, and sensory information. "
+            "Add descriptive details, character thoughts, dialogue, actions, and sensory information. "
         )
         if original_quote_text_from_problem == "N/A - General Issue":
             is_general_expansion_task = True
             length_expansion_instruction_header_parts.append(
-                f"Since the original quote is 'N/A - General Issue', your 'replace_with' text should be a **new, expanded passage** "
-                f"that addresses the 'Problem Description' and 'Suggested Fix Focus' within the broader 'Text Snippet' context. "
-                f"This generated text is intended as a candidate for insertion or to inform a broader rewrite of a section."
+                "Since the original quote is 'N/A - General Issue', your 'replace_with' text should be a **new, expanded passage** "
+                "that addresses the 'Problem Description' and 'Suggested Fix Focus' within the broader 'Text Snippet' context. "
+                "This generated text is intended as a candidate for insertion or to inform a broader rewrite of a section."
             )
         else:
             length_expansion_instruction_header_parts.append(
-                f"Aim for a notable increase in length and detail for the conceptual segment related to the original quote."
+                "Aim for a notable increase in length and detail for the conceptual segment related to the original quote."
             )
     length_expansion_instruction_header_str = "".join(
         length_expansion_instruction_header_parts
@@ -249,12 +248,11 @@ async def _generate_single_patch_instruction_llm(
         prompt_instruction_for_replacement_scope_parts
     )
 
-    plot_outline_data = _get_prop_from_agent(agent, "plot_outline", {})
     protagonist_name = _get_nested_prop_from_agent(
         agent, "plot_outline", "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
     )
 
-    few_shot_patch_example_str = f"""
+    few_shot_patch_example_str = """
 --- Example of how to provide 'replace_with' text (this is an example, NOT part of current task) ---
 IF THE PROBLEM WAS:
   - Issue Category: narrative_depth
@@ -891,8 +889,8 @@ async def revise_chapter_draft_logic(
         if needs_expansion_from_problems or needs_expansion_from_reasons:
             length_issue_explicit_instruction_full_rewrite_parts.extend(
                 [
-                    f"\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. ",
-                    f"Your revision MUST substantially expand the narrative by incorporating more descriptive details, character thoughts/introspection, dialogue, actions, and sensory information. ",
+                    "\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. ",
+                    "Your revision MUST substantially expand the narrative by incorporating more descriptive details, character thoughts/introspection, dialogue, actions, and sensory information. ",
                     f"Aim for a chapter length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
                 ]
             )
@@ -900,7 +898,6 @@ async def revise_chapter_draft_logic(
             length_issue_explicit_instruction_full_rewrite_parts
         )
 
-        plot_outline_data_full_rewrite = _get_prop_from_agent(agent, "plot_outline", {})
         protagonist_name_full_rewrite = _get_nested_prop_from_agent(
             agent, "plot_outline", "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
