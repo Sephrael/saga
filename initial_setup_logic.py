@@ -3,7 +3,6 @@ import logging
 import json  # Retain for fallback or other JSON operations
 import random
 import os
-import re
 from typing import Dict, Any, Optional, List, Tuple
 
 import config
@@ -96,19 +95,30 @@ def parse_key_value_block(
 
     display_key_to_internal_map: Dict[str, str] = {}
     for norm_display_key, internal_key_val in key_map.items():
-        display_key_for_llm_title = norm_display_key.replace("_", " ").title() + ":"
-        display_key_to_internal_map[display_key_for_llm_title] = internal_key_val
+        display_key_for_llm_title = (
+            norm_display_key.replace("_", " ").title() + ":"
+        )
+        display_key_to_internal_map[display_key_for_llm_title] = (
+            internal_key_val
+        )
 
         # Add lowercase version as well for more robust matching if LLM doesn't follow title case
         display_key_for_llm_lower = norm_display_key.replace("_", " ") + ":"
         if (
             display_key_for_llm_lower not in display_key_to_internal_map
         ):  # Avoid overwriting preferred Title Case
-            display_key_to_internal_map[display_key_for_llm_lower] = internal_key_val
+            display_key_to_internal_map[display_key_for_llm_lower] = (
+                internal_key_val
+            )
 
         # Add version without colon if LLM forgets it sometimes
-        display_key_for_llm_title_no_colon = norm_display_key.replace("_", " ").title()
-        if display_key_for_llm_title_no_colon not in display_key_to_internal_map:
+        display_key_for_llm_title_no_colon = norm_display_key.replace(
+            "_", " "
+        ).title()
+        if (
+            display_key_for_llm_title_no_colon
+            not in display_key_to_internal_map
+        ):
             display_key_to_internal_map[display_key_for_llm_title_no_colon] = (
                 internal_key_val
             )
@@ -133,7 +143,8 @@ def parse_key_value_block(
                 ):  # If lines were collected but not valid list items
                     # Fallback: treat as a single string if list parsing fails but content exists
                     logger.warning(
-                        f"List key '{current_internal_key}' had non-empty lines but no valid items starting with '- '. Collected: {current_value_lines}. Treating as single string."
+                        f"No '- ' items for list key '{current_internal_key}'. "
+                        f"Using single string: {current_value_lines}"
                     )
                     full_text = "\n".join(current_value_lines).strip()
                     if full_text:  # Only assign if there's actual text
@@ -208,9 +219,13 @@ def parse_key_value_block(
                 )
                 val_str = str(parsed_data[internal_key_to_ensure]).strip()
                 parsed_data[internal_key_to_ensure] = (
-                    [val_str] if val_str else [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                    [val_str]
+                    if val_str
+                    else [config.MARKDOWN_FILL_IN_PLACEHOLDER]
                 )
-            elif not parsed_data[internal_key_to_ensure]:  # If it's an empty list
+            elif not parsed_data[
+                internal_key_to_ensure
+            ]:  # If it's an empty list
                 parsed_data[internal_key_to_ensure] = [
                     config.MARKDOWN_FILL_IN_PLACEHOLDER
                 ]
@@ -219,35 +234,50 @@ def parse_key_value_block(
 
 
 def _get_val_or_fill_in(
-    data_dict: Optional[Dict[str, Any]], key: str, default_is_fill_in: bool = True
+    data_dict: Optional[Dict[str, Any]],
+    key: str,
+    default_is_fill_in: bool = True,
 ) -> Any:
     if data_dict is None:
-        return config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
+        return (
+            config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
+        )
     val = data_dict.get(key)
     if val is None or (
         isinstance(val, str) and not val.strip()
     ):  # Empty string is also a "fill-in" case
-        return config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
+        return (
+            config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
+        )
     return val
 
 
 def _create_default_plot(
-    default_protagonist_name: str, base_elements: Dict[str, Any], unhinged: bool
+    default_protagonist_name: str,
+    base_elements: Dict[str, Any],
+    unhinged: bool,
 ) -> PlotOutlineData:
     num_default_plot_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
     default_plot: PlotOutlineData = {
         "title": config.DEFAULT_PLOT_OUTLINE_TITLE,
         "protagonist_name": default_protagonist_name,
-        "protagonist_description": f"Default protagonist: {default_protagonist_name}, a character facing challenges.",
+        "protagonist_description": (
+            f"Default protagonist: {default_protagonist_name}, a character facing challenges."
+        ),
         "plot_points": [
             f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} - Default Plot Point {i + 1}"
             for i in range(num_default_plot_points)
         ],
-        "character_arc": f"Default character arc: {default_protagonist_name} learns something important over a significant journey.",
-        "setting_description": base_elements.get(
-            "setting_description", base_elements.get("setting", "A generic place.")
+        "character_arc": (
+            f"Default arc: {default_protagonist_name} learns something important."
         ),
-        "conflict_summary": "Default conflict: The protagonist must overcome a series of significant obstacles related to the core theme.",
+        "setting_description": base_elements.get(
+            "setting_description",
+            base_elements.get("setting", "A generic place."),
+        ),
+        "conflict_summary": (
+            "Default conflict: the protagonist faces obstacles tied to the theme."
+        ),
         "is_default": True,
         "source": "default_fallback",
     }
@@ -299,13 +329,17 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
     )  # normalize_keys is True by default in yaml_parser
     if user_data is None:
         logger.info(
-            f"User story elements file '{yaml_file_path}' not found or failed to parse. Will proceed with LLM generation or defaults."
+            f"User story elements file '{yaml_file_path}' not found or invalid. "
+            "Proceeding with LLM generation or defaults."
         )
         return None
     # load_yaml_file returns {} for empty file, or None for critical parse error / non-dict root
-    if not isinstance(user_data, dict) or not user_data:  # Ensure it's a non-empty dict
+    if (
+        not isinstance(user_data, dict) or not user_data
+    ):  # Ensure it's a non-empty dict
         logger.warning(
-            f"User story elements file '{yaml_file_path}' was empty or did not yield a dictionary. Will proceed with LLM generation or defaults."
+            f"User story elements file '{yaml_file_path}' was empty or invalid. "
+            "Using LLM generation or defaults."
         )
         return {}
 
@@ -323,7 +357,11 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
     ]
     found_any_expected_key = False
     for key in expected_top_level_keys:
-        if key in user_data and isinstance(user_data[key], dict) and user_data[key]:
+        if (
+            key in user_data
+            and isinstance(user_data[key], dict)
+            and user_data[key]
+        ):
             found_any_expected_key = True
             break
         elif (
@@ -337,17 +375,19 @@ def _load_user_supplied_data() -> Optional[Dict[str, Any]]:
 
     if not found_any_expected_key:
         logger.error(
-            f"User-supplied YAML data from '{yaml_file_path}' does not seem to contain any expected top-level sections with content after key normalization. Parsed data: {user_data}"
+            f"YAML '{yaml_file_path}' lacked expected sections after normalization: {user_data}"
         )
         return {}
 
     logger.info(
-        f"Successfully loaded and performed initial validation on user-supplied story data from '{yaml_file_path}'."
+        f"Loaded and validated user story data from '{yaml_file_path}'."
     )
     return user_data
 
 
-def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
+def _populate_agent_state_from_user_data(
+    agent: Any, user_data: Dict[str, Any]
+):
     plot_outline: PlotOutlineData = (
         agent.plot_outline
         if hasattr(agent, "plot_outline") and agent.plot_outline
@@ -367,9 +407,13 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     # Initialize world_building structure
     for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
         world_building.setdefault(cat_internal_key, {})
-    world_building["user_supplied_data"] = True  # Mark that user data was involved
+    world_building["user_supplied_data"] = (
+        True  # Mark that user data was involved
+    )
     world_building["is_default"] = False
-    world_building["source"] = "user_supplied_yaml"  # Updated source identifier
+    world_building["source"] = (
+        "user_supplied_yaml"  # Updated source identifier
+    )
 
     nc = user_data.get(
         "novel_concept", {}
@@ -384,7 +428,9 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     plot_outline["protagonist_description"] = _get_val_or_fill_in(
         prot_data, "description"
     )
-    plot_outline["character_arc"] = _get_val_or_fill_in(prot_data, "character_arc")
+    plot_outline["character_arc"] = _get_val_or_fill_in(
+        prot_data, "character_arc"
+    )
 
     ant_data = user_data.get("antagonist", {})
     plot_outline["antagonist_name"] = _get_val_or_fill_in(ant_data, "name")
@@ -396,7 +442,9 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     )
 
     conflict_data = user_data.get("conflict", {})
-    plot_outline["conflict_summary"] = _get_val_or_fill_in(conflict_data, "summary")
+    plot_outline["conflict_summary"] = _get_val_or_fill_in(
+        conflict_data, "summary"
+    )
     plot_outline["inciting_incident"] = _get_val_or_fill_in(
         conflict_data, "inciting_incident"
     )
@@ -423,9 +471,12 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
             len(plot_outline["plot_points"]) > 0
             and len(plot_outline["plot_points"])
             < config.TARGET_PLOT_POINTS_INITIAL_GENERATION
-            and plot_outline["plot_points"][-1] != config.MARKDOWN_FILL_IN_PLACEHOLDER
+            and plot_outline["plot_points"][-1]
+            != config.MARKDOWN_FILL_IN_PLACEHOLDER
         ):
-            plot_outline["plot_points"].append(config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            plot_outline["plot_points"].append(
+                config.MARKDOWN_FILL_IN_PLACEHOLDER
+            )
 
     # Process 'setting' section from user_data for world_building
     setting_data_md = user_data.get("setting", {})
@@ -440,7 +491,9 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     if not utils._is_fill_in(
         overview_desc_from_setting
     ):  # Only overwrite if user provided something
-        world_building["_overview_"]["description"] = overview_desc_from_setting
+        world_building["_overview_"]["description"] = (
+            overview_desc_from_setting
+        )
 
     key_locations_md = setting_data_md.get(
         "key_locations", {}
@@ -474,16 +527,22 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                     # Assume "Unique World Feature" as the display name if not explicitly named in MD
                     feature_item_name_display = (
                         _get_val_or_fill_in(
-                            main_wd_content_md, "name", default_is_fill_in=False
+                            main_wd_content_md,
+                            "name",
+                            default_is_fill_in=False,
                         )
                         or "Unique World Feature"
                     )
                     agent_item_details = world_building[
                         target_category_internal
                     ].setdefault(
-                        feature_item_name_display, {"source": "user_supplied_markdown"}
+                        feature_item_name_display,
+                        {"source": "user_supplied_markdown"},
                     )
-                    for md_detail_key, md_detail_val in main_wd_content_md.items():
+                    for (
+                        md_detail_key,
+                        md_detail_val,
+                    ) in main_wd_content_md.items():
                         if md_detail_key == "name":
                             continue  # Already used for item name
                         internal_detail_key = (
@@ -503,22 +562,28 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                         item_name_norm_md,
                         item_details_md,
                     ) in main_wd_content_md.items():
-                        item_name_display = item_name_norm_md.replace("_", " ").title()
-                        if not utils._is_fill_in(item_name_display) and isinstance(
-                            item_details_md, dict
-                        ):
+                        item_name_display = item_name_norm_md.replace(
+                            "_", " "
+                        ).title()
+                        if not utils._is_fill_in(
+                            item_name_display
+                        ) and isinstance(item_details_md, dict):
                             agent_item_details = world_building[
                                 target_category_internal
                             ].setdefault(
-                                item_name_display, {"source": "user_supplied_markdown"}
+                                item_name_display,
+                                {"source": "user_supplied_markdown"},
                             )
-                            for md_detail_key, md_detail_val in item_details_md.items():
-                                internal_detail_key = (
-                                    WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                        md_detail_key, md_detail_key
-                                    )
+                            for (
+                                md_detail_key,
+                                md_detail_val,
+                            ) in item_details_md.items():
+                                internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
+                                    md_detail_key, md_detail_key
                                 )
-                                agent_item_details[internal_detail_key] = md_detail_val
+                                agent_item_details[internal_detail_key] = (
+                                    md_detail_val
+                                )
 
             elif main_wd_key_norm_md == "relevant_lore":
                 target_category_internal = "lore"
@@ -528,22 +593,28 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                         item_name_norm_md,
                         item_details_md,
                     ) in main_wd_content_md.items():
-                        item_name_display = item_name_norm_md.replace("_", " ").title()
-                        if not utils._is_fill_in(item_name_display) and isinstance(
-                            item_details_md, dict
-                        ):
+                        item_name_display = item_name_norm_md.replace(
+                            "_", " "
+                        ).title()
+                        if not utils._is_fill_in(
+                            item_name_display
+                        ) and isinstance(item_details_md, dict):
                             agent_item_details = world_building[
                                 target_category_internal
                             ].setdefault(
-                                item_name_display, {"source": "user_supplied_markdown"}
+                                item_name_display,
+                                {"source": "user_supplied_markdown"},
                             )
-                            for md_detail_key, md_detail_val in item_details_md.items():
-                                internal_detail_key = (
-                                    WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                        md_detail_key, md_detail_key
-                                    )
+                            for (
+                                md_detail_key,
+                                md_detail_val,
+                            ) in item_details_md.items():
+                                internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
+                                    md_detail_key, md_detail_key
                                 )
-                                agent_item_details[internal_detail_key] = md_detail_val
+                                agent_item_details[internal_detail_key] = (
+                                    md_detail_val
+                                )
             # Add other categories like "history", "society" similarly if they appear under world_details
 
     plot_outline["source"] = "user_supplied_yaml"  # Updated source identifier
@@ -559,7 +630,8 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                 "traits": [
                     t
                     for t in prot_data.get("traits", [])
-                    if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+                    if isinstance(t, str)
+                    and (t.strip() or utils._is_fill_in(t))
                 ],  # Assumes 'traits' is list
                 "status": _get_val_or_fill_in(prot_data, "initial_status")
                 or "As described",
@@ -583,7 +655,8 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
                 "traits": [
                     t
                     for t in ant_data.get("traits", [])
-                    if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+                    if isinstance(t, str)
+                    and (t.strip() or utils._is_fill_in(t))
                 ],
                 "status": "As described",
                 "motivations": plot_outline["antagonist_motivations"],
@@ -602,26 +675,31 @@ def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
             char_detail_yaml,
         ) in other_chars_data.items():
             # char_name_other_normalized_yaml is already normalized by load_yaml_file
-            char_name_other_display = (
-                char_name_other_normalized_yaml.replace("_", " ").title()
-            )  # For display consistency if needed, but internal key is normalized
+            char_name_other_display = char_name_other_normalized_yaml.replace(
+                "_", " "
+            ).title()  # For display consistency if needed, but internal key is normalized
             if not utils._is_fill_in(char_name_other_display) and isinstance(
                 char_detail_yaml, dict
             ):
                 # Use normalized key for character_profiles dict directly
                 agent_char_details = character_profiles.setdefault(
-                    char_name_other_normalized_yaml, {"source": "user_supplied_yaml"}
+                    char_name_other_normalized_yaml,
+                    {"source": "user_supplied_yaml"},
                 )
                 for (
                     yaml_detail_key,
                     yaml_detail_val,
-                ) in char_detail_yaml.items():  # These keys are also normalized
+                ) in (
+                    char_detail_yaml.items()
+                ):  # These keys are also normalized
                     # Assuming char profile keys are mostly direct (already normalized)
                     internal_detail_key = yaml_detail_key
                     agent_char_details[internal_detail_key] = yaml_detail_val
 
     agent.character_profiles = character_profiles
-    agent.world_building = world_building  # world_building was modified in place
+    agent.world_building = (
+        world_building  # world_building was modified in place
+    )
     logger.info(
         "Agent state populated from user-supplied YAML data (preserving '[Fill-in]' markers)."
     )
@@ -644,20 +722,24 @@ async def generate_plot_outline_logic(
         "total_tokens": 0,
     }
 
-    if user_supplied_data:  # This will be None if file not found, or {} if empty/error
+    if (
+        user_supplied_data
+    ):  # This will be None if file not found, or {} if empty/error
         if (
             user_supplied_data
         ):  # Check if dict is not empty (i.e., file had content and parsed)
-            logger.info("Processing user-supplied YAML data for initial setup.")
+            logger.info(
+                "Processing user-supplied YAML data for initial setup."
+            )
             _populate_agent_state_from_user_data(agent, user_supplied_data)
         else:  # File was empty or structure was not a root dictionary
             logger.warning(
-                "User-supplied YAML file was effectively empty or did not yield a root dictionary. Plot will be fully generated or default."
+                "YAML file empty or not a dictionary. Using LLM or defaults."
             )
             agent.plot_outline = {}  # Ensure it's an empty dict, not None
     else:  # File not found
         logger.info(
-            "No user-supplied YAML file found. Plot outline will be fully generated by LLM or default."
+            "No YAML file found. Plot outline will be generated by LLM or defaults."
         )
         agent.plot_outline = {}
 
@@ -730,30 +812,45 @@ async def generate_plot_outline_logic(
                         concrete_list_items = [
                             item
                             for item in user_val
-                            if not utils._is_fill_in(item) and str(item).strip()
+                            if not utils._is_fill_in(item)
+                            and str(item).strip()
                         ]
                         fill_in_placeholders_in_list = [
-                            item for item in user_val if utils._is_fill_in(item)
+                            item
+                            for item in user_val
+                            if utils._is_fill_in(item)
                         ]
 
                         if concrete_list_items:
-                            context_from_user_input += f'  - {display_key_title_case}: User provided {len(concrete_list_items)} concrete item(s), e.g., "{str(concrete_list_items[0])[:50]}...". '  # Ensure str
+                            context_from_user_input += f"  - {display_key_title_case}: {len(concrete_list_items)} item(s) provided. "  # Ensure str
                             has_user_context = True
                         if fill_in_placeholders_in_list:
-                            context_from_user_input += f"Also includes {len(fill_in_placeholders_in_list)} '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' items to complete.\n"
+                            context_from_user_input += (
+                                f"Also includes {len(fill_in_placeholders_in_list)} "
+                                f"'{config.MARKDOWN_FILL_IN_PLACEHOLDER}' items to complete.\n"
+                            )
                             has_user_context = True
                         elif concrete_list_items:
                             context_from_user_input += "This list might need expansion if below target count.\n"
-                    elif not utils._is_fill_in(user_val) and str(user_val).strip():
+                    elif (
+                        not utils._is_fill_in(user_val)
+                        and str(user_val).strip()
+                    ):
                         context_from_user_input += (
                             f"  - {display_key_title_case}: {str(user_val)}\n"
                         )
                         has_user_context = True
                     elif utils._is_fill_in(user_val):
-                        context_from_user_input += f"  - {display_key_title_case}: {config.MARKDOWN_FILL_IN_PLACEHOLDER} (User requests generation for this field)\n"
+                        context_from_user_input += (
+                            f"  - {display_key_title_case}: {config.MARKDOWN_FILL_IN_PLACEHOLDER} "
+                            "(needs generation)\n"
+                        )
                         has_user_context = True
         if not has_user_context:
-            context_from_user_input = "\n**User-Provided Context:** No specific overriding preferences or fill-in requests were found; generate all fields creatively.\n"
+            context_from_user_input = (
+                "\n**User-Provided Context:** No overriding preferences or fill-in "
+                "requests; generate all fields creatively.\n"
+            )
 
         llm_fields_to_generate_text = "\n".join(
             [
@@ -782,20 +879,32 @@ async def generate_plot_outline_logic(
                 "theme", random.choice(config.UNHINGED_THEMES)
             )
             base_elements_for_outline["setting_description"] = kwargs.get(
-                "setting_archetype", random.choice(config.UNHINGED_SETTINGS_ARCHETYPES)
+                "setting_archetype",
+                random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
             )
-            base_elements_for_outline["protagonist_name"] = default_protagonist_name
+            base_elements_for_outline["protagonist_name"] = (
+                default_protagonist_name
+            )
             base_elements_for_outline["source_hint"] = "unhinged_pure_llm"
-            prompt_core_elements_intro = f"You are in UNHINGED mode. Generate a novel concept based on:\n  - Genre: {base_elements_for_outline['genre']}\n  - Theme: {base_elements_for_outline['theme']}\n  - Setting Archetype: {base_elements_for_outline['setting_description']}\n"
+            prompt_core_elements_intro = (
+                "You are in UNHINGED mode. Generate a novel concept based on:\n"
+                f"  - Genre: {base_elements_for_outline['genre']}\n"
+                f"  - Theme: {base_elements_for_outline['theme']}\n"
+                f"  - Setting Archetype: {base_elements_for_outline['setting_description']}\n"
+            )
         else:
             base_elements_for_outline["genre"] = (
                 current_agent_plot_outline.get("genre")
-                if not utils._is_fill_in(current_agent_plot_outline.get("genre"))
+                if not utils._is_fill_in(
+                    current_agent_plot_outline.get("genre")
+                )
                 else config.CONFIGURED_GENRE
             )
             base_elements_for_outline["theme"] = (
                 current_agent_plot_outline.get("theme")
-                if not utils._is_fill_in(current_agent_plot_outline.get("theme"))
+                if not utils._is_fill_in(
+                    current_agent_plot_outline.get("theme")
+                )
                 else config.CONFIGURED_THEME
             )
             base_elements_for_outline["setting_description"] = (
@@ -815,7 +924,13 @@ async def generate_plot_outline_logic(
             base_elements_for_outline["source_hint"] = (
                 "configured_or_user_yaml"  # Updated source hint
             )
-            prompt_core_elements_intro = f"Generate a novel concept based on (or incorporating):\n  - Genre: {base_elements_for_outline['genre']}\n  - Theme: {base_elements_for_outline['theme']}\n  - Initial Setting Idea: {base_elements_for_outline['setting_description']}\n  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
+            prompt_core_elements_intro = (
+                "Generate a novel concept based on (or incorporating):\n"
+                f"  - Genre: {base_elements_for_outline['genre']}\n"
+                f"  - Theme: {base_elements_for_outline['theme']}\n"
+                f"  - Initial Setting Idea: {base_elements_for_outline['setting_description']}\n"
+                f"  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
+            )
 
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
@@ -866,7 +981,9 @@ async def generate_plot_outline_logic(
             accumulated_usage_data["completion_tokens"] += usage_data.get(
                 "completion_tokens", 0
             )
-            accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
+            accumulated_usage_data["total_tokens"] += usage_data.get(
+                "total_tokens", 0
+            )
 
         parsed_llm_response = parse_key_value_block(
             cleaned_outline_text,
@@ -890,7 +1007,11 @@ async def generate_plot_outline_logic(
                         and pp.strip()
                     ]
                     llm_pps = (
-                        [pp for pp in llm_value if isinstance(pp, str) and pp.strip()]
+                        [
+                            pp
+                            for pp in llm_value
+                            if isinstance(pp, str) and pp.strip()
+                        ]
                         if isinstance(llm_value, list)
                         else []
                     )
@@ -910,7 +1031,9 @@ async def generate_plot_outline_logic(
                         final_pps.append(
                             f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} - Additional plot point needed"
                         )
-                    agent.plot_outline[key] = final_pps[:target_num_plot_points]
+                    agent.plot_outline[key] = final_pps[
+                        :target_num_plot_points
+                    ]
                 elif (
                     utils._is_fill_in(existing_val)
                     or existing_val is None
@@ -929,13 +1052,17 @@ async def generate_plot_outline_logic(
                     llm_generated_val = parsed_llm_response.get(
                         be_key, base_elements_for_outline.get(be_key)
                     )
-                    if llm_generated_val and not utils._is_fill_in(llm_generated_val):
+                    if llm_generated_val and not utils._is_fill_in(
+                        llm_generated_val
+                    ):
                         agent.plot_outline[be_key] = llm_generated_val
                     elif base_elements_for_outline.get(
                         be_key
-                    ) and not utils._is_fill_in(base_elements_for_outline.get(be_key)):
-                        agent.plot_outline[be_key] = base_elements_for_outline.get(
-                            be_key
+                    ) and not utils._is_fill_in(
+                        base_elements_for_outline.get(be_key)
+                    ):
+                        agent.plot_outline[be_key] = (
+                            base_elements_for_outline.get(be_key)
                         )
 
             agent.plot_outline.pop("is_default", None)
@@ -947,7 +1074,8 @@ async def generate_plot_outline_logic(
                     "source_hint", "llm_generated_or_merged"
                 )
             logger.info(
-                f"LLM successfully generated/updated plot outline elements. Title: '{agent.plot_outline.get('title', 'N/A')}' with {len(agent.plot_outline.get('plot_points', []))} plot points."
+                f"LLM updated plot outline '{agent.plot_outline.get('title', 'N/A')}' "
+                f"with {len(agent.plot_outline.get('plot_points', []))} points."
             )
         else:
             logger.error(
@@ -980,13 +1108,17 @@ async def generate_plot_outline_logic(
 
     final_protagonist_name = agent.plot_outline["protagonist_name"]
 
-    if not hasattr(agent, "character_profiles") or agent.character_profiles is None:
+    if (
+        not hasattr(agent, "character_profiles")
+        or agent.character_profiles is None
+    ):
         agent.character_profiles = {}
     if not isinstance(agent.character_profiles, dict):
         agent.character_profiles = {}
 
     agent.character_profiles.setdefault(
-        final_protagonist_name, {"source": agent.plot_outline.get("source", "unknown")}
+        final_protagonist_name,
+        {"source": agent.plot_outline.get("source", "unknown")},
     )
     prot_profile_ref = agent.character_profiles[final_protagonist_name]
 
@@ -1000,7 +1132,9 @@ async def generate_plot_outline_logic(
         elif key not in prot_profile_ref or utils._is_fill_in(
             prot_profile_ref.get(key)
         ):
-            prot_profile_ref[key] = f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} for {key}"
+            prot_profile_ref[key] = (
+                f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} for {key}"
+            )
 
     prot_profile_ref["role"] = "protagonist"
     if (
@@ -1017,7 +1151,9 @@ async def generate_plot_outline_logic(
     ):
         prot_profile_ref["status"] = (
             config.MARKDOWN_FILL_IN_PLACEHOLDER
-            if utils._is_fill_in(agent.plot_outline.get("protagonist_description"))
+            if utils._is_fill_in(
+                agent.plot_outline.get("protagonist_description")
+            )
             else "As described in plot outline"
         )
 
@@ -1039,9 +1175,14 @@ async def generate_plot_outline_logic(
     overview_desc_val = agent.plot_outline.get(
         "setting_description", config.MARKDOWN_FILL_IN_PLACEHOLDER
     )
-    agent.world_building.setdefault("_overview_", {})["description"] = overview_desc_val
+    agent.world_building.setdefault("_overview_", {})["description"] = (
+        overview_desc_val
+    )
 
-    return agent.plot_outline, accumulated_usage_data if llm_was_called else None
+    return (
+        agent.plot_outline,
+        accumulated_usage_data if llm_was_called else None,
+    )
 
 
 async def generate_world_building_logic(
@@ -1071,26 +1212,43 @@ async def generate_world_building_logic(
         agent.world_building.get("source") == "user_supplied_yaml"
     ):  # Updated source check
         # Check if any [Fill-in] exists in user-supplied data
-        for category_internal, items_or_details_dict in agent.world_building.items():
-            if category_internal in ["is_default", "source", "user_supplied_data"]:
+        for (
+            category_internal,
+            items_or_details_dict,
+        ) in agent.world_building.items():
+            if category_internal in [
+                "is_default",
+                "source",
+                "user_supplied_data",
+            ]:
                 continue  # Skip helper keys
             if isinstance(items_or_details_dict, dict):
                 if category_internal == "_overview_":
-                    for detail_key, detail_value in items_or_details_dict.items():
+                    for (
+                        detail_key,
+                        detail_value,
+                    ) in items_or_details_dict.items():
                         if utils._is_fill_in(detail_value):
                             needs_llm_for_world = True
                             break
                 else:  # Itemized categories
-                    for item_name, item_detail_dict in items_or_details_dict.items():
+                    for (
+                        item_name,
+                        item_detail_dict,
+                    ) in items_or_details_dict.items():
                         if isinstance(item_detail_dict, dict):
-                            for detail_key, detail_value in item_detail_dict.items():
+                            for (
+                                detail_key,
+                                detail_value,
+                            ) in item_detail_dict.items():
                                 if detail_key == "source":
                                     continue
                                 if utils._is_fill_in(detail_value):
                                     needs_llm_for_world = True
                                     break
                                 if isinstance(detail_value, list) and any(
-                                    utils._is_fill_in(li) for li in detail_value
+                                    utils._is_fill_in(li)
+                                    for li in detail_value
                                 ):
                                     needs_llm_for_world = True
                                     break
@@ -1121,9 +1279,9 @@ async def generate_world_building_logic(
             agent.world_building.get("_overview_", {}).get("description")
         ):
             # Set a very generic overview if nothing else is available
-            agent.world_building.setdefault("_overview_", {})["description"] = (
-                "A world to be detailed by the LLM."
-            )
+            agent.world_building.setdefault("_overview_", {})[
+                "description"
+            ] = "A world to be detailed by the LLM."
         if (
             agent.world_building.get("source") != "user_supplied_yaml"
         ):  # Avoid overwriting this if it was set
@@ -1139,15 +1297,15 @@ async def generate_world_building_logic(
     plot_genre = agent.plot_outline.get("genre", "N/A")
 
     # Prepare world_setting_desc for the prompt, prioritizing agent.world_building._overview.description
-    world_setting_desc = agent.world_building.get("_overview_", {}).get("description")
+    world_setting_desc = agent.world_building.get("_overview_", {}).get(
+        "description"
+    )
     if not world_setting_desc or utils._is_fill_in(world_setting_desc):
         world_setting_desc = agent.plot_outline.get(
             "setting_description"
         )  # Fallback to plot_outline
     if not world_setting_desc or utils._is_fill_in(world_setting_desc):
-        world_setting_desc = (
-            "A mysterious and detailed world waiting to be fleshed out by the LLM."
-        )
+        world_setting_desc = "A mysterious and detailed world waiting to be fleshed out by the LLM."
 
     user_world_context_str = "\n**User-Provided World Context (Content from user_story_elements.yaml - Respect these concrete values. Complete any '[Fill-in]' fields creatively using Markdown):**\n"  # Updated filename
     temp_user_wb_for_prompt: List[str] = []
@@ -1155,14 +1313,18 @@ async def generate_world_building_logic(
     if agent.world_building.get("source") == "user_supplied_yaml" and (
         agent.world_building.get("_overview_")
         or any(
-            k not in ["_overview_", "is_default", "source", "user_supplied_data"]
+            k
+            not in ["_overview_", "is_default", "source", "user_supplied_data"]
             for k in agent.world_building.keys()
         )
     ):  # user_supplied_data might be redundant
         overview_data_for_prompt = agent.world_building.get("_overview_", {})
         if overview_data_for_prompt:  # Check if overview itself is not empty
             temp_user_wb_for_prompt.append("## Overview")
-            for detail_key_internal, detail_val in overview_data_for_prompt.items():
+            for (
+                detail_key_internal,
+                detail_val,
+            ) in overview_data_for_prompt.items():
                 if detail_key_internal == "source":
                     continue
                 detail_key_display_for_prompt = detail_key_internal.replace(
@@ -1182,35 +1344,46 @@ async def generate_world_building_logic(
             ]:
                 continue
 
-            cat_display_for_prompt = cat_internal.replace("_", " ").capitalize()
-            category_lines_for_prompt: List[str] = []  # Lines for current category
+            cat_display_for_prompt = cat_internal.replace(
+                "_", " "
+            ).capitalize()
+            category_lines_for_prompt: List[
+                str
+            ] = []  # Lines for current category
 
             if isinstance(items_dict, dict) and items_dict:
-                category_lines_for_prompt.append(f"## {cat_display_for_prompt}")
+                category_lines_for_prompt.append(
+                    f"## {cat_display_for_prompt}"
+                )
                 for item_display_name, details in items_dict.items():
-                    if not isinstance(details, dict) or item_display_name.startswith(
-                        "_"
-                    ):
+                    if not isinstance(
+                        details, dict
+                    ) or item_display_name.startswith("_"):
                         continue  # Skip internal markers like _is_fill_in
 
-                    category_lines_for_prompt.append(f"### {item_display_name}")
+                    category_lines_for_prompt.append(
+                        f"### {item_display_name}"
+                    )
                     item_has_details = False
                     for detail_key_internal, detail_val in details.items():
                         if detail_key_internal == "source":
                             continue
-                        detail_key_display_for_prompt = detail_key_internal.replace(
-                            "_", " "
-                        ).capitalize()
+                        detail_key_display_for_prompt = (
+                            detail_key_internal.replace("_", " ").capitalize()
+                        )
                         if isinstance(detail_val, list):
                             if detail_val:  # Only add if list has items
                                 category_lines_for_prompt.append(
                                     f"**{detail_key_display_for_prompt}**:"
                                 )
                                 for li_val in detail_val:
-                                    category_lines_for_prompt.append(f"  - {li_val}")
+                                    category_lines_for_prompt.append(
+                                        f"  - {li_val}"
+                                    )
                                 item_has_details = True
                         elif detail_val is not None and (
-                            isinstance(detail_val, bool) or str(detail_val).strip()
+                            isinstance(detail_val, bool)
+                            or str(detail_val).strip()
                         ):
                             category_lines_for_prompt.append(
                                 f"**{detail_key_display_for_prompt}**: {detail_val}"
@@ -1348,17 +1521,23 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
         auto_clean_response=True,
     )
     if usage_data:
-        accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
+        accumulated_usage_data["prompt_tokens"] += usage_data.get(
+            "prompt_tokens", 0
+        )
         accumulated_usage_data["completion_tokens"] += usage_data.get(
             "completion_tokens", 0
         )
-        accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
+        accumulated_usage_data["total_tokens"] += usage_data.get(
+            "total_tokens", 0
+        )
 
     logger.debug(
         f"Cleaned LLM world-building JSON output (len: {len(cleaned_world_text_json)}):\nSTART_OF_WB_JSON_TEXT\n{cleaned_world_text_json}\nEND_OF_WB_JSON_TEXT"
     )  # Updated log message
 
-    logger.info("Attempting to parse LLM world-building output using JSON parser...")
+    logger.info(
+        "Attempting to parse LLM world-building output using JSON parser..."
+    )
     parsed_llm_json_response: Optional[Dict[str, Any]] = None
     try:
         parsed_llm_json_response = json.loads(cleaned_world_text_json)
@@ -1408,7 +1587,10 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
 
             if internal_cat_name == "_overview_":
                 # json_cat_content is like {"description": "...", "mood": "..."}
-                for json_detail_key, json_detail_value in json_cat_content.items():
+                for (
+                    json_detail_key,
+                    json_detail_value,
+                ) in json_cat_content.items():
                     # Assuming json_detail_key is already the desired internal key, or maps directly
                     # from WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL's keys.
                     internal_detail_key_target = (
@@ -1431,8 +1613,9 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                         internal_detail_key_target
                     )
                     if utils._is_fill_in(existing_val) or existing_val is None:
-                        if json_detail_value is not None and not utils._is_fill_in(
-                            json_detail_value
+                        if (
+                            json_detail_value is not None
+                            and not utils._is_fill_in(json_detail_value)
                         ):
                             if (
                                 internal_detail_key_target
@@ -1443,7 +1626,9 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                     processed_list = [
                                         str(li)
                                         for li in json_detail_value
-                                        if isinstance(li, (str, int, float, bool))
+                                        if isinstance(
+                                            li, (str, int, float, bool)
+                                        )
                                         and not utils._is_fill_in(str(li))
                                     ]
                                     if (
@@ -1478,14 +1663,17 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                         internal_detail_key_target
                                     ] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
                             else:  # Not a list key
-                                target_category_in_agent[internal_detail_key_target] = (
-                                    str(json_detail_value)
-                                )  # Ensure string
+                                target_category_in_agent[
+                                    internal_detail_key_target
+                                ] = str(json_detail_value)  # Ensure string
             else:  # Itemized categories like "locations", "factions"
                 processed_items_for_category: Dict[str, Any] = {}
                 default_item_properties: Dict[str, Any] = {}
 
-                for item_key_from_llm, item_value_from_llm in json_cat_content.items():
+                for (
+                    item_key_from_llm,
+                    item_value_from_llm,
+                ) in json_cat_content.items():
                     # Try to normalize item_key_from_llm in case it's a property name for the default item
                     internal_item_key_for_agent = (
                         WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
@@ -1499,14 +1687,15 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                         item_attributes_dict = item_value_from_llm
                         processed_attributes: Dict[str, Any] = {}
                         for attr_key, attr_val in item_attributes_dict.items():
-                            target_attr_key = (
-                                WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                    attr_key, attr_key
-                                )
+                            target_attr_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
+                                attr_key, attr_key
                             )
 
                             # Conditionally wrap attr_val
-                            if target_attr_key not in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                            if (
+                                target_attr_key
+                                not in WORLD_DETAIL_LIST_INTERNAL_KEYS
+                            ):
                                 if isinstance(attr_val, str):
                                     attr_val = {"text": attr_val}
                                 elif isinstance(attr_val, list):
@@ -1527,9 +1716,9 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                 prop_value = {"text": prop_value}
                             elif isinstance(prop_value, list):
                                 prop_value = {"items": prop_value}
-                        default_item_properties[internal_item_key_for_agent] = (
-                            prop_value
-                        )
+                        default_item_properties[
+                            internal_item_key_for_agent
+                        ] = prop_value
 
                 if default_item_properties:
                     # Use the original LLM category key as the default item name
@@ -1569,7 +1758,9 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                 # The current logic path is for when `needs_llm_for_world` is true.
 
                 # Re-initialize the category in agent state to ensure clean slate for LLM content
-                target_category_in_agent = agent.world_building[internal_cat_name] = {}
+                target_category_in_agent = agent.world_building[
+                    internal_cat_name
+                ] = {}
 
                 for (
                     item_name,
@@ -1577,8 +1768,11 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                 ) in processed_items_for_category.items():
                     # Ensure item_name is a string, as it's used as a dict key
                     item_name_str = str(item_name)
-                    agent_item_details_target = target_category_in_agent.setdefault(
-                        item_name_str, {"source": "llm_generated_json_style"}
+                    agent_item_details_target = (
+                        target_category_in_agent.setdefault(
+                            item_name_str,
+                            {"source": "llm_generated_json_style"},
+                        )
                     )
 
                     # Merge the processed details.
@@ -1588,26 +1782,36 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
 
                     for detail_key, detail_value in item_details_dict.items():
                         # detail_key is already the internal_item_detail_key_target
-                        existing_agent_val = agent_item_details_target.get(detail_key)
+                        existing_agent_val = agent_item_details_target.get(
+                            detail_key
+                        )
 
                         # Apply if existing is fill-in, or if it's None (new key for this item)
                         if (
                             utils._is_fill_in(existing_agent_val)
                             or existing_agent_val is None
                         ):
-                            if detail_value is not None and not utils._is_fill_in(
-                                detail_value
+                            if (
+                                detail_value is not None
+                                and not utils._is_fill_in(detail_value)
                             ):  # LLM provided actual content
-                                if detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                if (
+                                    detail_key
+                                    in WORLD_DETAIL_LIST_INTERNAL_KEYS
+                                ):
                                     # Value from LLM (detail_value) might be {"items": ["a", "b"]} or a direct list if wrapping wasn't applied
                                     # or it was already a list key.
                                     actual_list_items = []
                                     if (
                                         isinstance(detail_value, dict)
                                         and "items" in detail_value
-                                        and isinstance(detail_value["items"], list)
+                                        and isinstance(
+                                            detail_value["items"], list
+                                        )
                                     ):
-                                        actual_list_items = detail_value["items"]
+                                        actual_list_items = detail_value[
+                                            "items"
+                                        ]
                                     elif isinstance(
                                         detail_value, list
                                     ):  # LLM directly provided a list for a list key
@@ -1630,19 +1834,23 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                     processed_list = [
                                         str(li)
                                         for li in actual_list_items
-                                        if isinstance(li, (str, int, float, bool))
+                                        if isinstance(
+                                            li, (str, int, float, bool)
+                                        )
                                         and not utils._is_fill_in(str(li))
                                     ]
                                     if processed_list:
-                                        agent_item_details_target[detail_key] = (
-                                            processed_list
-                                        )
+                                        agent_item_details_target[
+                                            detail_key
+                                        ] = processed_list
                                     # If existing was fill-in and LLM provided empty/bad list, ensure it remains a fill-in list
                                     elif (
                                         utils._is_fill_in(existing_agent_val)
                                         or existing_agent_val is None
                                     ):
-                                        agent_item_details_target[detail_key] = [
+                                        agent_item_details_target[
+                                            detail_key
+                                        ] = [
                                             config.MARKDOWN_FILL_IN_PLACEHOLDER
                                         ]
                                 else:  # Not a list key
@@ -1651,13 +1859,13 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                         isinstance(detail_value, dict)
                                         and "text" in detail_value
                                     ):
-                                        agent_item_details_target[detail_key] = str(
-                                            detail_value["text"]
-                                        )
+                                        agent_item_details_target[
+                                            detail_key
+                                        ] = str(detail_value["text"])
                                     else:  # Assume it's a direct string or can be converted
-                                        agent_item_details_target[detail_key] = str(
-                                            detail_value
-                                        )
+                                        agent_item_details_target[
+                                            detail_key
+                                        ] = str(detail_value)
                             # If LLM detail_value is None or fill-in, and agent had fill-in/None, ensure it's properly set to fill-in
                             elif detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
                                 agent_item_details_target[detail_key] = [
@@ -1679,7 +1887,7 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
         # This 'else' corresponds to 'if parsed_llm_json_response and isinstance(parsed_llm_json_response, dict):'
         # It means either json.loads failed (parsed_llm_json_response is None) or the root was not a dict.
         logger.error(
-            "Failed to parse a valid world-building dictionary from LLM JSON output, or root of JSON was not a dictionary. Existing or default world_building will be used."
+            "Failed to parse world-building JSON; using existing or default data."
         )  # Updated log
         if not agent.world_building.get("_overview_") or utils._is_fill_in(
             agent.world_building.get("_overview_", {}).get("description")
@@ -1692,9 +1900,9 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                     "A default world setting, to be detailed later."
                 )
 
-            agent.world_building.setdefault("_overview_", {})["description"] = (
-                default_wb_overview_desc
-            )
+            agent.world_building.setdefault("_overview_", {})[
+                "description"
+            ] = default_wb_overview_desc
             # Only set to default_fallback if it wasn't originally user-supplied and now failing back
             if agent.world_building.get("source") != "user_supplied_yaml":
                 agent.world_building["source"] = "default_fallback"
@@ -1710,8 +1918,15 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
     if llm_was_called:  # Only do this if an LLM call was actually made
         current_source = agent.world_building.get("source", "")
         # Don't create empty categories if data is purely from user_supplied_yaml and LLM was not needed to fill gaps
-        if not (current_source == "user_supplied_yaml" and not needs_llm_for_world):
-            for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
+        if not (
+            current_source == "user_supplied_yaml" and not needs_llm_for_world
+        ):
+            for (
+                cat_internal_key
+            ) in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
                 agent.world_building.setdefault(cat_internal_key, {})
 
-    return agent.world_building, accumulated_usage_data if llm_was_called else None
+    return (
+        agent.world_building,
+        accumulated_usage_data if llm_was_called else None,
+    )
