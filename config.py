@@ -20,7 +20,8 @@ Copyright 2025 Dennis Lewis
 """
 
 from dotenv import load_dotenv
-load_dotenv() # Loads environment variables from .env file into os.environ
+
+load_dotenv()  # Loads environment variables from .env file into os.environ
 
 import os
 import logging
@@ -28,29 +29,43 @@ import json
 from typing import Optional, List
 import numpy as np
 
+
 # --- Helper function to load lists from JSON ---
-def _load_list_from_json(file_path: str, default_if_missing: Optional[List[str]] = None) -> List[str]:
+def _load_list_from_json(
+    file_path: str, default_if_missing: Optional[List[str]] = None
+) -> List[str]:
     """Loads a list of strings from a JSON file."""
     if default_if_missing is None:
         default_if_missing = []
     try:
         if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, list) and all(isinstance(item, str) for item in data):
+                if isinstance(data, list) and all(
+                    isinstance(item, str) for item in data
+                ):
                     return data
                 else:
-                    logging.warning(f"Content of {file_path} is not a list of strings. Using default.")
+                    logging.warning(
+                        f"Content of {file_path} is not a list of strings. Using default."
+                    )
                     return default_if_missing
         else:
-            logging.warning(f"Unhinged data file not found: {file_path}. Using default.")
+            logging.warning(
+                f"Unhinged data file not found: {file_path}. Using default."
+            )
             return default_if_missing
     except json.JSONDecodeError:
-        logging.error(f"Error decoding JSON from {file_path}. Using default.", exc_info=True)
+        logging.error(
+            f"Error decoding JSON from {file_path}. Using default.", exc_info=True
+        )
         return default_if_missing
     except Exception:
-        logging.error(f"Unexpected error loading {file_path}. Using default.", exc_info=True)
+        logging.error(
+            f"Unexpected error loading {file_path}. Using default.", exc_info=True
+        )
         return default_if_missing
+
 
 # --- API and Model Configuration ---
 # URL for the Ollama service used for generating embeddings.
@@ -64,7 +79,9 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "nope")
 # Name of the embedding model to use with Ollama (e.g., "nomic-embed-text:latest", "mxbai-embed-large:latest").
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text:latest")
 # Expected dimension of the embeddings produced by EMBEDDING_MODEL. Critical for Neo4j index and numpy operations.
-EXPECTED_EMBEDDING_DIM: int = int(os.getenv("EXPECTED_EMBEDDING_DIM", "768")) # MODIFIED: Allow int from env
+EXPECTED_EMBEDDING_DIM: int = int(
+    os.getenv("EXPECTED_EMBEDDING_DIM", "768")
+)  # MODIFIED: Allow int from env
 # Numpy data type for storing embeddings. float32 is common.
 EMBEDDING_DTYPE: np.dtype = np.dtype(np.float32)
 
@@ -93,16 +110,20 @@ NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 # Model Aliases & Defaults
 # Default model names if not overridden by environment variables.
 # These are just examples; actual model names depend on what's available in your LLM server.
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B-Q4" # Example: A large model alias
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B-Q4" # Example: A medium model alias
+LARGE_MODEL_DEFAULT: str = "Qwen3-14B-Q4"  # Example: A large model alias
+MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B-Q4"  # Example: A medium model alias
 SMALL_MODEL_DEFAULT: str = "Qwen3-4B-Q4"  # Example: A small model alias
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B-Q4" # Model primarily used for creative writing/drafting.
+NARRATOR_MODEL_DEFAULT: str = (
+    "Qwen3-14B-Q4"  # Model primarily used for creative writing/drafting.
+)
 
 # Actual model names to be used by the system, loaded from environment or defaults.
 LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
 MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
 SMALL_MODEL: str = os.getenv("SMALL_MODEL", SMALL_MODEL_DEFAULT)
-NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT) # Often same as LARGE_MODEL or a specialized writing model.
+NARRATOR_MODEL: str = os.getenv(
+    "NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT
+)  # Often same as LARGE_MODEL or a specialized writing model.
 
 # --- LLM Call Settings & Fallbacks ---
 # Number of retry attempts for LLM API calls if they fail.
@@ -112,9 +133,11 @@ LLM_RETRY_DELAY_SECONDS: float = 3.0
 # Default timeout (in seconds) for async HTTP requests made via httpx.
 HTTPX_TIMEOUT: float = float(os.getenv("HTTPX_TIMEOUT", "600.0"))
 # Model to use as a fallback if the primary LLM call fails and fallback is allowed.
-FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL # Often a smaller, faster model.
+FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL  # Often a smaller, faster model.
 # Toggle for the "/no_think" directive in LLM prompts.
-ENABLE_LLM_NO_THINK_DIRECTIVE: bool = os.getenv("ENABLE_LLM_NO_THINK_DIRECTIVE", "True").lower() == "true"
+ENABLE_LLM_NO_THINK_DIRECTIVE: bool = (
+    os.getenv("ENABLE_LLM_NO_THINK_DIRECTIVE", "True").lower() == "true"
+)
 
 
 # Specific model assignments for different tasks
@@ -139,51 +162,81 @@ PATCH_GENERATION_MODEL: str = MEDIUM_MODEL
 # Creative tasks: Higher temperature for more varied output
 TEMPERATURE_INITIAL_SETUP: float = float(os.getenv("TEMPERATURE_INITIAL_SETUP", "0.8"))
 TEMPERATURE_DRAFTING: float = float(os.getenv("TEMPERATURE_DRAFTING", "0.8"))
-TEMPERATURE_REVISION: float = float(os.getenv("TEMPERATURE_REVISION", "0.65")) # Slightly less than pure drafting
-TEMPERATURE_PLANNING: float = float(os.getenv("TEMPERATURE_PLANNING", "0.6")) # Needs structure but also ideas
+TEMPERATURE_REVISION: float = float(
+    os.getenv("TEMPERATURE_REVISION", "0.65")
+)  # Slightly less than pure drafting
+TEMPERATURE_PLANNING: float = float(
+    os.getenv("TEMPERATURE_PLANNING", "0.6")
+)  # Needs structure but also ideas
 
 # Analytical/Extraction tasks: Lower temperature for more deterministic and factual output
 TEMPERATURE_EVALUATION: float = float(os.getenv("TEMPERATURE_EVALUATION", "0.3"))
-TEMPERATURE_CONSISTENCY_CHECK: float = float(os.getenv("TEMPERATURE_CONSISTENCY_CHECK", "0.2")) # Very factual
+TEMPERATURE_CONSISTENCY_CHECK: float = float(
+    os.getenv("TEMPERATURE_CONSISTENCY_CHECK", "0.2")
+)  # Very factual
 TEMPERATURE_KG_EXTRACTION: float = float(os.getenv("TEMPERATURE_KG_EXTRACTION", "0.4"))
 TEMPERATURE_SUMMARY: float = float(os.getenv("TEMPERATURE_SUMMARY", "0.5"))
-TEMPERATURE_PATCH: float = float(os.getenv("TEMPERATURE_PATCH", "0.7")) # Needs to be creative but focused
+TEMPERATURE_PATCH: float = float(
+    os.getenv("TEMPERATURE_PATCH", "0.7")
+)  # Needs to be creative but focused
 
 # Default temperature if a specific one isn't used (fallback)
 TEMPERATURE_DEFAULT: float = 0.6
 
 # Top-P sampling parameter for LLM generation (0.0 to 1.0). Higher is more diverse.
-LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.8")) # MODIFIED to get from env
+LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.8"))  # MODIFIED to get from env
 
 # --- LLM Frequency and Presence Penalties ---
 # Values typically between -2.0 and 2.0. Positive values penalize, negative values encourage.
 # Drafting
-FREQUENCY_PENALTY_DRAFTING: float = float(os.getenv("FREQUENCY_PENALTY_DRAFTING", "0.3"))
+FREQUENCY_PENALTY_DRAFTING: float = float(
+    os.getenv("FREQUENCY_PENALTY_DRAFTING", "0.3")
+)
 PRESENCE_PENALTY_DRAFTING: float = float(os.getenv("PRESENCE_PENALTY_DRAFTING", "1.5"))
 # Revision
-FREQUENCY_PENALTY_REVISION: float = float(os.getenv("FREQUENCY_PENALTY_REVISION", "0.2"))
+FREQUENCY_PENALTY_REVISION: float = float(
+    os.getenv("FREQUENCY_PENALTY_REVISION", "0.2")
+)
 PRESENCE_PENALTY_REVISION: float = float(os.getenv("PRESENCE_PENALTY_REVISION", "1.5"))
 # Patch Generation
 FREQUENCY_PENALTY_PATCH: float = float(os.getenv("FREQUENCY_PENALTY_PATCH", "0.2"))
 PRESENCE_PENALTY_PATCH: float = float(os.getenv("PRESENCE_PENALTY_PATCH", "1.5"))
 # Planning (less likely to need strong penalties, but configurable)
-FREQUENCY_PENALTY_PLANNING: float = float(os.getenv("FREQUENCY_PENALTY_PLANNING", "0.0"))
+FREQUENCY_PENALTY_PLANNING: float = float(
+    os.getenv("FREQUENCY_PENALTY_PLANNING", "0.0")
+)
 PRESENCE_PENALTY_PLANNING: float = float(os.getenv("PRESENCE_PENALTY_PLANNING", "1.5"))
 # Initial Setup (e.g. plot outline)
-FREQUENCY_PENALTY_INITIAL_SETUP: float = float(os.getenv("FREQUENCY_PENALTY_INITIAL_SETUP", "0.1"))
-PRESENCE_PENALTY_INITIAL_SETUP: float = float(os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "1.5"))
+FREQUENCY_PENALTY_INITIAL_SETUP: float = float(
+    os.getenv("FREQUENCY_PENALTY_INITIAL_SETUP", "0.1")
+)
+PRESENCE_PENALTY_INITIAL_SETUP: float = float(
+    os.getenv("PRESENCE_PENALTY_INITIAL_SETUP", "1.5")
+)
 # Evaluation (least likely to need penalties, as it's analytical)
-FREQUENCY_PENALTY_EVALUATION: float = float(os.getenv("FREQUENCY_PENALTY_EVALUATION", "0.0"))
-PRESENCE_PENALTY_EVALUATION: float = float(os.getenv("PRESENCE_PENALTY_EVALUATION", "1.5"))
+FREQUENCY_PENALTY_EVALUATION: float = float(
+    os.getenv("FREQUENCY_PENALTY_EVALUATION", "0.0")
+)
+PRESENCE_PENALTY_EVALUATION: float = float(
+    os.getenv("PRESENCE_PENALTY_EVALUATION", "1.5")
+)
 # Knowledge Graph Extraction
-FREQUENCY_PENALTY_KG_EXTRACTION: float = float(os.getenv("FREQUENCY_PENALTY_KG_EXTRACTION", "0.0"))
-PRESENCE_PENALTY_KG_EXTRACTION: float = float(os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "1.5"))
+FREQUENCY_PENALTY_KG_EXTRACTION: float = float(
+    os.getenv("FREQUENCY_PENALTY_KG_EXTRACTION", "0.0")
+)
+PRESENCE_PENALTY_KG_EXTRACTION: float = float(
+    os.getenv("PRESENCE_PENALTY_KG_EXTRACTION", "1.5")
+)
 # Summarization
 FREQUENCY_PENALTY_SUMMARY: float = float(os.getenv("FREQUENCY_PENALTY_SUMMARY", "0.0"))
 PRESENCE_PENALTY_SUMMARY: float = float(os.getenv("PRESENCE_PENALTY_SUMMARY", "1.5"))
 # Consistency Check
-FREQUENCY_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("FREQUENCY_PENALTY_CONSISTENCY_CHECK", "0.0"))
-PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(os.getenv("PRESENCE_PENALTY_CONSISTENCY_CHECK", "1.5"))
+FREQUENCY_PENALTY_CONSISTENCY_CHECK: float = float(
+    os.getenv("FREQUENCY_PENALTY_CONSISTENCY_CHECK", "0.0")
+)
+PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(
+    os.getenv("PRESENCE_PENALTY_CONSISTENCY_CHECK", "1.5")
+)
 
 
 # --- Output and File Paths ---
@@ -207,14 +260,20 @@ USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.md"
 
 # Directory for "unhinged mode" data files (e.g., lists of genres, themes).
 UNHINGED_DATA_DIR: str = "unhinged_data"
-os.makedirs(UNHINGED_DATA_DIR, exist_ok=True) # Ensure directory exists
+os.makedirs(UNHINGED_DATA_DIR, exist_ok=True)  # Ensure directory exists
 
 # File paths for unhinged mode JSON data.
 UNHINGED_GENRES_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_genres.json")
 UNHINGED_THEMES_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_themes.json")
-UNHINGED_SETTINGS_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_settings_archetypes.json")
-UNHINGED_PROTAGONISTS_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_protagonist_archetypes.json")
-UNHINGED_CONFLICTS_FILE: str = os.path.join(UNHINGED_DATA_DIR, "unhinged_conflict_types.json")
+UNHINGED_SETTINGS_FILE: str = os.path.join(
+    UNHINGED_DATA_DIR, "unhinged_settings_archetypes.json"
+)
+UNHINGED_PROTAGONISTS_FILE: str = os.path.join(
+    UNHINGED_DATA_DIR, "unhinged_protagonist_archetypes.json"
+)
+UNHINGED_CONFLICTS_FILE: str = os.path.join(
+    UNHINGED_DATA_DIR, "unhinged_conflict_types.json"
+)
 
 # Ensure output directories exist.
 os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
@@ -225,15 +284,21 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 
 # --- Generation Parameters ---
 # Maximum context tokens the LLM can handle for prompts (check your model's limits).
-MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "40960")) # Example: 40k, common for some models
+MAX_CONTEXT_TOKENS: int = int(
+    os.getenv("MAX_CONTEXT_TOKENS", "40960")
+)  # Example: 40k, common for some models
 # Maximum tokens to request for LLM generation (output length). None means let model decide or use client's default.
-MAX_GENERATION_TOKENS: int = int(os.getenv("MAX_GENERATION_TOKENS", "16384")) # Example: 16k, often a model max.
+MAX_GENERATION_TOKENS: int = int(
+    os.getenv("MAX_GENERATION_TOKENS", "16384")
+)  # Example: 16k, often a model max.
 # Number of previous chapters to consider for semantic context (used by Neo4j vector search limit and fallback).
 CONTEXT_CHAPTER_COUNT: int = 5
 # Number of chapters to attempt to generate in a single run of the orchestrator.
 CHAPTERS_PER_RUN: int = int(os.getenv("CHAPTERS_PER_RUN", "3"))
 # Target number of plot points for the initial plot outline generation.
-TARGET_PLOT_POINTS_INITIAL_GENERATION: int = int(os.getenv("TARGET_PLOT_POINTS_INITIAL_GENERATION", "12"))
+TARGET_PLOT_POINTS_INITIAL_GENERATION: int = int(
+    os.getenv("TARGET_PLOT_POINTS_INITIAL_GENERATION", "12")
+)
 
 
 # --- Caching ---
@@ -248,7 +313,9 @@ TOKENIZER_CACHE_SIZE: int = 10
 
 # --- Agentic Planning & Prompt Context Snippets ---
 # Toggle for enabling/disabling agentic scene planning.
-ENABLE_AGENTIC_PLANNING: bool = os.getenv("ENABLE_AGENTIC_PLANNING", "True").lower() == "true"
+ENABLE_AGENTIC_PLANNING: bool = (
+    os.getenv("ENABLE_AGENTIC_PLANNING", "True").lower() == "true"
+)
 # Maximum tokens allowed for the planning LLM call's prompt.
 MAX_PLANNING_TOKENS: int = int(os.getenv("MAX_PLANNING_TOKENS", "8192"))
 # Target minimum number of scenes per chapter for the planner.
@@ -271,15 +338,23 @@ PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
 # --- Revision and Validation ---
 # Toggle for enabling/disabling patch-based revision.
-ENABLE_PATCH_BASED_REVISION: bool = os.getenv("ENABLE_PATCH_BASED_REVISION", "True").lower() == "true"
+ENABLE_PATCH_BASED_REVISION: bool = (
+    os.getenv("ENABLE_PATCH_BASED_REVISION", "True").lower() == "true"
+)
 # Maximum number of patch instructions to generate per revision cycle.
-MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = int(os.getenv("MAX_PATCH_INSTRUCTIONS_TO_GENERATE", "3"))
+MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = int(
+    os.getenv("MAX_PATCH_INSTRUCTIONS_TO_GENERATE", "3")
+)
 # Max character window for the context provided to the patch generation LLM.
 MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 8192
 # Coherence score threshold (cosine similarity with previous chapter) below which revision might be triggered.
-REVISION_COHERENCE_THRESHOLD: float = float(os.getenv("REVISION_COHERENCE_THRESHOLD", "0.60"))
+REVISION_COHERENCE_THRESHOLD: float = float(
+    os.getenv("REVISION_COHERENCE_THRESHOLD", "0.60")
+)
 # If patched/rewritten text is this similar (or more) to the original, log a warning.
-REVISION_SIMILARITY_ACCEPTANCE: float = float(os.getenv("REVISION_SIMILARITY_ACCEPTANCE", "0.995"))
+REVISION_SIMILARITY_ACCEPTANCE: float = float(
+    os.getenv("REVISION_SIMILARITY_ACCEPTANCE", "0.995")
+)
 # Maximum tokens for the summary generation LLM call's prompt.
 MAX_SUMMARY_TOKENS: int = int(os.getenv("MAX_SUMMARY_TOKENS", "4096"))
 # Maximum tokens for the KG triple extraction LLM call's prompt.
@@ -290,7 +365,9 @@ MAX_PREPOP_KG_TOKENS: int = int(os.getenv("MAX_PREPOP_KG_TOKENS", "16384"))
 # Default minimum acceptable length for a chapter draft (in characters).
 MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT = 12000
 # Actual minimum draft length, loaded from environment or default.
-MIN_ACCEPTABLE_DRAFT_LENGTH: int = int(os.getenv("MIN_ACCEPTABLE_DRAFT_LENGTH", str(MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT)))
+MIN_ACCEPTABLE_DRAFT_LENGTH: int = int(
+    os.getenv("MIN_ACCEPTABLE_DRAFT_LENGTH", str(MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT))
+)
 # Warn if user sets a very high minimum draft length.
 if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000:
     logging.warning(
@@ -300,15 +377,21 @@ if MIN_ACCEPTABLE_DRAFT_LENGTH > MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT + 2000:
     )
 
 # Toggle for enabling dynamic state adaptation (e.g., LLM proposing 'MODIFY key: value' changes).
-ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True # Currently not env configurable.
+ENABLE_DYNAMIC_STATE_ADAPTATION: bool = True  # Currently not env configurable.
 # Chapter number assigned to items from initial setup/prepopulation (e.g., KG facts from initial world/char setup).
 KG_PREPOPULATION_CHAPTER_NUM: int = 0
 
 
 # --- De-duplication Configuration ---
-DEDUPLICATION_USE_SEMANTIC: bool = os.getenv("DEDUPLICATION_USE_SEMANTIC", "True").lower() == 'true'
-DEDUPLICATION_SEMANTIC_THRESHOLD: float = float(os.getenv("DEDUPLICATION_SEMANTIC_THRESHOLD", "0.90"))
-DEDUPLICATION_MIN_SEGMENT_LENGTH: int = int(os.getenv("DEDUPLICATION_MIN_SEGMENT_LENGTH", "150")) # Characters
+DEDUPLICATION_USE_SEMANTIC: bool = (
+    os.getenv("DEDUPLICATION_USE_SEMANTIC", "True").lower() == "true"
+)
+DEDUPLICATION_SEMANTIC_THRESHOLD: float = float(
+    os.getenv("DEDUPLICATION_SEMANTIC_THRESHOLD", "0.90")
+)
+DEDUPLICATION_MIN_SEGMENT_LENGTH: int = int(
+    os.getenv("DEDUPLICATION_MIN_SEGMENT_LENGTH", "150")
+)  # Characters
 
 
 # --- Logging ---
@@ -316,9 +399,9 @@ DEDUPLICATION_MIN_SEGMENT_LENGTH: int = int(os.getenv("DEDUPLICATION_MIN_SEGMENT
 LOG_LEVEL_STR: str = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_LEVEL: int = getattr(logging, LOG_LEVEL_STR, logging.INFO)
 # Format string for log messages.
-LOG_FORMAT: str = '%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s'
+LOG_FORMAT: str = "%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s"
 # Format string for timestamps in log messages.
-LOG_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
+LOG_DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
 # Path to the log file. If None, logs only to console.
 LOG_FILE: Optional[str] = os.path.join(BASE_OUTPUT_DIR, "saga_run.log")
 
@@ -339,26 +422,40 @@ DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 
 # Neo4j Node IDs for main container/info nodes (used for consistent querying).
 MAIN_NOVEL_INFO_NODE_ID: str = "saga_main_novel_info"
-MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container" # Not currently used but reserved
+MAIN_CHARACTERS_CONTAINER_NODE_ID: str = (
+    "saga_main_characters_container"  # Not currently used but reserved
+)
 MAIN_WORLD_CONTAINER_NODE_ID: str = "saga_main_world_container"
 
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
 # Default lists used if JSON files for unhinged mode are missing or invalid.
 _DEFAULT_GENRE_LIST = ["science fiction", "fantasy", "horror"]
-UNHINGED_GENRES: List[str] = _load_list_from_json(UNHINGED_GENRES_FILE, _DEFAULT_GENRE_LIST)
-UNHINGED_THEMES: List[str] = _load_list_from_json(UNHINGED_THEMES_FILE, ["the nature of reality", "the cost of power"])
-UNHINGED_SETTINGS_ARCHETYPES: List[str] = _load_list_from_json(UNHINGED_SETTINGS_FILE, ["a floating city", "a derelict starship"])
-UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = _load_list_from_json(UNHINGED_PROTAGONISTS_FILE, ["a reluctant hero", "a cynical detective"])
-UNHINGED_CONFLICT_TYPES: List[str] = _load_list_from_json(UNHINGED_CONFLICTS_FILE, ["man vs self", "man vs society"])
+UNHINGED_GENRES: List[str] = _load_list_from_json(
+    UNHINGED_GENRES_FILE, _DEFAULT_GENRE_LIST
+)
+UNHINGED_THEMES: List[str] = _load_list_from_json(
+    UNHINGED_THEMES_FILE, ["the nature of reality", "the cost of power"]
+)
+UNHINGED_SETTINGS_ARCHETYPES: List[str] = _load_list_from_json(
+    UNHINGED_SETTINGS_FILE, ["a floating city", "a derelict starship"]
+)
+UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = _load_list_from_json(
+    UNHINGED_PROTAGONISTS_FILE, ["a reluctant hero", "a cynical detective"]
+)
+UNHINGED_CONFLICT_TYPES: List[str] = _load_list_from_json(
+    UNHINGED_CONFLICTS_FILE, ["man vs self", "man vs society"]
+)
 
 # Log a warning if default unhinged genre list is used.
 if not UNHINGED_GENRES or UNHINGED_GENRES == _DEFAULT_GENRE_LIST:
-    logging.warning("UNHINGED_GENRES might be using default values. Check unhinged_genres.json.")
+    logging.warning(
+        "UNHINGED_GENRES might be using default values. Check unhinged_genres.json."
+    )
 
 # --- Tokenizer Fallback Configuration ---
 # Default tiktoken encoding model to use if a specific model's tokenizer isn't found.
-TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base" # Common for many OpenAI models
+TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"  # Common for many OpenAI models
 # Estimated average characters per token, used as a fallback if tiktoken fails.
 FALLBACK_CHARS_PER_TOKEN: float = 4.0
 
@@ -366,7 +463,7 @@ FALLBACK_CHARS_PER_TOKEN: float = 4.0
 # Toggle for enabling Rich library for enhanced console progress display.
 ENABLE_RICH_PROGRESS: bool = os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
 # How many times per second the Rich Live display should attempt to refresh.
-RICH_REFRESH_PER_SECOND: float = 4.0 # Higher values refresh faster but use more CPU.
+RICH_REFRESH_PER_SECOND: float = 4.0  # Higher values refresh faster but use more CPU.
 
 # --- Markdown Story Parser Configuration ---
 # Placeholder string used in user_story_elements.md to indicate SAGA should generate this field.

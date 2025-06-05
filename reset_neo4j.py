@@ -1,10 +1,10 @@
 # reset_neo4j.py
 import argparse
 import time
-from core_db.base_db_manager import Neo4jManagerSingleton # Use the singleton
-import config # To get default URI, user, pass if not provided via args
-import asyncio # Required to call async methods
-from typing import List, Dict, Any # Added for type hints
+from core_db.base_db_manager import Neo4jManagerSingleton  # Use the singleton
+import config  # To get default URI, user, pass if not provided via args
+import asyncio  # Required to call async methods
+from typing import List, Dict, Any  # Added for type hints
 
 # Create an instance of the manager to use its methods
 neo4j_manager_instance = Neo4jManagerSingleton()
@@ -22,38 +22,56 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             "⚠️ WARNING: This will delete ALL data, ALL user-defined constraints, and ALL user-defined indexes "
             "in the Neo4j database. This is a destructive operation. Continue? (y/N): "
         )
-        if response.lower() not in ['y', 'yes']:
+        if response.lower() not in ["y", "yes"]:
             print("Operation cancelled.")
             return False
-    
+
     effective_uri = uri or config.NEO4J_URI
     effective_user = user or config.NEO4J_USER
     effective_password = password or config.NEO4J_PASSWORD
 
-    original_uri, original_user, original_pass = config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD
-    config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = effective_uri, effective_user, effective_password
+    original_uri, original_user, original_pass = (
+        config.NEO4J_URI,
+        config.NEO4J_USER,
+        config.NEO4J_PASSWORD,
+    )
+    config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = (
+        effective_uri,
+        effective_user,
+        effective_password,
+    )
 
     try:
         print(f"Connecting to Neo4j database at {effective_uri}...")
         await neo4j_manager_instance.connect()
 
-        async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+        async with neo4j_manager_instance.driver.session(
+            database=config.NEO4J_DATABASE
+        ) as session:  # type: ignore
             result = await session.run("MATCH (n) RETURN count(n) as count")
             single_result = await result.single()
             node_count = single_result["count"] if single_result else 0
             print(f"Current database has {node_count} nodes.")
-        
+
         print("Resetting database data (nodes and relationships)...")
         start_time = time.time()
-        
+
         nodes_deleted_total = 0
         while True:
-            async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+            async with neo4j_manager_instance.driver.session(
+                database=config.NEO4J_DATABASE
+            ) as session:  # type: ignore
                 tx = await session.begin_transaction()
-                result = await tx.run("MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch")
+                result = await tx.run(
+                    "MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch"
+                )
                 single_result_batch = await result.single()
                 await tx.commit()
-                deleted_in_batch = single_result_batch["deleted_nodes_batch"] if single_result_batch else 0
+                deleted_in_batch = (
+                    single_result_batch["deleted_nodes_batch"]
+                    if single_result_batch
+                    else 0
+                )
                 nodes_deleted_total += deleted_in_batch
                 if deleted_in_batch == 0:
                     break
@@ -61,10 +79,16 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         print(f"   Total {nodes_deleted_total} nodes deleted.")
 
         print("Attempting to drop ALL user-defined constraints...")
-        async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+        async with neo4j_manager_instance.driver.session(
+            database=config.NEO4J_DATABASE
+        ) as session:  # type: ignore
             constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
-            constraints_to_drop: List[str] = [record["name"] for record in await constraints_result.data() if record["name"]]
-            
+            constraints_to_drop: List[str] = [
+                record["name"]
+                for record in await constraints_result.data()
+                if record["name"]
+            ]
+
             if not constraints_to_drop:
                 print("   No user-defined constraints found to drop.")
             else:
@@ -74,14 +98,22 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
                         tx = await session.begin_transaction()
                         await tx.run(f"DROP CONSTRAINT {constraint_name} IF EXISTS")
                         await tx.commit()
-                        print(f"      Dropped constraint '{constraint_name}' (or it didn't exist).")
+                        print(
+                            f"      Dropped constraint '{constraint_name}' (or it didn't exist)."
+                        )
                     except Exception as e_constraint:
-                        if tx and not tx.closed(): # type: ignore
+                        if tx and not tx.closed():  # type: ignore
                             await tx.rollback()
-                        print(f"   Note: Could not drop constraint '{constraint_name}': {e_constraint}")
-        
-        print("Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)...")
-        async with neo4j_manager_instance.driver.session(database=config.NEO4J_DATABASE) as session: # type: ignore
+                        print(
+                            f"   Note: Could not drop constraint '{constraint_name}': {e_constraint}"
+                        )
+
+        print(
+            "Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)..."
+        )
+        async with neo4j_manager_instance.driver.session(
+            database=config.NEO4J_DATABASE
+        ) as session:  # type: ignore
             # Query for indexes, trying to filter out system ones if possible (type might not always be 'SYSTEM_LOOKUP')
             # The most reliable way is usually by name patterns if system indexes have those, or by excluding known types.
             # For now, we will attempt to drop all that are not of type 'LOOKUP' for node_label_property which could be old schema index.
@@ -95,55 +127,88 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             else:
                 for index_info in indexes_to_drop_info:
                     index_name = index_info.get("name")
-                    index_type = index_info.get("type", "").upper() # VECTOR, BTREE, TEXT, FULLTEXT, POINT, RANGE, LOOKUP
+                    index_type = index_info.get(
+                        "type", ""
+                    ).upper()  # VECTOR, BTREE, TEXT, FULLTEXT, POINT, RANGE, LOOKUP
 
                     # Heuristic: Avoid dropping system/lookup indexes that Neo4j might manage internally for constraints.
                     # Typically, SAGA creates BTREE (for property indexes) and VECTOR indexes.
                     # Other types might be from older versions or manual creation.
                     # `tokenLookup` is often for fulltext schema indexes.
-                    if index_name and "tokenLookup" not in index_name.lower() and "system" not in index_type.lower():
+                    if (
+                        index_name
+                        and "tokenLookup" not in index_name.lower()
+                        and "system" not in index_type.lower()
+                    ):
                         try:
-                            print(f"   Attempting to drop index: {index_name} (type: {index_type})")
+                            print(
+                                f"   Attempting to drop index: {index_name} (type: {index_type})"
+                            )
                             tx = await session.begin_transaction()
                             await tx.run(f"DROP INDEX {index_name} IF EXISTS")
                             await tx.commit()
-                            print(f"      Dropped index '{index_name}' (or it didn't exist).")
+                            print(
+                                f"      Dropped index '{index_name}' (or it didn't exist)."
+                            )
                         except Exception as e_index:
-                            if tx and not tx.closed(): # type: ignore
+                            if tx and not tx.closed():  # type: ignore
                                 await tx.rollback()
-                            print(f"   Note: Could not drop index '{index_name}': {e_index}")
+                            print(
+                                f"   Note: Could not drop index '{index_name}': {e_index}"
+                            )
                     elif index_name:
-                         print(f"   Skipping potential system/lookup index: {index_name} (type: {index_type})")
+                        print(
+                            f"   Skipping potential system/lookup index: {index_name} (type: {index_type})"
+                        )
 
         elapsed_time = time.time() - start_time
-        print(f"✅ Database data, all user-defined constraints, and relevant user-defined indexes reset/dropped in {elapsed_time:.2f} seconds.")
-        print(f"   The SAGA system will attempt to recreate its necessary schema on the next run.")
-        
+        print(
+            f"✅ Database data, all user-defined constraints, and relevant user-defined indexes reset/dropped in {elapsed_time:.2f} seconds."
+        )
+        print(
+            f"   The SAGA system will attempt to recreate its necessary schema on the next run."
+        )
+
         return True
-        
+
     except Exception as e:
         print(f"❌ Error resetting database: {e}", exc_info=True)
         return False
-    
+
     finally:
         if neo4j_manager_instance.driver:
             await neo4j_manager_instance.close()
             print("Connection closed.")
-        config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = original_uri, original_user, original_pass
+        config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = (
+            original_uri,
+            original_user,
+            original_pass,
+        )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Reset a Neo4j database by removing all data, user constraints, and user indexes.")
-    parser.add_argument("--uri", default=None, help=f"Neo4j connection URI (default: {config.NEO4J_URI})")
-    parser.add_argument("--user", default=None, help=f"Neo4j username (default: {config.NEO4J_USER})")
-    parser.add_argument("--password", default=None, help=f"Neo4j password (default: {config.NEO4J_PASSWORD})")
+    parser = argparse.ArgumentParser(
+        description="Reset a Neo4j database by removing all data, user constraints, and user indexes."
+    )
+    parser.add_argument(
+        "--uri",
+        default=None,
+        help=f"Neo4j connection URI (default: {config.NEO4J_URI})",
+    )
+    parser.add_argument(
+        "--user", default=None, help=f"Neo4j username (default: {config.NEO4J_USER})"
+    )
+    parser.add_argument(
+        "--password",
+        default=None,
+        help=f"Neo4j password (default: {config.NEO4J_PASSWORD})",
+    )
     parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
-    
+
     args = parser.parse_args()
-    
-    asyncio.run(reset_neo4j_database_async(
-        uri=args.uri,
-        user=args.user,
-        password=args.password,
-        confirm=args.force
-    ))
+
+    asyncio.run(
+        reset_neo4j_database_async(
+            uri=args.uri, user=args.user, password=args.password, confirm=args.force
+        )
+    )

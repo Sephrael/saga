@@ -14,7 +14,19 @@ def test_merge_character_profile_updates():
 
 
 def test_merge_world_item_updates():
-    current = {"Places": {"City": WorldItem("Places_City", "Places", "City", properties={"description": "Old"})}}
-    updates = {"Places": {"City": WorldItem("Places_City", "Places", "City", properties={"description": "New"})}}
+    current = {
+        "Places": {
+            "City": WorldItem(
+                "Places_City", "Places", "City", properties={"description": "Old"}
+            )
+        }
+    }
+    updates = {
+        "Places": {
+            "City": WorldItem(
+                "Places_City", "Places", "City", properties={"description": "New"}
+            )
+        }
+    }
     merge_world_item_updates(current, updates, 1, False)
     assert current["Places"]["City"].properties["description"] == "New"

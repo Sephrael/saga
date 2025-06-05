@@ -1,13 +1,14 @@
-import json # For creating JSON strings if needed, though direct strings are fine
-from kg_maintainer.parsing import ( # Assuming parsing is now a module inside kg_maintainer
+import json  # For creating JSON strings if needed, though direct strings are fine
+from kg_maintainer.parsing import (  # Assuming parsing is now a module inside kg_maintainer
     parse_unified_character_updates,
     parse_unified_world_updates,
 )
-from kg_maintainer.models import CharacterProfile, WorldItem # Added WorldItem import
+from kg_maintainer.models import CharacterProfile, WorldItem  # Added WorldItem import
 
 # Example of a helper to create JSON strings for tests if they get complex
 # def make_json_string(data_dict):
 #     return json.dumps(data_dict)
+
 
 def test_parse_character_updates_simple_json():
     json_text = """
@@ -45,13 +46,16 @@ def test_parse_character_updates_simple_json():
     assert isinstance(bob_prof, CharacterProfile)
     assert bob_prof.description == "Loyal companion"
     # Test default development note if not provided by JSON but other attrs exist
-    assert bob_prof.development_in_chapter_1 == "Character 'Bob' details updated in Chapter 1."
+    assert (
+        bob_prof.development_in_chapter_1
+        == "Character 'Bob' details updated in Chapter 1."
+    )
 
 
 def test_parse_character_updates_empty_or_invalid_json():
     assert parse_unified_character_updates("", 1) == {}
     assert parse_unified_character_updates("{}", 1) == {}
-    assert parse_unified_character_updates("[]", 1) == {} # Not a dict of characters
+    assert parse_unified_character_updates("[]", 1) == {}  # Not a dict of characters
     assert parse_unified_character_updates("invalid json", 1) == {}
     # Test with a valid JSON but not the expected structure (e.g. list at root)
     assert parse_unified_character_updates('[{"name": "Alice"}]', 1) == {}
@@ -97,8 +101,10 @@ def test_parse_world_updates_simple_json():
     assert city.description == "A large, well-lit city from JSON."
     assert city.atmosphere == "Vibrant and bustling"
     # Check for default elaboration note
-    assert city.elaboration_in_chapter_1 == "Item 'City of Brightness' in category 'Locations' updated in Chapter 1."
-
+    assert (
+        city.elaboration_in_chapter_1
+        == "Item 'City of Brightness' in category 'Locations' updated in Chapter 1."
+    )
 
     assert "Dark Forest" in locations
     forest = locations["Dark Forest"]
@@ -112,27 +118,33 @@ def test_parse_world_updates_simple_json():
     guild = factions["The Sun Guild"]
     assert isinstance(guild, WorldItem)
     assert "Spread light" in guild.goals
-    assert guild.elaboration_in_chapter_1 == "Introduced as a benevolent force." # Explicitly provided
+    assert (
+        guild.elaboration_in_chapter_1 == "Introduced as a benevolent force."
+    )  # Explicitly provided
 
     assert "Overview" in result
     overview_cat = result["Overview"]
-    assert "_overview_" in overview_cat # Overview item is stored with key "_overview_"
+    assert "_overview_" in overview_cat  # Overview item is stored with key "_overview_"
     overview_item = overview_cat["_overview_"]
     assert isinstance(overview_item, WorldItem)
-    assert overview_item.category == "Overview" # Category name from JSON
-    assert overview_item.name == "_overview_" # Fixed name for overview item
+    assert overview_item.category == "Overview"  # Category name from JSON
+    assert overview_item.name == "_overview_"  # Fixed name for overview item
     assert overview_item.description == "A world of magic and mystery."
     assert overview_item.mood == "Adventurous"
-    assert overview_item.elaboration_in_chapter_1 == "Overall world overview updated in Chapter 1."
+    assert (
+        overview_item.elaboration_in_chapter_1
+        == "Overall world overview updated in Chapter 1."
+    )
 
 
 def test_parse_world_updates_empty_or_invalid_json():
     assert parse_unified_world_updates("", 1) == {}
     assert parse_unified_world_updates("{}", 1) == {}
-    assert parse_unified_world_updates("[]", 1) == {} # Not a dict of categories
+    assert parse_unified_world_updates("[]", 1) == {}  # Not a dict of categories
     assert parse_unified_world_updates("invalid json", 1) == {}
     # Test with valid JSON but not expected structure (e.g. category content is not a dict of items)
     assert parse_unified_world_updates('{"Locations": ["City1", "City2"]}', 1) == {}
+
 
 # It might be good to add more tests:
 # - Character updates with relationships in different formats (list of strings, list of dicts)
@@ -140,4 +152,3 @@ def test_parse_world_updates_empty_or_invalid_json():
 # - Normalization of keys if LLM provides slightly different casings/spacings for keys
 # - Handling of completely unexpected structures in the JSON from LLM
 # - Test for the default elaboration notes more thoroughly.
-
