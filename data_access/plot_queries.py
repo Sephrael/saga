@@ -6,109 +6,138 @@ from core_db.base_db_manager import neo4j_manager
 
 logger = logging.getLogger(__name__)
 
+
 async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
     logger.info("Synchronizing plot outline to Neo4j (non-destructive)...")
     if not plot_data:
-        logger.warning("save_plot_outline_to_db: plot_data is empty. No changes will be made.")
-        return True # Or False if an empty plot_data implies deletion of existing plot
+        logger.warning(
+            "save_plot_outline_to_db: plot_data is empty. No changes will be made."
+        )
+        return True  # Or False if an empty plot_data implies deletion of existing plot
 
     novel_id = config.MAIN_NOVEL_INFO_NODE_ID
     statements: List[Tuple[str, Dict[str, Any]]] = []
-    
+
     # 1. Synchronize NovelInfo node (basic properties of the plot)
     novel_props_for_set = {
-        k: v for k, v in plot_data.items() 
-        if not isinstance(v, (list, dict)) and v is not None and k != 'id'
+        k: v
+        for k, v in plot_data.items()
+        if not isinstance(v, (list, dict)) and v is not None and k != "id"
     }
-    novel_props_for_set['id'] = novel_id # Ensure id is part of properties for SET
+    novel_props_for_set["id"] = novel_id  # Ensure id is part of properties for SET
 
-    statements.append((
-        """
+    statements.append(
+        (
+            """
         MERGE (ni:Entity {id: $id_val})
         ON CREATE SET ni:NovelInfo, ni = $props, ni.created_ts = timestamp()
         ON MATCH SET  ni:NovelInfo, ni = $props, ni.updated_ts = timestamp()
         """,
-        {"id_val": novel_id, "props": novel_props_for_set}
-    ))
+            {"id_val": novel_id, "props": novel_props_for_set},
+        )
+    )
 
     # 2. Synchronize PlotPoint nodes and their relationships
-    input_plot_points_list = plot_data.get('plot_points', [])
+    input_plot_points_list = plot_data.get("plot_points", [])
     all_input_pp_ids: Set[str] = set()
     if isinstance(input_plot_points_list, list):
         for i, _ in enumerate(input_plot_points_list):
-            pp_id = f"pp_{novel_id}_{i+1}" # Consistent ID generation
+            pp_id = f"pp_{novel_id}_{i + 1}"  # Consistent ID generation
             all_input_pp_ids.add(pp_id)
 
     # Get existing PlotPoint IDs for this novel from DB to find orphans
     try:
         existing_pp_records = await neo4j_manager.execute_read_query(
             "MATCH (:NovelInfo:Entity {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity) RETURN pp.id AS id",
-            {"novel_id_param": novel_id}
+            {"novel_id_param": novel_id},
         )
-        existing_db_pp_ids: Set[str] = {record['id'] for record in existing_pp_records if record and record['id']}
+        existing_db_pp_ids: Set[str] = {
+            record["id"] for record in existing_pp_records if record and record["id"]
+        }
     except Exception as e:
-        logger.error(f"Failed to retrieve existing PlotPoint IDs for novel {novel_id}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to retrieve existing PlotPoint IDs for novel {novel_id}: {e}",
+            exc_info=True,
+        )
         return False
 
     # PlotPoints to delete (in DB but not in current input_plot_points_list)
     pp_to_delete = existing_db_pp_ids - all_input_pp_ids
     if pp_to_delete:
-        statements.append((
-            """
+        statements.append(
+            (
+                """
             MATCH (pp:PlotPoint:Entity)
             WHERE pp.id IN $pp_ids_to_delete
             DETACH DELETE pp
             """,
-            {"pp_ids_to_delete": list(pp_to_delete)}
-        ))
-    
+                {"pp_ids_to_delete": list(pp_to_delete)},
+            )
+        )
+
     # Process each PlotPoint from input_plot_points_list
     if isinstance(input_plot_points_list, list):
         for i, point_desc_str_or_dict in enumerate(input_plot_points_list):
-            pp_id = f"pp_{novel_id}_{i+1}"
-            
+            pp_id = f"pp_{novel_id}_{i + 1}"
+
             pp_props = {
-                "id": pp_id, # For SET clause
+                "id": pp_id,  # For SET clause
                 "sequence": i + 1,
-                "status": "pending" # Default status
+                "status": "pending",  # Default status
             }
             if isinstance(point_desc_str_or_dict, str):
                 pp_props["description"] = point_desc_str_or_dict
-            elif isinstance(point_desc_str_or_dict, dict): # If plot points are dicts with more info
-                pp_props["description"] = str(point_desc_str_or_dict.get("description", ""))
-                pp_props["status"] = str(point_desc_str_or_dict.get("status", "pending"))
+            elif isinstance(
+                point_desc_str_or_dict, dict
+            ):  # If plot points are dicts with more info
+                pp_props["description"] = str(
+                    point_desc_str_or_dict.get("description", "")
+                )
+                pp_props["status"] = str(
+                    point_desc_str_or_dict.get("status", "pending")
+                )
                 # Add any other simple properties from the dict
                 for k_pp, v_pp in point_desc_str_or_dict.items():
-                    if isinstance(v_pp, (str,int,float,bool)) and k_pp not in pp_props:
+                    if (
+                        isinstance(v_pp, (str, int, float, bool))
+                        and k_pp not in pp_props
+                    ):
                         pp_props[k_pp] = v_pp
             else:
-                logger.warning(f"Skipping invalid plot point item at index {i}: {point_desc_str_or_dict}")
+                logger.warning(
+                    f"Skipping invalid plot point item at index {i}: {point_desc_str_or_dict}"
+                )
                 continue
 
             # MERGE PlotPoint node
-            statements.append((
-                """
+            statements.append(
+                (
+                    """
                 MERGE (pp:Entity {id: $id_val})
                 ON CREATE SET pp:PlotPoint, pp = $props, pp.created_ts = timestamp()
                 ON MATCH SET  pp:PlotPoint, pp = $props, pp.updated_ts = timestamp()
                 """,
-                {"id_val": pp_id, "props": pp_props}
-            ))
+                    {"id_val": pp_id, "props": pp_props},
+                )
+            )
             # Link PlotPoint to NovelInfo
-            statements.append((
-                """
+            statements.append(
+                (
+                    """
                 MATCH (ni:NovelInfo:Entity {id: $novel_id_param})
                 MATCH (pp:PlotPoint:Entity {id: $pp_id_val})
                 MERGE (ni)-[:HAS_PLOT_POINT]->(pp)
                 """,
-                {"novel_id_param": novel_id, "pp_id_val": pp_id}
-            ))
-            
+                    {"novel_id_param": novel_id, "pp_id_val": pp_id},
+                )
+            )
+
             # Link to previous PlotPoint (NEXT_PLOT_POINT)
             if i > 0:
-                prev_pp_id = f"pp_{novel_id}_{i}" # ID of the (i-1)th plot point
-                statements.append((
-                    """
+                prev_pp_id = f"pp_{novel_id}_{i}"  # ID of the (i-1)th plot point
+                statements.append(
+                    (
+                        """
                     MATCH (prev_pp:PlotPoint:Entity {id: $prev_pp_id_val})
                     MATCH (curr_pp:PlotPoint:Entity {id: $curr_pp_id_val})
                     // Remove any old NEXT_PLOT_POINT from prev_pp before creating new one to ensure linearity
@@ -117,16 +146,23 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
                     DELETE old_next_rel
                     MERGE (prev_pp)-[:NEXT_PLOT_POINT]->(curr_pp)
                     """,
-                    {"prev_pp_id_val": prev_pp_id, "curr_pp_id_val": pp_id}
-                ))
+                        {"prev_pp_id_val": prev_pp_id, "curr_pp_id_val": pp_id},
+                    )
+                )
     try:
         if statements:
             await neo4j_manager.execute_cypher_batch(statements)
-        logger.info(f"Successfully synchronized plot outline for novel '{novel_id}' to Neo4j.")
+        logger.info(
+            f"Successfully synchronized plot outline for novel '{novel_id}' to Neo4j."
+        )
         return True
     except Exception as e:
-        logger.error(f"Error synchronizing plot outline for novel '{novel_id}': {e}", exc_info=True)
+        logger.error(
+            f"Error synchronizing plot outline for novel '{novel_id}': {e}",
+            exc_info=True,
+        )
         return False
+
 
 async def get_plot_outline_from_db() -> Dict[str, Any]:
     logger.info("Loading decomposed plot outline from Neo4j...")
@@ -135,18 +171,21 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
 
     # Fetch NovelInfo node properties
     novel_info_query = "MATCH (ni:NovelInfo:Entity {id: $novel_id_param}) RETURN ni"
-    result_list = await neo4j_manager.execute_read_query(novel_info_query, {"novel_id_param": novel_id})
+    result_list = await neo4j_manager.execute_read_query(
+        novel_info_query, {"novel_id_param": novel_id}
+    )
 
-    if not result_list or not result_list[0] or not result_list[0].get('ni'):
-        logger.warning(f"No NovelInfo node found with id '{novel_id}'. Returning empty plot outline.")
+    if not result_list or not result_list[0] or not result_list[0].get("ni"):
+        logger.warning(
+            f"No NovelInfo node found with id '{novel_id}'. Returning empty plot outline."
+        )
         return {}
 
-    novel_node = result_list[0]['ni']
+    novel_node = result_list[0]["ni"]
     plot_data.update(dict(novel_node))
-    plot_data.pop('id', None) # Remove internal DB ID from returned dict
-    plot_data.pop('created_ts', None)
-    plot_data.pop('updated_ts', None)
-
+    plot_data.pop("id", None)  # Remove internal DB ID from returned dict
+    plot_data.pop("created_ts", None)
+    plot_data.pop("updated_ts", None)
 
     # Fetch PlotPoints linked to this NovelInfo, ordered by sequence
     plot_points_query = """
@@ -154,22 +193,31 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
     RETURN pp
     ORDER BY pp.sequence ASC
     """
-    pp_results = await neo4j_manager.execute_read_query(plot_points_query, {"novel_id_param": novel_id})
-    
+    pp_results = await neo4j_manager.execute_read_query(
+        plot_points_query, {"novel_id_param": novel_id}
+    )
+
     # Store plot points. Current orchestrator expects a list of strings (descriptions).
     # If more structured plot point data is needed later, this can be changed to list of dicts.
     fetched_plot_points = []
     if pp_results:
         for record in pp_results:
-            pp_node = record.get('pp')
+            pp_node = record.get("pp")
             if pp_node:
                 # For compatibility with Orchestrator expecting list of strings:
-                fetched_plot_points.append(pp_node.get('description', f"Plot Point {pp_node.get('sequence')}: Desc missing"))
+                fetched_plot_points.append(
+                    pp_node.get(
+                        "description",
+                        f"Plot Point {pp_node.get('sequence')}: Desc missing",
+                    )
+                )
                 # If full plot point data is needed:
                 # pp_data = dict(pp_node)
                 # pp_data.pop('id', None); pp_data.pop('created_ts', None); pp_data.pop('updated_ts', None)
                 # fetched_plot_points.append(pp_data)
-    plot_data['plot_points'] = fetched_plot_points
+    plot_data["plot_points"] = fetched_plot_points
 
-    logger.info(f"Successfully loaded plot outline for novel '{novel_id}'. Plot points: {len(plot_data.get('plot_points',[]))}")
+    logger.info(
+        f"Successfully loaded plot outline for novel '{novel_id}'. Plot points: {len(plot_data.get('plot_points', []))}"
+    )
     return plot_data

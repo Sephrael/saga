@@ -3,28 +3,47 @@ from typing import List, Dict, Any, Tuple, Optional
 from unittest.mock import AsyncMock, patch
 
 # Assuming data_access.kg_queries is the path. Adjust if necessary based on project structure.
-from data_access.kg_queries import _get_cypher_labels, add_kg_triples_batch_to_db, query_kg_from_db
-from core_db.base_db_manager import Neo4jManagerSingleton # Needed for type hinting if neo4j_manager is mocked
+from data_access.kg_queries import (
+    _get_cypher_labels,
+    add_kg_triples_batch_to_db,
+    query_kg_from_db,
+)
+from core_db.base_db_manager import (
+    Neo4jManagerSingleton,
+)  # Needed for type hinting if neo4j_manager is mocked
 from kg_constants import KG_REL_CHAPTER_ADDED, KG_IS_PROVISIONAL
 
 
 # Test cases for _get_cypher_labels
-@pytest.mark.parametrize("entity_type, expected_labels", [
-    ("Character", ":Character:Entity"),
-    ("character", ":Character:Entity"), # Test case-insensitivity for "Character"
-    ("Person", ":Character:Person:Entity"), # Person should get Character first, then Person
-    ("person", ":Character:Person:Entity"), # Test case-insensitivity for "Person"
-    ("Location", ":Location:Entity"),
-    ("Event", ":Event:Entity"),
-    ("  Item ", ":Item:Entity"), # Test stripping whitespace
-    ("Complex_Type", ":Complextype:Entity"), # Test with underscore (becomes Complextype due to capitalize() then isalnum())
-    ("Invalid!@#Type", ":Invalidtype:Entity"), # Test sanitization (becomes Invalidtype due to capitalize() then isalnum())
-    ("Entity", ":Entity"), # Explicit "Entity" type
-    ("", ":Entity"), # Empty type
-    (None, ":Entity"), # None type
-])
+@pytest.mark.parametrize(
+    "entity_type, expected_labels",
+    [
+        ("Character", ":Character:Entity"),
+        ("character", ":Character:Entity"),  # Test case-insensitivity for "Character"
+        (
+            "Person",
+            ":Character:Person:Entity",
+        ),  # Person should get Character first, then Person
+        ("person", ":Character:Person:Entity"),  # Test case-insensitivity for "Person"
+        ("Location", ":Location:Entity"),
+        ("Event", ":Event:Entity"),
+        ("  Item ", ":Item:Entity"),  # Test stripping whitespace
+        (
+            "Complex_Type",
+            ":Complextype:Entity",
+        ),  # Test with underscore (becomes Complextype due to capitalize() then isalnum())
+        (
+            "Invalid!@#Type",
+            ":Invalidtype:Entity",
+        ),  # Test sanitization (becomes Invalidtype due to capitalize() then isalnum())
+        ("Entity", ":Entity"),  # Explicit "Entity" type
+        ("", ":Entity"),  # Empty type
+        (None, ":Entity"),  # None type
+    ],
+)
 def test_get_cypher_labels_various_types(entity_type, expected_labels):
     assert _get_cypher_labels(entity_type) == expected_labels
+
 
 def test_get_cypher_labels_character_is_primary():
     # Ensure if type is "Character", it doesn't become :Character:Character:Entity
@@ -36,40 +55,72 @@ def test_get_cypher_labels_character_is_primary():
 # Mocking Neo4j interactions for add_kg_triples_batch_to_db and query_kg_from_db
 @pytest.fixture
 def mock_neo4j_manager():
-    with patch('data_access.kg_queries.neo4j_manager', spec=Neo4jManagerSingleton) as mock_manager:
+    with patch(
+        "data_access.kg_queries.neo4j_manager", spec=Neo4jManagerSingleton
+    ) as mock_manager:
         mock_manager.execute_cypher_batch = AsyncMock(return_value=None)
         # Simplistic mock for query_kg_from_db, will be updated by test logic
         mock_manager.execute_read_query = AsyncMock(return_value=[])
         yield mock_manager
 
+
 # Store for captured statements by the mock
 captured_statements_for_tests: List[Tuple[str, Dict[str, Any]]] = []
+
 
 async def capture_statements_mock(statements: List[Tuple[str, Dict[str, Any]]]):
     captured_statements_for_tests.clear()
     captured_statements_for_tests.extend(statements)
     return None
 
+
 @pytest.mark.asyncio
 async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     captured_statements_for_tests.clear()
     # Override the mock for execute_cypher_batch for this test to capture statements
-    mock_neo4j_manager.execute_cypher_batch = AsyncMock(side_effect=capture_statements_mock)
+    mock_neo4j_manager.execute_cypher_batch = AsyncMock(
+        side_effect=capture_statements_mock
+    )
 
     triples_data = [
         # Scenario 1: Explicit Character type
-        {"subject": {"name": "Alice", "type": "Character"}, "predicate": "IS_A", "object_literal": "Protagonist", "is_literal_object": True},
+        {
+            "subject": {"name": "Alice", "type": "Character"},
+            "predicate": "IS_A",
+            "object_literal": "Protagonist",
+            "is_literal_object": True,
+        },
         # Scenario 2: Person type, should also get Character label
-        {"subject": {"name": "Bob", "type": "Person"}, "predicate": "WORKS_AS", "object_literal": "Engineer", "is_literal_object": True},
+        {
+            "subject": {"name": "Bob", "type": "Person"},
+            "predicate": "WORKS_AS",
+            "object_literal": "Engineer",
+            "is_literal_object": True,
+        },
         # Scenario 3: Other type
-        {"subject": {"name": "Castle", "type": "Location"}, "predicate": "IS_NEAR", "object_literal": "Forest", "is_literal_object": True},
+        {
+            "subject": {"name": "Castle", "type": "Location"},
+            "predicate": "IS_NEAR",
+            "object_literal": "Forest",
+            "is_literal_object": True,
+        },
         # Scenario 4: Character as object
-        {"subject": {"name": "Story1", "type": "Narrative"}, "predicate": "FEATURES", "object_entity": {"name": "Charles", "type": "Character"}},
+        {
+            "subject": {"name": "Story1", "type": "Narrative"},
+            "predicate": "FEATURES",
+            "object_entity": {"name": "Charles", "type": "Character"},
+        },
         # Scenario 5: Person as object
-        {"subject": {"name": "ProjectX", "type": "Project"}, "predicate": "MANAGED_BY", "object_entity": {"name": "Diana", "type": "Person"}},
+        {
+            "subject": {"name": "ProjectX", "type": "Project"},
+            "predicate": "MANAGED_BY",
+            "object_entity": {"name": "Diana", "type": "Person"},
+        },
     ]
 
-    await add_kg_triples_batch_to_db(triples_data, chapter_number=1, is_from_flawed_draft=False)
+    await add_kg_triples_batch_to_db(
+        triples_data, chapter_number=1, is_from_flawed_draft=False
+    )
 
     # Debug: Print captured statements
     # for i, (query, params) in enumerate(captured_statements_for_tests):
@@ -82,21 +133,30 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     alice_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Alice":
-            assert "MERGE (s:Character:Entity {name: $subject_name_param})" in query or \
-                   "MERGE (s:Character:Entity {name: $subject_name_param})" in query # Accommodate slight variations if any
+            assert (
+                "MERGE (s:Character:Entity {name: $subject_name_param})" in query
+                or "MERGE (s:Character:Entity {name: $subject_name_param})" in query
+            )  # Accommodate slight variations if any
             alice_statement_found = True
             break
-    assert alice_statement_found, "Cypher statement for Alice as Character not found or incorrect."
+    assert alice_statement_found, (
+        "Cypher statement for Alice as Character not found or incorrect."
+    )
 
     # Verify generated Cypher for Bob (Person -> Character:Person)
     bob_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Bob":
-            assert "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query or \
-                   "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query
+            assert (
+                "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query
+                or "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
+                in query
+            )
             bob_statement_found = True
             break
-    assert bob_statement_found, "Cypher statement for Bob as Person:Character not found or incorrect."
+    assert bob_statement_found, (
+        "Cypher statement for Bob as Person:Character not found or incorrect."
+    )
 
     # Verify generated Cypher for Castle (Location)
     castle_statement_found = False
@@ -105,7 +165,9 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
             assert "MERGE (s:Location:Entity {name: $subject_name_param})" in query
             castle_statement_found = True
             break
-    assert castle_statement_found, "Cypher statement for Castle as Location not found or incorrect."
+    assert castle_statement_found, (
+        "Cypher statement for Castle as Location not found or incorrect."
+    )
 
     # Verify Charles (Object, Character)
     charles_statement_found = False
@@ -114,16 +176,22 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
             assert "MERGE (o:Character:Entity {name: $object_name_param})" in query
             charles_statement_found = True
             break
-    assert charles_statement_found, "Cypher statement for Charles as Character (object) not found or incorrect."
+    assert charles_statement_found, (
+        "Cypher statement for Charles as Character (object) not found or incorrect."
+    )
 
     # Verify Diana (Object, Person -> Character:Person)
     diana_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("object_name_param") == "Diana":
-            assert "MERGE (o:Character:Person:Entity {name: $object_name_param})" in query
+            assert (
+                "MERGE (o:Character:Person:Entity {name: $object_name_param})" in query
+            )
             diana_statement_found = True
             break
-    assert diana_statement_found, "Cypher statement for Diana as Person:Character (object) not found or incorrect."
+    assert diana_statement_found, (
+        "Cypher statement for Diana as Person:Character (object) not found or incorrect."
+    )
 
 
 # Placeholder for a more comprehensive query test.
@@ -145,20 +213,57 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's modify the mock to capture the query string for query_kg_from_db
 
     captured_query_string = ""
+
     async def capture_read_query_mock(query: str, params: Dict[str, Any]):
         nonlocal captured_query_string
         captured_query_string = query
         # Simulate finding relevant nodes
-        if ":Character" in query and params.get("subject_param") is None : # General Character query
-             return [
-                {"subject": "Alice", "predicate": "IS_A", "object": "Protagonist", "object_type": "Literal", KG_REL_CHAPTER_ADDED: 1, "confidence": 1.0, KG_IS_PROVISIONAL: False},
-                {"subject": "Bob", "predicate": "WORKS_AS", "object": "Engineer", "object_type": "Literal", KG_REL_CHAPTER_ADDED: 1, "confidence": 1.0, KG_IS_PROVISIONAL: False},
-                {"subject": "Charles", "predicate": "APPEARS_IN", "object": "Story1", "object_type": "Narrative", KG_REL_CHAPTER_ADDED: 1, "confidence": 1.0, KG_IS_PROVISIONAL: False},
-                {"subject": "Diana", "predicate": "LEADS", "object": "ProjectX", "object_type": "Project", KG_REL_CHAPTER_ADDED: 1, "confidence": 1.0, KG_IS_PROVISIONAL: False},
+        if (
+            ":Character" in query and params.get("subject_param") is None
+        ):  # General Character query
+            return [
+                {
+                    "subject": "Alice",
+                    "predicate": "IS_A",
+                    "object": "Protagonist",
+                    "object_type": "Literal",
+                    KG_REL_CHAPTER_ADDED: 1,
+                    "confidence": 1.0,
+                    KG_IS_PROVISIONAL: False,
+                },
+                {
+                    "subject": "Bob",
+                    "predicate": "WORKS_AS",
+                    "object": "Engineer",
+                    "object_type": "Literal",
+                    KG_REL_CHAPTER_ADDED: 1,
+                    "confidence": 1.0,
+                    KG_IS_PROVISIONAL: False,
+                },
+                {
+                    "subject": "Charles",
+                    "predicate": "APPEARS_IN",
+                    "object": "Story1",
+                    "object_type": "Narrative",
+                    KG_REL_CHAPTER_ADDED: 1,
+                    "confidence": 1.0,
+                    KG_IS_PROVISIONAL: False,
+                },
+                {
+                    "subject": "Diana",
+                    "predicate": "LEADS",
+                    "object": "ProjectX",
+                    "object_type": "Project",
+                    KG_REL_CHAPTER_ADDED: 1,
+                    "confidence": 1.0,
+                    KG_IS_PROVISIONAL: False,
+                },
             ]
         return []
 
-    mock_neo4j_manager.execute_read_query = AsyncMock(side_effect=capture_read_query_mock)
+    mock_neo4j_manager.execute_read_query = AsyncMock(
+        side_effect=capture_read_query_mock
+    )
 
     # Query for all subjects that are Characters (implicit by querying for :Character)
     # query_kg_from_db structure might need adjustment if we want to query nodes by type directly
@@ -198,8 +303,10 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's simplify this test to focus on the fact that query_kg_from_db *can* retrieve
     # data if the entities were labeled correctly.
 
-    results = await query_kg_from_db(include_provisional=True) # general query
-    assert "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string # default query
+    results = await query_kg_from_db(include_provisional=True)  # general query
+    assert (
+        "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string
+    )  # default query
     # The actual filtering for :Character would happen in Cypher if one were to write:
     # MATCH (c:Character) ...
     # This python function doesn't build arbitrary node selection queries, only triple queries.
@@ -222,4 +329,4 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # to prove that the labels are correctly applied, making them queryable.
     # This test can be a simple pass or focus on a very specific aspect of query_kg_from_db
     # if relevant.
-    pass # Placeholder for further refinement if a direct query test is needed.
+    pass  # Placeholder for further refinement if a direct query test is needed.

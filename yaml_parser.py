@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+
 def normalize_keys_recursive(data: Any) -> Any:
     """
     Recursively normalizes keys in a dictionary to lowercase and replaces spaces with underscores.
@@ -24,7 +25,10 @@ def normalize_keys_recursive(data: Any) -> Any:
     else:
         return data
 
-def load_yaml_file(filepath: str, normalize_keys: bool = True) -> Optional[Dict[str, Any]]:
+
+def load_yaml_file(
+    filepath: str, normalize_keys: bool = True
+) -> Optional[Dict[str, Any]]:
     """
     Loads and parses a YAML file.
 
@@ -40,24 +44,27 @@ def load_yaml_file(filepath: str, normalize_keys: bool = True) -> Optional[Dict[
         logger.error(f"File specified is not a YAML file: {filepath}")
         return None
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             content = yaml.safe_load(f)
 
         if not isinstance(content, dict):
-            logger.warning(f"YAML file {filepath} did not parse into a dictionary at the root level. Parsed type: {type(content)}")
+            logger.warning(
+                f"YAML file {filepath} did not parse into a dictionary at the root level. Parsed type: {type(content)}"
+            )
             # Depending on requirements, you might want to return `content` if it's a list,
             # or enforce dictionary structure. For now, allowing non-dict if safe_load returns one.
             # However, for consistency with previous parser, usually a Dict is expected.
             # Let's assume for now we want a dictionary, makes `normalize_keys` simpler.
-            if content is None: # Empty file
+            if content is None:  # Empty file
                 return {}
-            if not isinstance(content, dict): # If not None and not dict, log error.
-                 logger.error(f"YAML file {filepath} must have a dictionary as its root element for this application.")
-                 return None
+            if not isinstance(content, dict):  # If not None and not dict, log error.
+                logger.error(
+                    f"YAML file {filepath} must have a dictionary as its root element for this application."
+                )
+                return None
 
-
-        if normalize_keys and content: # only normalize if content is not None
-            return normalize_keys_recursive(content) # type: ignore
+        if normalize_keys and content:  # only normalize if content is not None
+            return normalize_keys_recursive(content)  # type: ignore
         return content
     except FileNotFoundError:
         logger.warning(f"YAML file '{filepath}' not found.")
@@ -66,10 +73,14 @@ def load_yaml_file(filepath: str, normalize_keys: bool = True) -> Optional[Dict[
         logger.error(f"Error parsing YAML file {filepath}: {e}", exc_info=True)
         return None
     except Exception as e:
-        logger.error(f"An unexpected error occurred while loading YAML file {filepath}: {e}", exc_info=True)
+        logger.error(
+            f"An unexpected error occurred while loading YAML file {filepath}: {e}",
+            exc_info=True,
+        )
         return None
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Example usage (primarily for testing the module directly)
     logging.basicConfig(level=logging.DEBUG)
     # Create a dummy test.yaml file for this example
@@ -84,7 +95,7 @@ if __name__ == '__main__':
         - Witty
     """
     test_yaml_filepath = "test_example.yaml"
-    with open(test_yaml_filepath, 'w', encoding='utf-8') as f:
+    with open(test_yaml_filepath, "w", encoding="utf-8") as f:
         f.write(test_yaml_content_for_direct_run)
 
     parsed_data_normalized = load_yaml_file(test_yaml_filepath)
@@ -111,4 +122,5 @@ if __name__ == '__main__':
         # ...
 
     import os
-    os.remove(test_yaml_filepath) # Clean up dummy file
+
+    os.remove(test_yaml_filepath)  # Clean up dummy file
