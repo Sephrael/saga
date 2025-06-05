@@ -13,7 +13,8 @@ from prompt_data_getters import (
     get_filtered_world_data_for_prompt_plain_text,
     get_reliable_kg_facts_for_drafting_prompt
 )
-from parsing_utils import split_text_into_blocks, parse_key_value_block
+# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
+import json # Added for JSON parsing
 
 logger = logging.getLogger(__name__)
 
@@ -30,63 +31,81 @@ class WorldContinuityAgent:
         logger.info(f"WorldContinuityAgent initialized with model: {self.model_name}")
         utils.load_spacy_model_if_needed() # Ensure spaCy model is available
 
-    async def _parse_llm_consistency_output(self, text: str, chapter_number: int, original_draft_text: str) -> List[ProblemDetail]: # Added original_draft_text
+    async def _parse_llm_consistency_output(self, json_text: str, chapter_number: int, original_draft_text: str) -> List[ProblemDetail]:
         """
-        Parses LLM plain text output specifically for consistency problems.
+        Parses LLM JSON output specifically for consistency problems.
+        Expects a JSON array of problem objects.
         Populates character offsets for the quote and its containing sentence using spaCy.
         """
         final_problems: List[ProblemDetail] = []
-        if not text or not text.strip() or "no significant consistency problems found" in text.lower() or "no significant problems found" in text.lower():
-            logger.info(f"Consistency check for Ch {chapter_number} is empty or indicates no problems. No problems parsed.")
+        if not json_text or not json_text.strip():
+            logger.info(f"Consistency check JSON for Ch {chapter_number} is empty. No problems parsed.")
             return []
 
-        problem_blocks_text = split_text_into_blocks(text, separator_regex_str=r'\n\s*---\s*\n')
+        try:
+            parsed_data = json.loads(json_text)
+            if not isinstance(parsed_data, list):
+                if isinstance(parsed_data, dict) and "status" in parsed_data and \
+                   ("no significant consistency problems found" in parsed_data["status"].lower() or \
+                    "no significant problems found" in parsed_data["status"].lower()):
+                    logger.info(f"JSON consistency check for Ch {chapter_number} indicates no problems: {parsed_data}")
+                    return []
+                if isinstance(parsed_data, dict) and "problems" in parsed_data and isinstance(parsed_data["problems"], list):
+                     logger.info(f"JSON consistency check for Ch {chapter_number} has problems nested under 'problems' key.")
+                     parsed_data = parsed_data["problems"] # Process the list of problems
+                else:
+                    logger.error(f"LLM consistency output was not a JSON list of problems. Received type: {type(parsed_data)}. Content: {json_text[:300]}")
+                    final_problems.append({
+                        "issue_category": "consistency", "problem_description": "LLM output was not a list of consistency problems.",
+                        "quote_from_original_text": "N/A - LLM Output Format Error",
+                        "quote_char_start": None, "quote_char_end": None,
+                        "sentence_char_start": None, "sentence_char_end": None,
+                        "suggested_fix_focus": "Ensure LLM outputs a JSON list of problem objects for consistency check."
+                    })
+                    return final_problems
 
-        for block_num, block_content in enumerate(problem_blocks_text):
-            if not block_content.strip():
-                continue
-            logger.debug(f"Parsing consistency problem block {block_num+1} for Ch {chapter_number}:\n{block_content[:150]}...")
+            if not parsed_data: # Empty list from JSON
+                 logger.info(f"JSON consistency check for Ch {chapter_number} was an empty list. No problems parsed.")
+                 return []
 
-            parsed_problem_dict = parse_key_value_block(
-                block_text_or_lines=block_content,
-                key_map=PROBLEM_DETAIL_KEY_MAP,
-                list_internal_keys=[]
-            )
-
-            required_keys_internal = set(PROBLEM_DETAIL_KEY_MAP.values())
-            missing_keys = required_keys_internal - set(parsed_problem_dict.keys())
-
-            problem_meta: ProblemDetail = { # Initialize with defaults
-                "issue_category": "consistency", # Default for this agent
-                "problem_description": "N/A",
-                "quote_from_original_text": "N/A - Malformed LLM Output",
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode JSON from LLM consistency output for Ch {chapter_number}: {e}. Text: {json_text[:500]}...")
+            if "no significant consistency problems found" in json_text.lower() or "no significant problems found" in json_text.lower():
+                 logger.info("JSON decode error for consistency check, but text indicates no significant problems.")
+                 return []
+            final_problems.append({
+                "issue_category": "consistency", "problem_description": f"Invalid JSON from LLM for consistency check: {e}",
+                "quote_from_original_text": "N/A - Invalid JSON",
                 "quote_char_start": None, "quote_char_end": None,
                 "sentence_char_start": None, "sentence_char_end": None,
-                "suggested_fix_focus": "Review LLM output."
-            }
+                "suggested_fix_focus": "Review LLM output for JSON validity (consistency check)."
+            })
+            return final_problems
 
-            if missing_keys:
-                logger.warning(f"Could not parse all required fields from consistency problem block {block_num+1} for Ch {chapter_number}. Missing: {missing_keys}. Block: '{block_content[:150]}...'")
-                problem_meta["problem_description"] = f"Malformed consistency problem block from LLM: {block_content}"
-                final_problems.append(problem_meta)
+        for i, problem_dict in enumerate(parsed_data):
+            if not isinstance(problem_dict, dict):
+                logger.warning(f"Consistency problem item {i+1} in JSON list for Ch {chapter_number} is not a dictionary. Skipping. Item: {problem_dict}")
                 continue
 
-            problem_meta["problem_description"] = parsed_problem_dict.get("problem_description", "N/A")
-            problem_meta["quote_from_original_text"] = parsed_problem_dict.get("quote_from_original_text", "N/A - General Issue")
-            problem_meta["suggested_fix_focus"] = parsed_problem_dict.get("suggested_fix_focus", "N/A")
+            # PROBLEM_DETAIL_KEY_MAP can be used if LLM keys are different, but for now assume direct mapping
+            # or LLM is prompted for these exact keys.
+            problem_meta: ProblemDetail = {
+                "issue_category": "consistency", # Forced for this agent
+                "problem_description": problem_dict.get("problem_description", "N/A - Missing description"),
+                "quote_from_original_text": problem_dict.get("quote_from_original_text", "N/A - General Issue"),
+                "quote_char_start": None, "quote_char_end": None,
+                "sentence_char_start": None, "sentence_char_end": None,
+                "suggested_fix_focus": problem_dict.get("suggested_fix_focus", "N/A - Missing suggestion")
+            }
 
-            category = str(parsed_problem_dict.get("issue_category", "consistency")).strip().lower()
-            if category != "consistency":
-                 logger.warning(f"WorldContinuityAgent parsed a non-consistency category '{category}' in block {block_num+1} for Ch {chapter_number}. Forcing to 'consistency'.")
-                 problem_meta["issue_category"] = "consistency"
-            else:
-                problem_meta["issue_category"] = category
+            # Verify LLM provided 'consistency' or warn if it didn't (though we force it above)
+            llm_category_raw = str(problem_dict.get("issue_category", "consistency")).strip().lower()
+            if llm_category_raw != "consistency":
+                 logger.warning(f"WorldContinuityAgent received non-consistency category '{llm_category_raw}' in problem {i+1} for Ch {chapter_number}. It has been forced to 'consistency'.")
 
             quote_text_from_llm = problem_meta["quote_from_original_text"]
-            # Normalize "N/A..." variations to a single canonical form first
-            if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip():
+            if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip() or quote_text_from_llm == "N/A":
                 problem_meta["quote_from_original_text"] = "N/A - General Issue"
-                logger.debug(f"Consistency problem block {block_num+1} for Ch {chapter_number} is 'N/A - General Issue' or empty quote.")
             elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
                 offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(original_draft_text, quote_text_from_llm)
                 if offsets_tuple:
@@ -95,13 +114,12 @@ class WorldContinuityAgent:
                     problem_meta["quote_char_end"] = q_end
                     problem_meta["sentence_char_start"] = s_start
                     problem_meta["sentence_char_end"] = s_end
-                    logger.debug(f"Ch {chapter_number} consistency problem: Quote '{quote_text_from_llm[:30]}...' found at {q_start}-{q_end}, Sentence: {s_start}-{s_end}")
                 else:
-                    logger.warning(f"Ch {chapter_number} consistency problem: Could not find quote via spaCy utils: '{quote_text_from_llm[:50]}...'. Offsets will be None.")
+                    logger.warning(f"Ch {chapter_number} consistency problem {i+1}: Could not find quote via spaCy: '{quote_text_from_llm[:50]}...'")
             elif not original_draft_text.strip():
-                 logger.warning(f"Ch {chapter_number} consistency problem: Original draft text is empty. Cannot find offsets for quote: '{quote_text_from_llm[:50]}...'")
+                 logger.warning(f"Ch {chapter_number} consistency problem {i+1}: Original draft text is empty for quote search: '{quote_text_from_llm[:50]}...'")
             else: # spaCy not loaded
-                logger.info(f"Ch {chapter_number} consistency problem: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'")
+                logger.info(f"Ch {chapter_number} consistency problem {i+1}: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'")
 
             final_problems.append(problem_meta)
         return final_problems
@@ -128,18 +146,24 @@ class WorldContinuityAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
-        few_shot_consistency_example_str = f"""
-ISSUE CATEGORY: consistency
-PROBLEM DESCRIPTION: The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.
-QUOTE FROM ORIGINAL: She admired the brilliant blue glow of the Sunstone clutched in her hand.
-SUGGESTED FIX FOCUS: Change the Sunstone's color to 'crimson red' to align with established world canon.
----
-ISSUE CATEGORY: consistency
-PROBLEM DESCRIPTION: Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states "Kael | mentored | Elara (Ch: 3)".
-QUOTE FROM ORIGINAL: "I do not believe we have crossed paths before, young one," Kael said, peering at Elara.
-SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her).
+        # This whole block will replace the existing few_shot_consistency_example_str
+        few_shot_consistency_example_str = """
+[
+  {
+    "issue_category": "consistency",
+    "problem_description": "The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.",
+    "quote_from_original_text": "She admired the brilliant blue glow of the Sunstone clutched in her hand.",
+    "suggested_fix_focus": "Change the Sunstone's color to 'crimson red' to align with established world canon."
+  },
+  {
+    "issue_category": "consistency",
+    "problem_description": "Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states \\"Kael | mentored | Elara (Ch: 3)\\".",
+    "quote_from_original_text": "\\"I do not believe we have crossed paths before, young one,\\" Kael said, peering at Elara.",
+    "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her)."
+  }
+]
 """
-
+        # Note: The user/developer needs to update the actual LLM prompt to request JSON.
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
@@ -182,24 +206,23 @@ SUGGESTED FIX FOCUS: Adjust Kael's dialogue to acknowledge his prior mentorship 
             draft_text,
             "--- END COMPLETE CHAPTER TEXT ---",
             "",
-            "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
-            "If consistency problems are found, list each problem individually.",
-            "Use the EXACT keys: `ISSUE CATEGORY: consistency`, `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
-            "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \"N/A - General Issue\".",
-            "Separate each problem block with a line containing only \"---\".",
-            "If NO consistency problems are found, output ONLY the phrase: \"No significant consistency problems found.\"",
+            "**Output Format (CRITICAL - JSON ONLY):**",
+            "If consistency problems are found, output a JSON array of problem objects.",
+            "Each object MUST have these keys: \"issue_category\" (fixed to \"consistency\"), \"problem_description\", \"quote_from_original_text\", \"suggested_fix_focus\".",
+            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \"N/A - General Issue\".",
+            "If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like `{\"status\": \"No significant consistency problems found\"}`.",
             "",
-            "**Follow this example structure for your output precisely:**",
-            "```plaintext",
+            "**Follow this example structure for your JSON output precisely:**",
+            "```json",
             few_shot_consistency_example_str.strip(),
             "```",
             "",
-            "Begin output now:"
+            "Begin your JSON output now:"
         ])
         prompt = "\n".join(prompt_lines)
 
-        logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number}...")
-        cleaned_consistency_text, usage_data = await llm_service.async_call_llm( 
+        logger.info(f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number} (expecting JSON)...")
+        cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_CONSISTENCY_CHECK, 

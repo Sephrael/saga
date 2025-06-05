@@ -32,6 +32,7 @@ from drafting_agent import DraftingAgent
 from kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile, WorldItem, _normalize_for_id # Added _normalize_for_id
 from world_continuity_agent import WorldContinuityAgent
+from yaml_parser import load_yaml_file # Added import
 
 from initial_setup_logic import generate_plot_outline_logic, generate_world_building_logic
 from context_generation_logic import generate_hybrid_chapter_context_logic

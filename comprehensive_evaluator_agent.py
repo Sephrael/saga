@@ -13,7 +13,9 @@ from prompt_data_getters import (
     get_filtered_world_data_for_prompt_plain_text,
     get_reliable_kg_facts_for_drafting_prompt
 )
-from parsing_utils import split_text_into_blocks, parse_key_value_block
+# from parsing_utils import split_text_into_blocks # No longer needed if parsing JSON list
+# from parsing_utils import parse_key_value_block # Removed
+import json # Added for JSON parsing
 
 logger = logging.getLogger(__name__)
 
@@ -52,66 +54,81 @@ class ComprehensiveEvaluatorAgent:
         logger.info(f"ComprehensiveEvaluatorAgent initialized with model: {self.model_name}")
         utils.load_spacy_model_if_needed() # Ensure spaCy model is available
 
-    async def _parse_llm_evaluation_output(self, text: str, chapter_number: int, original_draft_text: str) -> List[ProblemDetail]: # Added original_draft_text
+    async def _parse_llm_evaluation_output(self, json_text: str, chapter_number: int, original_draft_text: str) -> List[ProblemDetail]:
         """
-        Parses LLM plain text output for chapter evaluation problems.
+        Parses LLM JSON output for chapter evaluation problems.
         Populates character offsets for the quote and its containing sentence using spaCy.
         """
         final_problems: List[ProblemDetail] = []
 
-        if not text or not text.strip() or "no significant problems found" in text.lower():
-            logger.info(f"Plain text evaluation for Ch {chapter_number} is empty or indicates no problems. No problems parsed.")
+        if not json_text or not json_text.strip():
+            logger.info(f"JSON evaluation for Ch {chapter_number} is empty. No problems parsed.")
             return []
 
-        problem_blocks_text = split_text_into_blocks(text, separator_regex_str=r'\n\s*---\s*\n')
+        try:
+            # LLM is expected to output a JSON list of problem objects.
+            # Each object should have keys like: issue_category, problem_description,
+            # quote_from_original_text, suggested_fix_focus
+            parsed_data = json.loads(json_text)
+            if not isinstance(parsed_data, list):
+                # Handle cases where LLM might return a single JSON object or a dict with a status
+                if isinstance(parsed_data, dict) and "status" in parsed_data and "no significant problems found" in parsed_data["status"].lower():
+                    logger.info(f"JSON evaluation for Ch {chapter_number} indicates no problems: {parsed_data}")
+                    return []
+                if isinstance(parsed_data, dict) and "problems" in parsed_data and isinstance(parsed_data["problems"], list):
+                    logger.info(f"JSON evaluation for Ch {chapter_number} has problems nested under 'problems' key.")
+                    parsed_data = parsed_data["problems"] # Process the list of problems
+                else:
+                    logger.error(f"LLM evaluation output was not a JSON list of problems as expected. Received type: {type(parsed_data)}. Content: {json_text[:300]}")
+                    final_problems.append({
+                        "issue_category": "meta", "problem_description": "LLM output was not a list of problems.",
+                        "quote_from_original_text": "N/A - LLM Output Format Error",
+                        "quote_char_start": None, "quote_char_end": None,
+                        "sentence_char_start": None, "sentence_char_end": None,
+                        "suggested_fix_focus": "Ensure LLM outputs a JSON list of problem objects."
+                    })
+                    return final_problems
 
-        for block_num, block_content in enumerate(problem_blocks_text):
-            if not block_content.strip():
-                continue
+            if not parsed_data: # Empty list from JSON
+                 logger.info(f"JSON evaluation for Ch {chapter_number} was an empty list. No problems parsed.")
+                 return []
 
-            logger.debug(f"Parsing problem block {block_num+1} for Ch {chapter_number}:\n{block_content[:150]}...")
-
-            parsed_problem_dict = parse_key_value_block(
-                block_text_or_lines=block_content,
-                key_map=PROBLEM_DETAIL_KEY_MAP,
-                list_internal_keys=[]
-            )
-
-            required_keys_internal = set(PROBLEM_DETAIL_KEY_MAP.values())
-            missing_keys = required_keys_internal - set(parsed_problem_dict.keys())
-
-            problem_meta: ProblemDetail = { # Initialize with defaults
-                "issue_category": "meta",
-                "problem_description": "N/A",
-                "quote_from_original_text": "N/A - Malformed LLM Output",
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode JSON from LLM evaluation output for Ch {chapter_number}: {e}. Text: {json_text[:500]}...")
+            # Check for common "no problems" text even if JSON is malformed around it
+            if "no significant problems found" in json_text.lower():
+                 logger.info("JSON decode error, but text indicates no significant problems.")
+                 return []
+            final_problems.append({
+                "issue_category": "meta", "problem_description": f"Invalid JSON from LLM: {e}",
+                "quote_from_original_text": "N/A - Invalid JSON",
                 "quote_char_start": None, "quote_char_end": None,
                 "sentence_char_start": None, "sentence_char_end": None,
-                "suggested_fix_focus": "Review LLM output."
+                "suggested_fix_focus": "Review LLM output for JSON validity."
+            })
+            return final_problems
+
+        for i, problem_dict in enumerate(parsed_data):
+            if not isinstance(problem_dict, dict):
+                logger.warning(f"Problem item {i+1} in JSON list for Ch {chapter_number} is not a dictionary. Skipping. Item: {problem_dict}")
+                continue
+
+            problem_meta: ProblemDetail = {
+                "issue_category": _normalize_llm_category_to_internal(problem_dict.get("issue_category", "meta")),
+                "problem_description": problem_dict.get("problem_description", "N/A - Missing description from LLM"),
+                "quote_from_original_text": problem_dict.get("quote_from_original_text", "N/A - General Issue"),
+                "quote_char_start": None, "quote_char_end": None,
+                "sentence_char_start": None, "sentence_char_end": None,
+                "suggested_fix_focus": problem_dict.get("suggested_fix_focus", "N/A - Missing suggestion from LLM")
             }
 
-            if missing_keys:
-                logger.warning(f"Could not parse all required fields from problem block {block_num+1} for Ch {chapter_number}. Missing: {missing_keys}. Block: '{block_content[:150]}...'")
-                problem_meta["problem_description"] = f"Malformed problem block from LLM: {block_content}"
-                final_problems.append(problem_meta)
-                continue
-            
-            problem_meta["problem_description"] = parsed_problem_dict.get("problem_description", "N/A")
-            problem_meta["quote_from_original_text"] = parsed_problem_dict.get("quote_from_original_text", "N/A - General Issue")
-            problem_meta["suggested_fix_focus"] = parsed_problem_dict.get("suggested_fix_focus", "N/A")
-            
-            llm_category_raw = str(parsed_problem_dict.get("issue_category", "meta")).strip()
-            internal_category = _normalize_llm_category_to_internal(llm_category_raw)
-            problem_meta["issue_category"] = internal_category
-
-            if internal_category == "meta" and llm_category_raw.lower().strip() != "meta":
-                 logger.warning(f"LLM provided category '{llm_category_raw}' in block {block_num+1} for Ch {chapter_number}, which normalized to 'meta'. Check normalization if this is unexpected.")
+            if problem_meta["issue_category"] == "meta" and str(problem_dict.get("issue_category", "")).lower().strip() != "meta":
+                 logger.warning(f"LLM provided category '{problem_dict.get('issue_category')}' in problem {i+1} for Ch {chapter_number}, which normalized to 'meta'.")
 
 
             quote_text_from_llm = problem_meta["quote_from_original_text"]
-            # Normalize "N/A..." variations to a single canonical form first
-            if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip():
+            if "N/A - General Issue" in quote_text_from_llm or not quote_text_from_llm.strip() or quote_text_from_llm == "N/A":
                 problem_meta["quote_from_original_text"] = "N/A - General Issue"
-                logger.debug(f"Problem block {block_num+1} for Ch {chapter_number} is 'N/A - General Issue' or empty quote.")
             elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
                 offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(original_draft_text, quote_text_from_llm)
                 if offsets_tuple:
@@ -120,13 +137,12 @@ class ComprehensiveEvaluatorAgent:
                     problem_meta["quote_char_end"] = q_end
                     problem_meta["sentence_char_start"] = s_start
                     problem_meta["sentence_char_end"] = s_end
-                    logger.debug(f"Ch {chapter_number} problem: Quote '{quote_text_from_llm[:30]}...' found at {q_start}-{q_end}, Sentence: {s_start}-{s_end}")
                 else:
-                    logger.warning(f"Ch {chapter_number} problem: Could not find quote via spaCy utils: '{quote_text_from_llm[:50]}...'. Offsets will be None.")
+                    logger.warning(f"Ch {chapter_number} problem {i+1}: Could not find quote via spaCy: '{quote_text_from_llm[:50]}...'")
             elif not original_draft_text.strip():
-                 logger.warning(f"Ch {chapter_number} problem: Original draft text is empty. Cannot find offsets for quote: '{quote_text_from_llm[:50]}...'")
+                 logger.warning(f"Ch {chapter_number} problem {i+1}: Original draft text is empty. Cannot find offsets for quote: '{quote_text_from_llm[:50]}...'")
             else: # spaCy not loaded
-                logger.info(f"Ch {chapter_number} problem: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'")
+                logger.info(f"Ch {chapter_number} problem {i+1}: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'")
             
             final_problems.append(problem_meta)
         return final_problems
@@ -169,28 +185,31 @@ class ComprehensiveEvaluatorAgent:
         ] if novel_props.get('plot_points') else ["  - Not available"]
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
 
-        few_shot_eval_example_str = f"""
-ISSUE CATEGORY: CONSISTENCY
-PROBLEM DESCRIPTION: Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.
-QUOTE FROM ORIGINAL: "I've never seen anything beyond these village walls," Elara sighed, gazing at the distant mountains.
-SUGGESTED FIX FOCUS: Adjust Elara's dialogue to align with her established backstory of training in the Capital, or reconcile this statement with her past (e.g., she's being metaphorical or hiding her past).
----
-ISSUE CATEGORY: PLOT_ARC
-PROBLEM DESCRIPTION: The chapter focuses heavily on a minor side character's backstory, which doesn't significantly advance the intended plot point about finding the Sunstone.
-QUOTE FROM ORIGINAL: The old merchant then spent a long while recounting his youthful adventures in the spice trade, detailing three different voyages.
-SUGGESTED FIX FOCUS: Reduce the side character's backstory significantly or tie it directly into how it helps or hinders the search for the Sunstone. Ensure the main plot point progression is central.
----
-ISSUE CATEGORY: NARRATIVE_DEPTH_AND_LENGTH
-PROBLEM DESCRIPTION: The confrontation with the antagonist feels rushed and lacks emotional impact. The protagonist's internal reaction to the antagonist's reveal is minimal.
-QUOTE FROM ORIGINAL: "It was you all along!" John exclaimed. The Baron merely smiled. Then they fought.
-SUGGESTED FIX FOCUS: Expand on John's internal thoughts and feelings upon discovering the Baron's betrayal. Show, don't just tell, the emotional weight of this moment. Describe the fight with more detail and tension.
----
-ISSUE CATEGORY: THEMATIC_ALIGNMENT
-PROBLEM DESCRIPTION: A newly introduced magical system allowing instant teleportation undermines the established theme of 'arduous journeys have transformative power'.
-QUOTE FROM ORIGINAL: With a flick of her wrist, Mariel teleported the entire party across the Obsidian Peaks.
-SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add significant costs, limitations, or consequences that align with or challenge the core theme in an interesting way, rather than negating it.
+        # This whole block will replace the existing few_shot_eval_example_str
+        few_shot_eval_example_str = """
+[
+  {
+    "issue_category": "CONSISTENCY",
+    "problem_description": "Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.",
+    "quote_from_original_text": "I've never seen anything beyond these village walls,\\" Elara sighed, gazing at the distant mountains.",
+    "suggested_fix_focus": "Adjust Elara's dialogue to align with her established backstory of training in the Capital, or reconcile this statement with her past (e.g., she's being metaphorical or hiding her past)."
+  },
+  {
+    "issue_category": "PLOT_ARC",
+    "problem_description": "The chapter focuses heavily on a minor side character's backstory, which doesn't significantly advance the intended plot point about finding the Sunstone.",
+    "quote_from_original_text": "The old merchant then spent a long while recounting his youthful adventures in the spice trade, detailing three different voyages.",
+    "suggested_fix_focus": "Reduce the side character's backstory significantly or tie it directly into how it helps or hinders the search for the Sunstone. Ensure the main plot point progression is central."
+  },
+  {
+    "issue_category": "NARRATIVE_DEPTH_AND_LENGTH",
+    "problem_description": "The confrontation with the antagonist feels rushed and lacks emotional impact. The protagonist's internal reaction to the antagonist's reveal is minimal.",
+    "quote_from_original_text": "\\"It was you all along!\\" John exclaimed. The Baron merely smiled. Then they fought.",
+    "suggested_fix_focus": "Expand on John's internal thoughts and feelings upon discovering the Baron's betrayal. Show, don't just tell, the emotional weight of this moment. Describe the fight with more detail and tension."
+  }
+]
 """
-        
+        # Note: The user/developer needs to update the actual LLM prompt to request JSON.
+        # This tool only changes the agent's parsing logic and the example string.
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
@@ -234,25 +253,23 @@ SUGGESTED FIX FOCUS: Reconsider the instant teleportation. If kept, add signific
             draft_text,
             "--- END COMPLETE CHAPTER TEXT ---",
             "",
-            "**Output Format (CRITICAL - PLAIN TEXT ONLY):**",
-            "Provide your evaluation as plain text. If problems are found, list each problem individually.",
-            "For `ISSUE CATEGORY:`, use one of the EXACT category names listed in your task (CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH).", 
-            "Then, use the EXACT keys: `PROBLEM DESCRIPTION:`, `QUOTE FROM ORIGINAL:`, `SUGGESTED FIX FOCUS:`.",
-            "The `QUOTE FROM ORIGINAL:` must be a VERBATIM quote (10-50 words) from the chapter text. If general (e.g., overall length) or no quote applies, use \"N/A - General Issue\".",
-            "Separate each problem block with a line containing only \"---\".",
-            "If NO problems are found, output ONLY the phrase: \"No significant problems found.\"",
+            "**Output Format (CRITICAL - JSON ONLY):**",
+            "Provide your evaluation as a JSON array of problem objects. Each object must have these keys: \"issue_category\", \"problem_description\", \"quote_from_original_text\", \"suggested_fix_focus\".",
+            "For `issue_category`, use one of the EXACT category names: CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH.",
+            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \"N/A - General Issue\".",
+            "If NO problems are found, output an empty JSON array `[]` or a JSON object like `{\"status\": \"No significant problems found\"}`.",
             "",
-            "**Follow this example structure for your output precisely:**",
-            "```plaintext",
+            "**Follow this example structure for your JSON output precisely:**",
+            "```json",
             few_shot_eval_example_str.strip(),
             "```",
             "",
-            "Begin your output now:"
+            "Begin your JSON output now:"
         ])
         prompt = "\n".join(prompt_lines)
 
-        logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number}...")
-        cleaned_evaluation_text, usage_data = await llm_service.async_call_llm( # MODIFIED
+        logger.info(f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number} (expecting JSON)...")
+        cleaned_evaluation_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_EVALUATION, 
