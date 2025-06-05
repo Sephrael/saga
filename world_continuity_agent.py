@@ -157,8 +157,8 @@ class WorldContinuityAgent:
   },
   {
     "issue_category": "consistency",
-    "problem_description": "Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states \\"Kael | mentored | Elara (Ch: 3)\\".",
-    "quote_from_original_text": "\\"I do not believe we have crossed paths before, young one,\\" Kael said, peering at Elara.",
+    "problem_description": "Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states \"Kael | mentored | Elara (Ch: 3)\".",
+    "quote_from_original_text": "\"I do not believe we have crossed paths before, young one,\" Kael said, peering at Elara.",
     "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her)."
   }
 ]
@@ -208,9 +208,9 @@ class WorldContinuityAgent:
             "",
             "**Output Format (CRITICAL - JSON ONLY):**",
             "If consistency problems are found, output a JSON array of problem objects.",
-            "Each object MUST have these keys: \\"issue_category\\" (fixed to \\"consistency\\"), \\"problem_description\\", \\"quote_from_original_text\\", \\"suggested_fix_focus\\".",
-            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \\"N/A - General Issue\\".",
-            "If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like `{\\"status\\": \\"No significant consistency problems found\\"}`.",
+            "Each object MUST have these keys: \"issue_category\" (fixed to \"consistency\"), \"problem_description\", \"quote_from_original_text\", \"suggested_fix_focus\".",
+            "The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use \"N/A - General Issue\".",
+            "If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like `{\"status\": \"No significant consistency problems found\"}`.",
             "",
             "**Follow this example structure for your JSON output precisely:**",
             "```json",
