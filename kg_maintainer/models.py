@@ -10,13 +10,17 @@ from kg_constants import (
 
 
 def _normalize_for_id(text: str) -> str:
-    """Normalizes a string for use in an ID (lowercase, spaces to underscores, remove problematic chars)."""
+    """Normalize a string for use in an ID."""
+    """Lowercase, convert spaces to underscores, remove problematic chars."""
     if not isinstance(text, str):  # Handle potential non-string input
         text = str(text)
     text = text.strip().lower()
-    text = re.sub(r"['\"()]", "", text)  # Remove apostrophes, quotes, parentheses
-    text = re.sub(r"\s+", "_", text)  # Replace whitespace with underscore
-    text = re.sub(r"[^a-z0-9_]", "", text)  # Keep only alphanumeric and underscore
+    text = re.sub(r"['\"()]", "", text)
+    # Remove apostrophes, quotes, parentheses
+    text = re.sub(r"\s+", "_", text)
+    # Replace whitespace with underscore
+    text = re.sub(r"[^a-z0-9_]", "", text)
+    # Keep only alphanumeric and underscore
     return text
 
 
@@ -67,22 +71,31 @@ class WorldItem:
     properties: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, category: str, name: str, data: Dict[str, Any]) -> "WorldItem":
+    def from_dict(
+        cls, category: str, name: str, data: Dict[str, Any]
+    ) -> "WorldItem":
         """
         Creates a WorldItem.
         'category' and 'name' are the intended display/canonical values.
-        The 'id' is always generated deterministically from normalized versions of these.
+        The 'id' is always generated deterministically from normalized
+        versions of these.
         Any 'id' in the 'data' dict is ignored.
         """
-        if not category or not isinstance(category, str) or not category.strip():
+        if (
+            not category
+            or not isinstance(category, str)
+            or not category.strip()
+        ):
             raise ValueError("WorldItem category must be a non-empty string.")
         if not name or not isinstance(name, str) or not name.strip():
             raise ValueError(
-                f"WorldItem name must be a non-empty string (for category '{category}')."
+                "WorldItem name must be a non-empty string "
+                f"(for category '{category}')."
             )
 
         # Generate canonical ID from normalized category and name.
-        # The 'name' and 'category' stored on the instance are the ones passed as arguments.
+        # The 'name' and 'category' stored on the instance are the ones
+        # passed as arguments.
         normalized_id_category = _normalize_for_id(category)
         normalized_id_name = _normalize_for_id(name)
 
@@ -104,7 +117,14 @@ class WorldItem:
             if k not in {"id", KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL}
         }
 
-        return cls(item_id, category, name, created_chapter, is_provisional, props)
+        return cls(
+            item_id,
+            category,
+            name,
+            created_chapter,
+            is_provisional,
+            props,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         data = {
@@ -113,7 +133,8 @@ class WorldItem:
             KG_IS_PROVISIONAL: self.is_provisional,
             "created_chapter": self.created_chapter,  # convenience duplicate
             "is_provisional": self.is_provisional,  # convenience duplicate
-            # name and category are top-level attributes, not in properties dict for this method's output
+            # name and category are top-level attributes, not in properties
+            # dict for this method's output
         }
         data.update(self.properties)
         return data

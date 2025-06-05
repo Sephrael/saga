@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 def generate_character_node_cypher(
     profile: CharacterProfile, chapter_number_for_delta: int
 ) -> List[Tuple[str, Dict[str, Any]]]:
-    """Create Cypher statements to persist or update a single character profile's core attributes and direct relationships."""
+    """Create Cypher statements for a character profile."""
+    """Persist or update core attributes and direct relationships."""
     statements: List[Tuple[str, Dict[str, Any]]] = []
 
     props_from_profile = profile.to_dict()
@@ -42,7 +43,8 @@ def generate_character_node_cypher(
                 if k_update not in basic_props:
                     basic_props[k_update] = v_update
 
-    # Ensure is_provisional is set based on the current chapter's source quality if available
+    # Ensure provisional status is set based on the current chapter's
+    # source quality if available
     current_chapter_source_quality_key = (
         f"source_quality_chapter_{chapter_number_for_delta}"
     )
@@ -97,12 +99,16 @@ def generate_character_node_cypher(
                             ON MATCH SET t:Trait
                         MERGE (c)-[:HAS_TRAIT]->(t)
                         """,
-                        {"name": profile.name, "trait_name": trait_name.strip()},
+                        {
+                            "name": profile.name,
+                            "trait_name": trait_name.strip(),
+                        },
                     )
                 )
 
     # Development Events from profile.updates
-    # This should ONLY process the development event for the CURRENT chapter_number_for_delta
+    # This should process only the development event for the current
+    # chapter_number_for_delta
     dev_event_key_for_current_chapter = (
         f"development_in_chapter_{chapter_number_for_delta}"
     )
@@ -112,11 +118,15 @@ def generate_character_node_cypher(
     ):
         dev_event_summary = profile.updates[dev_event_key_for_current_chapter]
         if isinstance(dev_event_summary, str) and dev_event_summary.strip():
-            dev_event_id = f"dev_{profile.name}_ch{chapter_number_for_delta}_{hash(dev_event_summary)}"
+            dev_event_id = (
+                f"dev_{profile.name}_ch{chapter_number_for_delta}_"
+                f"{hash(dev_event_summary)}"
+            )
             dev_event_props = {
                 "id": dev_event_id,
                 "summary": dev_event_summary,
-                "chapter_updated": chapter_number_for_delta,  # Use the passed chapter number
+                "chapter_updated": chapter_number_for_delta,
+                # Use the passed chapter number
                 KG_IS_PROVISIONAL: basic_props.get(
                     KG_IS_PROVISIONAL, False
                 ),  # Inherit provisional status
@@ -126,8 +136,14 @@ def generate_character_node_cypher(
                     """
                     MATCH (c:Character:Entity {name: $name})
                     MERGE (dev:Entity {id: $dev_event_id})
-                        ON CREATE SET dev:DevelopmentEvent, dev = $props, dev.created_ts = timestamp()
-                        ON MATCH SET  dev:DevelopmentEvent, dev = $props, dev.updated_ts = timestamp()
+                        ON CREATE SET
+                            dev:DevelopmentEvent,
+                            dev = $props,
+                            dev.created_ts = timestamp()
+                        ON MATCH SET
+                            dev:DevelopmentEvent,
+                            dev = $props,
+                            dev.updated_ts = timestamp()
                     MERGE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
                     """,
                     {
@@ -138,7 +154,8 @@ def generate_character_node_cypher(
                 )
             )
 
-    # Explicit relationships from profile.relationships (assumed to be updates for current chapter_number_for_delta)
+    # Explicit relationships from profile.relationships
+    # (assumed to be updates for current chapter_number_for_delta)
     if profile.relationships:
         for target_char_name, rel_detail in profile.relationships.items():
             if isinstance(target_char_name, str) and target_char_name.strip():
@@ -161,9 +178,12 @@ def generate_character_node_cypher(
                     rel_cypher_props.pop("type", None)
 
                 # Tag relationship with current chapter metadata
-                rel_cypher_props[KG_REL_CHAPTER_ADDED] = chapter_number_for_delta
+                rel_cypher_props[KG_REL_CHAPTER_ADDED] = (
+                    chapter_number_for_delta
+                )
                 rel_cypher_props[KG_IS_PROVISIONAL] = basic_props.get(
-                    KG_IS_PROVISIONAL, False
+                    KG_IS_PROVISIONAL,
+                    False,
                 )
                 rel_cypher_props["source_profile_managed"] = (
                     True  # Mark as managed by character profile system
@@ -172,20 +192,40 @@ def generate_character_node_cypher(
                 statements.append(
                     (
                         """
-                        MATCH (c1:Character:Entity {name: $source_name})
-                        MERGE (c2:Entity {name: $target_name})
-                            ON CREATE SET c2:Character, c2.description = 'Auto-created via relationship from ' + $source_name, c2.created_ts = timestamp()
-                            ON MATCH SET c2:Character
-                        
-                        MERGE (c1)-[r:DYNAMIC_REL {type: $rel_type_str, chapter_added: $chapter_num_delta}]->(c2)
-                            ON CREATE SET r = $rel_props, r.created_ts = timestamp()
-                            ON MATCH SET  r += $rel_props, r.updated_ts = timestamp()
+                    MATCH (c1:Character:Entity {name: $source_name})
+                    MERGE (c2:Entity {name: $target_name})
+                        ON CREATE SET
+                            c2:Character,
+                            c2.description = (
+                                'Auto-created via relationship from '
+                                + $source_name
+                            ),
+                            c2.created_ts = timestamp()
+                        ON MATCH SET c2:Character
+
+                    MERGE (
+                        c1
+                    )-[
+                        r:DYNAMIC_REL {
+                            type: $rel_type_str,
+                            chapter_added: $chapter_num_delta,
+                        }
+                    ]->(
+                        c2
+                    )
+                        ON CREATE SET
+                            r = $rel_props,
+                            r.created_ts = timestamp()
+                        ON MATCH SET
+                            r += $rel_props,
+                            r.updated_ts = timestamp()
                         """,
                         {
                             "source_name": profile.name,
                             "target_name": target_char_name.strip(),
                             "rel_type_str": rel_type_str,
-                            "chapter_num_delta": chapter_number_for_delta,  # For unique MERGE key
+                            "chapter_num_delta": chapter_number_for_delta,
+                            # For unique MERGE key
                             "rel_props": rel_cypher_props,
                         },
                     )
@@ -205,8 +245,10 @@ def generate_world_element_node_cypher(
         "name": item.name,
         "category": item.category,
         # KG_NODE_CREATED_CHAPTER is set when the item is first seen.
-        # Updates might affect KG_IS_PROVISIONAL for the *current chapter's context*.
-        KG_NODE_CREATED_CHAPTER: item.created_chapter,  # This should be its original creation chapter
+        # Updates might affect KG_IS_PROVISIONAL for the
+        # *current chapter's context*.
+        KG_NODE_CREATED_CHAPTER: item.created_chapter,
+        # This should be its original creation chapter
     }
 
     current_chapter_source_quality_key = (
@@ -221,7 +263,8 @@ def generate_world_element_node_cypher(
     elif (
         KG_IS_PROVISIONAL not in node_props
     ):  # Default if not specified for this update context
-        # The item.is_provisional itself reflects the overall status, not specific to this delta.
+        # The item.is_provisional itself reflects the overall status,
+        # not specific to this delta.
         # For the node itself, its core provisional status is important.
         node_props[KG_IS_PROVISIONAL] = item.is_provisional
 
@@ -246,7 +289,10 @@ def generate_world_element_node_cypher(
                     node_props[key] = json.dumps(value, ensure_ascii=False)
                 except TypeError:
                     logger.warning(
-                        f"Could not JSON serialize property '{key}' for WorldElement '{item.id}'. Skipping."
+                        "Could not JSON serialize property '%s' for "
+                        "WorldElement '%s'. Skipping.",
+                        key,
+                        item.id,
                     )
 
     statements.append(
@@ -294,20 +340,31 @@ def generate_world_element_node_cypher(
                 if isinstance(value_str_unstripped, str):
                     value_str = value_str_unstripped.strip()
                     if value_str:
-                        # MERGE ValueNode based on its value and type, not a separate ID.
+                        # MERGE ValueNode based on its value and type,
+                        # not a separate ID.
                         statements.append(
                             (
                                 f"""
-                                MATCH (we:WorldElement:Entity {{id: $we_id}})
-                                MERGE (v:Entity:ValueNode {{value: $value_str, type: $prop_key}})
+                                MATCH (
+                                    we:WorldElement:Entity {id: $we_id}
+                                )
+                                MERGE (
+                                    v:Entity:ValueNode {
+                                        value: $value_str,
+                                        type: $prop_key,
+                                    }
+                                )
                                   ON CREATE SET v.created_ts = timestamp()
-                                  // ON MATCH SET can be omitted if no other props of ValueNode change
+                                  // ON MATCH SET can be omitted if no other
+                                  // props of ValueNode change
                                 MERGE (we)-[:{rel_type}]->(v)
                                 """,
                                 {
                                     "we_id": item.id,
-                                    "value_str": value_str,  # This is the constrained property
-                                    "prop_key": prop_key,  # This is the other constrained property
+                                    # This is the constrained property
+                                    "value_str": value_str,
+                                    # This is the other constrained property
+                                    "prop_key": prop_key,
                                 },
                             )
                         )
@@ -323,23 +380,33 @@ def generate_world_element_node_cypher(
         elab_summary = item.properties[elab_event_key_for_current_chapter]
         if isinstance(elab_summary, str) and elab_summary.strip():
             elab_event_id = (
-                f"elab_{item.id}_ch{chapter_number_for_delta}_{hash(elab_summary)}"
+                f"elab_{item.id}_ch{chapter_number_for_delta}_"
+                f"{hash(elab_summary)}"
             )
             elab_props = {
                 "id": elab_event_id,
                 "summary": elab_summary,
-                "chapter_updated": chapter_number_for_delta,  # Use passed chapter number
+                "chapter_updated": chapter_number_for_delta,
+                # Use passed chapter number
                 KG_IS_PROVISIONAL: node_props.get(
-                    KG_IS_PROVISIONAL, False
-                ),  # Inherit from node's provisional status for this delta
+                    KG_IS_PROVISIONAL,
+                    False,
+                ),
+                # Inherit from node's provisional status for this delta
             }
             statements.append(
                 (
                     """
                     MATCH (we:WorldElement:Entity {id: $we_id})
                     MERGE (elab:Entity {id: $elab_event_id})
-                        ON CREATE SET elab:WorldElaborationEvent, elab = $props, elab.created_ts = timestamp()
-                        ON MATCH SET  elab:WorldElaborationEvent, elab = $props, elab.updated_ts = timestamp()
+                        ON CREATE SET
+                            elab:WorldElaborationEvent,
+                            elab = $props,
+                            elab.created_ts = timestamp()
+                        ON MATCH SET
+                            elab:WorldElaborationEvent,
+                            elab = $props,
+                            elab.updated_ts = timestamp()
                     MERGE (we)-[:ELABORATED_IN_CHAPTER]->(elab)
                     """,
                     {

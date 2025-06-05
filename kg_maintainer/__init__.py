@@ -1,7 +1,10 @@
 """Package consolidating KG maintainer utilities."""
 
 from .models import CharacterProfile, WorldItem
-from .parsing import parse_unified_character_updates, parse_unified_world_updates
+from .parsing import (
+    parse_unified_character_updates,
+    parse_unified_world_updates,
+)
 from .merge import (
     merge_character_profile_updates,
     merge_world_item_updates,
