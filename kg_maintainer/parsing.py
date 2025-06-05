@@ -1,6 +1,5 @@
 # kg_maintainer/parsing.py
 from typing import Dict, Any, List  # Added Any, List
-import re
 import json  # Added json
 import logging  # Added logging
 
@@ -33,9 +32,11 @@ CHAR_UPDATE_LIST_INTERNAL_KEYS = [
     "aliases",
 ]  # Added aliases as example
 
-# No longer need CHAR_UPDATE_PKVB_SPECIAL_HANDLING as parse_key_value_block is removed
+# No longer need CHAR_UPDATE_PKVB_SPECIAL_HANDLING as
+# parse_key_value_block is removed
 
-WORLD_UPDATE_DETAIL_KEY_MAP = {  # Ensure these keys match what LLM will produce in JSON
+WORLD_UPDATE_DETAIL_KEY_MAP = {
+    # Ensure these keys match what LLM will produce in JSON
     "desc": "description",
     "description": "description",
     "atmosphere": "atmosphere",  # Added from original example
@@ -54,12 +55,15 @@ WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = [
 
 
 def _normalize_attributes(
-    attributes_dict: Dict[str, Any], key_map: Dict[str, str], list_keys: List[str]
+    attributes_dict: Dict[str, Any],
+    key_map: Dict[str, str],
+    list_keys: List[str],
 ) -> Dict[str, Any]:
     normalized_attrs: Dict[str, Any] = {}
     if not isinstance(attributes_dict, dict):
         logger.warning(
-            f"Input to _normalize_attributes was not a dict: {type(attributes_dict)}"
+            "Input to _normalize_attributes was not a dict: %s",
+            type(attributes_dict),
         )
         return {}
 
@@ -91,8 +95,8 @@ def _normalize_attributes(
         if l_key not in normalized_attrs:
             normalized_attrs[l_key] = []
         elif not isinstance(normalized_attrs[l_key], list):
-            # This case handles if a key in list_keys was present in attributes_dict
-            # but its value was not a list (and wasn't converted above)
+            # This handles a key in list_keys present in attributes_dict
+            # but with a value not converted to a list above
             if (
                 normalized_attrs[l_key] is not None
                 and str(normalized_attrs[l_key]).strip()
@@ -118,30 +122,38 @@ def parse_unified_character_updates(
         parsed_data = json.loads(json_text_block)
         if not isinstance(parsed_data, dict):
             logger.error(
-                f"Character updates JSON was not a dictionary. Received: {type(parsed_data)}"
+                "Character updates JSON was not a dictionary. Received: %s",
+                type(parsed_data),
             )
             return char_updates
     except json.JSONDecodeError as e:
         logger.error(
-            f"Failed to parse character updates JSON: {e}. Input: {json_text_block[:500]}..."
+            "Failed to parse character updates JSON: %s. Input: %s...",
+            e,
+            json_text_block[:500],
         )
         return char_updates
 
     for char_name, char_attributes_llm in parsed_data.items():
         if not char_name or not isinstance(char_attributes_llm, dict):
             logger.warning(
-                f"Skipping character with invalid name or attributes: Name='{char_name}', Attrs_Type='{type(char_attributes_llm)}'"
+                "Skipping character with invalid name or attributes: Name='%s',"
+                " Attrs_Type='%s'",
+                char_name,
+                type(char_attributes_llm),
             )
             continue
 
-        # Normalize keys from LLM (e.g. "desc" to "description") and ensure list types
+        # Normalize keys from LLM (e.g. "desc" to "description")
+        # and ensure list types
         processed_char_attributes = _normalize_attributes(
             char_attributes_llm, CHAR_UPDATE_KEY_MAP, CHAR_UPDATE_LIST_INTERNAL_KEYS
         )
 
-        # Handle relationships specifically if they need structuring from list to dict
-        # Assuming LLM provides relationships as a list of strings "Target: Detail" or just "Target"
-        # Or ideally, LLM provides relationships as a dict: {"Target": "Detail"}
+        # Handle relationships if they need structuring from list to dict
+        # Assuming LLM provides relationships as a list of strings
+        # like "Target: Detail" or just "Target"
+        # Or ideally, as a dict: {"Target": "Detail"}
         if "relationships" in processed_char_attributes and isinstance(
             processed_char_attributes["relationships"], list
         ):
@@ -151,7 +163,11 @@ def parse_unified_character_updates(
                 if isinstance(rel_entry, str):
                     if ":" in rel_entry:
                         parts = rel_entry.split(":", 1)
-                        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                        if (
+                            len(parts) == 2
+                            and parts[0].strip()
+                            and parts[1].strip()
+                        ):
                             rels_dict[parts[0].strip()] = parts[1].strip()
                         elif parts[0].strip():  # If only name is there before colon
                             rels_dict[parts[0].strip()] = "related"
@@ -267,7 +283,8 @@ def parse_unified_world_updates(
             )
             if any(
                 k != "modification_proposal" for k in processed_overview_details
-            ):  # check if any meaningful data
+            ):
+                # check if any meaningful data
                 # Add default elaboration if not present
                 if not processed_overview_details.get(elaboration_key_standard):
                     processed_overview_details[elaboration_key_standard] = (
@@ -276,21 +293,28 @@ def parse_unified_world_updates(
                 try:
                     # For overview, item_name is fixed (e.g., "_overview_")
                     overview_item = WorldItem.from_dict(
-                        category_name_llm, "_overview_", processed_overview_details
+                        category_name_llm,
+                        "_overview_",
+                        processed_overview_details,
                     )
-                    results.setdefault(category_name_llm, {})["_overview_"] = (
-                        overview_item
-                    )
+                    results.setdefault(
+                        category_name_llm, {}
+                    )["_overview_"] = overview_item
                 except Exception as e:
                     logger.error(
-                        f"Error creating WorldItem for overview in category '{category_name_llm}': {e}",
+                        "Error creating WorldItem for overview in category '%s': %s",
+                        category_name_llm,
+                        e,
                         exc_info=True,
                     )
         else:  # Regular category with multiple items
             for item_name_llm, item_attributes_llm in items_llm.items():
                 if not item_name_llm or not isinstance(item_attributes_llm, dict):
                     logger.warning(
-                        f"Skipping item with invalid name or attributes in category '{category_name_llm}': Name='{item_name_llm}'"
+                        "Skipping item with invalid name or attributes in "
+                        "category '%s': Name='%s'",
+                        category_name_llm,
+                        item_name_llm,
                     )
                     continue
 
@@ -300,9 +324,14 @@ def parse_unified_world_updates(
                     WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
                 )
 
-                # Add default elaboration if not present and other attributes exist
+                # Add default elaboration if not present and other
+                # attributes exist
                 has_other_meaningful_item_attrs = any(
-                    k not in ["modification_proposal", elaboration_key_standard] and v
+                    k not in [
+                        "modification_proposal",
+                        elaboration_key_standard,
+                    ]
+                    and v
                     for k, v in processed_item_details.items()
                 )
                 if (
@@ -310,14 +339,18 @@ def parse_unified_world_updates(
                     and has_other_meaningful_item_attrs
                 ):
                     processed_item_details[elaboration_key_standard] = (
-                        f"Item '{item_name_llm}' in category '{category_name_llm}' updated in Chapter {chapter_number}."
+                        f"Item '{item_name_llm}' in category '{category_name_llm}' "
+                        f"updated in Chapter {chapter_number}."
                     )
 
                 try:
-                    # item_name_llm is the display name from JSON key. WorldItem stores this as .name
-                    # and normalizes it for .id along with category_name_llm.
+                    # item_name_llm is the display name from JSON key.
+                    # WorldItem stores this as .name and normalizes it for .id
+                    # along with category_name_llm.
                     world_item_instance = WorldItem.from_dict(
-                        category_name_llm, item_name_llm, processed_item_details
+                        category_name_llm,
+                        item_name_llm,
+                        processed_item_details,
                     )
 
                     # Store in this category's dictionary using the item's display name as key.
@@ -327,7 +360,10 @@ def parse_unified_world_updates(
                     )
                 except Exception as e:
                     logger.error(
-                        f"Error creating WorldItem for '{item_name_llm}' in category '{category_name_llm}': {e}",
+                        "Error creating WorldItem for '%s' in category '%s': %s",
+                        item_name_llm,
+                        category_name_llm,
+                        e,
                         exc_info=True,
                     )
 
