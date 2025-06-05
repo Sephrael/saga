@@ -891,6 +891,14 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                     # Assuming json_detail_key is already the desired internal key, or maps directly
                     # from WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL's keys.
                     internal_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(json_detail_key, json_detail_key)
+
+                    # Conditionally wrap json_detail_value
+                    if internal_detail_key_target not in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                        if isinstance(json_detail_value, str):
+                            json_detail_value = {"text": json_detail_value}
+                        elif isinstance(json_detail_value, list):
+                            json_detail_value = {"items": json_detail_value}
+
                     existing_val = target_category_in_agent.get(internal_detail_key_target)
                     if utils._is_fill_in(existing_val) or existing_val is None:
                         if json_detail_value is not None and not utils._is_fill_in(json_detail_value):
@@ -911,40 +919,124 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                             else: # Not a list key
                                 target_category_in_agent[internal_detail_key_target] = str(json_detail_value) # Ensure string
             else: # Itemized categories like "locations", "factions"
-                  # json_cat_content is like {"The Core Nexus": {"description": "...", "atmosphere": "..."}}
-                for item_name_from_json, item_details_json in json_cat_content.items():
-                    # item_name_from_json is the display name, used as key in agent state
-                    item_name_display = item_name_from_json # Already in display format
+                processed_items_for_category: Dict[str, Any] = {}
+                default_item_properties: Dict[str, Any] = {}
 
-                    if not isinstance(item_details_json, dict):
-                        logger.warning(f"Details for item '{item_name_from_json}' in category '{internal_cat_name}' is not a dict. Skipping. Details: {item_details_json}")
-                        continue
+                for item_key_from_llm, item_value_from_llm in json_cat_content.items():
+                    # Try to normalize item_key_from_llm in case it's a property name for the default item
+                    internal_item_key_for_agent = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(item_key_from_llm, item_key_from_llm)
+
+                    if isinstance(item_value_from_llm, dict): # This is a structured item with its own attributes
+                        item_attributes_dict = item_value_from_llm
+                        processed_attributes: Dict[str, Any] = {}
+                        for attr_key, attr_val in item_attributes_dict.items():
+                            target_attr_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(attr_key, attr_key)
+
+                            # Conditionally wrap attr_val
+                            if target_attr_key not in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                if isinstance(attr_val, str):
+                                    attr_val = {"text": attr_val}
+                                elif isinstance(attr_val, list):
+                                    attr_val = {"items": attr_val}
+                            processed_attributes[target_attr_key] = attr_val
+                        # Use original item_key_from_llm as the item name (not normalized version)
+                        processed_items_for_category[item_key_from_llm] = processed_attributes
+                    else: # This is a flat property, potentially for a "default" item for this category
+                        prop_value = item_value_from_llm
+                        # Here, internal_item_key_for_agent is the property name
+                        if internal_item_key_for_agent not in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                            if isinstance(prop_value, str):
+                                prop_value = {"text": prop_value}
+                            elif isinstance(prop_value, list):
+                                prop_value = {"items": prop_value}
+                        default_item_properties[internal_item_key_for_agent] = prop_value
+
+                if default_item_properties:
+                    # Use the original LLM category key as the default item name
+                    default_item_name = json_top_level_cat_key
+                    if default_item_name in processed_items_for_category:
+                        # If a real item has the same name as the category, merge default properties into it
+                        # Default properties take precedence
+                        logger.info(f"Merging default properties into existing item '{default_item_name}' for category '{internal_cat_name}'.")
+                        processed_items_for_category[default_item_name].update(default_item_properties)
+                    else:
+                        processed_items_for_category[default_item_name] = default_item_properties
+
+                # Update agent state for the current category
+                # Clear existing items managed by LLM for this category before adding new ones
+                # This part needs careful handling if user-supplied data and LLM data are mixed at item level
+                # For now, assuming LLM is authoritative for categories it processes in this block
+
+                # Preserve user-added items if any, only clear/update LLM-sourced items.
+                # However, the current task implies replacing the old loop, which suggests a full overwrite for LLM-processed categories.
+                # Let's proceed with clearing the category in agent state before repopulating from processed_items_for_category
+
+                # Ensure the category exists
+                agent.world_building.setdefault(internal_cat_name, {})
+
+                # Option 1: Full clear - simpler, assumes LLM provides complete picture for this category now
+                # agent.world_building[internal_cat_name].clear() # Clears all items, user-added or LLM
+
+                # Option 2: Selective update/clear (More complex: requires tracking item sources)
+                # For now, sticking to a simpler model: if LLM processes a category, it owns its content.
+                # User data should be merged *before* LLM if fill-ins are present.
+                # The current logic path is for when `needs_llm_for_world` is true.
+
+                # Re-initialize the category in agent state to ensure clean slate for LLM content
+                target_category_in_agent = agent.world_building[internal_cat_name] = {}
+
+
+                for item_name, item_details_dict in processed_items_for_category.items():
+                    # Ensure item_name is a string, as it's used as a dict key
+                    item_name_str = str(item_name)
+                    agent_item_details_target = target_category_in_agent.setdefault(item_name_str, {"source": "llm_generated_json_style"})
                     
-                    target_category_in_agent.setdefault(item_name_display, {"source": "llm_generated_json_style"}) # Updated style
-                    current_agent_item_details = target_category_in_agent[item_name_display]
+                    # Merge the processed details.
+                    # The item_details_dict already has values wrapped (text/items) and keys normalized where appropriate.
+                    # We need to handle the [Fill-in] logic and list vs string for WORLD_DETAIL_LIST_INTERNAL_KEYS
+                    # similar to how it's done for _overview_ or the previous item loop.
 
-                    for json_item_detail_key, json_item_detail_value in item_details_json.items():
-                        internal_item_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(json_item_detail_key, json_item_detail_key)
-                        existing_item_val = current_agent_item_details.get(internal_item_detail_key_target)
-                        
-                        if utils._is_fill_in(existing_item_val) or existing_item_val is None:
-                            if json_item_detail_value is not None and not utils._is_fill_in(json_item_detail_value):
-                                if internal_item_detail_key_target in WORLD_DETAIL_LIST_INTERNAL_KEYS:
-                                    if isinstance(json_item_detail_value, list):
-                                        processed_list = [str(li) for li in json_item_detail_value if isinstance(li, (str, int, float, bool)) and not utils._is_fill_in(str(li))]
-                                        if processed_list:
-                                            current_agent_item_details[internal_item_detail_key_target] = processed_list
-                                        elif utils._is_fill_in(existing_item_val) or existing_item_val is None:
-                                             current_agent_item_details[internal_item_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
-                                    elif isinstance(json_item_detail_value, str): # LLM returned a string for a list key
-                                        logger.warning(f"LLM returned string for list key '{internal_item_detail_key_target}' in item '{item_name_from_json}'. Converting to list: '{json_item_detail_value}'")
-                                        current_agent_item_details[internal_item_detail_key_target] = [json_item_detail_value]
-                                    else: # LLM returned something else problematic
-                                        logger.warning(f"LLM returned non-list/non-string for list key '{internal_item_detail_key_target}' in item '{item_name_from_json}': {type(json_item_detail_value)}. Setting to fill-in.")
-                                        current_agent_item_details[internal_item_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                    for detail_key, detail_value in item_details_dict.items():
+                        # detail_key is already the internal_item_detail_key_target
+                        existing_agent_val = agent_item_details_target.get(detail_key)
+
+                        # Apply if existing is fill-in, or if it's None (new key for this item)
+                        if utils._is_fill_in(existing_agent_val) or existing_agent_val is None:
+                            if detail_value is not None and not utils._is_fill_in(detail_value): # LLM provided actual content
+                                if detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                    # Value from LLM (detail_value) might be {"items": ["a", "b"]} or a direct list if wrapping wasn't applied
+                                    # or it was already a list key.
+                                    actual_list_items = []
+                                    if isinstance(detail_value, dict) and "items" in detail_value and isinstance(detail_value["items"], list):
+                                        actual_list_items = detail_value["items"]
+                                    elif isinstance(detail_value, list): # LLM directly provided a list for a list key
+                                        actual_list_items = detail_value
+                                    elif isinstance(detail_value, str): # LLM provided a string for a list key
+                                         logger.warning(f"LLM returned string for list key '{detail_key}' in item '{item_name_str}' for category '{internal_cat_name}'. Converting to list: '{detail_value}'")
+                                         actual_list_items = [detail_value]
+                                    else:
+                                        logger.warning(f"LLM returned incompatible type for list key '{detail_key}' in item '{item_name_str}' for '{internal_cat_name}': {type(detail_value)}. Setting to fill-in.")
+                                        actual_list_items = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+
+                                    processed_list = [str(li) for li in actual_list_items if isinstance(li, (str, int, float, bool)) and not utils._is_fill_in(str(li))]
+                                    if processed_list:
+                                        agent_item_details_target[detail_key] = processed_list
+                                    # If existing was fill-in and LLM provided empty/bad list, ensure it remains a fill-in list
+                                    elif utils._is_fill_in(existing_agent_val) or existing_agent_val is None:
+                                         agent_item_details_target[detail_key] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
                                 else: # Not a list key
-                                    current_agent_item_details[internal_item_detail_key_target] = str(json_item_detail_value) # Ensure string
-                        # Value type check (string vs list) is now handled above.
+                                    # Value from LLM (detail_value) might be {"text": "..."} or a direct string
+                                    if isinstance(detail_value, dict) and "text" in detail_value:
+                                        agent_item_details_target[detail_key] = str(detail_value["text"])
+                                    else: # Assume it's a direct string or can be converted
+                                        agent_item_details_target[detail_key] = str(detail_value)
+                            # If LLM detail_value is None or fill-in, and agent had fill-in/None, ensure it's properly set to fill-in
+                            elif detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                agent_item_details_target[detail_key] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                            else:
+                                agent_item_details_target[detail_key] = config.MARKDOWN_FILL_IN_PLACEHOLDER
+                        # If agent already had concrete data, LLM doesn't overwrite unless that logic changes.
+                        # This part is primarily for filling in missing/default data.
 
         agent.world_building.pop("is_default", None)
         agent.world_building.pop("user_supplied_data", None)
