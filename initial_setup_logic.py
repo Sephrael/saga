@@ -733,56 +733,97 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
         user_world_context_str = "\n**User-Provided World Context:** No specific world preferences or fill-in requests were found from user input; generate all fields creatively using Markdown.\n"
 
 
+    # Constants for JSON prompt construction
+    category_keys_str = ", ".join([f'"{k}"' for k in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.keys()])
+    detail_keys_for_prompt = sorted([k for k in WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.keys() if k != "primary_setting_description"])
+    detail_keys_str = ", ".join([f'"{k}"' for k in detail_keys_for_prompt])
+
+    internal_to_markdown_detail_key_map = {v: k for k, v in WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.items()}
+    list_detail_keys_for_prompt = sorted([internal_to_markdown_detail_key_map[k] for k in WORLD_DETAIL_LIST_INTERNAL_KEYS if k in internal_to_markdown_detail_key_map])
+    list_keys_str = ", ".join([f'"{k}"' for k in list_detail_keys_for_prompt])
+
+    # Construct the new prompt for JSON output
     prompt_lines = []
     if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
         prompt_lines.append("/no_think")
 
-    prompt_lines.extend([
-        "You are an expert world-building assistant for novelists.",
-        "Based on the provided novel concept and any existing user world context, generate or complete detailed world-building elements using MARKDOWN FORMATTING.",
-        "If user context provided a concrete value for an element, you MUST use it. You are filling in the gaps and expanding.",
-        f"If user context for an element is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, generate it creatively, maintaining the Markdown style.",
-        "",
-        "**Novel Concept:**",
-        f"  - Title: {plot_title}",
-        f"  - Genre: {plot_genre}",
-        f"  - Core Setting Idea (from plot outline): {world_setting_desc}",
-        f"{user_world_context_str}", 
-        "**Instructions for Output (CRITICAL - USE MARKDOWN FORMAT):**",
-        "1.  Structure your output using Markdown headers. Top-level categories (Overview, Locations, Factions, Systems, Lore, History, Society) should be H2 headers (e.g., `## Locations`).",
-        "2.  Specific items within categories (e.g., a specific location like 'The Hourglass Curios' under 'Locations') should be H3 headers (e.g., `### The Hourglass Curios`).",
-        "3.  Details for each item or category should be listed as `**Key**: Value` pairs, each on a new line. Indent these under their respective header/item if that improves clarity, but `**Key**: Value` on its own line is primary.",
-        "4.  For list-like details (e.g., `**Rules**` for a system, `**Goals**` for a faction), list each sub-item on a new line, indented further and prefixed with `- `.",
-        "5.  Ensure comprehensive yet concise details. Aim for 2-4 items per category where applicable (except Overview). Expand on any `[Fill-in]` fields from the user context.",
-        "",
-        "**Example Output Structure (Follow this Markdown style):**",
-        "```markdown",
-        "## Overview",
-        "**Description**: A general description of the world's feel and primary setting.",
-        "",
-        "## Locations",
-        "### Temporal Hub Prime",
-        "**Description**: A vast, crystalline city existing outside normal spacetime...",
-        "**Atmosphere**: Once bustling and sterile, now largely abandoned...",
-        "",
-        "### The Shifting Sands (Fracture Zone)",
-        "**Description**: A chaotic expanse where timelines bleed into one another...",
-        "**Atmosphere**: Surreal and disorienting...",
-        "",
-        "## Factions",
-        "### The Chronos Wardens",
-        "**Description**: A scattered group trying to uphold old laws...",
-        "**Goals**:",
-        "  - Preserve timeline integrity.",
-        "  - Recruit individuals like Jax.",
-        "```",
-        "",
-        "Begin your detailed world-building output now using Markdown formatting:"
-    ])
+    prompt_lines.append(f"""You are an expert world-building assistant for novelists.
+Your goal is to generate a comprehensive and consistent set of world-building details.
+You MUST output a single, valid JSON object that encompasses all world-building details. Do NOT use Markdown.
+
+**JSON Structure Requirements:**
+
+1.  **Top-Level Object:** The root of the JSON should be a single object.
+2.  **Categories:** The top-level object should have keys for world-building categories. The primary categories are: {category_keys_str}.
+    *   For the "overview" category, the value should be a JSON object containing detail key-value pairs. For example: `{{"description": "A vast desert world...", "mood": "Harsh and mysterious"}}`.
+    *   For all other categories (e.g., "locations", "factions", "systems"), the value should be a JSON object. In this object, each key is the unique name of an item (e.g., "The Sunken City", "The Mechanists Guild"), and its value is another JSON object containing the details for that item.
+3.  **Detail Keys:** The objects for "overview" and for each item within other categories (like "locations", "factions") should use the following keys for their details, where appropriate: {detail_keys_str}.
+    *   Example for a location item: `{{"description": "A hidden oasis...", "atmosphere": "Peaceful but eerie"}}`
+    *   Example for a faction item: `{{"description": "A group of scholars...", "goals": ["Preserve knowledge", "Share discoveries"]}}`
+4.  **Value Types for Details:**
+    *   Most detail values should be JSON strings.
+    *   The following detail keys MUST have values that are JSON arrays of strings: {list_keys_str}.
+        *   Example: `"goals": ["Achieve peace", "Build a monument"]`
+        *   If there's only one item for such a key, it should still be in an array: `"key_events": ["The Great Upheaval"]`
+        *   If there are no items for such a key, use an empty array: `"rules": []`
+
+**Example of Expected JSON Output:**
+```json
+{{
+  "overview": {{
+    "description": "A world of floating islands interconnected by ancient bridges.",
+    "mood": "Mysterious and serene",
+    "time_period": "Post-cataclysmic era"
+  }},
+  "locations": {{
+    "Aerie Citadel": {{
+      "description": "The main hub city, built on the largest cluster of islands. Features advanced, wind-powered technology.",
+      "atmosphere": "Bustling with traders, artisans, and sky-ship pilots. A sense of cautious optimism prevails."
+    }},
+    "Whispering Chasm": {{
+      "description": "A deep rift between islands, rumored to hold ancient secrets and dangers.",
+      "atmosphere": "Eerie, filled with strange echoes and gusts of wind."
+    }}
+  }},
+  "factions": {{
+    "Sky Wardens": {{
+      "description": "Dedicated guardians of the old skyways and the inter-island bridges. They are stern and traditional.",
+      "goals": ["Protect the floating islands from falling", "Preserve the knowledge of the Ancients"],
+      "structure": "Hierarchical, led by a council of Elders."
+    }}
+  }},
+  "systems": {{
+    "Aetherium Currents": {{
+      "description": "Naturally occurring energy currents in the sky that are harnessed for power and travel.",
+      "rules": ["Currents shift seasonally", "Over-harvesting can lead to local depletion and atmospheric instability"],
+      "function": "Primary power source for island technology and sky-ship propulsion."
+    }}
+  }}
+  // ... other categories like "lore", "history", "society" would follow a similar structure ...
+}}
+```
+
+**Handling User-Provided Context:**
+The following section, delimited by "--- USER WORLD CONTEXT START ---" and "--- USER WORLD CONTEXT END ---", contains any world details already provided by the user. This context is currently in a Markdown-like format.
+*   You MUST incorporate any concrete values from this user context into the correct locations within the JSON structure you generate.
+*   If the user context specifies `"{config.MARKDOWN_FILL_IN_PLACEHOLDER}"` for a field, or if a field is missing from the user context that you would normally generate, you should creatively generate that field's content according to the JSON structure defined above.
+*   Interpret headers (e.g., `## Locations`, `### Item Name`) and key-value pairs (e.g., `**Description**: ...`) from the user context to understand where the information belongs.
+
+**Novel Concept (from Plot Outline):**
+  - Title: {plot_title}
+  - Genre: {plot_genre}
+  - Core Setting Idea: {world_setting_desc}
+
+--- USER WORLD CONTEXT START ---
+{user_world_context_str}
+--- USER WORLD CONTEXT END ---
+
+Begin your single, valid JSON output now. Do NOT include any explanatory text before or after the JSON object.
+""")
     prompt = "\n".join(prompt_lines)
 
-    logger.info("Generating/completing initial world-building data (to Markdown) via LLM...")
-    cleaned_world_text_markdown, usage_data = await llm_service.async_call_llm(
+    logger.info("Generating/completing initial world-building data (to JSON) via LLM...") # Updated log message
+    cleaned_world_text_json, usage_data = await llm_service.async_call_llm( # Renamed variable
         model_name=config.INITIAL_SETUP_MODEL,
         prompt=prompt,
         temperature=config.TEMPERATURE_INITIAL_SETUP,
@@ -796,91 +837,143 @@ async def generate_world_building_logic(agent: Any) -> Tuple[WorldBuildingData, 
         accumulated_usage_data["completion_tokens"] += usage_data.get("completion_tokens", 0)
         accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
 
-    logger.debug(f"Cleaned LLM world-building Markdown output (len: {len(cleaned_world_text_markdown)}):\nSTART_OF_WB_MD_TEXT\n{cleaned_world_text_markdown}\nEND_OF_WB_MD_TEXT")
+    logger.debug(f"Cleaned LLM world-building JSON output (len: {len(cleaned_world_text_json)}):\nSTART_OF_WB_JSON_TEXT\n{cleaned_world_text_json}\nEND_OF_WB_JSON_TEXT") # Updated log message
 
-    logger.info("Attempting to parse LLM world-building output using Markdown parser...")
+    logger.info("Attempting to parse LLM world-building output using JSON parser...") # Updated log message
     # TODO: parse_markdown_to_dict is currently an unresolved import.
     # This will cause a runtime error if this part of the code is reached.
     # For now, proceeding as if it exists, to fulfill the subtask's scope.
-    parsed_llm_markdown_response: Optional[Dict[str, Any]] = None
+    parsed_llm_json_response: Optional[Dict[str, Any]] = None # Renamed variable
     try:
         # This import will fail if markdown_story_parser.py (containing parse_markdown_to_dict) is not available
         # and parse_markdown_to_dict hasn't been moved/redefined.
-        from markdown_story_parser import parse_markdown_to_dict 
-        parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
-        logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
-    except ImportError:
+        # from markdown_story_parser import parse_markdown_to_dict # This line will be replaced
+        # parsed_llm_markdown_response = parse_markdown_to_dict(cleaned_world_text_markdown)
+        # logger.debug(f"DIRECT Output of parse_markdown_to_dict for LLM response: {json.dumps(parsed_llm_markdown_response, indent=2)}")
+
+        # NEW JSON PARSING:
+        parsed_llm_json_response = json.loads(cleaned_world_text_json) # Use json.loads for JSON
+        logger.debug(f"DIRECT Output of json.loads for LLM response: {json.dumps(parsed_llm_json_response, indent=2)}")
+
+    except ImportError: # This specific except block might become irrelevant if parse_markdown_to_dict is no longer called here.
         logger.error("CRITICAL: `parse_markdown_to_dict` is not available due to markdown_story_parser.py deletion. LLM Markdown output for world-building cannot be processed.")
-        # parsed_llm_markdown_response remains None
+        # parsed_llm_json_response remains None
+    except json.JSONDecodeError as e:
+        logger.error(f"CRITICAL: Failed to decode JSON from LLM output. Error: {e}. Raw text was: {cleaned_world_text_json}")
+        parsed_llm_json_response = None
 
 
-    # Ensure agent.world_building is a dict before merging
-    if not isinstance(agent.world_building, dict):
-        agent.world_building = {"source":"llm_generated_or_merged_yaml_style", "_overview_":{}} # Updated style
-    elif "source" not in agent.world_building : # If it was populated by user data, source should be set
-        agent.world_building["source"] = "llm_generated_or_merged_yaml_style" # Updated style
+    if parsed_llm_json_response and isinstance(parsed_llm_json_response, dict):
+        agent.world_building["source"] = "llm_generated_or_merged_json_style" # Set source upon successful LLM parse
 
+        # Ensure agent.world_building is a dict (it should be, but as a safeguard)
+        if not isinstance(agent.world_building, dict):
+            agent.world_building = {"_overview_":{}} # Initialize if somehow it's not a dict
 
-    if parsed_llm_markdown_response and isinstance(parsed_llm_markdown_response, dict):
-        for md_top_level_cat_key, md_cat_content in parsed_llm_markdown_response.items(): # md_top_level_cat_key is normalized
-            internal_cat_name = WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.get(md_top_level_cat_key, None)
+        # The parsing logic below assumes the LLM *perfectly* follows the new JSON structure.
+        # It directly tries to map incoming JSON keys to internal agent state structure.
+        for json_top_level_cat_key, json_cat_content in parsed_llm_json_response.items():
+            internal_cat_name = WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.get(json_top_level_cat_key, None)
             if internal_cat_name is None:
-                logger.warning(f"LLM Markdown response contained unrecognized top-level key '{md_top_level_cat_key}'. This key will be IGNORED for direct category mapping.")
+                logger.warning(f"LLM JSON response contained unrecognized top-level key '{json_top_level_cat_key}'. This key will be IGNORED.")
                 continue
 
             agent.world_building.setdefault(internal_cat_name, {})
             target_category_in_agent = agent.world_building[internal_cat_name]
 
-            if not isinstance(md_cat_content, dict):
-                logger.warning(f"Content for category '{md_top_level_cat_key}' from LLM is not a dictionary. Skipping. Content: {md_cat_content}")
+            if not isinstance(json_cat_content, dict):
+                logger.warning(f"Content for category '{json_top_level_cat_key}' from LLM JSON is not a dictionary. Skipping. Content: {json_cat_content}")
                 continue
 
             if internal_cat_name == "_overview_":
-                for md_detail_key, md_detail_value in md_cat_content.items(): # md_detail_key is "description", "mood", etc.
-                    internal_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(md_detail_key, md_detail_key)
+                # json_cat_content is like {"description": "...", "mood": "..."}
+                for json_detail_key, json_detail_value in json_cat_content.items():
+                    # Assuming json_detail_key is already the desired internal key, or maps directly
+                    # from WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL's keys.
+                    internal_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(json_detail_key, json_detail_key)
                     existing_val = target_category_in_agent.get(internal_detail_key_target)
                     if utils._is_fill_in(existing_val) or existing_val is None:
-                        if md_detail_value is not None and not utils._is_fill_in(md_detail_value):
-                            target_category_in_agent[internal_detail_key_target] = md_detail_value
+                        if json_detail_value is not None and not utils._is_fill_in(json_detail_value):
+                            if internal_detail_key_target in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                if isinstance(json_detail_value, list):
+                                    # Ensure all items are strings, filtering out any [Fill-in] from LLM if it sneaks in
+                                    processed_list = [str(li) for li in json_detail_value if isinstance(li, (str, int, float, bool)) and not utils._is_fill_in(str(li))]
+                                    if processed_list: # Only assign if there's actual content
+                                        target_category_in_agent[internal_detail_key_target] = processed_list
+                                    elif utils._is_fill_in(existing_val) or existing_val is None: # If existing was fill-in, and LLM provided empty/bad list
+                                        target_category_in_agent[internal_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER] # Fallback to fill-in
+                                elif isinstance(json_detail_value, str): # LLM returned a string instead of a list
+                                    logger.warning(f"LLM returned string for list key '{internal_detail_key_target}' in overview. Converting to list: '{json_detail_value}'")
+                                    target_category_in_agent[internal_detail_key_target] = [json_detail_value]
+                                else: # LLM returned something else problematic
+                                    logger.warning(f"LLM returned non-list/non-string for list key '{internal_detail_key_target}' in overview: {type(json_detail_value)}. Setting to fill-in.")
+                                    target_category_in_agent[internal_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                            else: # Not a list key
+                                target_category_in_agent[internal_detail_key_target] = str(json_detail_value) # Ensure string
             else: # Itemized categories like "locations", "factions"
-                  # md_cat_content is like {"the_core_nexus": {"description": "...", "atmosphere": "..."}}
-                for item_name_norm_md, item_details_md in md_cat_content.items():
-                    item_name_display = item_name_norm_md.replace("_", " ").title()
+                  # json_cat_content is like {"The Core Nexus": {"description": "...", "atmosphere": "..."}}
+                for item_name_from_json, item_details_json in json_cat_content.items():
+                    # item_name_from_json is the display name, used as key in agent state
+                    item_name_display = item_name_from_json # Already in display format
 
-                    if not isinstance(item_details_md, dict):
-                        logger.warning(f"Details for item '{item_name_norm_md}' in category '{internal_cat_name}' is not a dict. Skipping. Details: {item_details_md}")
+                    if not isinstance(item_details_json, dict):
+                        logger.warning(f"Details for item '{item_name_from_json}' in category '{internal_cat_name}' is not a dict. Skipping. Details: {item_details_json}")
                         continue
                     
-                    # Ensure this item exists in the agent's state for this category
-                    target_category_in_agent.setdefault(item_name_display, {"source": "llm_generated_yaml_style"}) # Updated style
+                    target_category_in_agent.setdefault(item_name_display, {"source": "llm_generated_json_style"}) # Updated style
                     current_agent_item_details = target_category_in_agent[item_name_display]
 
-                    for md_item_detail_key, md_item_detail_value in item_details_md.items(): # md_item_detail_key is normalized
-                        internal_item_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(md_item_detail_key, md_item_detail_key)
+                    for json_item_detail_key, json_item_detail_value in item_details_json.items():
+                        internal_item_detail_key_target = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(json_item_detail_key, json_item_detail_key)
                         existing_item_val = current_agent_item_details.get(internal_item_detail_key_target)
                         
-                        if utils._is_fill_in(existing_item_val) or existing_item_val is None: # If agent's current value is fill-in or missing
-                            if md_item_detail_value is not None and not utils._is_fill_in(md_item_detail_value): # And LLM provided concrete
-                                current_agent_item_details[internal_item_detail_key_target] = md_item_detail_value
-                        # If agent had concrete user data, it's preserved (not overwritten by LLM unless it was [Fill-in])
+                        if utils._is_fill_in(existing_item_val) or existing_item_val is None:
+                            if json_item_detail_value is not None and not utils._is_fill_in(json_item_detail_value):
+                                if internal_item_detail_key_target in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                                    if isinstance(json_item_detail_value, list):
+                                        processed_list = [str(li) for li in json_item_detail_value if isinstance(li, (str, int, float, bool)) and not utils._is_fill_in(str(li))]
+                                        if processed_list:
+                                            current_agent_item_details[internal_item_detail_key_target] = processed_list
+                                        elif utils._is_fill_in(existing_item_val) or existing_item_val is None:
+                                             current_agent_item_details[internal_item_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                                    elif isinstance(json_item_detail_value, str): # LLM returned a string for a list key
+                                        logger.warning(f"LLM returned string for list key '{internal_item_detail_key_target}' in item '{item_name_from_json}'. Converting to list: '{json_item_detail_value}'")
+                                        current_agent_item_details[internal_item_detail_key_target] = [json_item_detail_value]
+                                    else: # LLM returned something else problematic
+                                        logger.warning(f"LLM returned non-list/non-string for list key '{internal_item_detail_key_target}' in item '{item_name_from_json}': {type(json_item_detail_value)}. Setting to fill-in.")
+                                        current_agent_item_details[internal_item_detail_key_target] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+                                else: # Not a list key
+                                    current_agent_item_details[internal_item_detail_key_target] = str(json_item_detail_value) # Ensure string
+                        # Value type check (string vs list) is now handled above.
 
-        agent.world_building.pop("is_default", None) # Clean up helper flags
+        agent.world_building.pop("is_default", None)
         agent.world_building.pop("user_supplied_data", None)
-        logger.info("Successfully processed LLM-generated Markdown world-building into agent state.")
+        logger.info("Successfully processed LLM-generated JSON world-building into agent state.") # Updated log
     else:
-        logger.error("Failed to parse a valid world-building dictionary from LLM Markdown output. Existing or default world_building will be used.")
+        # This 'else' corresponds to 'if parsed_llm_json_response and isinstance(parsed_llm_json_response, dict):'
+        # It means either json.loads failed (parsed_llm_json_response is None) or the root was not a dict.
+        logger.error("Failed to parse a valid world-building dictionary from LLM JSON output, or root of JSON was not a dictionary. Existing or default world_building will be used.") # Updated log
         if not agent.world_building.get("_overview_") or utils._is_fill_in(agent.world_building.get("_overview_",{}).get("description")):
             default_wb_overview_desc = agent.plot_outline.get("setting_description", "A default world setting.")
             if utils._is_fill_in(default_wb_overview_desc): default_wb_overview_desc = "A default world setting, to be detailed later."
 
             agent.world_building.setdefault("_overview_", {})["description"] = default_wb_overview_desc
-            if agent.world_building.get("source") != "user_supplied_yaml": agent.world_building["source"] = "default_fallback" # Updated source
-            if "is_default" not in agent.world_building : agent.world_building["is_default"] = True
+            # Only set to default_fallback if it wasn't originally user-supplied and now failing back
+            if agent.world_building.get("source") != "user_supplied_yaml":
+                 agent.world_building["source"] = "default_fallback"
+            # is_default should only be set if we are truly falling back from an LLM attempt on non-user data
+            if agent.world_building.get("source") == "default_fallback": # Check again, as it might have been set above
+                 agent.world_building["is_default"] = True
     
-    # Final check to ensure all expected categories exist, even if empty, if populated by LLM
-    if agent.world_building.get("source") != "user_supplied_yaml": # Updated source
-        for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
-            agent.world_building.setdefault(cat_internal_key, {})
+    # Final check to ensure all expected categories exist, even if empty.
+    # This should run regardless of LLM success if an LLM call was attempted.
+    # If it was user_supplied_yaml and LLM was skipped, this part is also skipped.
+    if llm_was_called: # Only do this if an LLM call was actually made
+        current_source = agent.world_building.get("source", "")
+        # Don't create empty categories if data is purely from user_supplied_yaml and LLM was not needed to fill gaps
+        if not (current_source == "user_supplied_yaml" and not needs_llm_for_world):
+            for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
+                agent.world_building.setdefault(cat_internal_key, {})
 
 
     return agent.world_building, accumulated_usage_data if llm_was_called else None
