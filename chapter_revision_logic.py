@@ -65,7 +65,9 @@ def _get_plot_point_info_from_agent(
     plot_point_index = min(chapter_number - 1, len(plot_points) - 1)
     if 0 <= plot_point_index < len(plot_points):
         plot_point = plot_points[plot_point_index]
-        return str(plot_point) if plot_point is not None else None, plot_point_index
+        return str(
+            plot_point
+        ) if plot_point is not None else None, plot_point_index
     return None, -1
 
 
@@ -121,12 +123,16 @@ def _get_context_window_for_patch_llm(
     half_window_around_focus = (window_size_chars - focus_len) // 2
 
     context_start = max(0, focus_start - half_window_around_focus)
-    context_end = min(len(original_doc_text), focus_end + half_window_around_focus)
+    context_end = min(
+        len(original_doc_text), focus_end + half_window_around_focus
+    )
 
     current_window_len = context_end - context_start
     if current_window_len < window_size_chars:
         if context_start == 0:
-            context_end = min(len(original_doc_text), context_start + window_size_chars)
+            context_end = min(
+                len(original_doc_text), context_start + window_size_chars
+            )
         elif context_end == len(original_doc_text):
             context_start = max(0, context_end - window_size_chars)
 
@@ -149,7 +155,9 @@ async def _generate_single_patch_instruction_llm(
     referring to the SENTENCE containing the problem quote if available.
     """
     plan_focus_section_parts: List[str] = []
-    plot_point_focus, _ = _get_plot_point_info_from_agent(agent, chapter_number)
+    plot_point_focus, _ = _get_plot_point_info_from_agent(
+        agent, chapter_number
+    )
     max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
@@ -233,10 +241,15 @@ async def _generate_single_patch_instruction_llm(
             "Avoid excessive unrelated expansion beyond the scope of the problem for this segment.**"
         )
         original_snippet_tokens = count_tokens(
-            original_chapter_text_snippet_for_llm, config.PATCH_GENERATION_MODEL
+            original_chapter_text_snippet_for_llm,
+            config.PATCH_GENERATION_MODEL,
         )  # MODIFIED
-        expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
-        max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
+        expansion_factor = (
+            2.5 if length_expansion_instruction_header_str else 1.5
+        )
+        max_patch_output_tokens = int(
+            original_snippet_tokens * expansion_factor
+        )
         max_patch_output_tokens = min(
             max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2
         )
@@ -249,7 +262,10 @@ async def _generate_single_patch_instruction_llm(
     )
 
     protagonist_name = _get_nested_prop_from_agent(
-        agent, "plot_outline", "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+        agent,
+        "plot_outline",
+        "protagonist_name",
+        config.DEFAULT_PROTAGONIST_NAME,
     )
 
     few_shot_patch_example_str = """
@@ -355,7 +371,9 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
                     f"is not significantly larger than context snippet ({len(original_chapter_text_snippet_for_llm)}). "
                     f"Problem: {problem['problem_description'][:60]}"
                 )
-        elif is_general_expansion_task and len(replace_with_text_cleaned) < 500:
+        elif (
+            is_general_expansion_task and len(replace_with_text_cleaned) < 500
+        ):
             logger.warning(
                 f"Patch for Ch {chapter_number} ('N/A - General Issue' expansion) produced a relatively short new passage (len: {len(replace_with_text_cleaned)}). "
                 f"Problem: {problem['problem_description'][:60]}"
@@ -433,18 +451,14 @@ async def _generate_patch_instructions_logic(
         if is_specific_and_located or is_expansion_depth_issue_general:
             actionable_problems_for_patch_generation.append(p_item)
         else:
-            reason_skip = (
-                "not specific quote text OR not an expansion-type general issue"
-            )
+            reason_skip = "not specific quote text OR not an expansion-type general issue"
             if (
                 p_item["quote_from_original_text"] != "N/A - General Issue"
                 and p_item["quote_from_original_text"].strip()
                 and p_item.get("sentence_char_start") is None
                 and p_item.get("quote_char_start") is None
             ):
-                reason_skip = (
-                    "specific quote text present, but no offsets found by spaCy utils"
-                )
+                reason_skip = "specific quote text present, but no offsets found by spaCy utils"
             logger.info(
                 f"Skipping patch generation for Ch {chapter_number} problem {p_idx + 1} ({reason_skip}): '{p_item['problem_description'][:60]}'"
             )
@@ -485,7 +499,9 @@ async def _generate_patch_instructions_logic(
         )
         return [], None
 
-    results = await asyncio.gather(*patch_generation_tasks, return_exceptions=True)
+    results = await asyncio.gather(
+        *patch_generation_tasks, return_exceptions=True
+    )
     for i, res_or_exc in enumerate(results):
         problem_ref = problems_to_process[i]
         if isinstance(res_or_exc, Exception):
@@ -499,7 +515,9 @@ async def _generate_patch_instructions_logic(
                 patch_instructions.append(patch_instr)
             if usage:
                 total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
-                total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+                total_usage["completion_tokens"] += usage.get(
+                    "completion_tokens", 0
+                )
                 total_usage["total_tokens"] += usage.get("total_tokens", 0)
         else:
             logger.warning(
@@ -509,7 +527,9 @@ async def _generate_patch_instructions_logic(
     logger.info(
         f"Generated {len(patch_instructions)} patch instructions for Ch {chapter_number}."
     )
-    return patch_instructions, total_usage if total_usage["total_tokens"] > 0 else None
+    return patch_instructions, total_usage if total_usage[
+        "total_tokens"
+    ] > 0 else None
 
 
 async def _apply_patches_to_text(
@@ -559,12 +579,16 @@ async def _apply_patches_to_text(
     failed_patches_target_not_found = 0
 
     for patch_idx, patch in enumerate(applicable_patches):
-        segment_to_replace_start: Optional[int] = patch.get("target_char_start")
+        segment_to_replace_start: Optional[int] = patch.get(
+            "target_char_start"
+        )
         segment_to_replace_end: Optional[int] = patch.get("target_char_end")
         method_used = "spaCy-derived sentence/quote offsets"
 
         if segment_to_replace_start is None or segment_to_replace_end is None:
-            quote_text_for_semantic_search = patch["original_problem_quote_text"]
+            quote_text_for_semantic_search = patch[
+                "original_problem_quote_text"
+            ]
             if (
                 quote_text_for_semantic_search != "N/A - General Issue"
                 and quote_text_for_semantic_search.strip()
@@ -573,11 +597,13 @@ async def _apply_patches_to_text(
                     f"Patch {patch_idx + 1}: Missing precise offsets for problem '{quote_text_for_semantic_search[:50]}'. Attempting semantic paragraph search."
                 )
                 method_used = "Semantic paragraph search (fallback)"
-                semantic_match_info = await utils.find_semantically_closest_segment(
-                    original_text,
-                    quote_text_for_semantic_search,
-                    segment_type="paragraph",
-                    min_similarity_threshold=0.60,
+                semantic_match_info = (
+                    await utils.find_semantically_closest_segment(
+                        original_text,
+                        quote_text_for_semantic_search,
+                        segment_type="paragraph",
+                        min_similarity_threshold=0.60,
+                    )
                 )
                 if semantic_match_info:
                     segment_to_replace_start, segment_to_replace_end, score = (
@@ -655,7 +681,9 @@ async def _apply_patches_to_text(
             f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
         )
 
-    num_patches_attempted = len(applicable_patches) - failed_patches_target_not_found
+    num_patches_attempted = (
+        len(applicable_patches) - failed_patches_target_not_found
+    )
     logger.info(
         f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
     )
@@ -679,11 +707,15 @@ async def revise_chapter_draft_logic(
 
     def _add_usage(usage: Optional[Dict[str, int]]):
         if usage:
-            cumulative_usage_data["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            cumulative_usage_data["prompt_tokens"] += usage.get(
+                "prompt_tokens", 0
+            )
             cumulative_usage_data["completion_tokens"] += usage.get(
                 "completion_tokens", 0
             )
-            cumulative_usage_data["total_tokens"] += usage.get("total_tokens", 0)
+            cumulative_usage_data["total_tokens"] += usage.get(
+                "total_tokens", 0
+            )
 
     if not original_text:
         logger.error(
@@ -691,7 +723,9 @@ async def revise_chapter_draft_logic(
         )
         return None, None
 
-    problems_to_fix: List[ProblemDetail] = evaluation_result.get("problems_found", [])
+    problems_to_fix: List[ProblemDetail] = evaluation_result.get(
+        "problems_found", []
+    )
     if not problems_to_fix and evaluation_result.get("needs_revision"):
         logger.warning(
             f"Revision for ch {chapter_number} explicitly requested, but no specific problems were itemized. This might lead to a full rewrite attempt if general reasons exist."
@@ -738,11 +772,17 @@ async def revise_chapter_draft_logic(
         )
     ]
 
-    if config.ENABLE_PATCH_BASED_REVISION and actionable_problems_for_patch_gen_check:
+    if (
+        config.ENABLE_PATCH_BASED_REVISION
+        and actionable_problems_for_patch_gen_check
+    ):
         logger.info(
             f"Attempting patch-based revision for Ch {chapter_number} with {len(actionable_problems_for_patch_gen_check)} potentially actionable problem(s)."
         )
-        patch_instructions, patch_usage = await _generate_patch_instructions_logic(
+        (
+            patch_instructions,
+            patch_usage,
+        ) = await _generate_patch_instructions_logic(
             agent,
             original_text,
             problems_to_fix,
@@ -768,7 +808,9 @@ async def revise_chapter_draft_logic(
                 f"Patch-based revision for Ch {chapter_number}: No valid patch instructions were generated. Will consider full rewrite if needed."
             )
 
-    raw_patch_llm_outputs_combined_str = "".join(raw_patch_llm_outputs_combined_parts)
+    raw_patch_llm_outputs_combined_str = "".join(
+        raw_patch_llm_outputs_combined_parts
+    )
 
     final_revised_text: Optional[str] = None
     final_raw_llm_output: Optional[str] = None
@@ -783,7 +825,10 @@ async def revise_chapter_draft_logic(
             llm_service.async_get_embedding(original_text),
             llm_service.async_get_embedding(patched_text),
         )
-        if sim_original_embedding is not None and sim_patched_embedding is not None:
+        if (
+            sim_original_embedding is not None
+            and sim_patched_embedding is not None
+        ):
             similarity_score = utils.numpy_cosine_similarity(
                 sim_original_embedding, sim_patched_embedding
             )
@@ -808,7 +853,9 @@ async def revise_chapter_draft_logic(
                 f"Ch {chapter_number}: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite)."
             )
 
-    if not use_patched_text_as_final and evaluation_result.get("needs_revision"):
+    if not use_patched_text_as_final and evaluation_result.get(
+        "needs_revision"
+    ):
         if (
             config.ENABLE_PATCH_BASED_REVISION
             and actionable_problems_for_patch_gen_check
@@ -817,8 +864,9 @@ async def revise_chapter_draft_logic(
             logger.warning(
                 f"Patching attempted for Ch {chapter_number} but produced no usable text. Falling back to full rewrite."
             )
-        elif not actionable_problems_for_patch_gen_check and evaluation_result.get(
-            "needs_revision"
+        elif (
+            not actionable_problems_for_patch_gen_check
+            and evaluation_result.get("needs_revision")
         ):
             logger.info(
                 f"No problems suitable for patching in Ch {chapter_number}, but revision needed. Proceeding with full rewrite."
@@ -830,7 +878,9 @@ async def revise_chapter_draft_logic(
                 f"Patching disabled, and revision needed. Proceeding with full rewrite for Ch {chapter_number}."
             )
 
-        logger.info(f"Proceeding with full chapter rewrite for Ch {chapter_number}.")
+        logger.info(
+            f"Proceeding with full chapter rewrite for Ch {chapter_number}."
+        )
         max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
         original_snippet = truncate_text_by_tokens(  # MODIFIED
             original_text,
@@ -845,7 +895,9 @@ async def revise_chapter_draft_logic(
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
             formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(  # Removed agent argument
-                chapter_plan, config.REVISION_MODEL, max_plan_tokens_for_full_rewrite
+                chapter_plan,
+                config.REVISION_MODEL,
+                max_plan_tokens_for_full_rewrite,
             )
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
             if "plan truncated" in formatted_plan_fr:
@@ -899,7 +951,10 @@ async def revise_chapter_draft_logic(
         )
 
         protagonist_name_full_rewrite = _get_nested_prop_from_agent(
-            agent, "plot_outline", "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+            agent,
+            "plot_outline",
+            "protagonist_name",
+            config.DEFAULT_PROTAGONIST_NAME,
         )
 
         all_problem_descriptions_parts: List[str] = []
@@ -1006,7 +1061,9 @@ async def revise_chapter_draft_logic(
         logger.info(
             f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}."
         )
-    elif not use_patched_text_as_final and not evaluation_result.get("needs_revision"):
+    elif not use_patched_text_as_final and not evaluation_result.get(
+        "needs_revision"
+    ):
         logger.info(
             f"No revision performed for Ch {chapter_number} (original deemed acceptable or patching ineffective but not critical as no revision was strictly needed)."
         )
@@ -1043,7 +1100,10 @@ async def revise_chapter_draft_logic(
             logger.info(
                 f"Full rewrite similarity with original text (final check): {similarity_score_full_final:.4f}"
             )
-            if similarity_score_full_final >= config.REVISION_SIMILARITY_ACCEPTANCE:
+            if (
+                similarity_score_full_final
+                >= config.REVISION_SIMILARITY_ACCEPTANCE
+            ):
                 logger.warning(
                     f"Full rewrite for ch {chapter_number} is very similar to original (Score: {similarity_score_full_final:.4f}). "
                     f"The LLM may not have made sufficient changes despite instructions."
@@ -1059,4 +1119,6 @@ async def revise_chapter_draft_logic(
     return (
         final_revised_text,
         final_raw_llm_output,
-    ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
+    ), cumulative_usage_data if cumulative_usage_data[
+        "total_tokens"
+    ] > 0 else None
