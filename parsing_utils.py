@@ -2,8 +2,8 @@
 import re
 import logging
 from typing import List, Dict, Any, Optional, Union, Pattern, Callable, Tuple
-from rdflib import Graph, URIRef, Literal, BNode
-from rdflib.namespace import RDF, RDFS
+# from rdflib import Graph, URIRef, Literal, BNode # No longer needed for triples
+# from rdflib.namespace import RDF, RDFS # No longer needed for triples
 
 logger = logging.getLogger(__name__)
 
@@ -14,105 +14,110 @@ class ParseError(Exception):
 # DEFAULT_BLOCK_SEPARATOR_REGEX and split_text_into_blocks removed as they are no longer used.
 
 # --- New RDF Triple Parsing using rdflib ---
+# Modified to be a custom plain-text triple parser
 
-def _get_entity_type_and_name_from_uri(uri_ref: URIRef, base_uri: str) -> Dict[str, Optional[str]]:
-    logger_func = logging.getLogger(__name__) # Avoid conflict with module-level logger
-    uri_str = str(uri_ref)
-    name = None
+def _get_entity_type_and_name_from_text(entity_text: str) -> Dict[str, Optional[str]]:
+    """
+    Parses 'EntityType:EntityName' or just 'EntityName' string.
+    If EntityType is missing, it's set to None.
+    """
+    name_part = entity_text
+    type_part = None
+    if ":" in entity_text:
+        parts = entity_text.split(":", 1)
+        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+            type_part = parts[0].strip()
+            name_part = parts[1].strip()
+        elif parts[0].strip(): # Only one part before colon, might be a type or a name with an odd colon
+            # Heuristic: if it starts with uppercase and has no spaces, assume it's a type and name is missing/error.
+            # Or if it's a common entity type. For now, simpler: if only one part before ':', it's the type.
+            # This logic might need refinement if LLM is inconsistent.
+            # Let's assume if one part before ':', it's the type and the rest is name.
+            # If no part after ':', then name is effectively empty.
+            type_part = parts[0].strip()
+            name_part = parts[1].strip() if len(parts) > 1 else ""
 
-    if uri_str.startswith(base_uri):
-        name_part = uri_str[len(base_uri):]
-        name = name_part.split('/')[-1].replace('_', ' ')
-    else:
-        name = uri_str.split('/')[-1].split('#')[-1].replace('_', ' ')
 
-    type_str = None
-    if not base_uri.endswith('/'): base_uri_slash = base_uri + '/'
-    else: base_uri_slash = base_uri
+    return {"type": type_part if type_part else None, "name": name_part.strip() if name_part else None}
 
-    if uri_str.startswith(f'{base_uri_slash}Character/'):
-        type_str = 'Character'
-    elif uri_str.startswith(f'{base_uri_slash}Location/'):
-        type_str = 'Location'
-    elif uri_str.startswith(f'{base_uri_slash}WorldElement/'):
-        type_str = 'WorldElement'
-    elif uri_str.startswith(f'{base_uri_slash}Item/'):
-        type_str = 'Item'
-    elif uri_str.startswith(f'{base_uri_slash}Faction/'):
-        type_str = 'Faction'
-    elif uri_str.startswith(f'{base_uri_slash}Concept/'):
-        type_str = 'Concept'
-
-    if type_str is None and name and name[0].isupper() and f'{base_uri_slash}{name.replace(" ", "_")}' == uri_str :
-            logger_func.debug(f"URI {uri_str} resulted in name '{name}' which could be a type itself.")
-
-    return {"type": type_str, "name": name}
 
 def parse_rdf_triples_with_rdflib(text_block: str, rdf_format: str = "turtle", base_uri: str = "http://example.org/saga/") -> List[Dict[str, Any]]:
-    logger_func = logging.getLogger(__name__) # Avoid conflict with module-level logger
+    """
+    Custom parser for LLM-generated plain text triples.
+    Expected format: 'SubjectEntityType:SubjectName | Predicate | ObjectEntityType:ObjectName'
+                 OR 'SubjectEntityType:SubjectName | Predicate | LiteralValue'
+    """
+    logger_func = logging.getLogger(__name__)
     triples_list: List[Dict[str, Any]] = []
-    if not text_block.strip():
+    if not text_block or not text_block.strip():
         return triples_list
 
-    if not base_uri.endswith('/'):
-        context_base_uri = base_uri + '/'
-    else:
-        context_base_uri = base_uri
+    lines = text_block.strip().splitlines()
 
-    g = Graph()
-    try:
-        g.parse(data=text_block, format=rdf_format, publicID=context_base_uri)
-    except Exception as e:
-        logger_func.error(f"Failed to parse RDF text with rdflib (format: {rdf_format}): {e}", exc_info=True)
-        logger_func.error(f"Problematic RDF text block was:\n{text_block[:500]}...")
-        return triples_list
+    for line_num, line in enumerate(lines):
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("//"): # Skip empty or comment lines
+            continue
 
-    for s, p, o in g:
-        predicate_name_parts = str(p).split('/')[-1].split('#')[-1]
-        predicate_str = predicate_name_parts.replace('_', ' ')
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) != 3:
+            logger_func.warning(f"Line {line_num+1}: Malformed triple (expected 3 parts separated by '|'): '{line}'")
+            continue
 
-        s_details = _get_entity_type_and_name_from_uri(s, context_base_uri) if isinstance(s, URIRef) else {"type": "BNode" if isinstance(s, BNode) else "Literal", "name": str(s)}
+        subject_text, predicate_text, object_text = parts
 
-        # Attempt to get type from rdf:type triple for subject
-        for _, _, s_rdf_type_obj in g.triples((s, RDF.type, None)):
-            if isinstance(s_rdf_type_obj, URIRef):
-                s_details["type"] = str(s_rdf_type_obj).split('/')[-1].split('#')[-1].replace('_', ' ')
-                break
+        subject_details = _get_entity_type_and_name_from_text(subject_text)
+        predicate_str = predicate_text.strip().upper().replace(" ", "_") # Normalize predicate
 
+        if not subject_details.get("name") or not predicate_str:
+            logger_func.warning(f"Line {line_num+1}: Missing subject name or predicate: S='{subject_text}', P='{predicate_text}'")
+            continue
+
+        # Determine if object is an entity or a literal
+        # If object_text contains 'EntityType:', assume it's an entity.
+        # Otherwise, treat as a literal value.
         object_entity_payload: Optional[Dict[str, Optional[str]]] = None
         object_literal_payload: Optional[str] = None
-        is_literal_object = False
+        is_literal_object = True # Default to literal
 
-        if isinstance(o, Literal):
-            is_literal_object = True
-            object_literal_payload = str(o)
-        elif isinstance(o, URIRef):
-            object_entity_payload = _get_entity_type_and_name_from_uri(o, context_base_uri)
-            # Attempt to get type from rdf:type triple for object
-            for _, _, o_rdf_type_obj in g.triples((o, RDF.type, None)):
-                if isinstance(o_rdf_type_obj, URIRef):
-                    # Ensure object_entity_payload is not None before assigning to its key
-                    if object_entity_payload is None: object_entity_payload = {} # Should not happen if o is URIRef and _get_entity... works
-                    object_entity_payload["type"] = str(o_rdf_type_obj).split('/')[-1].split('#')[-1].replace('_', ' ')
-                    break
-        elif isinstance(o, BNode):
-            object_entity_payload = {"type": "BNode", "name": str(o)}
-        else:
-            logger_func.warning(f"Unexpected object type: {type(o)} for object {o}")
-            continue
+        if ":" in object_text:
+            obj_parts_check = object_text.split(":",1)
+            # Heuristic: if part before colon is a known type or capitalized, assume entity
+            # This can be made more robust by checking against a list of known types.
+            potential_obj_type = obj_parts_check[0].strip()
+            # A simple check: if it's capitalized and has no spaces, maybe it's a type.
+            # Or if it matches any of the example types.
+            # For now, if a colon is present and there's content on both sides, assume it's Type:Name
+            if len(obj_parts_check) == 2 and obj_parts_check[0].strip() and obj_parts_check[1].strip():
+                 # Check if potential_obj_type is likely an entity type (e.g. starts with uppercase)
+                if potential_obj_type[0].isupper() and " " not in potential_obj_type:
+                    object_entity_payload = _get_entity_type_and_name_from_text(object_text)
+                    is_literal_object = False
 
-        if not s_details.get("name") or not predicate_str:
-            logger_func.warning(f"Skipping triple due to missing subject name or predicate: S={s_details}, P={predicate_str}, O_lit={object_literal_payload}, O_ent={object_entity_payload}")
-            continue
+
+        if is_literal_object:
+            object_literal_payload = object_text.strip()
+            # Further clean if it's a string literal that might have quotes (LLM sometimes adds them)
+            if object_literal_payload.startswith('"') and object_literal_payload.endswith('"'):
+                object_literal_payload = object_literal_payload[1:-1]
+            if object_literal_payload.startswith("'") and object_literal_payload.endswith("'"):
+                object_literal_payload = object_literal_payload[1:-1]
+
         if not is_literal_object and (not object_entity_payload or not object_entity_payload.get("name")):
-            logger_func.warning(f"Skipping triple due to missing object entity name: S={s_details}, P={predicate_str}, O_ent={object_entity_payload}")
-            continue
+            # This means we thought it was an entity due to ':', but parsing failed to get a name.
+            # So, revert to treating it as a literal.
+            logger_func.debug(f"Line {line_num+1}: Object '{object_text}' looked like entity but parsed no name. Reverting to literal.")
+            object_literal_payload = object_text.strip()
+            is_literal_object = True
+            object_entity_payload = None
+
 
         triples_list.append({
-            "subject": s_details,
+            "subject": subject_details,
             "predicate": predicate_str,
             "object_entity": object_entity_payload,
             "object_literal": object_literal_payload,
             "is_literal_object": is_literal_object
         })
+
     return triples_list

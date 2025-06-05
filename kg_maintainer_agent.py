@@ -9,7 +9,7 @@ from llm_interface import llm_service
 import config
 from core_db.base_db_manager import neo4j_manager
 from data_access import kg_queries
-from parsing_utils import parse_rdf_triples_with_rdflib
+from parsing_utils import parse_rdf_triples_with_rdflib # Will be modified to custom parser
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import models, parsing, merge, cypher_generation
@@ -149,21 +149,47 @@ class KGMaintainerAgent:
                 "### WORLD UPDATES ###",
                 "### KG TRIPLES ###",
                 "",
-                "For CHARACTER UPDATES:",
-                " - Use the format 'Character: <Character Name>' to start a block for each character.",
-                " - Under each character, list new or changed attributes as 'key: value' pairs (e.g., 'status: injured', 'description: now wears a red cloak').",
-                " - For traits, use 'traits: <trait1>, <trait2>, ...'. List only new or emphasized traits.",
-                " - For relationships, use 'relationships: <Target Character Name>: <description of relationship change/nuance>, ...'.",
-                f" - Include 'development_in_chapter_{chapter_number}: <Brief note on how the character developed or what they did in this chapter>'.",
+                "For CHARACTER UPDATES: Output a JSON object where keys are character names. Each character's value should be another JSON object containing their attributes (e.g., {\"status\": \"injured\", \"description\": \"now wears a red cloak\"}).",
+                " - For traits, use a key like \"traits\" with a JSON array of strings: [\"trait1\", \"trait2\"]. List only new or emphasized traits.",
+                " - For relationships, use a key like \"relationships\" with a JSON object where keys are target character names and values are strings describing the relationship change/nuance: {\"Target Character\": \"became allies\"}.",
+                f" - Include a key \"development_in_chapter_{chapter_number}\" with a string value: \"<Brief note on how the character developed or what they did in this chapter>\".",
+                "Example for Character Updates (JSON format):",
+                "```json",
+                "{",
+                "  \"Elara Voss\": {",
+                "    \"status\": \"determined\",",
+                "    \"traits\": [\"curious\", \"introspective\"],",
+                "    \"relationships\": {\"Her Father\": \"vanished, left clues\"},",
+                f"    \"development_in_chapter_{chapter_number}\": \"Discovered father's journal.\"",
+                "  }",
+                "}",
+                "```",
                 "",
-                "For WORLD UPDATES:",
-                " - Group items by 'Category: <Category Name>' (e.g., 'Category: Locations', 'Category: Factions').",
-                " - Under each category, list items as 'Item: <Item Name>' followed by 'key: value' pairs for its properties.",
-                f" - Include 'elaboration_in_chapter_{chapter_number}: <Note on how this item was detailed or interacted with>'.",
-                # " - For new items, try to infer 'created_chapter: {chapter_number}'.", # This is complex for LLM, handled by model.py
+                "For WORLD UPDATES: Output a JSON object where keys are category names (e.g., \"Locations\", \"Factions\"). Each category's value should be another JSON object where keys are item names and values are their attribute objects.",
+                " - Each item's attribute object should contain keys like \"description\", \"atmosphere\", etc., with string values.",
+                " - For list-like details (e.g. \"rules\" for a system), use a JSON array of strings.",
+                f" - Include a key \"elaboration_in_chapter_{chapter_number}\" with a string value: \"<Note on how this item was detailed or interacted with>\".",
+                "Example for World Updates (JSON format):",
+                "```json",
+                "{",
+                "  \"Locations\": {",
+                "    \"Ancient Cabin\": {",
+                "      \"description\": \"Wooden frame, half-buried in snow.\",",
+                "      \"atmosphere\": \"Frozen in time, eerie silence.\",",
+                f"      \"elaboration_in_chapter_{chapter_number}\": \"Visited by Elara, map found here.\"",
+                "    }",
+                "  },",
+                "  \"WorldElements\": {",
+                "    \"Echoes\": {",
+                "      \"description\": \"Forces of balance, threads of memory.\",",
+                f"      \"elaboration_in_chapter_{chapter_number}\": \"Elara learns they are ancient forces.\"",
+                "    }",
+                "  }",
+                "}",
+                "```",
                 "",
                 "For KG TRIPLES:",
-                " - List factual statements on separate lines.",
+                " - List factual statements on separate lines (plain text, NOT JSON for this section).",
                 " - Format: 'SubjectEntityType:SubjectName | Predicate | ObjectEntityType:ObjectName' OR 'SubjectEntityType:SubjectName | Predicate | LiteralValue'.",
                 " - Valid Subject/Object EntityTypes: Character, WorldElement, Location, Faction, Item, Concept, Trait, Event, PlotPoint, Organization, Species, Ability, MagicSystem, Technology, Currency, Language, Food, Plant, Animal, Vehicle, Weapon, Armor, Clothing, Tool, Building, Region, Planet, StarSystem, Galaxy, Dimension, HistoricalPeriod, CulturalAspect, SocialClass, Occupation, Title, Role, StatusEffect, Quest, LoreFragment, Prophecy, Rumor, Secret.",
                 "   If type is ambiguous or general for a specific subject/object, you can omit its type prefix (e.g., 'Lirion | DEFEATED | Goblin Chieftain').",
@@ -252,7 +278,11 @@ class KGMaintainerAgent:
                 current_section_key = None # Reset if unknown header
             
             if current_section_key:
-                parsed_sections[current_section_key] = content_text_raw
+                # Remove potential ```json ... ``` markdown if LLM adds it for JSON sections
+                if current_section_key in ["character_updates", "world_updates"]:
+                    content_text_raw = re.sub(r"^\s*```json\s*\n?", "", content_text_raw, flags=re.MULTILINE)
+                    content_text_raw = re.sub(r"\n?\s*```\s*$", "", content_text_raw, flags=re.MULTILINE)
+                parsed_sections[current_section_key] = content_text_raw.strip()
                 current_section_key = None # Reset for next potential header block
 
 
@@ -264,7 +294,7 @@ class KGMaintainerAgent:
         )
         
         # Use the corrected function name for structured triple parsing
-        parsed_triples_structured = parse_rdf_triples_with_rdflib(parsed_sections.get("kg_triples", ""), rdf_format="turtle")
+        parsed_triples_structured = parse_rdf_triples_with_rdflib(parsed_sections.get("kg_triples", ""))
 
 
         logger.info(f"Chapter {chapter_number} LLM Extraction: "
