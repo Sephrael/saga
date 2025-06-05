@@ -255,9 +255,9 @@ class PlannerAgent:
             f"Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}, formatted as a JSON array of scene objects.",
             "These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.",
             "Each scene object in the JSON array must have the following keys: "
-            "\\"scene_number\\" (integer), \\"summary\\" (string), \\"characters_involved\\" (array of strings), "
-            "\\"key_dialogue_points\\" (array of strings), \\"setting_details\\" (string), "
-            "\\"scene_focus_elements\\" (array of strings), \\"contribution\\" (string).",
+            "\"scene_number\" (integer), \"summary\" (string), \"characters_involved\" (array of strings), "
+            "\"key_dialogue_points\" (array of strings), \"setting_details\" (string), "
+            "\"scene_focus_elements\" (array of strings), \"contribution\" (string).",
             "",
             "**Follow this example structure for your JSON output precisely:**",
             "```json",
