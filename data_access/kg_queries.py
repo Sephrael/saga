@@ -1,5 +1,6 @@
 # data_access/kg_queries.py
 import logging
+import re
 from typing import Optional, List, Dict, Any, Tuple
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (

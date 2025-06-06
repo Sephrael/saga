@@ -223,9 +223,7 @@ def parse_key_value_block(
                     if val_str
                     else [config.MARKDOWN_FILL_IN_PLACEHOLDER]
                 )
-            elif not parsed_data[
-                internal_key_to_ensure
-            ]:  # If it's an empty list
+            elif not parsed_data[internal_key_to_ensure]: # If it's an empty list
                 parsed_data[internal_key_to_ensure] = [
                     config.MARKDOWN_FILL_IN_PLACEHOLDER
                 ]
