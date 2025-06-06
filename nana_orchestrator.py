@@ -37,7 +37,6 @@ from kg_maintainer.models import (
     _normalize_for_id,
 )  # Added _normalize_for_id
 from world_continuity_agent import WorldContinuityAgent
-from yaml_parser import load_yaml_file  # Added import
 
 from initial_setup_logic import (
     generate_plot_outline_logic,
@@ -108,7 +107,9 @@ class NANA_Orchestrator:
         self.kg_maintainer_agent = KGMaintainerAgent()
 
         self.plot_outline: Dict[str, Any] = {}
-        self.character_profiles: Dict[str, Any] = {}  # Stores profiles as dicts
+        self.character_profiles: Dict[
+            str, Any
+        ] = {}  # Stores profiles as dicts
         self.world_building: Dict[str, Any] = {}  # Stores world data as dicts
         self.chapter_count: int = 0
         self.novel_props_cache: Dict[str, Any] = {}
@@ -118,8 +119,12 @@ class NANA_Orchestrator:
         self.rich_status_group: Optional[Group] = None
         self.status_text_novel_title: Text = Text("Novel: N/A")
         self.status_text_current_chapter: Text = Text("Current Chapter: N/A")
-        self.status_text_current_step: Text = Text("Current Step: Initializing...")
-        self.status_text_tokens_generated: Text = Text("Tokens Generated (this run): 0")
+        self.status_text_current_step: Text = Text(
+            "Current Step: Initializing..."
+        )
+        self.status_text_tokens_generated: Text = Text(
+            "Tokens Generated (this run): 0"
+        )
         self.status_text_elapsed_time: Text = Text("Elapsed Time: 0s")
         self.run_start_time: float = 0.0
 
@@ -162,19 +167,17 @@ class NANA_Orchestrator:
             return
 
         if chapter_num is not None:
-            self.status_text_current_chapter.plain = f"Current Chapter: {chapter_num}"  # type: ignore
+            self.status_text_current_chapter.plain = (
+                f"Current Chapter: {chapter_num}"  # type: ignore
+            )
         if step is not None:
             self.status_text_current_step.plain = f"Current Step: {step}"  # type: ignore
         self.status_text_novel_title.plain = (
             f"Novel: {self.plot_outline.get('title', 'N/A')}"  # type: ignore
         )
-        self.status_text_tokens_generated.plain = (
-            f"Tokens Generated (this run): {self.total_tokens_generated_this_run:,}"  # type: ignore
-        )
+        self.status_text_tokens_generated.plain = f"Tokens Generated (this run): {self.total_tokens_generated_this_run:,}"  # type: ignore
         elapsed_seconds = time.time() - self.run_start_time
-        self.status_text_elapsed_time.plain = (
-            f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}"  # type: ignore
-        )
+        self.status_text_elapsed_time.plain = f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}"  # type: ignore
 
     def _accumulate_tokens(
         self, operation_name: str, usage_data: Optional[Dict[str, int]]
@@ -204,7 +207,9 @@ class NANA_Orchestrator:
 
     def _update_novel_props_cache(self):
         self.novel_props_cache = {
-            "title": self.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE),
+            "title": self.plot_outline.get(
+                "title", config.DEFAULT_PLOT_OUTLINE_TITLE
+            ),
             "genre": self.plot_outline.get("genre", config.CONFIGURED_GENRE),
             "theme": self.plot_outline.get("theme", config.CONFIGURED_THEME),
             "protagonist_name": self.plot_outline.get(
@@ -229,7 +234,9 @@ class NANA_Orchestrator:
             "chars": character_queries.get_character_profiles_from_db(),
             "world": world_queries.get_world_building_from_db(),
         }
-        results = await asyncio.gather(*load_tasks.values(), return_exceptions=True)
+        results = await asyncio.gather(
+            *load_tasks.values(), return_exceptions=True
+        )
         loaded_data = dict(zip(load_tasks.keys(), results))
         for key, value in loaded_data.items():
             if isinstance(value, Exception):
@@ -245,11 +252,17 @@ class NANA_Orchestrator:
                     self.world_building = {}
             else:
                 if key == "plot":
-                    self.plot_outline = value if isinstance(value, dict) else {}
+                    self.plot_outline = (
+                        value if isinstance(value, dict) else {}
+                    )
                 elif key == "chars":
-                    self.character_profiles = value if isinstance(value, dict) else {}
+                    self.character_profiles = (
+                        value if isinstance(value, dict) else {}
+                    )
                 elif key == "world":
-                    self.world_building = value if isinstance(value, dict) else {}
+                    self.world_building = (
+                        value if isinstance(value, dict) else {}
+                    )
 
         if not self.plot_outline.get("plot_points"):
             logger.warning(
@@ -269,7 +282,11 @@ class NANA_Orchestrator:
             "NANA: Saving core novel state (plot, characters, world) to Neo4j sequentially..."
         )
         save_operations = [
-            ("plot_outline", plot_queries.save_plot_outline_to_db, self.plot_outline),
+            (
+                "plot_outline",
+                plot_queries.save_plot_outline_to_db,
+                self.plot_outline,
+            ),
             (
                 "character_profiles",
                 character_queries.save_character_profiles_to_db,
@@ -307,7 +324,9 @@ class NANA_Orchestrator:
                     )
             except Exception as e:
                 all_succeeded = False
-                logger.error(f"Failed to save {name} to Neo4j: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to save {name} to Neo4j: {e}", exc_info=True
+                )
 
         if all_succeeded:
             logger.info("All core state objects saved to Neo4j successfully.")
@@ -335,7 +354,9 @@ class NANA_Orchestrator:
                     "protagonist_archetype": random.choice(
                         config.UNHINGED_PROTAGONIST_ARCHETYPES
                     ),
-                    "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES),
+                    "conflict_archetype": random.choice(
+                        config.UNHINGED_CONFLICT_TYPES
+                    ),
                 }
             )
 
@@ -355,12 +376,16 @@ class NANA_Orchestrator:
         _, world_usage = await generate_world_building_logic(self)
         self._accumulate_tokens("InitialSetup-WorldBuilding", world_usage)
         world_source = self.world_building.get("source", "unknown")
-        logger.info(f"   World Building initialized/loaded (source: {world_source}).")
+        logger.info(
+            f"   World Building initialized/loaded (source: {world_source})."
+        )
         self._update_rich_display(step="World Building Generated/Loaded")
 
         self._update_novel_props_cache()
         await self._save_core_novel_state_to_neo4j()
-        logger.info("   Initial plot, character, and world data saved to Neo4j.")
+        logger.info(
+            "   Initial plot, character, and world data saved to Neo4j."
+        )
         self._update_rich_display(step="Initial State Saved")
 
         if (
@@ -387,7 +412,9 @@ class NANA_Orchestrator:
             "llm_generated_or_merged",
         ] or plot_source.startswith("llm_generated")
 
-        if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
+        if not is_plot_ready_for_kg and not self.plot_outline.get(
+            "is_default", False
+        ):
             logger.info(
                 f"Skipping KG pre-population: Plot outline source '{plot_source}' does not indicate it's ready for KG, and it's not a default plot."
             )
@@ -426,12 +453,12 @@ class NANA_Orchestrator:
                     if canonical_key not in processed_canonical_world_items:
                         world_objs.setdefault(overview_category_name, {})
                         try:
-                            world_objs[overview_category_name][overview_item_name] = (
-                                WorldItem.from_dict(
-                                    overview_category_name,
-                                    overview_item_name,
-                                    overview_details,
-                                )
+                            world_objs[overview_category_name][
+                                overview_item_name
+                            ] = WorldItem.from_dict(
+                                overview_category_name,
+                                overview_item_name,
+                                overview_details,
                             )
                             processed_canonical_world_items.add(canonical_key)
                         except ValueError as e:
@@ -550,7 +577,8 @@ class NANA_Orchestrator:
             config.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
         )
         log_file_path = os.path.join(
-            config.CHAPTER_LOGS_DIR, f"chapter_{chapter_number:04d}_raw_llm_log.txt"
+            config.CHAPTER_LOGS_DIR,
+            f"chapter_{chapter_number:04d}_raw_llm_log.txt",
         )
         os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
@@ -570,7 +598,8 @@ class NANA_Orchestrator:
         loop = asyncio.get_event_loop()
         try:
             safe_stage_desc = "".join(
-                c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
+                c if c.isalnum() or c in ["_", "-"] else "_"
+                for c in stage_description
             )
             file_name = f"chapter_{chapter_number:04d}_{safe_stage_desc}.txt"
             file_path = os.path.join(config.DEBUG_OUTPUTS_DIR, file_name)
@@ -594,14 +623,19 @@ class NANA_Orchestrator:
     async def perform_deduplication(
         self, text_to_dedup: str, chapter_number: int
     ) -> Tuple[str, int]:
-        logger.info(f"NANA: Performing de-duplication for Chapter {chapter_number}...")
+        logger.info(
+            f"NANA: Performing de-duplication for Chapter {chapter_number}..."
+        )
         if not text_to_dedup or not text_to_dedup.strip():
             logger.info(
                 f"De-duplication for Chapter {chapter_number}: Input text is empty. No action taken."
             )
             return text_to_dedup, 0
         try:
-            deduplicated_text, chars_removed = await utils.deduplicate_text_segments(
+            (
+                deduplicated_text,
+                chars_removed,
+            ) = await utils.deduplicate_text_segments(
                 original_text=text_to_dedup,
                 segment_level="paragraph",
                 similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
@@ -636,8 +670,8 @@ class NANA_Orchestrator:
             step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
         )
 
-        plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(
-            novel_chapter_number
+        plot_point_focus, plot_point_index = (
+            self._get_plot_point_info_for_chapter(novel_chapter_number)
         )
         if plot_point_focus is None:
             logger.error(
@@ -645,14 +679,21 @@ class NANA_Orchestrator:
             )
             return None, -1, None, None
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Planning Scenes")
-        chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Planning Scenes"
+        )
+        (
+            chapter_plan_result,
+            plan_usage,
+        ) = await self.planner_agent.plan_chapter_scenes(
             self.novel_props_cache,
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
         )
-        self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-Planning", plan_usage
+        )
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
@@ -671,7 +712,9 @@ class NANA_Orchestrator:
             self.novel_props_cache, novel_chapter_number, chapter_plan
         )
         await self._save_debug_output(
-            novel_chapter_number, "hybrid_context_for_draft", hybrid_context_for_draft
+            novel_chapter_number,
+            "hybrid_context_for_draft",
+            hybrid_context_for_draft,
         )
 
         return (
@@ -702,7 +745,9 @@ class NANA_Orchestrator:
             hybrid_context_for_draft,
             chapter_plan,
         )
-        self._accumulate_tokens(f"Ch{novel_chapter_number}-Drafting", draft_usage)
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-Drafting", draft_usage
+        )
 
         if not initial_draft_text:
             logger.error(
@@ -711,7 +756,8 @@ class NANA_Orchestrator:
             await self._save_debug_output(
                 novel_chapter_number,
                 "initial_draft_fail_raw_llm",
-                initial_raw_llm_text or "Drafting Agent returned None for raw output.",
+                initial_raw_llm_text
+                or "Drafting Agent returned None for raw output.",
             )
             return None, None
 
@@ -749,7 +795,10 @@ class NANA_Orchestrator:
             logger.info(
                 f"NANA: Ch {novel_chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt + 1}"
             )
-            deduplicated_text, removed_char_count = await self.perform_deduplication(
+            (
+                deduplicated_text,
+                removed_char_count,
+            ) = await self.perform_deduplication(
                 current_text_to_process, novel_chapter_number
             )
             if removed_char_count > 0:
@@ -788,7 +837,8 @@ class NANA_Orchestrator:
                 hybrid_context_for_draft,
             )
             self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt + 1}", eval_usage
+                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt + 1}",
+                eval_usage,
             )
             evaluation_result: EvaluationResult = eval_result_obj
             await self._save_debug_output(
@@ -879,9 +929,13 @@ class NANA_Orchestrator:
                     and revision_tuple_result[0]
                     and len(revision_tuple_result[0]) > 50
                 ):
-                    current_text_to_process, rev_raw_output = revision_tuple_result
+                    current_text_to_process, rev_raw_output = (
+                        revision_tuple_result
+                    )
                     current_raw_llm_output = (
-                        rev_raw_output if rev_raw_output else current_raw_llm_output
+                        rev_raw_output
+                        if rev_raw_output
+                        else current_raw_llm_output
                     )
                     logger.info(
                         f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt + 1} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval)."
@@ -925,7 +979,9 @@ class NANA_Orchestrator:
         final_raw_llm_output: Optional[str],
         is_from_flawed_source_for_kg: bool,
     ) -> Optional[str]:
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Summarizing")
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Summarizing"
+        )
         (
             chapter_summary,
             summary_usage,
@@ -939,20 +995,26 @@ class NANA_Orchestrator:
             novel_chapter_number, "final_summary", chapter_summary
         )
 
-        final_embedding = await llm_service.async_get_embedding(final_text_to_process)
+        final_embedding = await llm_service.async_get_embedding(
+            final_text_to_process
+        )
         if final_embedding is None:
             logger.error(
                 f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only."
             )
             await self._save_chapter_text_and_log(
-                novel_chapter_number, final_text_to_process, final_raw_llm_output
+                novel_chapter_number,
+                final_text_to_process,
+                final_raw_llm_output,
             )
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - No Embedding"
             )
             return None
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Saving to DB")
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Saving to DB"
+        )
         await chapter_queries.save_chapter_data_to_db(
             novel_chapter_number,
             final_text_to_process,
@@ -965,18 +1027,24 @@ class NANA_Orchestrator:
             novel_chapter_number, final_text_to_process, final_raw_llm_output
         )
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Updating KG")
-        kg_merge_usage = await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.novel_props_cache,
-            novel_chapter_number,
-            final_text_to_process,
-            is_from_flawed_source_for_kg,
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Updating KG"
+        )
+        kg_merge_usage = (
+            await self.kg_maintainer_agent.extract_and_merge_knowledge(
+                self.novel_props_cache,
+                novel_chapter_number,
+                final_text_to_process,
+                is_from_flawed_source_for_kg,
+            )
         )
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
         )
 
-        self.character_profiles = self.novel_props_cache.get("character_profiles", {})
+        self.character_profiles = self.novel_props_cache.get(
+            "character_profiles", {}
+        )
         self.world_building = self.novel_props_cache.get("world_building", {})
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
@@ -1008,10 +1076,15 @@ class NANA_Orchestrator:
             )
             return None
 
-        prereq_result = await self._prepare_chapter_prerequisites(novel_chapter_number)
-        plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft = (
-            prereq_result
+        prereq_result = await self._prepare_chapter_prerequisites(
+            novel_chapter_number
         )
+        (
+            plot_point_focus,
+            plot_point_index,
+            chapter_plan,
+            hybrid_context_for_draft,
+        ) = prereq_result
 
         if plot_point_focus is None or hybrid_context_for_draft is None:
             self._update_rich_display(
@@ -1151,8 +1224,12 @@ class NANA_Orchestrator:
                     "NANA: Core plot data missing or insufficient (e.g., no title, no concrete plot points). Performing initial setup..."
                 )
                 if not await self.perform_initial_setup():
-                    logger.critical("NANA: Initial setup failed. Halting generation.")
-                    self._update_rich_display(step="Initial Setup Failed - Halting")
+                    logger.critical(
+                        "NANA: Initial setup failed. Halting generation."
+                    )
+                    self._update_rich_display(
+                        step="Initial Setup Failed - Halting"
+                    )
                     return
                 self._update_novel_props_cache()
 
@@ -1190,18 +1267,22 @@ class NANA_Orchestrator:
                     f"NANA: All {total_concrete_plot_points} concrete plot points appear to be covered by existing {self.chapter_count} chapters. No new chapters to generate."
                 )
                 self._update_rich_display(
-                    chapter_num=self.chapter_count, step="All Plot Points Covered"
+                    chapter_num=self.chapter_count,
+                    step="All Plot Points Covered",
                 )
             else:
                 chapters_to_attempt_this_run = min(
-                    config.CHAPTERS_PER_RUN, remaining_plot_points_to_address_in_novel
+                    config.CHAPTERS_PER_RUN,
+                    remaining_plot_points_to_address_in_novel,
                 )
                 logger.info(
                     f"NANA: Targeting up to {chapters_to_attempt_this_run} new chapter(s) in this run, starting with Novel Chapter {start_novel_chapter_to_write}."
                 )
 
                 chapters_successfully_written_this_run = 0
-                for k_th_chapter_this_run in range(chapters_to_attempt_this_run):
+                for k_th_chapter_this_run in range(
+                    chapters_to_attempt_this_run
+                ):
                     current_novel_chapter_number = (
                         start_novel_chapter_to_write + k_th_chapter_this_run
                     )
@@ -1215,8 +1296,10 @@ class NANA_Orchestrator:
                     )
 
                     try:
-                        chapter_text_result = await self.run_chapter_generation_process(
-                            current_novel_chapter_number
+                        chapter_text_result = (
+                            await self.run_chapter_generation_process(
+                                current_novel_chapter_number
+                            )
                         )
                         if chapter_text_result:
                             chapters_successfully_written_this_run += 1
@@ -1248,7 +1331,7 @@ class NANA_Orchestrator:
                     await chapter_queries.load_chapter_count_from_db()
                 )
                 logger.info(
-                    f"\n--- NANA: Novel writing process finished for this run ---"
+                    "\n--- NANA: Novel writing process finished for this run ---"
                 )
                 logger.info(
                     f"NANA: Successfully processed {chapters_successfully_written_this_run} chapter(s) in this run."
@@ -1276,7 +1359,9 @@ class NANA_Orchestrator:
                 await asyncio.sleep(0.1)
                 self.rich_live.stop()
             await neo4j_manager.close()
-            logger.info("NANA: Neo4j driver successfully closed on application exit.")
+            logger.info(
+                "NANA: Neo4j driver successfully closed on application exit."
+            )
 
 
 def setup_logging_nana():
@@ -1308,11 +1393,15 @@ def setup_logging_nana():
             )
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
-            root_logger.info(f"File logging enabled. Log file: {config.LOG_FILE}")
+            root_logger.info(
+                f"File logging enabled. Log file: {config.LOG_FILE}"
+            )
         except Exception as e:
             console_handler_fallback = logging.StreamHandler()
             console_handler_fallback.setFormatter(
-                logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+                logging.Formatter(
+                    config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
+                )
             )
             root_logger.addHandler(console_handler_fallback)
             root_logger.error(
@@ -1324,7 +1413,9 @@ def setup_logging_nana():
         existing_console = None
         if root_logger.handlers:
             for h_idx, h in enumerate(root_logger.handlers):
-                if hasattr(h, "console") and not isinstance(h, logging.FileHandler):
+                if hasattr(h, "console") and not isinstance(
+                    h, logging.FileHandler
+                ):
                     existing_console = h.console  # type: ignore
                     break
 
@@ -1339,7 +1430,9 @@ def setup_logging_nana():
         )
         root_logger.addHandler(rich_handler)
         root_logger.info("Rich logging handler enabled for console.")
-    elif not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+    elif not any(
+        isinstance(h, logging.StreamHandler) for h in root_logger.handlers
+    ):
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(config.LOG_LEVEL)
         stream_formatter = logging.Formatter(
@@ -1347,7 +1440,9 @@ def setup_logging_nana():
         )
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
-        root_logger.info("Standard stream logging handler enabled for console.")
+        root_logger.info(
+            "Standard stream logging handler enabled for console."
+        )
 
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
     logging.getLogger("neo4j").setLevel(logging.WARNING)
@@ -1368,7 +1463,9 @@ if __name__ == "__main__":
             "NANA Orchestrator shutting down gracefully due to KeyboardInterrupt..."
         )
         if orchestrator.rich_live and orchestrator.rich_live.is_started:  # type: ignore
-            orchestrator._update_rich_display(step="Shutdown (KeyboardInterrupt)")
+            orchestrator._update_rich_display(
+                step="Shutdown (KeyboardInterrupt)"
+            )
             orchestrator.rich_live.stop()  # type: ignore
     except Exception as main_err:
         logger.critical(
@@ -1382,7 +1479,9 @@ if __name__ == "__main__":
             orchestrator.rich_live.stop()  # type: ignore
     finally:
         if neo4j_manager.driver is not None:
-            logger.info("Ensuring Neo4j driver is closed from main entry point.")
+            logger.info(
+                "Ensuring Neo4j driver is closed from main entry point."
+            )
 
             async def _close_driver_main():
                 await neo4j_manager.close()
