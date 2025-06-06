@@ -33,6 +33,7 @@ PLOT_OUTLINE_KEY_MAP = {
     "antagonist_motivations": "antagonist_motivations",
     "genre": "genre",
     "theme": "theme",  # Added genre and theme to be fillable
+    "stakes": "stakes",
 }
 PLOT_OUTLINE_LIST_INTERNAL_KEYS = ["plot_points"]
 
@@ -287,42 +288,89 @@ def _populate_agent_state_from_user_data(
         ant_data, "motivations"
     )
 
-    conflict_data = user_data.get("conflict", {})
-    plot_outline["conflict_summary"] = _get_val_or_fill_in(
-        conflict_data, "summary"
-    )
-    plot_outline["inciting_incident"] = _get_val_or_fill_in(
-        conflict_data, "inciting_incident"
-    )
-    plot_outline["climax_event_preview"] = _get_val_or_fill_in(
-        conflict_data, "climax_event_preview"
-    )
+    # Get plot_elements data, defaulting to an empty dict if not present
+    plot_elements_data = user_data.get("plot_elements", {})
+    conflict_data = user_data.get("conflict", {}) # Still needed for climax_event_preview unless specified otherwise
 
-    raw_plot_points = user_data.get("plot_points", [])
+    if plot_elements_data:
+        logger.info("Populating plot outline from 'plot_elements' section in user data.")
+        plot_outline["inciting_incident"] = _get_val_or_fill_in(
+            plot_elements_data, "inciting_incident"
+        )
+        # Read key_plot_points from plot_elements_data
+        raw_plot_points = plot_elements_data.get("key_plot_points", [])
+        plot_outline["conflict_summary"] = _get_val_or_fill_in(
+            plot_elements_data, "central_conflict"
+        )
+        plot_outline["stakes"] = _get_val_or_fill_in(plot_elements_data, "stakes")
+        # climax_event_preview continues to be read from conflict_data as its migration was not specified.
+        # If it should also come from plot_elements, this would need adjustment.
+        plot_outline["climax_event_preview"] = _get_val_or_fill_in(
+            conflict_data, "climax_event_preview"
+        )
+    else:
+        logger.info("No 'plot_elements' section found or it is empty. Using fallback logic or default fill-ins.")
+        # If plot_elements is the sole intended source for these, they become [Fill-in]
+        plot_outline["inciting_incident"] = _get_val_or_fill_in(
+            {}, "inciting_incident"
+        )  # Results in [Fill-in]
+        # Fallback to reading plot_points from the top-level user_data if plot_elements not present
+        raw_plot_points = user_data.get("plot_points", [])
+        plot_outline["conflict_summary"] = _get_val_or_fill_in(
+            conflict_data, "summary" # Fallback to old source if plot_elements not present
+        )
+        plot_outline["stakes"] = _get_val_or_fill_in(
+            {}, "stakes"
+        )  # Results in [Fill-in] as it's new to plot_elements
+        plot_outline["climax_event_preview"] = _get_val_or_fill_in(
+            conflict_data, "climax_event_preview"
+        )
+
     if not isinstance(raw_plot_points, list):
         logger.warning(
-            f"Markdown 'plot_points' parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
+            f"Plot points ('key_plot_points' or 'plot_points') parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
+            f"Plot points ('key_plot_points' or 'plot_points') parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
         )
         plot_outline["plot_points"] = [
             config.MARKDOWN_FILL_IN_PLACEHOLDER
         ] * config.TARGET_PLOT_POINTS_INITIAL_GENERATION
     else:
-        plot_outline["plot_points"] = [
-            str(pp).strip()
-            if isinstance(pp, str) and (pp.strip() or utils._is_fill_in(pp))
-            else config.MARKDOWN_FILL_IN_PLACEHOLDER
-            for pp in raw_plot_points
-        ]
-        while (
-            len(plot_outline["plot_points"]) > 0
-            and len(plot_outline["plot_points"])
-            < config.TARGET_PLOT_POINTS_INITIAL_GENERATION
-            and plot_outline["plot_points"][-1]
-            != config.MARKDOWN_FILL_IN_PLACEHOLDER
-        ):
-            plot_outline["plot_points"].append(
-                config.MARKDOWN_FILL_IN_PLACEHOLDER
-            )
+        # Ensure each plot point is a string, handle if not.
+        processed_plot_points = []
+        for pp in raw_plot_points:
+            if isinstance(pp, str):
+                processed_plot_points.append(pp.strip() if pp.strip() or utils._is_fill_in(pp) else config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            elif pp is None: # Handle None items in the list
+                processed_plot_points.append(config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            else: # Coerce to string if other type, e.g. number
+                processed_plot_points.append(str(pp).strip() if str(pp).strip() else config.MARKDOWN_FILL_IN_PLACEHOLDER)
+
+        plot_outline["plot_points"] = processed_plot_points
+
+        # Pad with [Fill-in] placeholders up to TARGET_PLOT_POINTS_INITIAL_GENERATION
+        # Ensure that we only pad if there are actual plot points or if the list is empty
+        # and needs to be filled to the target length.
+        # Also, ensure that if the list is shorter than target, but the last item is already a fill-in,
+        # we don't add more fill-ins unless necessary to reach the target.
+
+        # Only add fill-ins if the list is shorter than the target
+        current_length = len(plot_outline["plot_points"])
+        if current_length < config.TARGET_PLOT_POINTS_INITIAL_GENERATION:
+            # If the list is not empty and the last element is not already a fill-in,
+            # or if the list is empty, then pad.
+            # This prevents adding fill-ins if the user explicitly provided some fill-ins at the end
+            # but fewer than the target. The goal is to reach the target.
+            if current_length == 0 or \
+               (current_length > 0 and plot_outline["plot_points"][-1] != config.MARKDOWN_FILL_IN_PLACEHOLDER) or \
+               sum(1 for p in plot_outline["plot_points"] if p == config.MARKDOWN_FILL_IN_PLACEHOLDER) < (config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length):
+
+                needed_fill_ins = config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length
+                plot_outline["plot_points"].extend([config.MARKDOWN_FILL_IN_PLACEHOLDER] * needed_fill_ins)
+
+        # Ensure the list does not exceed the target length if it somehow became too long before padding
+        if len(plot_outline["plot_points"]) > config.TARGET_PLOT_POINTS_INITIAL_GENERATION:
+            plot_outline["plot_points"] = plot_outline["plot_points"][:config.TARGET_PLOT_POINTS_INITIAL_GENERATION]
+
 
     # Process 'setting' section from user_data for world_building
     setting_data_md = user_data.get("setting", {})
@@ -467,80 +515,86 @@ def _populate_agent_state_from_user_data(
     plot_outline["is_default"] = False
     agent.plot_outline = plot_outline
 
-    prot_name_val = plot_outline["protagonist_name"]
-    if not utils._is_fill_in(prot_name_val):
-        character_profiles.setdefault(prot_name_val, {})
-        character_profiles[prot_name_val].update(
-            {
-                "description": plot_outline["protagonist_description"],
-                "traits": [
-                    t
-                    for t in prot_data.get("traits", [])
-                    if isinstance(t, str)
-                    and (t.strip() or utils._is_fill_in(t))
-                ],  # Assumes 'traits' is list
-                "status": _get_val_or_fill_in(prot_data, "initial_status")
-                or "As described",
-                "character_arc_summary": plot_outline["character_arc"],
-                "role": "protagonist",
-                "source": "user_supplied_yaml",  # Updated source
-                "relationships": prot_data.get(
-                    "relationships", {}
-                ),  # Assumes 'relationships' is dict
-            }
-        )
+    # Ensure character_profiles is a dictionary of CharacterProfile instances
+    if not isinstance(character_profiles, dict): # Should have been initialized earlier, but as a safeguard
+        character_profiles = {}
 
-    ant_name_val = plot_outline["antagonist_name"]
-    if (
-        not utils._is_fill_in(ant_name_val) and ant_data
-    ):  # ant_data is from user_data.get("antagonist", {})
-        character_profiles.setdefault(ant_name_val, {})
-        character_profiles[ant_name_val].update(
-            {
-                "description": plot_outline["antagonist_description"],
-                "traits": [
-                    t
-                    for t in ant_data.get("traits", [])
-                    if isinstance(t, str)
-                    and (t.strip() or utils._is_fill_in(t))
-                ],
-                "status": "As described",
-                "motivations": plot_outline["antagonist_motivations"],
-                "role": "antagonist",
-                "source": "user_supplied_yaml",  # Updated source
-                "relationships": ant_data.get("relationships", {}),
-            }
-        )
+    prot_name_val = plot_outline.get("protagonist_name")
+    if not utils._is_fill_in(prot_name_val) and prot_name_val: # Ensure prot_name_val is not empty
+        if prot_name_val not in character_profiles or not isinstance(character_profiles[prot_name_val], CharacterProfile):
+            profile = CharacterProfile(name=prot_name_val)
+            character_profiles[prot_name_val] = profile
+        else:
+            profile = character_profiles[prot_name_val]
 
-    other_chars_data = user_data.get(
-        "other_key_characters", {}
-    )  # This should be a dict of char_name: details
+        profile.description = plot_outline.get("protagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.traits = [
+            t for t in prot_data.get("traits", [])
+            if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+        ]
+        profile.status = _get_val_or_fill_in(prot_data, "initial_status") or "As described"
+        profile.relationships = prot_data.get("relationships", {}) # Direct attribute
+
+        profile.updates["character_arc_summary"] = plot_outline.get("character_arc", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.updates["role"] = "protagonist"
+        profile.updates["source"] = "user_supplied_yaml"
+
+    ant_name_val = plot_outline.get("antagonist_name")
+    if not utils._is_fill_in(ant_name_val) and ant_name_val and ant_data: # Ensure ant_name_val is not empty
+        if ant_name_val not in character_profiles or not isinstance(character_profiles[ant_name_val], CharacterProfile):
+            ant_profile = CharacterProfile(name=ant_name_val)
+            character_profiles[ant_name_val] = ant_profile
+        else:
+            ant_profile = character_profiles[ant_name_val]
+
+        ant_profile.description = plot_outline.get("antagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.traits = [
+            t for t in ant_data.get("traits", [])
+            if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+        ]
+        ant_profile.status = "As described" # Direct attribute
+        ant_profile.relationships = ant_data.get("relationships", {}) # Direct attribute
+
+        ant_profile.updates["motivations"] = plot_outline.get("antagonist_motivations", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.updates["role"] = "antagonist"
+        ant_profile.updates["source"] = "user_supplied_yaml"
+
+
+    other_chars_data = user_data.get("other_key_characters", {})
     if isinstance(other_chars_data, dict):
-        for (
-            char_name_other_normalized_yaml,
-            char_detail_yaml,
-        ) in other_chars_data.items():
-            # char_name_other_normalized_yaml is already normalized by load_yaml_file
-            char_name_other_display = char_name_other_normalized_yaml.replace(
-                "_", " "
-            ).title()  # For display consistency if needed, but internal key is normalized
-            if not utils._is_fill_in(char_name_other_display) and isinstance(
-                char_detail_yaml, dict
-            ):
-                # Use normalized key for character_profiles dict directly
-                agent_char_details = character_profiles.setdefault(
-                    char_name_other_normalized_yaml,
-                    {"source": "user_supplied_yaml"},
-                )
-                for (
-                    yaml_detail_key,
-                    yaml_detail_val,
-                ) in (
-                    char_detail_yaml.items()
-                ):  # These keys are also normalized
-                    # Assuming char profile keys are mostly direct (already normalized)
-                    internal_detail_key = yaml_detail_key
-                    agent_char_details[internal_detail_key] = yaml_detail_val
+        for char_name_other_normalized_yaml, char_detail_yaml in other_chars_data.items():
+            char_name_key = char_name_other_normalized_yaml # This is already normalized key
+
+            if utils._is_fill_in(char_name_key) or not isinstance(char_detail_yaml, dict):
+                continue
+
+            if char_name_key not in character_profiles or not isinstance(character_profiles[char_name_key], CharacterProfile):
+                other_char_profile = CharacterProfile(name=char_name_key)
+                character_profiles[char_name_key] = other_char_profile
+            else:
+                other_char_profile = character_profiles[char_name_key]
+
+            # Set source first, can be overwritten by yaml_detail_key if 'source' is in there
+            other_char_profile.updates["source"] = "user_supplied_yaml"
+
+            for yaml_detail_key, yaml_detail_val in char_detail_yaml.items():
+                if yaml_detail_key == "name": # Name is set at construction, display_name could be an update field
+                    other_char_profile.updates["display_name"] = yaml_detail_val # Example if display name differs
+                elif yaml_detail_key == "description" and hasattr(other_char_profile, 'description'):
+                    other_char_profile.description = yaml_detail_val
+                elif yaml_detail_key == "traits" and hasattr(other_char_profile, 'traits'):
+                    other_char_profile.traits = [str(t).strip() for t in yaml_detail_val] if isinstance(yaml_detail_val, list) else [str(yaml_detail_val).strip()]
+                elif yaml_detail_key == "status" and hasattr(other_char_profile, 'status'):
+                    other_char_profile.status = yaml_detail_val
+                elif yaml_detail_key == "relationships" and hasattr(other_char_profile, 'relationships'):
+                    other_char_profile.relationships = yaml_detail_val if isinstance(yaml_detail_val, dict) else {}
+                else: # Fallback to updates dictionary for other fields like role, specific motivations, etc.
+                    other_char_profile.updates[yaml_detail_key] = yaml_detail_val
+
+            # Ensure 'role' is set, defaulting to 'other_key_character' if not provided
+            if "role" not in other_char_profile.updates and not hasattr(other_char_profile, "role"):
+                 other_char_profile.updates["role"] = "other_key_character"
+
 
     agent.character_profiles = character_profiles
     agent.world_building = (
