@@ -1,9 +1,7 @@
 # core_db/base_db_manager.py
 import logging
-import json
 from typing import Optional, List, Dict, Any, Tuple, Union
 import numpy as np
-import asyncio
 
 from neo4j import AsyncGraphDatabase, AsyncSession, AsyncManagedTransaction, AsyncDriver  # type: ignore
 from neo4j.exceptions import ServiceUnavailable, Neo4jError  # type: ignore
