@@ -1243,7 +1243,7 @@ class NANA_Orchestrator:
 
 def setup_logging_nana():
     logging.basicConfig(
-        level=config.LOG_LEVEL,
+        level=config.LOG_LEVEL_STR,
         format=config.LOG_FORMAT,
         datefmt=config.LOG_DATE_FORMAT,
         handlers=[],
@@ -1264,7 +1264,7 @@ def setup_logging_nana():
                 mode="a",
                 encoding="utf-8",
             )
-            file_handler.setLevel(config.LOG_LEVEL)
+            file_handler.setLevel(config.LOG_LEVEL_STR)
             formatter = logging.Formatter(
                 config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
             )
@@ -1291,7 +1291,7 @@ def setup_logging_nana():
                     break
 
         rich_handler = RichHandler(
-            level=config.LOG_LEVEL,
+            level=config.LOG_LEVEL_STR,
             rich_tracebacks=True,
             show_path=False,
             markup=True,
@@ -1303,7 +1303,7 @@ def setup_logging_nana():
         root_logger.info("Rich logging handler enabled for console.")
     elif not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
         stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(config.LOG_LEVEL)
+        stream_handler.setLevel(config.LOG_LEVEL_STR)
         stream_formatter = logging.Formatter(
             config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
         )
@@ -1316,7 +1316,7 @@ def setup_logging_nana():
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     root_logger.info(
-        f"NANA Logging setup complete. Application Log Level: {logging.getLevelName(config.LOG_LEVEL)}."
+        f"NANA Logging setup complete. Application Log Level: {logging.getLevelName(config.LOG_LEVEL_STR)}."
     )
 
 
