@@ -350,9 +350,9 @@ root_logger.setLevel(LOG_LEVEL_STR)
 
 # --- Novel Configuration (Defaults / Placeholders) ---
 UNHINGED_PLOT_MODE: bool = os.getenv("UNHINGED_PLOT_MODE", "False").lower() == "true"
-CONFIGURED_GENRE: str = os.getenv("CONFIGURED_GENRE", "gritty fantasy")
-CONFIGURED_THEME: str = os.getenv("CONFIGURED_THEME", "the cost of historical revisionism")
-CONFIGURED_SETTING_DESCRIPTION: str = os.getenv("CONFIGURED_SETTINGS_DESCRIPTION", "a city that appears normal by day but transforms into something otherworldly at night")
+CONFIGURED_GENRE: str = "gritty fantasy"
+CONFIGURED_THEME: str = "the cost of historical revisionism"
+CONFIGURED_SETTING_DESCRIPTION: str = "a city that appears normal by day but transforms into something otherworldly at night"
 DEFAULT_PROTAGONIST_NAME: str = "Saga"
 DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 

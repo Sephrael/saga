@@ -207,7 +207,7 @@ def generate_character_node_cypher(
                     )-[
                         r:DYNAMIC_REL {
                             type: $rel_type_str,
-                            chapter_added: $chapter_num_delta,
+                            chapter_added: $chapter_num_delta
                         }
                     ]->(
                         c2
@@ -350,7 +350,7 @@ def generate_world_element_node_cypher(
                                 MERGE (
                                     v:Entity:ValueNode {{
                                         value: $value_str,
-                                        type: $prop_key,
+                                        type: $prop_key
                                     }}
                                 )
                                   ON CREATE SET v.created_ts = timestamp()

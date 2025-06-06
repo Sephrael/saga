@@ -1,0 +1,76 @@
+# SAGA Story Elements File (YAML Example)
+# This file outlines the core elements of the story.
+# It's recommended to use lowercase_with_underscores for keys if you want them
+# to match the output of the previous Markdown parser without needing normalization.
+# Otherwise, the load_yaml_file function can normalize them.
+
+novel_concept:
+  title: "Saga" # Quotes optional for simple strings, good for strings with special chars
+  genre: "Gritty Fantasy"
+  setting: "a city that appears normal by day but transforms into something otherworldly at night"
+  logline: "[Fill-in]"
+  theme: "the impact of economic disparity"
+
+protagonist:
+  name: "Jules Vidant"
+  description: "[Fill-in]"
+  traits:
+    - "Clever"
+    - "Witty (Dry Humor)"
+    - "Resourceful"
+    - "Introverted"
+    - "[Fill-in]"
+  motivation: "[Fill-in]"
+  relationships:
+    tula_veridian: # Using normalized keys directly in YAML is cleaner
+      name: "Tula Veridian"
+      status: "[Fill-in]"
+      details: "[Fill-in]"
+    sampson_taylor:
+      name: "sampson_taylor"
+      status: "Active"
+      details: "[Fill-in]"
+    # Add other key relationships as needed, e.g.:
+    #警部_k:  # Example of a non-English key, if needed (YAML supports Unicode)
+    #  name: "Inspector K"
+    #  status: "Antagonist / Ally?"
+    #  details: "A temporal police inspector who's sometimes on Jax's tail, sometimes needs his help."
+
+setting:
+  primary_setting_overview: "a city that appears normal by day but transforms into something otherworldly at night"
+  key_locations:
+    - name: "[Fill-in]"
+      description: "[Fill-in]"
+      atmosphere: "[Fill-in]"
+    - name: "[Fill-in]"
+      description: "[Fill-in]"
+      atmosphere: "[Fill-in]"
+    - name: "[Fill-in]"
+      description: "[Fill-in]"
+      atmosphere: "[Fill-in]"
+
+plot_elements:
+  inciting_incident: "[Fill-in]"
+  key_plot_points: # List of major turning points or events
+    - "[Fill-in]"
+    - "[Fill-in]"
+    - "[Fill-in]"
+    - "[Fill-in]"
+  central_conflict: "[Fill-in]"
+  stakes: "[Fill-in]"
+
+style_and_tone:
+  narrative_style: "First-person (Jule's perspective) OR Third-person limited"
+  tone: "[Fill-in]"
+  pacing: "Generally fast-paced during action, slower during investigative and reflective moments."
+
+# Optional: For more complex world-building elements if not covered by KG
+# world_specifics:
+#   magic_system_or_technology:
+#     name: "Temporal Displacement Units (TDUs)"
+#     rules:
+#       - "Require significant energy, prone to temporal drift if not calibrated."
+#       - "Extended use can cause 'chronal sickness'."
+#     limitations:
+#       - "Cannot easily change 'fixed points' in time."
+#       - "Travel to 'erased' timelines is extremely hazardous."
