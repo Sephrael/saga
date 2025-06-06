@@ -1,5 +1,5 @@
 import pytest
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 from unittest.mock import AsyncMock, patch
 
 # Assuming data_access.kg_queries is the path. Adjust if necessary based on project structure.
@@ -19,12 +19,18 @@ from kg_constants import KG_REL_CHAPTER_ADDED, KG_IS_PROVISIONAL
     "entity_type, expected_labels",
     [
         ("Character", ":Character:Entity"),
-        ("character", ":Character:Entity"),  # Test case-insensitivity for "Character"
+        (
+            "character",
+            ":Character:Entity",
+        ),  # Test case-insensitivity for "Character"
         (
             "Person",
             ":Character:Person:Entity",
         ),  # Person should get Character first, then Person
-        ("person", ":Character:Person:Entity"),  # Test case-insensitivity for "Person"
+        (
+            "person",
+            ":Character:Person:Entity",
+        ),  # Test case-insensitivity for "Person"
         ("Location", ":Location:Entity"),
         ("Event", ":Event:Entity"),
         ("  Item ", ":Item:Entity"),  # Test stripping whitespace
@@ -68,7 +74,9 @@ def mock_neo4j_manager():
 captured_statements_for_tests: List[Tuple[str, Dict[str, Any]]] = []
 
 
-async def capture_statements_mock(statements: List[Tuple[str, Dict[str, Any]]]):
+async def capture_statements_mock(
+    statements: List[Tuple[str, Dict[str, Any]]],
+):
     captured_statements_for_tests.clear()
     captured_statements_for_tests.extend(statements)
     return None
@@ -134,8 +142,10 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Alice":
             assert (
-                "MERGE (s:Character:Entity {name: $subject_name_param})" in query
-                or "MERGE (s:Character:Entity {name: $subject_name_param})" in query
+                "MERGE (s:Character:Entity {name: $subject_name_param})"
+                in query
+                or "MERGE (s:Character:Entity {name: $subject_name_param})"
+                in query
             )  # Accommodate slight variations if any
             alice_statement_found = True
             break
@@ -148,7 +158,8 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Bob":
             assert (
-                "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query
+                "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
+                in query
                 or "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
                 in query
             )
@@ -162,7 +173,10 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     castle_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Castle":
-            assert "MERGE (s:Location:Entity {name: $subject_name_param})" in query
+            assert (
+                "MERGE (s:Location:Entity {name: $subject_name_param})"
+                in query
+            )
             castle_statement_found = True
             break
     assert castle_statement_found, (
@@ -173,7 +187,10 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     charles_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("object_name_param") == "Charles":
-            assert "MERGE (o:Character:Entity {name: $object_name_param})" in query
+            assert (
+                "MERGE (o:Character:Entity {name: $object_name_param})"
+                in query
+            )
             charles_statement_found = True
             break
     assert charles_statement_found, (
@@ -185,7 +202,8 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("object_name_param") == "Diana":
             assert (
-                "MERGE (o:Character:Person:Entity {name: $object_name_param})" in query
+                "MERGE (o:Character:Person:Entity {name: $object_name_param})"
+                in query
             )
             diana_statement_found = True
             break
@@ -303,7 +321,7 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's simplify this test to focus on the fact that query_kg_from_db *can* retrieve
     # data if the entities were labeled correctly.
 
-    results = await query_kg_from_db(include_provisional=True)  # general query
+    await query_kg_from_db(include_provisional=True)  # general query
     assert (
         "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string
     )  # default query

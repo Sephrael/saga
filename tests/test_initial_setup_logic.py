@@ -7,7 +7,6 @@ import json
 from initial_setup_logic import (
     generate_world_building_logic,
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
-    WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
 )
 import config  # For config.MARKDOWN_FILL_IN_PLACEHOLDER and other config values if needed
@@ -49,7 +48,10 @@ async def test_valid_json_output_from_llm(agent_instance):
         "factions": {
             "Desert Nomads": {
                 "description": "Tribes that roam the great sands.",
-                "goals": ["Survive the harsh conditions", "Find new water sources"],
+                "goals": [
+                    "Survive the harsh conditions",
+                    "Find new water sources",
+                ],
                 "structure": "Tribal councils",
             }
         },
@@ -67,7 +69,10 @@ async def test_valid_json_output_from_llm(agent_instance):
         await generate_world_building_logic(agent_instance)
 
     wb = agent_instance.world_building
-    assert wb["_overview_"]["description"] == "A vast desert planet with twin suns."
+    assert (
+        wb["_overview_"]["description"]
+        == "A vast desert planet with twin suns."
+    )
     assert wb["_overview_"]["mood"] == "Harsh and unforgiving"
 
     assert "Oasis City" in wb["locations"]
@@ -99,9 +104,7 @@ async def test_valid_json_output_from_llm(agent_instance):
 @pytest.mark.asyncio
 async def test_invalid_json_output_decode_error(agent_instance):
     """Test handling of JSONDecodeError when LLM output is malformed."""
-    malformed_json_str = (
-        '{"overview": {"description": "A broken world..."'  # Missing closing brace
-    )
+    malformed_json_str = '{"overview": {"description": "A broken world..."'  # Missing closing brace
     mock_llm_output = (
         malformed_json_str,
         {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
@@ -227,7 +230,10 @@ async def test_llm_output_missing_category(agent_instance):
     # Check that all categories defined in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL exist
     # For missing ones like 'factions', they should be initialized as empty dicts by the end of the function
     # if the source is not user_supplied_yaml (which it isn't in this LLM-only flow)
-    for cat_norm, cat_internal in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.items():
+    for (
+        cat_norm,
+        cat_internal,
+    ) in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.items():
         assert cat_internal in wb
         if cat_norm not in json_payload_missing_category:
             assert wb[cat_internal] == {}  # Should be initialized as empty
@@ -303,7 +309,9 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
             "User Keep": {
                 "description": "LLM tries to change this.",  # Should be ignored
                 "atmosphere": "LLM tries to change this too.",  # Should be ignored
-                "features": ["New LLM feature"],  # This is a new field, should be added
+                "features": [
+                    "New LLM feature"
+                ],  # This is a new field, should be added
             },
             "LLM Lava Caves": {
                 "description": "Dangerous lava caves from LLM.",
@@ -313,7 +321,10 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
         "factions": {  # LLM generates this category
             "Sun Scorched Clan": {
                 "description": "A clan adapted to extreme heat.",
-                "goals": ["Find the legendary Sunstone", "Appease the Sun God"],
+                "goals": [
+                    "Find the legendary Sunstone",
+                    "Appease the Sun God",
+                ],
             }
         },
     }
@@ -332,13 +343,16 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
     wb = agent_instance.world_building
 
     # Overview: User's description preserved, LLM's mood used for [Fill-in]
-    assert wb["_overview_"]["description"] == "User's original world description."
+    assert (
+        wb["_overview_"]["description"] == "User's original world description."
+    )
     assert wb["_overview_"]["mood"] == "Mystical and vibrant (from LLM)"
 
     # Locations: User Keep's original details preserved, new field 'features' added by LLM
     assert "User Keep" in wb["locations"]
     assert (
-        wb["locations"]["User Keep"]["description"] == "A sturdy keep from user data."
+        wb["locations"]["User Keep"]["description"]
+        == "A sturdy keep from user data."
     )
     assert wb["locations"]["User Keep"]["atmosphere"] == "Ancient and strong"
     assert wb["locations"]["User Keep"]["features"] == ["New LLM feature"]
@@ -432,7 +446,9 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     # "overall_vibe", "non_list_property_for_default", "unnormalized_default_prop"
 
     # Create a combined list for patching, ensuring no duplicates and preserving originals
-    mock_list_keys_content = list(set(original_list_keys + test_specific_list_keys))
+    mock_list_keys_content = list(
+        set(original_list_keys + test_specific_list_keys)
+    )
 
     # Patch the global list within the 'initial_setup_logic' module for the duration of this test
     with (
@@ -479,7 +495,10 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     # Assuming "Key Elements" maps to "key_elements" or is used as is.
     # The key "Key Elements" is not in WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL, internal_item_key_for_agent = "Key Elements"
     # "Key Elements" IS in mock_list_keys_content (due to test_specific_list_keys). So, not wrapped.
-    assert default_item.get("Key Elements") == ["Ancient Scrolls", "Whispering Winds"]
+    assert default_item.get("Key Elements") == [
+        "Ancient Scrolls",
+        "Whispering Winds",
+    ]
 
     # 'NonListPropertyForDefault' is NOT in mock_list_keys_content, so its list value should be wrapped.
     # internal_item_key_for_agent = "NonListPropertyForDefault"
@@ -503,7 +522,9 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
         "text": "A library lost to the depths, holding ancient secrets."
     }
     # 'atmosphere' is not in WORLD_DETAIL_LIST_INTERNAL_KEYS
-    assert sunken_library.get("atmosphere") == {"text": "Mysterious and silent"}
+    assert sunken_library.get("atmosphere") == {
+        "text": "Mysterious and silent"
+    }
 
     # --- Proper Item Asserts ("Dragon's Peak") ---
     assert "Dragon's Peak" in lore_category_data
