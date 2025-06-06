@@ -165,22 +165,39 @@ class Neo4jManagerSingleton:
             "Creating/verifying Neo4j indexes and constraints (batch execution)..."
         )
 
-        global_entity_name_constraint_name = "entity_name_unique"
-        drop_global_entity_name_constraint = (
-            f"DROP CONSTRAINT {global_entity_name_constraint_name} IF EXISTS"
-        )
-
-        worldelement_name_index_name = "worldElement_name_index"
-        drop_worldelement_name_plain_index = (
-            f"DROP INDEX {worldelement_name_index_name} IF EXISTS"
-        )
-        drop_worldelement_name_unique_prop_idx = (
-            "DROP INDEX worldelement_name_unique IF EXISTS"
-        )
-        # Also drop the constraint we are removing
-        drop_worldelement_name_constraint = (
-            "DROP CONSTRAINT worldElement_name_unique IF EXISTS"
-        )
+        try:
+            constraints_result = await self.execute_read_query(
+                "SHOW CONSTRAINTS YIELD name RETURN name"
+            )
+            indexes_result = await self.execute_read_query(
+                "SHOW INDEXES YIELD name RETURN name"
+            )
+            for record in constraints_result:
+                constraint_name = record.get("name")
+                if not constraint_name:
+                    continue
+                try:
+                    await self.execute_write_query(f"DROP CONSTRAINT {constraint_name}")
+                    self.logger.info(f"Dropped constraint '{constraint_name}'")
+                except Neo4jError as e_drop:
+                    self.logger.debug(
+                        f"Ignoring constraint drop failure for '{constraint_name}': {e_drop}"
+                    )
+            for record in indexes_result:
+                index_name = record.get("name")
+                if not index_name:
+                    continue
+                try:
+                    await self.execute_write_query(f"DROP INDEX {index_name}")
+                    self.logger.info(f"Dropped index '{index_name}'")
+                except Neo4jError as e_drop:
+                    self.logger.debug(
+                        f"Ignoring index drop failure for '{index_name}': {e_drop}"
+                    )
+        except Exception as e:
+            self.logger.error(
+                f"Failed to drop existing schema elements: {e}", exc_info=True
+            )
 
         core_constraints_queries = [
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
@@ -218,54 +235,6 @@ class Neo4jManagerSingleton:
             `vector.similarity_function`: '{config.NEO4J_VECTOR_SIMILARITY_FUNCTION}'
         }}}}
         """
-
-        pre_drop_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
-            (
-                drop_global_entity_name_constraint,
-                {"constraint_name": global_entity_name_constraint_name},
-            ),
-            (
-                drop_worldelement_name_plain_index,
-                {"index_name": worldelement_name_index_name},
-            ),
-            (
-                drop_worldelement_name_unique_prop_idx,
-                {"index_name": "worldelement_name_unique"},
-            ),
-            (drop_worldelement_name_constraint, {}),  # Drop the problematic constraint
-        ]
-
-        self.logger.info(
-            "Executing pre-emptive drop statements for potentially conflicting schema..."
-        )
-        for query, params in pre_drop_statements_with_params:
-            try:
-                await self.execute_write_query(
-                    query, params if params else {}
-                )  # Ensure params is not None
-                self.logger.info(f"Successfully executed pre-emptive drop: '{query}'")
-            except Neo4jError as e_drop:
-                log_message = f"Could not execute pre-emptive drop '{query}' (this may be fine if it didn't exist or permission issue): {e_drop}. "
-                if query == drop_global_entity_name_constraint:
-                    log_message += (
-                        f"If you are encountering 'ConstraintValidationFailed' errors related to 'Entity.name', "
-                        f"ensure that no global uniqueness constraint exists on (:Entity {{name}}), or that if it does, "
-                        f"its name is '{global_entity_name_constraint_name}' so this script can attempt to drop it. "
-                        f"Otherwise, you may need to manually drop it using 'DROP CONSTRAINT YourConstraintName'. "
-                        f"You can find constraint names with 'SHOW CONSTRAINTS'."
-                    )
-                    self.logger.error(log_message)
-                elif query == drop_worldelement_name_constraint:
-                    self.logger.info(
-                        f"Successfully dropped (or it didn't exist) 'worldElement_name_unique' constraint: {query}"
-                    )
-                else:
-                    self.logger.warning(log_message)
-            except Exception as e_unexpected_drop:
-                self.logger.error(
-                    f"Unexpected error during pre-emptive drop '{query}': {e_unexpected_drop}",
-                    exc_info=True,
-                )
 
         all_schema_ops_queries = (
             core_constraints_queries + index_queries + [vector_index_query]
