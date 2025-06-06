@@ -1,3 +1,4 @@
+      
 # config.py
 """
 Configuration settings for the Saga Novel Generation system.
@@ -320,12 +321,27 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-formatter = structlog.stdlib.ProcessorFormatter.from_processors(
-    [
+# FIX: The original code had an AttributeError here.
+# The modern `structlog` API initializes the formatter by passing processors
+# to the constructor, not via a `from_processors` class method.
+# `foreign_pre_chain` is used to process logs from non-structlog sources
+# (like standard library loggers) before they reach the main processors.
+formatter = structlog.stdlib.ProcessorFormatter(
+    # These processors are applied to log records that come from non-`structlog` loggers.
+    foreign_pre_chain=[
+        # Add the name and level to the event dict.
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        # Remove processors meta that the standard library logger doesn't know about.
         structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-        structlog.dev.ConsoleRenderer()  # Or structlog.processors.JSONRenderer()
+    ],
+    # These processors are applied to all log records.
+    processors=[
+        # This is the last processor in the chain, rendering the log record.
+        structlog.dev.ConsoleRenderer() # Or structlog.processors.JSONRenderer()
     ]
 )
+
 
 handler = stdlib_logging.StreamHandler() # Default to console
 if LOG_FILE:
@@ -411,3 +427,5 @@ RICH_REFRESH_PER_SECOND: float = 4.0
 
 # --- Markdown Story Parser Configuration ---
 MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
+
+    
