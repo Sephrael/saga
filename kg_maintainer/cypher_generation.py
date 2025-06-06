@@ -1,15 +1,16 @@
 # kg_maintainer/cypher_generation.py
-from typing import Dict, List, Tuple, Any
 import json
 import logging
+from typing import Any, Dict, List, Tuple
 
 import config  # For MAIN_NOVEL_INFO_NODE_ID, MAIN_WORLD_CONTAINER_NODE_ID
-from .models import CharacterProfile, WorldItem
 from kg_constants import (
-    KG_NODE_CREATED_CHAPTER,
     KG_IS_PROVISIONAL,
+    KG_NODE_CREATED_CHAPTER,
     KG_REL_CHAPTER_ADDED,
 )
+
+from .models import CharacterProfile, WorldItem
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +179,7 @@ def generate_character_node_cypher(
                     rel_cypher_props.pop("type", None)
 
                 # Tag relationship with current chapter metadata
-                rel_cypher_props[KG_REL_CHAPTER_ADDED] = (
-                    chapter_number_for_delta
-                )
+                rel_cypher_props[KG_REL_CHAPTER_ADDED] = chapter_number_for_delta
                 rel_cypher_props[KG_IS_PROVISIONAL] = basic_props.get(
                     KG_IS_PROVISIONAL,
                     False,
@@ -346,13 +345,13 @@ def generate_world_element_node_cypher(
                             (
                                 f"""
                                 MATCH (
-                                    we:WorldElement:Entity {id: $we_id}
+                                    we:WorldElement:Entity {{id: $we_id}}
                                 )
                                 MERGE (
-                                    v:Entity:ValueNode {
+                                    v:Entity:ValueNode {{
                                         value: $value_str,
                                         type: $prop_key,
-                                    }
+                                    }}
                                 )
                                   ON CREATE SET v.created_ts = timestamp()
                                   // ON MATCH SET can be omitted if no other
@@ -380,8 +379,7 @@ def generate_world_element_node_cypher(
         elab_summary = item.properties[elab_event_key_for_current_chapter]
         if isinstance(elab_summary, str) and elab_summary.strip():
             elab_event_id = (
-                f"elab_{item.id}_ch{chapter_number_for_delta}_"
-                f"{hash(elab_summary)}"
+                f"elab_{item.id}_ch{chapter_number_for_delta}_{hash(elab_summary)}"
             )
             elab_props = {
                 "id": elab_event_id,
