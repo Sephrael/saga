@@ -1,6 +1,6 @@
 # initial_setup_logic.py
 import logging
-import json  # Retain for fallback or other JSON operations
+import json
 import random
 import os
 from typing import Dict, Any, Optional, List, Tuple
@@ -9,8 +9,6 @@ import config
 from llm_interface import llm_service
 import utils  # For _is_fill_in
 
-# MODIFIED: Aliased import for specific debug logging
-# from parsing_utils import parse_key_value_block # Kept for plot parsing # REMOVED this import
 from yaml_parser import load_yaml_file
 
 logger = logging.getLogger(__name__)
@@ -78,157 +76,6 @@ WORLD_DETAIL_LIST_INTERNAL_KEYS = [
     "key_figures",
     "features",
 ]  # Added features
-
-
-def parse_key_value_block(
-    text_block: str, key_map: Dict[str, str], list_keys_internal: List[str]
-) -> Dict[str, Any]:
-    """
-    Parses a block of text where keys are followed by values, potentially multi-line.
-    Special handling for keys that expect a list of items (e.g., "Plot Points:").
-    """
-    parsed_data: Dict[str, Any] = {}
-    lines = text_block.strip().splitlines()
-
-    current_internal_key: Optional[str] = None
-    current_value_lines: List[str] = []
-
-    display_key_to_internal_map: Dict[str, str] = {}
-    for norm_display_key, internal_key_val in key_map.items():
-        display_key_for_llm_title = (
-            norm_display_key.replace("_", " ").title() + ":"
-        )
-        display_key_to_internal_map[display_key_for_llm_title] = (
-            internal_key_val
-        )
-
-        # Add lowercase version as well for more robust matching if LLM doesn't follow title case
-        display_key_for_llm_lower = norm_display_key.replace("_", " ") + ":"
-        if (
-            display_key_for_llm_lower not in display_key_to_internal_map
-        ):  # Avoid overwriting preferred Title Case
-            display_key_to_internal_map[display_key_for_llm_lower] = (
-                internal_key_val
-            )
-
-        # Add version without colon if LLM forgets it sometimes
-        display_key_for_llm_title_no_colon = norm_display_key.replace(
-            "_", " "
-        ).title()
-        if (
-            display_key_for_llm_title_no_colon
-            not in display_key_to_internal_map
-        ):
-            display_key_to_internal_map[display_key_for_llm_title_no_colon] = (
-                internal_key_val
-            )
-
-    sorted_llm_keys_for_matching = sorted(
-        display_key_to_internal_map.keys(), key=len, reverse=True
-    )
-
-    def process_previous_key_value():
-        nonlocal current_internal_key, current_value_lines
-        if current_internal_key and current_value_lines:
-            if current_internal_key in list_keys_internal:
-                list_items = [
-                    line.strip()[2:].strip()
-                    for line in current_value_lines
-                    if line.strip().startswith("- ")
-                ]
-                if list_items:
-                    parsed_data[current_internal_key] = list_items
-                elif any(
-                    line.strip() for line in current_value_lines
-                ):  # If lines were collected but not valid list items
-                    # Fallback: treat as a single string if list parsing fails but content exists
-                    logger.warning(
-                        f"No '- ' items for list key '{current_internal_key}'. "
-                        f"Using single string: {current_value_lines}"
-                    )
-                    full_text = "\n".join(current_value_lines).strip()
-                    if full_text:  # Only assign if there's actual text
-                        parsed_data[current_internal_key] = full_text
-            else:  # For non-list keys
-                full_text = "\n".join(current_value_lines).strip()
-                if full_text:  # Only assign if there's actual text
-                    parsed_data[current_internal_key] = full_text
-        current_value_lines = []
-
-    for line_content in lines:
-        line_stripped_for_key_check = line_content.strip()
-        matched_new_key = False
-
-        for llm_output_key_format in sorted_llm_keys_for_matching:
-            # Check if the line STARTS with the key format (potentially with or without colon)
-            if line_stripped_for_key_check.startswith(llm_output_key_format):
-                process_previous_key_value()
-                current_internal_key = display_key_to_internal_map[
-                    llm_output_key_format
-                ]
-
-                value_on_same_line = line_stripped_for_key_check[
-                    len(llm_output_key_format) :
-                ].strip()
-                if value_on_same_line:
-                    current_value_lines.append(value_on_same_line)
-
-                matched_new_key = True
-                break
-
-        if not matched_new_key and current_internal_key:
-            # This line is a continuation of the previous key's value or a list item
-            if current_internal_key in list_keys_internal:
-                if line_stripped_for_key_check.startswith("- "):
-                    current_value_lines.append(line_stripped_for_key_check)
-                # If it's a list key but line doesn't start with "- ", and it's not empty,
-                # it could be a malformed list item or start of something else.
-                # For robustness, only add lines starting with "- " to list_keys.
-                # If LLM just lists things without "-", current_value_lines will capture them,
-                # and the fallback logic in process_previous_key_value might treat it as a string.
-                elif (
-                    line_stripped_for_key_check
-                ):  # If line is not empty and not a list item marker
-                    pass  # Don't add non-list-item lines to list_keys collections unless explicitly part of prior value.
-
-            else:  # Not a list key, append as part of a multi-line string
-                current_value_lines.append(
-                    line_content
-                )  # Preserve original indents for multiline strings
-
-    process_previous_key_value()
-
-    for _, internal_key_to_ensure in key_map.items():
-        if (
-            internal_key_to_ensure not in parsed_data
-            or not parsed_data[internal_key_to_ensure]
-        ):
-            # If key is missing, or its value is empty (e.g. empty string/list from parsing)
-            if internal_key_to_ensure in list_keys_internal:
-                parsed_data[internal_key_to_ensure] = [
-                    config.MARKDOWN_FILL_IN_PLACEHOLDER
-                ]
-            else:
-                parsed_data[internal_key_to_ensure] = (
-                    config.MARKDOWN_FILL_IN_PLACEHOLDER
-                )
-        elif internal_key_to_ensure in list_keys_internal:
-            if not isinstance(parsed_data[internal_key_to_ensure], list):
-                logger.warning(
-                    f"List key '{internal_key_to_ensure}' was parsed as non-list: '{parsed_data[internal_key_to_ensure]}'. Forcing to list."
-                )
-                val_str = str(parsed_data[internal_key_to_ensure]).strip()
-                parsed_data[internal_key_to_ensure] = (
-                    [val_str]
-                    if val_str
-                    else [config.MARKDOWN_FILL_IN_PLACEHOLDER]
-                )
-            elif not parsed_data[internal_key_to_ensure]: # If it's an empty list
-                parsed_data[internal_key_to_ensure] = [
-                    config.MARKDOWN_FILL_IN_PLACEHOLDER
-                ]
-
-    return parsed_data
 
 
 def _get_val_or_fill_in(
@@ -706,10 +553,6 @@ def _populate_agent_state_from_user_data(
 async def generate_plot_outline_logic(
     agent: Any, default_protagonist_name: str, unhinged_mode: bool, **kwargs
 ) -> Tuple[PlotOutlineData, Optional[Dict[str, int]]]:
-    # ... (Plot outline generation logic remains largely the same, as it uses parse_key_value_block) ...
-    # This function already assumes a flat key-value structure from the LLM, which is different from world-building.
-    # The key change was ensuring _populate_agent_state_from_user_data correctly sets up agent.plot_outline
-    # from the YAML before this LLM call happens (if it's needed).
     logger.info(f"Generating plot outline. Unhinged mode: {unhinged_mode}")
     user_supplied_data = _load_user_supplied_data()  # Now loads YAML
 
@@ -850,12 +693,6 @@ async def generate_plot_outline_logic(
                 "requests; generate all fields creatively.\n"
             )
 
-        llm_fields_to_generate_text = "\n".join(
-            [
-                f"- {k.replace('_', ' ').title()}"
-                for k in current_plot_outline_key_map_for_llm_prompt.keys()
-            ]
-        )
         target_num_plot_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
 
         base_elements_for_outline: Dict[str, Any] = {}
@@ -934,34 +771,68 @@ async def generate_plot_outline_logic(
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
 
+        json_keys_str = ", ".join([f'"{k}"' for k in PLOT_OUTLINE_KEY_MAP.keys()])
+        json_list_keys_str = ", ".join([f'"{k}"' for k in PLOT_OUTLINE_LIST_INTERNAL_KEYS])
+
         prompt_lines.extend(
             [
                 "You are a creative assistant specializing in crafting compelling narrative structures for full novels.",
+                "Your task is to generate or complete a plot outline based on the provided context.",
+                "You MUST output a single, valid JSON object.",
+                "",
+                "**JSON Structure Requirements:**",
+                f"1. The root must be a single JSON object with the following keys: {json_keys_str}.",
+                f"2. The value for the '{json_list_keys_str}' key MUST be a JSON array of strings.",
+                "3. All other keys should have JSON string values.",
+                "4. Ensure you generate a complete narrative arc with approximately "
+                f"{target_num_plot_points} distinct points in the 'plot_points' array.",
+                "",
+                "**Example of Expected JSON Output:**",
+                "```json",
+                "{",
+                '  "title": "Chronoscape Drifters",',
+                '  "genre": "Time-Travel Adventure",',
+                '  "theme": "The immutability of fate vs. free will",',
+                '  "protagonist_name": "Jax Xenobia",',
+                '  "protagonist_description": "A cynical historian who discovers a faulty time-travel device.",',
+                '  "character_arc": "From a detached observer of the past to an active participant willing to risk everything to change it.",',
+                '  "logline": "A historian who stumbles upon a malfunctioning time machine must navigate the chaotic streams of history to prevent a temporal paradox from erasing existence, all while being hunted by a relentless temporal guardian.",',
+                '  "setting_description": "A near-future Earth where history is a commercialized commodity, accessed through sanitized virtual reality simulations.",',
+                '  "conflict_summary": "Jax vs. The Chronos Guard (an organization enforcing temporal purity) and the internal conflict of whether saving one life is worth jeopardizing the entire timeline.",',
+                '  "inciting_incident": "During a routine simulation, the device glitches, stranding Jax in a pivotal, unrecorded historical event where he accidentally saves someone who was supposed to die.",',
+                '  "antagonist_name": "Warden Kael",',
+                '  "antagonist_description": "A stoic and powerful agent of the Chronos Guard, who sees any deviation from the established timeline as a cosmic threat.",',
+                '  "antagonist_motivations": "A rigid belief that the established timeline, with all its tragedies, is the only one that avoids total annihilation. He has witnessed the horrors of a paradoxical timeline before.",',
+                '  "climax_event_preview": "A final confrontation at the nexus of time where Jax must choose between restoring the original timeline (and sacrificing the person he saved) or creating a new, uncertain reality.",',
+                '  "plot_points": [',
+                '    "Jax discovers the time-travel glitch and saves a historical figure, creating a small paradox.",',
+                '    "Warden Kael detects the anomaly and begins hunting Jax through time.",',
+                '    "Jax learns about the Chronos Guard and the dangers of altering history from a reclusive temporal outcast.",',
+                '    "A cat-and-mouse chase ensues across multiple historical periods, with Jax using his historical knowledge to evade Kael.",',
+                '    "The consequences of the initial paradox begin to ripple, subtly changing Jax\'s present.",',
+                '    "Jax finds a way to amplify his device, hoping to make a more significant, corrective change.",',
+                '    "Kael reveals a personal tragedy that fuels his rigid adherence to the timeline.",',
+                '    "Jax must gather allies from different time periods who have also been affected by temporal anomalies.",',
+                '    "The allies formulate a risky plan to access the nexus of time, the control point for the timeline.",',
+                '    "Kael anticipates their move and sets a trap at the nexus.",',
+                '    "The final confrontation occurs, where Jax must make a choice with cosmic consequences.",',
+                '    "Resolution: Jax either restores the timeline and lives with the moral cost, or shatters it, creating a new, unknown future for everyone."'
+                '  ]',
+                "}",
+                "```",
+                "",
                 f"{prompt_core_elements_intro}",
                 f"{context_from_user_input}",
-                "Based on all the above, generate or complete the following plot outline fields.",
-                "If user context provided a concrete value for a field, you MUST use it.",
-                f"If user context for a field is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, or if a list like 'Plot Points' needs more items, generate them creatively.",
-                f'Ensure the "Plot Points" section contains approximately {target_num_plot_points} distinct points that form a complete narrative arc. If the user provided some plot points, integrate them and add more to reach the target.',
-                "The fields to ensure are complete:",
-                f"{llm_fields_to_generate_text}",
-                "",
-                'Please output ONLY the plot elements as plain text, using the specified field names (e.g., "Title:", "Protagonist Name:").',
-                'For "Plot Points", use this EXACT format with each point on a new line prefixed by "- ".',
-                f'Example of "Plot Points" for a {target_num_plot_points}-point outline:',
-                "Plot Points:",
-                "- Plot Point 1 description.",
-                "- Plot Point 2 description.",
-                "...",
-                f"- Plot Point {target_num_plot_points} description.",
-                "",
-                "Begin your output now using the requested field names:",
+                "Based on all the above, generate a complete and valid JSON object following the structure requirements.",
+                "If user context provided a concrete value for a field, you MUST use it in the JSON.",
+                f"If user context for a field is '{config.MARKDOWN_FILL_IN_PLACEHOLDER}' or missing, or if a list like 'plot_points' needs more items, generate that content creatively.",
+                "Begin your single, valid JSON output now. Do NOT include any explanatory text before or after the JSON object.",
             ]
         )
         prompt = "\n".join(prompt_lines)
 
         logger.info(
-            f"Calling LLM for plot outline generation/completion (to plain text), targeting ~{target_num_plot_points} plot points..."
+            f"Calling LLM for plot outline generation/completion (to JSON), targeting ~{target_num_plot_points} plot points..."
         )
         cleaned_outline_text, usage_data = await llm_service.async_call_llm(
             model_name=config.INITIAL_SETUP_MODEL,
@@ -983,20 +854,32 @@ async def generate_plot_outline_logic(
                 "total_tokens", 0
             )
 
-        parsed_llm_response = parse_key_value_block(
-            cleaned_outline_text,
-            current_plot_outline_key_map_for_llm_prompt,
-            PLOT_OUTLINE_LIST_INTERNAL_KEYS,
-        )
+        parsed_llm_response = None
+        try:
+            parsed_llm_response = json.loads(cleaned_outline_text)
+            if not isinstance(parsed_llm_response, dict):
+                logger.error(
+                    "LLM plot outline output was not a JSON object. Response: %s",
+                    cleaned_outline_text,
+                )
+                parsed_llm_response = None
+        except json.JSONDecodeError:
+            logger.error(
+                "Failed to decode JSON for plot outline. Response: %s",
+                cleaned_outline_text,
+            )
+            parsed_llm_response = None
+
 
         if not isinstance(agent.plot_outline, dict):
             agent.plot_outline = {}  # Ensure it's a dict
 
         if parsed_llm_response:
             for key, llm_value in parsed_llm_response.items():
-                existing_val = agent.plot_outline.get(key)
+                internal_key = PLOT_OUTLINE_KEY_MAP.get(key, key) # Normalize key from JSON
+                existing_val = agent.plot_outline.get(internal_key)
 
-                if key == "plot_points":
+                if internal_key == "plot_points":
                     user_pps_concrete = [
                         pp
                         for pp in (existing_val or [])
@@ -1029,7 +912,7 @@ async def generate_plot_outline_logic(
                         final_pps.append(
                             f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} - Additional plot point needed"
                         )
-                    agent.plot_outline[key] = final_pps[
+                    agent.plot_outline[internal_key] = final_pps[
                         :target_num_plot_points
                     ]
                 elif (
@@ -1037,13 +920,13 @@ async def generate_plot_outline_logic(
                     or existing_val is None
                     or not str(existing_val).strip()
                 ):
-                    agent.plot_outline[key] = llm_value
+                    agent.plot_outline[internal_key] = llm_value
                 elif (
                     isinstance(existing_val, str)
                     and not existing_val.strip()
                     and llm_value
                 ):  # Existing was empty string
-                    agent.plot_outline[key] = llm_value
+                    agent.plot_outline[internal_key] = llm_value
 
             for be_key in ["genre", "theme", "setting_description"]:
                 if utils._is_fill_in(agent.plot_outline.get(be_key)):
@@ -1597,16 +1480,6 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                         )
                     )
 
-                    # Conditionally wrap json_detail_value
-                    if (
-                        internal_detail_key_target
-                        not in WORLD_DETAIL_LIST_INTERNAL_KEYS
-                    ):
-                        if isinstance(json_detail_value, str):
-                            json_detail_value = {"text": json_detail_value}
-                        elif isinstance(json_detail_value, list):
-                            json_detail_value = {"items": json_detail_value}
-
                     existing_val = target_category_in_agent.get(
                         internal_detail_key_target
                     )
@@ -1665,228 +1538,40 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                                     internal_detail_key_target
                                 ] = str(json_detail_value)  # Ensure string
             else:  # Itemized categories like "locations", "factions"
-                processed_items_for_category: Dict[str, Any] = {}
-                default_item_properties: Dict[str, Any] = {}
+                # Clear the category in the agent's state before populating from the LLM's response
+                # This ensures the LLM's output is the single source of truth for this category run.
+                agent.world_building[internal_cat_name] = {}
+                target_category_in_agent = agent.world_building[internal_cat_name]
 
-                for (
-                    item_key_from_llm,
-                    item_value_from_llm,
-                ) in json_cat_content.items():
-                    # Try to normalize item_key_from_llm in case it's a property name for the default item
-                    internal_item_key_for_agent = (
-                        WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                            item_key_from_llm, item_key_from_llm
-                        )
-                    )
-
-                    if isinstance(
-                        item_value_from_llm, dict
-                    ):  # This is a structured item with its own attributes
-                        item_attributes_dict = item_value_from_llm
-                        processed_attributes: Dict[str, Any] = {}
-                        for attr_key, attr_val in item_attributes_dict.items():
-                            target_attr_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                attr_key, attr_key
-                            )
-
-                            # Conditionally wrap attr_val
-                            if (
-                                target_attr_key
-                                not in WORLD_DETAIL_LIST_INTERNAL_KEYS
-                            ):
-                                if isinstance(attr_val, str):
-                                    attr_val = {"text": attr_val}
-                                elif isinstance(attr_val, list):
-                                    attr_val = {"items": attr_val}
-                            processed_attributes[target_attr_key] = attr_val
-                        # Use original item_key_from_llm as the item name (not normalized version)
-                        processed_items_for_category[item_key_from_llm] = (
-                            processed_attributes
-                        )
-                    else:  # This is a flat property, potentially for a "default" item for this category
-                        prop_value = item_value_from_llm
-                        # Here, internal_item_key_for_agent is the property name
-                        if (
-                            internal_item_key_for_agent
-                            not in WORLD_DETAIL_LIST_INTERNAL_KEYS
-                        ):
-                            if isinstance(prop_value, str):
-                                prop_value = {"text": prop_value}
-                            elif isinstance(prop_value, list):
-                                prop_value = {"items": prop_value}
-                        default_item_properties[
-                            internal_item_key_for_agent
-                        ] = prop_value
-
-                if default_item_properties:
-                    # Use the original LLM category key as the default item name
-                    default_item_name = json_top_level_cat_key
-                    if default_item_name in processed_items_for_category:
-                        # If a real item has the same name as the category, merge default properties into it
-                        # Default properties take precedence
-                        logger.info(
-                            f"Merging default properties into existing item '{default_item_name}' for category '{internal_cat_name}'."
-                        )
-                        processed_items_for_category[default_item_name].update(
-                            default_item_properties
-                        )
-                    else:
-                        processed_items_for_category[default_item_name] = (
-                            default_item_properties
-                        )
-
-                # Update agent state for the current category
-                # Clear existing items managed by LLM for this category before adding new ones
-                # This part needs careful handling if user-supplied data and LLM data are mixed at item level
-                # For now, assuming LLM is authoritative for categories it processes in this block
-
-                # Preserve user-added items if any, only clear/update LLM-sourced items.
-                # However, the current task implies replacing the old loop, which suggests a full overwrite for LLM-processed categories.
-                # Let's proceed with clearing the category in agent state before repopulating from processed_items_for_category
-
-                # Ensure the category exists
-                agent.world_building.setdefault(internal_cat_name, {})
-
-                # Option 1: Full clear - simpler, assumes LLM provides complete picture for this category now
-                # agent.world_building[internal_cat_name].clear() # Clears all items, user-added or LLM
-
-                # Option 2: Selective update/clear (More complex: requires tracking item sources)
-                # For now, sticking to a simpler model: if LLM processes a category, it owns its content.
-                # User data should be merged *before* LLM if fill-ins are present.
-                # The current logic path is for when `needs_llm_for_world` is true.
-
-                # Re-initialize the category in agent state to ensure clean slate for LLM content
-                target_category_in_agent = agent.world_building[
-                    internal_cat_name
-                ] = {}
-
-                for (
-                    item_name,
-                    item_details_dict,
-                ) in processed_items_for_category.items():
-                    # Ensure item_name is a string, as it's used as a dict key
-                    item_name_str = str(item_name)
-                    agent_item_details_target = (
-                        target_category_in_agent.setdefault(
-                            item_name_str,
-                            {"source": "llm_generated_json_style"},
-                        )
-                    )
-
-                    # Merge the processed details.
-                    # The item_details_dict already has values wrapped (text/items) and keys normalized where appropriate.
-                    # We need to handle the [Fill-in] logic and list vs string for WORLD_DETAIL_LIST_INTERNAL_KEYS
-                    # similar to how it's done for _overview_ or the previous item loop.
-
-                    for detail_key, detail_value in item_details_dict.items():
-                        # detail_key is already the internal_item_detail_key_target
-                        existing_agent_val = agent_item_details_target.get(
-                            detail_key
-                        )
-
-                        # Apply if existing is fill-in, or if it's None (new key for this item)
-                        if (
-                            utils._is_fill_in(existing_agent_val)
-                            or existing_agent_val is None
-                        ):
-                            if (
-                                detail_value is not None
-                                and not utils._is_fill_in(detail_value)
-                            ):  # LLM provided actual content
-                                if (
-                                    detail_key
-                                    in WORLD_DETAIL_LIST_INTERNAL_KEYS
-                                ):
-                                    # Value from LLM (detail_value) might be {"items": ["a", "b"]} or a direct list if wrapping wasn't applied
-                                    # or it was already a list key.
-                                    actual_list_items = []
-                                    if (
-                                        isinstance(detail_value, dict)
-                                        and "items" in detail_value
-                                        and isinstance(
-                                            detail_value["items"], list
-                                        )
-                                    ):
-                                        actual_list_items = detail_value[
-                                            "items"
-                                        ]
-                                    elif isinstance(
-                                        detail_value, list
-                                    ):  # LLM directly provided a list for a list key
-                                        actual_list_items = detail_value
-                                    elif isinstance(
-                                        detail_value, str
-                                    ):  # LLM provided a string for a list key
-                                        logger.warning(
-                                            f"LLM returned string for list key '{detail_key}' in item '{item_name_str}' for category '{internal_cat_name}'. Converting to list: '{detail_value}'"
-                                        )
-                                        actual_list_items = [detail_value]
-                                    else:
-                                        logger.warning(
-                                            f"LLM returned incompatible type for list key '{detail_key}' in item '{item_name_str}' for '{internal_cat_name}': {type(detail_value)}. Setting to fill-in."
-                                        )
-                                        actual_list_items = [
-                                            config.MARKDOWN_FILL_IN_PLACEHOLDER
-                                        ]
-
-                                    processed_list = [
-                                        str(li)
-                                        for li in actual_list_items
-                                        if isinstance(
-                                            li, (str, int, float, bool)
-                                        )
-                                        and not utils._is_fill_in(str(li))
-                                    ]
-                                    if processed_list:
-                                        agent_item_details_target[
-                                            detail_key
-                                        ] = processed_list
-                                    # If existing was fill-in and LLM provided empty/bad list, ensure it remains a fill-in list
-                                    elif (
-                                        utils._is_fill_in(existing_agent_val)
-                                        or existing_agent_val is None
-                                    ):
-                                        agent_item_details_target[
-                                            detail_key
-                                        ] = [
-                                            config.MARKDOWN_FILL_IN_PLACEHOLDER
-                                        ]
-                                else:  # Not a list key
-                                    # Value from LLM (detail_value) might be {"text": "..."} or a direct string
-                                    if (
-                                        isinstance(detail_value, dict)
-                                        and "text" in detail_value
-                                    ):
-                                        agent_item_details_target[
-                                            detail_key
-                                        ] = str(detail_value["text"])
-                                    else:  # Assume it's a direct string or can be converted
-                                        agent_item_details_target[
-                                            detail_key
-                                        ] = str(detail_value)
-                            # If LLM detail_value is None or fill-in, and agent had fill-in/None, ensure it's properly set to fill-in
-                            elif detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
-                                agent_item_details_target[detail_key] = [
-                                    config.MARKDOWN_FILL_IN_PLACEHOLDER
-                                ]
+                for item_name, item_details in json_cat_content.items():
+                    if not isinstance(item_details, dict):
+                        logger.warning(f"Item '{item_name}' in category '{json_top_level_cat_key}' is not a dictionary. Skipping.")
+                        continue
+                    
+                    agent_item_details = target_category_in_agent.setdefault(item_name, {"source": "llm_generated_json_style"})
+                    
+                    for detail_key, detail_val in item_details.items():
+                        internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(detail_key, detail_key)
+                        
+                        if internal_detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
+                            if isinstance(detail_val, list):
+                                agent_item_details[internal_detail_key] = [str(v) for v in detail_val if not utils._is_fill_in(str(v))]
                             else:
-                                agent_item_details_target[detail_key] = (
-                                    config.MARKDOWN_FILL_IN_PLACEHOLDER
-                                )
-                        # If agent already had concrete data, LLM doesn't overwrite unless that logic changes.
-                        # This part is primarily for filling in missing/default data.
+                                logger.warning(f"LLM provided non-list for list key '{detail_key}' in '{item_name}'. Value: {detail_val}")
+                                agent_item_details[internal_detail_key] = [str(detail_val)] if detail_val is not None else []
+                        else:
+                            agent_item_details[internal_detail_key] = str(detail_val)
+
 
         agent.world_building.pop("is_default", None)
         agent.world_building.pop("user_supplied_data", None)
         logger.info(
             "Successfully processed LLM-generated JSON world-building into agent state."
-        )  # Updated log
+        )
     else:
-        # This 'else' corresponds to 'if parsed_llm_json_response and isinstance(parsed_llm_json_response, dict):'
-        # It means either json.loads failed (parsed_llm_json_response is None) or the root was not a dict.
         logger.error(
             "Failed to parse world-building JSON; using existing or default data."
-        )  # Updated log
+        )
         if not agent.world_building.get("_overview_") or utils._is_fill_in(
             agent.world_building.get("_overview_", {}).get("description")
         ):
@@ -1901,21 +1586,15 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
             agent.world_building.setdefault("_overview_", {})[
                 "description"
             ] = default_wb_overview_desc
-            # Only set to default_fallback if it wasn't originally user-supplied and now failing back
             if agent.world_building.get("source") != "user_supplied_yaml":
                 agent.world_building["source"] = "default_fallback"
-            # is_default should only be set if we are truly falling back from an LLM attempt on non-user data
             if (
                 agent.world_building.get("source") == "default_fallback"
-            ):  # Check again, as it might have been set above
+            ):
                 agent.world_building["is_default"] = True
 
-    # Final check to ensure all expected categories exist, even if empty.
-    # This should run regardless of LLM success if an LLM call was attempted.
-    # If it was user_supplied_yaml and LLM was skipped, this part is also skipped.
-    if llm_was_called:  # Only do this if an LLM call was actually made
+    if llm_was_called:
         current_source = agent.world_building.get("source", "")
-        # Don't create empty categories if data is purely from user_supplied_yaml and LLM was not needed to fill gaps
         if not (
             current_source == "user_supplied_yaml" and not needs_llm_for_world
         ):
