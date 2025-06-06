@@ -586,8 +586,14 @@ async def generate_plot_outline_logic(
         agent.plot_outline = {}
 
     # Ensure agent.plot_outline is a dict before checking keys
-    if not isinstance(agent.plot_outline, dict):
+    if not isinstance(agent.plot_outline, dict): # This is line 491 in original
         agent.plot_outline = {}
+
+    logger.info(f"NANA_INIT_SETUP: State of agent.plot_outline before base_elements_for_outline construction: "
+                f"Genre='{agent.plot_outline.get('genre')}', "
+                f"Theme='{agent.plot_outline.get('theme')}', "
+                f"Setting='{agent.plot_outline.get('setting_description')}', "
+                f"Protagonist='{agent.plot_outline.get('protagonist_name')}'")
 
     critical_plot_fields_for_llm_check = [
         "title",
@@ -768,6 +774,21 @@ async def generate_plot_outline_logic(
                 f"  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
             )
 
+            prompt_core_elements_intro = (
+                "Generate a novel concept based on (or incorporating):\n"
+                f"  - Genre: {base_elements_for_outline['genre']}\n"
+                f"  - Theme: {base_elements_for_outline['theme']}\n"
+                f"  - Initial Setting Idea: {base_elements_for_outline['setting_description']}\n"
+                f"  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
+            )
+
+        logger.info(f"NANA_INIT_SETUP: Base elements determined for LLM prompt: "
+                    f"Genre='{base_elements_for_outline.get('genre')}', "
+                    f"Theme='{base_elements_for_outline.get('theme')}', "
+                    f"Setting='{base_elements_for_outline.get('setting_description')}', "
+                    f"Protagonist='{base_elements_for_outline.get('protagonist_name')}', "
+                    f"SourceHint='{base_elements_for_outline.get('source_hint')}'")
+        logger.info(f"NANA_INIT_SETUP: Constructed prompt_core_elements_intro for LLM: {prompt_core_elements_intro}")
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
@@ -871,6 +892,17 @@ async def generate_plot_outline_logic(
             )
             parsed_llm_response = None
 
+        # This is inside the if parsed_llm_response: block
+        # And after it's confirmed to be a dict (or handled if not)
+        if parsed_llm_response: # Check if parsed_llm_response is not None
+            if isinstance(parsed_llm_response, dict):
+                logger.info(f"NANA_INIT_SETUP: LLM parsed response for critical fields: "
+                            f"Genre='{parsed_llm_response.get('genre')}', "
+                            f"Theme='{parsed_llm_response.get('theme')}', "
+                            f"Setting='{parsed_llm_response.get('setting_description')}'")
+            else:
+                # This case might be if json.loads succeeded but returned not a dict, or if parsed_llm_response was None initially
+                logger.info(f"NANA_INIT_SETUP: LLM parsed_llm_response was not a dictionary after JSON parsing. Value: {parsed_llm_response}")
 
         if not isinstance(agent.plot_outline, dict):
             agent.plot_outline = {}  # Ensure it's a dict
@@ -946,6 +978,11 @@ async def generate_plot_outline_logic(
                         agent.plot_outline[be_key] = (
                             base_elements_for_outline.get(be_key)
                         )
+
+            logger.info(f"NANA_INIT_SETUP: Final agent.plot_outline after LLM processing and default application for critical fields: "
+                        f"Genre='{agent.plot_outline.get('genre')}', "
+                        f"Theme='{agent.plot_outline.get('theme')}', "
+                        f"Setting='{agent.plot_outline.get('setting_description')}'")
 
             agent.plot_outline.pop("is_default", None)
             if (
