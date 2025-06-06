@@ -8,14 +8,20 @@ MODIFIED: To use Neo4j vector similarity search for semantic context.
 
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any
 
 import config
-from llm_interface import llm_service, count_tokens, truncate_text_by_tokens  # MODIFIED
+from llm_interface import (
+    llm_service,
+    count_tokens,
+    truncate_text_by_tokens,
+)  # MODIFIED
 
 # import utils # numpy_cosine_similarity no longer needed here
 # from state_manager import state_manager # No longer directly used
-from data_access import chapter_queries  # For chapter data and similarity search
+from data_access import (
+    chapter_queries,
+)  # For chapter data and similarity search
 from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt
 from type import SceneDetail
 
@@ -23,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_nested_prop_from_agent_or_props(
-    agent_or_props: Any, primary_key: str, secondary_key: str, default: Any = None
+    agent_or_props: Any,
+    primary_key: str,
+    secondary_key: str,
+    default: Any = None,
 ) -> Any:
     """Helper to get a nested property from an agent-like object or a dictionary."""
     primary_data = (
@@ -60,7 +69,11 @@ async def _generate_semantic_chapter_context_logic(
         plot_points = plot_outline_data.get("plot_points", [])
 
     plot_point_focus = None
-    if plot_points and isinstance(plot_points, list) and current_chapter_number > 0:
+    if (
+        plot_points
+        and isinstance(plot_points, list)
+        and current_chapter_number > 0
+    ):
         idx = current_chapter_number - 1
         if 0 <= idx < len(plot_points):
             plot_point_focus = (
@@ -93,7 +106,9 @@ async def _generate_semantic_chapter_context_logic(
             f"No specific plot point found for ch {current_chapter_number}. Using generic semantic context query."
         )
 
-    query_embedding_np = await llm_service.async_get_embedding(context_query_text)
+    query_embedding_np = await llm_service.async_get_embedding(
+        context_query_text
+    )
     max_semantic_tokens = (config.MAX_CONTEXT_TOKENS * 2) // 3
 
     if query_embedding_np is None:
@@ -125,15 +140,16 @@ async def _generate_semantic_chapter_context_logic(
                     else "Text Snippet"
                 )
                 if content:
-                    prefix = (
-                        f"[Fallback Semantic Context from Chapter {i} ({ctype})]:\n"
-                    )
+                    prefix = f"[Fallback Semantic Context from Chapter {i} ({ctype})]:\n"
                     suffix = "\n---\n"
                     full_content_part = f"{prefix}{content}{suffix}"
                     part_tokens = count_tokens(
                         full_content_part, config.DRAFTING_MODEL
                     )  # MODIFIED
-                    if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
+                    if (
+                        total_tokens_accumulated + part_tokens
+                        <= max_semantic_tokens
+                    ):
                         context_parts_list.append(full_content_part)
                         total_tokens_accumulated += part_tokens
                     else:
@@ -142,7 +158,10 @@ async def _generate_semantic_chapter_context_logic(
                         )
                         if (
                             remaining_tokens
-                            > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10
+                            > count_tokens(
+                                prefix + suffix, config.DRAFTING_MODEL
+                            )
+                            + 10
                         ):  # MODIFIED
                             truncated_content_part = (
                                 truncate_text_by_tokens(  # MODIFIED
@@ -154,7 +173,9 @@ async def _generate_semantic_chapter_context_logic(
                             context_parts_list.append(truncated_content_part)
                             total_tokens_accumulated += remaining_tokens
                         break
-        final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
+        final_semantic_context = "\n".join(
+            reversed(context_parts_list)
+        ).strip()
         final_tokens_count = count_tokens(
             final_semantic_context, config.DRAFTING_MODEL
         )  # MODIFIED
@@ -164,7 +185,9 @@ async def _generate_semantic_chapter_context_logic(
         return final_semantic_context
 
     similar_chapters_data = await chapter_queries.find_similar_chapters_in_db(
-        query_embedding_np, config.CONTEXT_CHAPTER_COUNT, current_chapter_number
+        query_embedding_np,
+        config.CONTEXT_CHAPTER_COUNT,
+        current_chapter_number,
     )
 
     if not similar_chapters_data:
@@ -180,11 +203,14 @@ async def _generate_semantic_chapter_context_logic(
             for ch_data in similar_chapters_data
         )
         if not is_immediate_prev_present:
-            immediate_prev_data = await chapter_queries.get_chapter_data_from_db(
-                immediate_prev_chap_num
+            immediate_prev_data = (
+                await chapter_queries.get_chapter_data_from_db(
+                    immediate_prev_chap_num
+                )
             )
             if immediate_prev_data and (
-                immediate_prev_data.get("summary") or immediate_prev_data.get("text")
+                immediate_prev_data.get("summary")
+                or immediate_prev_data.get("text")
             ):
                 similar_chapters_data.append(
                     {
@@ -215,7 +241,9 @@ async def _generate_semantic_chapter_context_logic(
             break
 
         chap_num = chap_data["chapter_number"]
-        content = (chap_data.get("summary") or chap_data.get("text", "")).strip()
+        content = (
+            chap_data.get("summary") or chap_data.get("text", "")
+        ).strip()
         is_prov = chap_data.get("is_provisional", False)
         score = chap_data.get("score", "N/A")
         score_str = f"{score:.3f}" if isinstance(score, float) else str(score)
@@ -242,13 +270,19 @@ async def _generate_semantic_chapter_context_logic(
                 context_parts_list.append(full_content_part)
                 total_tokens_accumulated += part_tokens
             else:
-                remaining_tokens = max_semantic_tokens - total_tokens_accumulated
+                remaining_tokens = (
+                    max_semantic_tokens - total_tokens_accumulated
+                )
                 if (
                     remaining_tokens
                     > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10
                 ):  # MODIFIED
-                    truncated_content_part = truncate_text_by_tokens(  # MODIFIED
-                        full_content_part, config.DRAFTING_MODEL, remaining_tokens
+                    truncated_content_part = (
+                        truncate_text_by_tokens(  # MODIFIED
+                            full_content_part,
+                            config.DRAFTING_MODEL,
+                            remaining_tokens,
+                        )
                     )
                     context_parts_list.append(truncated_content_part)
                     total_tokens_accumulated += remaining_tokens
@@ -283,7 +317,9 @@ async def generate_hybrid_chapter_context_logic(
     """
     if current_chapter_number <= 0:
         return ""
-    logger.info(f"Generating HYBRID context for Chapter {current_chapter_number}...")
+    logger.info(
+        f"Generating HYBRID context for Chapter {current_chapter_number}..."
+    )
 
     semantic_context_task = _generate_semantic_chapter_context_logic(
         agent_or_props, current_chapter_number
@@ -306,7 +342,9 @@ async def generate_hybrid_chapter_context_logic(
         hybrid_context_parts.append(
             "--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---"
         )
-        hybrid_context_parts.append("No relevant semantic context could be retrieved.")
+        hybrid_context_parts.append(
+            "No relevant semantic context could be retrieved."
+        )
         hybrid_context_parts.append("--- END SEMANTIC CONTEXT ---")
     if kg_facts_str and kg_facts_str.strip():
         hybrid_context_parts.append(
