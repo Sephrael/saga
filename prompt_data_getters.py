@@ -797,17 +797,17 @@ async def get_reliable_kg_facts_for_drafting_prompt(
 
     novel_context_queries_params = [
         (
-            f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.theme AS value, 'The novel\\'s theme' AS description",
+            "MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.theme AS value, 'The novel\\'s theme' AS description",
             {"novel_id_param": novel_id},
             "theme",
         ),
         (
-            f"MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.conflict_summary AS value, 'The main conflict' AS description",
+            "MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.conflict_summary AS value, 'The main conflict' AS description",
             {"novel_id_param": novel_id},
             "conflict_summary",
         ),
     ]
-    for query, params, desc_key in novel_context_queries_params:
+    for _, _, desc_key in novel_context_queries_params:  # query and params marked as unused
         if len(facts_for_prompt_list) >= max_total_facts:
             break
         try:

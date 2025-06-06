@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple, Union
 import numpy as np
 
-from neo4j import AsyncGraphDatabase, AsyncSession, AsyncManagedTransaction, AsyncDriver  # type: ignore
+from neo4j import AsyncGraphDatabase, AsyncManagedTransaction, AsyncDriver  # type: ignore
 from neo4j.exceptions import ServiceUnavailable, Neo4jError  # type: ignore
 
 import config

@@ -238,19 +238,12 @@ class ComprehensiveEvaluatorAgent:
                 "legacy_narrative_depth_issues": "Skipped (empty draft)",
             }, None
 
-        plot_point_focus_str = (
-            plot_point_focus
-            if plot_point_focus is not None
-            else "Not available for this chapter."
-        )
-        if plot_point_focus is None:
+        if plot_point_focus is None:  # plot_point_focus_str removed
             logger.warning(
                 f"Plot point focus not available for Ch {chapter_number} during comprehensive evaluation."
             )
 
-        novel_theme_str = novel_props.get("theme", "Not specified")
-        novel_genre_str = novel_props.get("genre", "Not specified")
-        protagonist_arc_str = novel_props.get("character_arc", "Not specified")
+        # novel_theme_str, novel_genre_str, protagonist_arc_str removed
         protagonist_name_str = novel_props.get("protagonist_name", "The Protagonist")
 
         char_profiles_plain_text = (
