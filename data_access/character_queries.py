@@ -1,12 +1,14 @@
 # data_access/character_queries.py
 import logging
-from typing import Dict, Any, List, Tuple, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import config
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (
-    KG_NODE_CHAPTER_UPDATED,
     KG_IS_PROVISIONAL,
+    KG_NODE_CHAPTER_UPDATED,
 )
+from kg_maintainer.models import CharacterProfile
 
 logger = logging.getLogger(__name__)
 
@@ -279,9 +281,9 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
         return False
 
 
-async def get_character_profiles_from_db() -> Dict[str, Any]:
+async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
     logger.info("Loading decomposed character profiles from Neo4j...")
-    profiles_data: Dict[str, Any] = {}
+    profiles_data: Dict[str, CharacterProfile] = {}
 
     char_query = "MATCH (c:Character:Entity) RETURN c"
     char_results = await neo4j_manager.execute_read_query(char_query)
@@ -346,11 +348,11 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
                     relationships[target_name] = rel_props_cleaned
         profile["relationships"] = relationships
 
-        dev_query = f"""
-        MATCH (:Character:Entity {{name: $char_name}})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
-        RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id
-        ORDER BY dev.chapter_updated ASC
-        """
+        dev_query = (
+            "MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)\n"
+            f"RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id\n"
+            "ORDER BY dev.chapter_updated ASC"
+        )
         dev_results = await neo4j_manager.execute_read_query(
             dev_query, {"char_name": char_name}
         )
@@ -366,7 +368,7 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
                             "provisional_from_unrevised_draft"
                         )
 
-        profiles_data[char_name] = profile
+        profiles_data[char_name] = CharacterProfile.from_dict(char_name, profile)
 
     logger.info(
         f"Successfully loaded and recomposed {len(profiles_data)} character profiles from Neo4j."
@@ -377,8 +379,8 @@ async def get_character_profiles_from_db() -> Dict[str, Any]:
 async def get_character_info_for_snippet_from_db(
     char_name: str, chapter_limit: int
 ) -> Optional[Dict[str, Any]]:
-    query = f"""
-    MATCH (c:Character:Entity {{name: $char_name_param}})
+    query = """
+    MATCH (c:Character:Entity {name: $char_name_param})
     
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent:Entity)
     WHERE dev_np.chapter_updated <= $chapter_limit_param AND (dev_np.is_provisional IS NULL OR dev_np.is_provisional = FALSE)

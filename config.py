@@ -1,4 +1,3 @@
-      
 # config.py
 """
 Configuration settings for the Saga Novel Generation system.
@@ -20,7 +19,6 @@ limitations under the License.
 Copyright 2025 Dennis Lewis
 """
 
-import asyncio
 import json
 import logging as stdlib_logging  # For configuring structlog's underlying logger
 import os
@@ -198,9 +196,7 @@ PRESENCE_PENALTY_CONSISTENCY_CHECK: float = float(
 # --- Output and File Paths ---
 BASE_OUTPUT_DIR: str = "novel_output"
 PLOT_OUTLINE_FILE: str = os.path.join(BASE_OUTPUT_DIR, "plot_outline.json")
-CHARACTER_PROFILES_FILE: str = os.path.join(
-    BASE_OUTPUT_DIR, "character_profiles.json"
-)
+CHARACTER_PROFILES_FILE: str = os.path.join(BASE_OUTPUT_DIR, "character_profiles.json")
 WORLD_BUILDER_FILE: str = os.path.join(BASE_OUTPUT_DIR, "world_building.json")
 CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
@@ -338,12 +334,12 @@ formatter = structlog.stdlib.ProcessorFormatter(
     # These processors are applied to all log records.
     processors=[
         # This is the last processor in the chain, rendering the log record.
-        structlog.dev.ConsoleRenderer() # Or structlog.processors.JSONRenderer()
-    ]
+        structlog.dev.ConsoleRenderer()  # Or structlog.processors.JSONRenderer()
+    ],
 )
 
 
-handler = stdlib_logging.StreamHandler() # Default to console
+handler = stdlib_logging.StreamHandler()  # Default to console
 if LOG_FILE:
     handler = stdlib_logging.FileHandler(LOG_FILE)
 handler.setFormatter(formatter)
@@ -405,9 +401,9 @@ async def load_unhinged_data_async():
 
     if not UNHINGED_GENRES or UNHINGED_GENRES == _DEFAULT_GENRE_LIST:
         logger.warning(
-            "UNHINGED_GENRES might be using default values. "
-            "Check unhinged_genres.json."
+            "UNHINGED_GENRES might be using default values. Check unhinged_genres.json."
         )
+
 
 # Example of how to run the async loading (e.g., in your main app setup):
 # if __name__ == "__main__":
@@ -420,12 +416,8 @@ TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"
 FALLBACK_CHARS_PER_TOKEN: float = 4.0
 
 # --- Rich Progress Display Configuration ---
-ENABLE_RICH_PROGRESS: bool = (
-    os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
-)
+ENABLE_RICH_PROGRESS: bool = os.getenv("ENABLE_RICH_PROGRESS", "True").lower() == "true"
 RICH_REFRESH_PER_SECOND: float = 4.0
 
 # --- Markdown Story Parser Configuration ---
 MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
-
-    

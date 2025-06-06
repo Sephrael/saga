@@ -1,7 +1,6 @@
 # kg_maintainer/models.py
-import re  # For normalization in ID generation
 from dataclasses import dataclass, field
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 import utils
 from kg_constants import (
@@ -57,9 +56,7 @@ class WorldItem:
     properties: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(
-        cls, category: str, name: str, data: Dict[str, Any]
-    ) -> "WorldItem":
+    def from_dict(cls, category: str, name: str, data: Dict[str, Any]) -> "WorldItem":
         """
         Creates a WorldItem.
         'category' and 'name' are the intended display/canonical values.
@@ -67,11 +64,7 @@ class WorldItem:
         versions of these.
         Any 'id' in the 'data' dict is ignored.
         """
-        if (
-            not category
-            or not isinstance(category, str)
-            or not category.strip()
-        ):
+        if not category or not isinstance(category, str) or not category.strip():
             raise ValueError("WorldItem category must be a non-empty string.")
         if not name or not isinstance(name, str) or not name.strip():
             raise ValueError(
