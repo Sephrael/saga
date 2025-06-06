@@ -17,14 +17,20 @@ def test_merge_world_item_updates():
     current = {
         "Places": {
             "City": WorldItem(
-                "Places_City", "Places", "City", properties={"description": "Old"}
+                "Places_City",
+                "Places",
+                "City",
+                properties={"description": "Old"},
             )
         }
     }
     updates = {
         "Places": {
             "City": WorldItem(
-                "Places_City", "Places", "City", properties={"description": "New"}
+                "Places_City",
+                "Places",
+                "City",
+                properties={"description": "New"},
             )
         }
     }

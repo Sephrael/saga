@@ -1,9 +1,11 @@
-import json  # For creating JSON strings if needed, though direct strings are fine
 from kg_maintainer.parsing import (  # Assuming parsing is now a module inside kg_maintainer
     parse_unified_character_updates,
     parse_unified_world_updates,
 )
-from kg_maintainer.models import CharacterProfile, WorldItem  # Added WorldItem import
+from kg_maintainer.models import (
+    CharacterProfile,
+    WorldItem,
+)  # Added WorldItem import
 
 # Example of a helper to create JSON strings for tests if they get complex
 # def make_json_string(data_dict):
@@ -55,7 +57,9 @@ def test_parse_character_updates_simple_json():
 def test_parse_character_updates_empty_or_invalid_json():
     assert parse_unified_character_updates("", 1) == {}
     assert parse_unified_character_updates("{}", 1) == {}
-    assert parse_unified_character_updates("[]", 1) == {}  # Not a dict of characters
+    assert (
+        parse_unified_character_updates("[]", 1) == {}
+    )  # Not a dict of characters
     assert parse_unified_character_updates("invalid json", 1) == {}
     # Test with a valid JSON but not the expected structure (e.g. list at root)
     assert parse_unified_character_updates('[{"name": "Alice"}]', 1) == {}
@@ -124,7 +128,9 @@ def test_parse_world_updates_simple_json():
 
     assert "Overview" in result
     overview_cat = result["Overview"]
-    assert "_overview_" in overview_cat  # Overview item is stored with key "_overview_"
+    assert (
+        "_overview_" in overview_cat
+    )  # Overview item is stored with key "_overview_"
     overview_item = overview_cat["_overview_"]
     assert isinstance(overview_item, WorldItem)
     assert overview_item.category == "Overview"  # Category name from JSON
@@ -140,10 +146,15 @@ def test_parse_world_updates_simple_json():
 def test_parse_world_updates_empty_or_invalid_json():
     assert parse_unified_world_updates("", 1) == {}
     assert parse_unified_world_updates("{}", 1) == {}
-    assert parse_unified_world_updates("[]", 1) == {}  # Not a dict of categories
+    assert (
+        parse_unified_world_updates("[]", 1) == {}
+    )  # Not a dict of categories
     assert parse_unified_world_updates("invalid json", 1) == {}
     # Test with valid JSON but not expected structure (e.g. category content is not a dict of items)
-    assert parse_unified_world_updates('{"Locations": ["City1", "City2"]}', 1) == {}
+    assert (
+        parse_unified_world_updates('{"Locations": ["City1", "City2"]}', 1)
+        == {}
+    )
 
 
 # It might be good to add more tests:

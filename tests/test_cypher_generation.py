@@ -15,7 +15,10 @@ def test_generate_character_node_cypher():
 
 def test_generate_world_element_node_cypher():
     item = WorldItem(
-        "places_city", "Places", "City", properties={"description": "Metropolis"}
+        "places_city",
+        "Places",
+        "City",
+        properties={"description": "Metropolis"},
     )
     stmts = generate_world_element_node_cypher(item)
     assert any("MERGE (we:Entity" in s[0] for s in stmts)
