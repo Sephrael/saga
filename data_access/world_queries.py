@@ -1,6 +1,6 @@
 # data_access/world_queries.py
 import logging
-from typing import Dict, Any, List, Tuple, Optional, Set
+from typing import Dict, Any, List, Tuple, Set
 import config
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (

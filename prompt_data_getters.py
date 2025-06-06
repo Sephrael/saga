@@ -10,7 +10,7 @@ import logging
 import re
 import asyncio
 import copy
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Any
 
 import config
 import utils  # For _is_fill_in

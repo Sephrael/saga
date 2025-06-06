@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 class ParseError(Exception):
     """Custom exception for parsing errors."""
 
-    pass
 
 
 # DEFAULT_BLOCK_SEPARATOR_REGEX and split_text_into_blocks removed as they are no longer used.
