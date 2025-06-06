@@ -72,13 +72,20 @@ def parse_rdf_triples_with_rdflib(
             continue
 
         parts = [p.strip() for p in line.split("|")]
-        if len(parts) != 3:
+        if len(parts) < 3:
             logger_func.warning(
-                f"Line {line_num + 1}: Malformed triple (expected 3 parts separated by '|'): '{line}'"
+                f"Line {line_num + 1}: Malformed triple (expected at least 3 parts separated by '|'): '{line}'"
             )
             continue
 
-        subject_text, predicate_text, object_text = parts
+        subject_text = parts[0]
+        predicate_text = parts[1]
+        object_text = parts[2]
+
+        if len(parts) > 3:
+            logger_func.debug(
+                f"Line {line_num + 1}: Triple had extra parts which are being ignored: '{' | '.join(parts[3:])}' from original line '{line}'"
+            )
 
         subject_details = _get_entity_type_and_name_from_text(subject_text)
         predicate_str = (

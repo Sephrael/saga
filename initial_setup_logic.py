@@ -515,80 +515,86 @@ def _populate_agent_state_from_user_data(
     plot_outline["is_default"] = False
     agent.plot_outline = plot_outline
 
-    prot_name_val = plot_outline["protagonist_name"]
-    if not utils._is_fill_in(prot_name_val):
-        character_profiles.setdefault(prot_name_val, {})
-        character_profiles[prot_name_val].update(
-            {
-                "description": plot_outline["protagonist_description"],
-                "traits": [
-                    t
-                    for t in prot_data.get("traits", [])
-                    if isinstance(t, str)
-                    and (t.strip() or utils._is_fill_in(t))
-                ],  # Assumes 'traits' is list
-                "status": _get_val_or_fill_in(prot_data, "initial_status")
-                or "As described",
-                "character_arc_summary": plot_outline["character_arc"],
-                "role": "protagonist",
-                "source": "user_supplied_yaml",  # Updated source
-                "relationships": prot_data.get(
-                    "relationships", {}
-                ),  # Assumes 'relationships' is dict
-            }
-        )
+    # Ensure character_profiles is a dictionary of CharacterProfile instances
+    if not isinstance(character_profiles, dict): # Should have been initialized earlier, but as a safeguard
+        character_profiles = {}
 
-    ant_name_val = plot_outline["antagonist_name"]
-    if (
-        not utils._is_fill_in(ant_name_val) and ant_data
-    ):  # ant_data is from user_data.get("antagonist", {})
-        character_profiles.setdefault(ant_name_val, {})
-        character_profiles[ant_name_val].update(
-            {
-                "description": plot_outline["antagonist_description"],
-                "traits": [
-                    t
-                    for t in ant_data.get("traits", [])
-                    if isinstance(t, str)
-                    and (t.strip() or utils._is_fill_in(t))
-                ],
-                "status": "As described",
-                "motivations": plot_outline["antagonist_motivations"],
-                "role": "antagonist",
-                "source": "user_supplied_yaml",  # Updated source
-                "relationships": ant_data.get("relationships", {}),
-            }
-        )
+    prot_name_val = plot_outline.get("protagonist_name")
+    if not utils._is_fill_in(prot_name_val) and prot_name_val: # Ensure prot_name_val is not empty
+        if prot_name_val not in character_profiles or not isinstance(character_profiles[prot_name_val], CharacterProfile):
+            profile = CharacterProfile(name=prot_name_val)
+            character_profiles[prot_name_val] = profile
+        else:
+            profile = character_profiles[prot_name_val]
 
-    other_chars_data = user_data.get(
-        "other_key_characters", {}
-    )  # This should be a dict of char_name: details
+        profile.description = plot_outline.get("protagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.traits = [
+            t for t in prot_data.get("traits", [])
+            if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+        ]
+        profile.status = _get_val_or_fill_in(prot_data, "initial_status") or "As described"
+        profile.relationships = prot_data.get("relationships", {}) # Direct attribute
+
+        profile.updates["character_arc_summary"] = plot_outline.get("character_arc", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.updates["role"] = "protagonist"
+        profile.updates["source"] = "user_supplied_yaml"
+
+    ant_name_val = plot_outline.get("antagonist_name")
+    if not utils._is_fill_in(ant_name_val) and ant_name_val and ant_data: # Ensure ant_name_val is not empty
+        if ant_name_val not in character_profiles or not isinstance(character_profiles[ant_name_val], CharacterProfile):
+            ant_profile = CharacterProfile(name=ant_name_val)
+            character_profiles[ant_name_val] = ant_profile
+        else:
+            ant_profile = character_profiles[ant_name_val]
+
+        ant_profile.description = plot_outline.get("antagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.traits = [
+            t for t in ant_data.get("traits", [])
+            if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
+        ]
+        ant_profile.status = "As described" # Direct attribute
+        ant_profile.relationships = ant_data.get("relationships", {}) # Direct attribute
+
+        ant_profile.updates["motivations"] = plot_outline.get("antagonist_motivations", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.updates["role"] = "antagonist"
+        ant_profile.updates["source"] = "user_supplied_yaml"
+
+
+    other_chars_data = user_data.get("other_key_characters", {})
     if isinstance(other_chars_data, dict):
-        for (
-            char_name_other_normalized_yaml,
-            char_detail_yaml,
-        ) in other_chars_data.items():
-            # char_name_other_normalized_yaml is already normalized by load_yaml_file
-            char_name_other_display = char_name_other_normalized_yaml.replace(
-                "_", " "
-            ).title()  # For display consistency if needed, but internal key is normalized
-            if not utils._is_fill_in(char_name_other_display) and isinstance(
-                char_detail_yaml, dict
-            ):
-                # Use normalized key for character_profiles dict directly
-                agent_char_details = character_profiles.setdefault(
-                    char_name_other_normalized_yaml,
-                    {"source": "user_supplied_yaml"},
-                )
-                for (
-                    yaml_detail_key,
-                    yaml_detail_val,
-                ) in (
-                    char_detail_yaml.items()
-                ):  # These keys are also normalized
-                    # Assuming char profile keys are mostly direct (already normalized)
-                    internal_detail_key = yaml_detail_key
-                    agent_char_details[internal_detail_key] = yaml_detail_val
+        for char_name_other_normalized_yaml, char_detail_yaml in other_chars_data.items():
+            char_name_key = char_name_other_normalized_yaml # This is already normalized key
+
+            if utils._is_fill_in(char_name_key) or not isinstance(char_detail_yaml, dict):
+                continue
+
+            if char_name_key not in character_profiles or not isinstance(character_profiles[char_name_key], CharacterProfile):
+                other_char_profile = CharacterProfile(name=char_name_key)
+                character_profiles[char_name_key] = other_char_profile
+            else:
+                other_char_profile = character_profiles[char_name_key]
+
+            # Set source first, can be overwritten by yaml_detail_key if 'source' is in there
+            other_char_profile.updates["source"] = "user_supplied_yaml"
+
+            for yaml_detail_key, yaml_detail_val in char_detail_yaml.items():
+                if yaml_detail_key == "name": # Name is set at construction, display_name could be an update field
+                    other_char_profile.updates["display_name"] = yaml_detail_val # Example if display name differs
+                elif yaml_detail_key == "description" and hasattr(other_char_profile, 'description'):
+                    other_char_profile.description = yaml_detail_val
+                elif yaml_detail_key == "traits" and hasattr(other_char_profile, 'traits'):
+                    other_char_profile.traits = [str(t).strip() for t in yaml_detail_val] if isinstance(yaml_detail_val, list) else [str(yaml_detail_val).strip()]
+                elif yaml_detail_key == "status" and hasattr(other_char_profile, 'status'):
+                    other_char_profile.status = yaml_detail_val
+                elif yaml_detail_key == "relationships" and hasattr(other_char_profile, 'relationships'):
+                    other_char_profile.relationships = yaml_detail_val if isinstance(yaml_detail_val, dict) else {}
+                else: # Fallback to updates dictionary for other fields like role, specific motivations, etc.
+                    other_char_profile.updates[yaml_detail_key] = yaml_detail_val
+
+            # Ensure 'role' is set, defaulting to 'other_key_character' if not provided
+            if "role" not in other_char_profile.updates and not hasattr(other_char_profile, "role"):
+                 other_char_profile.updates["role"] = "other_key_character"
+
 
     agent.character_profiles = character_profiles
     agent.world_building = (
