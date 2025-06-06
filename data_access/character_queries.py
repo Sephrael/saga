@@ -13,7 +13,7 @@ from kg_maintainer.models import CharacterProfile
 logger = logging.getLogger(__name__)
 
 
-async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
+async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bool:
     logger.info("Synchronizing character profiles to Neo4j (non-destructive)...")
 
     novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID

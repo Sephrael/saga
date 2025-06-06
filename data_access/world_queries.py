@@ -15,7 +15,7 @@ from kg_maintainer.models import WorldItem
 logger = logging.getLogger(__name__)
 
 
-async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
+async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
     logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
     novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID

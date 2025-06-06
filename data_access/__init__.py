@@ -4,12 +4,12 @@
 
 from .plot_queries import save_plot_outline_to_db, get_plot_outline_from_db
 from .character_queries import (
-    save_character_profiles_to_db,
+    sync_full_state_from_object_to_db as sync_characters_full_state_from_object_to_db,
     get_character_profiles_from_db,
     get_character_info_for_snippet_from_db,
 )
 from .world_queries import (
-    save_world_building_to_db,
+    sync_full_state_from_object_to_db as sync_world_full_state_from_object_to_db,
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
 )
@@ -29,10 +29,10 @@ from .kg_queries import (
 __all__ = [
     "save_plot_outline_to_db",
     "get_plot_outline_from_db",
-    "save_character_profiles_to_db",
+    "sync_characters_full_state_from_object_to_db",
     "get_character_profiles_from_db",
     "get_character_info_for_snippet_from_db",
-    "save_world_building_to_db",
+    "sync_world_full_state_from_object_to_db",
     "get_world_building_from_db",
     "get_world_elements_for_snippet_from_db",
     "load_chapter_count_from_db",
