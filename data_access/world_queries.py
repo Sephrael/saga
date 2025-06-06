@@ -2,6 +2,7 @@
 import logging
 from typing import Dict, Any, List, Tuple, Set
 import config
+import utils
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (
     KG_NODE_CREATED_CHAPTER,
@@ -89,12 +90,8 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
             else:  # Fallback to old generation for consistency if 'id' isn't in the dict from DB.
                 # WorldItem.from_dict ensures 'id' is always there for objects from parsing.
                 # For data from DB via get_world_building_from_db, 'id' is popped but needs to be reconstructed for this check.
-                from kg_maintainer.models import (
-                    _normalize_for_id,
-                )  # Local import to avoid circularity at top level
-
-                norm_cat = _normalize_for_id(category_str)
-                norm_name = _normalize_for_id(item_name_str)
+                norm_cat = utils._normalize_for_id(category_str)
+                norm_name = utils._normalize_for_id(item_name_str)
                 if not norm_cat:
                     norm_cat = "unknown_category"
                 if not norm_name:
@@ -152,10 +149,8 @@ async def save_world_building_to_db(world_data: Dict[str, Any]) -> bool:
             ):
                 we_id_str = details_dict.get("id")
             else:  # Fallback for safety or if 'id' was somehow removed before this point
-                from kg_maintainer.models import _normalize_for_id
-
-                norm_cat = _normalize_for_id(category_str)
-                norm_name = _normalize_for_id(item_name_str)
+                norm_cat = utils._normalize_for_id(category_str)
+                norm_name = utils._normalize_for_id(item_name_str)
                 if not norm_cat:
                     norm_cat = "unknown_category"
                 if not norm_name:

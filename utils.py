@@ -1,9 +1,6 @@
 # utils.py
 """
 General utility functions for the Saga Novel Generation system.
-MODIFIED: Enhanced find_quote_and_sentence_offsets_with_spacy for more robust quote matching.
-ADDED: deduplicate_text_segments for removing near-identical text.
-ADDED: _is_fill_in helper function.
 """
 
 import numpy as np
@@ -19,6 +16,21 @@ import spacy
 import config  # For MARKDOWN_FILL_IN_PLACEHOLDER
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_for_id(text: str) -> str:
+    """Normalize a string for use in an ID."""
+    """Lowercase, convert spaces to underscores, remove problematic chars."""
+    if not isinstance(text, str):  # Handle potential non-string input
+        text = str(text)
+    text = text.strip().lower()
+    text = re.sub(r"['\"()]", "", text)
+    # Remove apostrophes, quotes, parentheses
+    text = re.sub(r"\s+", "_", text)
+    # Replace whitespace with underscore
+    text = re.sub(r"[^a-z0-9_]", "", text)
+    # Keep only alphanumeric and underscore
+    return text
 
 
 class SpaCyModelManager:

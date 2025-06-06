@@ -3,25 +3,11 @@ import re  # For normalization in ID generation
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
+import utils
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CREATED_CHAPTER,
 )
-
-
-def _normalize_for_id(text: str) -> str:
-    """Normalize a string for use in an ID."""
-    """Lowercase, convert spaces to underscores, remove problematic chars."""
-    if not isinstance(text, str):  # Handle potential non-string input
-        text = str(text)
-    text = text.strip().lower()
-    text = re.sub(r"['\"()]", "", text)
-    # Remove apostrophes, quotes, parentheses
-    text = re.sub(r"\s+", "_", text)
-    # Replace whitespace with underscore
-    text = re.sub(r"[^a-z0-9_]", "", text)
-    # Keep only alphanumeric and underscore
-    return text
 
 
 @dataclass
@@ -96,8 +82,8 @@ class WorldItem:
         # Generate canonical ID from normalized category and name.
         # The 'name' and 'category' stored on the instance are the ones
         # passed as arguments.
-        normalized_id_category = _normalize_for_id(category)
-        normalized_id_name = _normalize_for_id(name)
+        normalized_id_category = utils._normalize_for_id(category)
+        normalized_id_name = utils._normalize_for_id(name)
 
         # Ensure no empty parts in ID after normalization
         if not normalized_id_category:
