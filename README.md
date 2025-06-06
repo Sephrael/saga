@@ -138,6 +138,7 @@ LARGE_MODEL="Qwen3-14B-Q4"    # Or your preferred large model
 MEDIUM_MODEL="Qwen3-8B-Q4"   # Or your preferred medium model
 SMALL_MODEL="Qwen3-4B-Q4"    # Or your preferred small model
 NARRATOR_MODEL="Qwen3-14B-Q4" # Model for drafting
+MAX_REVISION_CYCLES_PER_CHAPTER="2"  # Max revision loops per chapter
 
 # Other important settings in config.py (review defaults)
 # MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL, etc.

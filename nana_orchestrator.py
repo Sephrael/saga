@@ -683,19 +683,23 @@ class NANA_Orchestrator:
         is_from_flawed_source_for_kg = False
         de_duplication_occurred_this_chapter = False
 
-        max_revision_attempts = 1
-        for attempt in range(max_revision_attempts + 1):
+        revisions_made = 0
+        needs_revision = True
+        while (
+            needs_revision and revisions_made < config.MAX_REVISION_CYCLES_PER_CHAPTER
+        ):
+            attempt = revisions_made + 1
             if current_text_to_process is None:
                 logger.error(
-                    f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt + 1}. Aborting chapter."
+                    f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt}. Aborting chapter."
                 )
                 return None, None, True
 
             self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - De-duplication Attempt {attempt + 1}"
+                step=f"Ch {novel_chapter_number} - De-duplication Attempt {attempt}"
             )
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt + 1}"
+                f"NANA: Ch {novel_chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt}"
             )
             (
                 deduplicated_text,
@@ -707,24 +711,24 @@ class NANA_Orchestrator:
                 de_duplication_occurred_this_chapter = True
                 is_from_flawed_source_for_kg = True
                 logger.info(
-                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt + 1}) removed {removed_char_count} characters. Text marked as potentially flawed for KG."
+                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt}) removed {removed_char_count} characters. Text marked as potentially flawed for KG."
                 )
                 current_text_to_process = deduplicated_text
                 await self._save_debug_output(
                     novel_chapter_number,
-                    f"deduplicated_text_attempt_{attempt + 1}",
+                    f"deduplicated_text_attempt_{attempt}",
                     current_text_to_process,
                 )
             else:
                 logger.info(
-                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt + 1}) found no significant changes."
+                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt}) found no significant changes."
                 )
 
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt + 1}"
+                f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt}"
             )
             self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt + 1}"
+                step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt}"
             )
 
             (
@@ -739,18 +743,18 @@ class NANA_Orchestrator:
                 hybrid_context_for_draft,
             )
             self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt + 1}",
+                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt}",
                 eval_usage,
             )
             evaluation_result: EvaluationResult = eval_result_obj
             await self._save_debug_output(
                 novel_chapter_number,
-                f"evaluation_result_attempt_{attempt + 1}",
+                f"evaluation_result_attempt_{attempt}",
                 evaluation_result,
             )
 
             self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - Continuity Check {attempt + 1}"
+                step=f"Ch {novel_chapter_number} - Continuity Check {attempt}"
             )
             (
                 continuity_problems,
@@ -762,18 +766,18 @@ class NANA_Orchestrator:
                 hybrid_context_for_draft,
             )
             self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-ContinuityCheck-Attempt{attempt + 1}",
+                f"Ch{novel_chapter_number}-ContinuityCheck-Attempt{attempt}",
                 continuity_usage,
             )
             await self._save_debug_output(
                 novel_chapter_number,
-                f"continuity_problems_attempt_{attempt + 1}",
+                f"continuity_problems_attempt_{attempt}",
                 continuity_problems,
             )
 
             if continuity_problems:
                 logger.warning(
-                    f"NANA: Ch {novel_chapter_number} (Attempt {attempt + 1}) - World Continuity Agent found {len(continuity_problems)} issues."
+                    f"NANA: Ch {novel_chapter_number} (Attempt {attempt}) - World Continuity Agent found {len(continuity_problems)} issues."
                 )
                 evaluation_result["problems_found"].extend(continuity_problems)
                 if not evaluation_result["needs_revision"]:
@@ -784,9 +788,10 @@ class NANA_Orchestrator:
                 )
                 evaluation_result["reasons"] = sorted(list(unique_reasons))
 
-            if not evaluation_result["needs_revision"]:
+            needs_revision = evaluation_result["needs_revision"]
+            if not needs_revision:
                 logger.info(
-                    f"NANA: Ch {novel_chapter_number} draft passed evaluation (Attempt {attempt + 1}). Text is considered good."
+                    f"NANA: Ch {novel_chapter_number} draft passed evaluation (Attempt {attempt}). Text is considered good."
                 )
                 self._update_rich_display(
                     step=f"Ch {novel_chapter_number} - Passed Evaluation"
@@ -795,11 +800,11 @@ class NANA_Orchestrator:
             else:
                 is_from_flawed_source_for_kg = True
                 logger.warning(
-                    f"NANA: Ch {novel_chapter_number} draft (Attempt {attempt + 1}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons', []))}"
+                    f"NANA: Ch {novel_chapter_number} draft (Attempt {attempt}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons', []))}"
                 )
-                if attempt >= max_revision_attempts:
+                if revisions_made >= config.MAX_REVISION_CYCLES_PER_CHAPTER:
                     logger.error(
-                        f"NANA: Ch {novel_chapter_number} - Max revision attempts ({max_revision_attempts + 1}) reached. Proceeding with current draft, marked as flawed."
+                        f"NANA: Ch {novel_chapter_number} - Max revision attempts ({config.MAX_REVISION_CYCLES_PER_CHAPTER}) reached. Proceeding with current draft, marked as flawed."
                     )
                     self._update_rich_display(
                         step=f"Ch {novel_chapter_number} - Max Revisions Reached (Flawed)"
@@ -807,7 +812,7 @@ class NANA_Orchestrator:
                     break
 
                 self._update_rich_display(
-                    step=f"Ch {novel_chapter_number} - Revision Attempt {attempt + 1}"
+                    step=f"Ch {novel_chapter_number} - Revision Attempt {attempt}"
                 )
                 (
                     revision_tuple_result,
@@ -822,7 +827,7 @@ class NANA_Orchestrator:
                     is_from_flawed_source=de_duplication_occurred_this_chapter,
                 )
                 self._accumulate_tokens(
-                    f"Ch{novel_chapter_number}-Revision-Attempt{attempt + 1}",
+                    f"Ch{novel_chapter_number}-Revision-Attempt{attempt}",
                     revision_usage,
                 )
 
@@ -831,21 +836,42 @@ class NANA_Orchestrator:
                     and revision_tuple_result[0]
                     and len(revision_tuple_result[0]) > 50
                 ):
-                    current_text_to_process, rev_raw_output = revision_tuple_result
+                    new_text, rev_raw_output = revision_tuple_result
+                    new_embedding, prev_embedding = await asyncio.gather(
+                        llm_service.async_get_embedding(new_text),
+                        llm_service.async_get_embedding(current_text_to_process),
+                    )
+                    if new_embedding is not None and prev_embedding is not None:
+                        similarity = utils.numpy_cosine_similarity(
+                            prev_embedding, new_embedding
+                        )
+                        if similarity > config.REVISION_SIMILARITY_ACCEPTANCE:
+                            logger.warning(
+                                f"NANA: Ch {novel_chapter_number} revision attempt {attempt} produced text too similar to previous (score: {similarity:.4f}). Stopping revisions."
+                            )
+                            current_text_to_process = new_text
+                            current_raw_llm_output = (
+                                rev_raw_output
+                                if rev_raw_output
+                                else current_raw_llm_output
+                            )
+                            break
+                    current_text_to_process = new_text
                     current_raw_llm_output = (
                         rev_raw_output if rev_raw_output else current_raw_llm_output
                     )
                     logger.info(
-                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt + 1} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval)."
+                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval)."
                     )
                     await self._save_debug_output(
                         novel_chapter_number,
-                        f"revised_text_attempt_{attempt + 1}",
+                        f"revised_text_attempt_{attempt}",
                         current_text_to_process,
                     )
+                    revisions_made += 1
                 else:
                     logger.error(
-                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt + 1} failed to produce usable text. Proceeding with previous draft, marked as flawed."
+                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text. Proceeding with previous draft, marked as flawed."
                     )
                     self._update_rich_display(
                         step=f"Ch {novel_chapter_number} - Revision Failed (Flawed)"
