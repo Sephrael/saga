@@ -6,17 +6,17 @@ increasingly by querying Neo4j directly for richer, graph-aware context.
 MODIFIED: To handle 'agent_or_props' for more flexible data access.
 """
 
-import logging
-import re
 import asyncio
 import copy
-from typing import Dict, List, Optional, Set, Any
+import logging
+import re
+from typing import Any, Dict, List, Optional, Set
 
 import config
 import utils  # For _is_fill_in
 
 # from state_manager import state_manager # No longer directly used
-from data_access import character_queries, world_queries, kg_queries  # MODIFIED
+from data_access import character_queries, kg_queries, world_queries  # MODIFIED
 from type import SceneDetail
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def _get_nested_prop(
     primary_data = _get_prop(agent_or_props, primary_key, {})
     if isinstance(primary_data, dict):
         return primary_data.get(secondary_key, default)
-    return default
+    return getattr(primary_data, secondary_key, default)
 
 
 async def get_character_state_snippet_for_prompt(
@@ -807,7 +807,11 @@ async def get_reliable_kg_facts_for_drafting_prompt(
             "conflict_summary",
         ),
     ]
-    for _, _, desc_key in novel_context_queries_params:  # query and params marked as unused
+    for (
+        _,
+        _,
+        desc_key,
+    ) in novel_context_queries_params:  # query and params marked as unused
         if len(facts_for_prompt_list) >= max_total_facts:
             break
         try:

@@ -1,10 +1,11 @@
 # reset_neo4j.py
 import argparse
-import time
-from core_db.base_db_manager import Neo4jManagerSingleton  # Use the singleton
-import config  # To get default URI, user, pass if not provided via args
 import asyncio  # Required to call async methods
-from typing import List, Dict, Any  # Added for type hints
+import time
+from typing import Any, Dict, List  # Added for type hints
+
+import config  # To get default URI, user, pass if not provided via args
+from core_db.base_db_manager import Neo4jManagerSingleton  # Use the singleton
 
 # Create an instance of the manager to use its methods
 neo4j_manager_instance = Neo4jManagerSingleton()
@@ -166,7 +167,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             f"✅ Database data, all user-defined constraints, and relevant user-defined indexes reset/dropped in {elapsed_time:.2f} seconds."
         )
         print(
-            f"   The SAGA system will attempt to recreate its necessary schema on the next run."
+            "   The SAGA system will attempt to recreate its necessary schema on the next run."
         )
 
         return True
