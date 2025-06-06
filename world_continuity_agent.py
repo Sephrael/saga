@@ -1,6 +1,5 @@
 # world_continuity_agent.py
 import logging
-import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 
 import config
@@ -11,10 +10,10 @@ from data_access import kg_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
-    get_reliable_kg_facts_for_drafting_prompt,
 )
 
-# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
+# from parsing_utils import split_text_into_blocks,
+# parse_key_value_block  # Removed
 import json  # Added for JSON parsing
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,9 @@ PROBLEM_DETAIL_KEY_MAP = {
 class WorldContinuityAgent:
     def __init__(self, model_name: str = config.EVALUATION_MODEL):
         self.model_name = model_name
-        logger.info(f"WorldContinuityAgent initialized with model: {self.model_name}")
+        logger.info(
+            f"WorldContinuityAgent initialized with model: {self.model_name}"
+        )
         utils.load_spacy_model_if_needed()  # Ensure spaCy model is available
 
     async def _parse_llm_consistency_output(
@@ -39,12 +40,14 @@ class WorldContinuityAgent:
         """
         Parses LLM JSON output specifically for consistency problems.
         Expects a JSON array of problem objects.
-        Populates character offsets for the quote and its containing sentence using spaCy.
+        Populates character offsets for the quote and its containing sentence
+        using spaCy.
         """
         final_problems: List[ProblemDetail] = []
         if not json_text or not json_text.strip():
             logger.info(
-                f"Consistency check JSON for Ch {chapter_number} is empty. No problems parsed."
+                f"Consistency check JSON for Ch {chapter_number} is empty."
+                " No problems parsed."
             )
             return []
 
@@ -62,7 +65,8 @@ class WorldContinuityAgent:
                     )
                 ):
                     logger.info(
-                        f"JSON consistency check for Ch {chapter_number} indicates no problems: {parsed_data}"
+                        f"JSON consistency check for Ch {chapter_number} "
+                        f"indicates no problems: {parsed_data}"
                     )
                     return []
                 if (
@@ -71,57 +75,75 @@ class WorldContinuityAgent:
                     and isinstance(parsed_data["problems"], list)
                 ):
                     logger.info(
-                        f"JSON consistency check for Ch {chapter_number} has problems nested under 'problems' key."
+                        f"JSON consistency check for Ch {chapter_number} has"
+                        " problems nested under 'problems' key."
                     )
                     parsed_data = parsed_data[
                         "problems"
                     ]  # Process the list of problems
                 else:
                     logger.error(
-                        f"LLM consistency output was not a JSON list of problems. Received type: {type(parsed_data)}. Content: {json_text[:300]}"
+                        f"LLM consistency output was not a JSON list of problems."
+                        f" Received type: {type(parsed_data)}. Content:"
+                        f" {json_text[:300]}"
                     )
                     final_problems.append(
                         {
                             "issue_category": "consistency",
-                            "problem_description": "LLM output was not a list of consistency problems.",
-                            "quote_from_original_text": "N/A - LLM Output Format Error",
+                            "problem_description": (
+                                "LLM output was not a list of consistency problems."
+                            ),
+                            "quote_from_original_text": (
+                                "N/A - LLM Output Format Error"
+                            ),
                             "quote_char_start": None,
                             "quote_char_end": None,
                             "sentence_char_start": None,
                             "sentence_char_end": None,
-                            "suggested_fix_focus": "Ensure LLM outputs a JSON list of problem objects for consistency check.",
+                            "suggested_fix_focus": (
+                                "Ensure LLM outputs a JSON list of problem objects"
+                                " for consistency check."
+                            ),
                         }
                     )
                     return final_problems
 
             if not parsed_data:  # Empty list from JSON
                 logger.info(
-                    f"JSON consistency check for Ch {chapter_number} was an empty list. No problems parsed."
+                    f"JSON consistency check for Ch {chapter_number} was an empty"
+                    " list. No problems parsed."
                 )
                 return []
 
         except json.JSONDecodeError as e:
             logger.error(
-                f"Failed to decode JSON from LLM consistency output for Ch {chapter_number}: {e}. Text: {json_text[:500]}..."
+                f"Failed to decode JSON from LLM consistency output for Ch"
+                f" {chapter_number}: {e}. Text: {json_text[:500]}..."
             )
             if (
-                "no significant consistency problems found" in json_text.lower()
+                "no significant consistency problems found"
+                in json_text.lower()
                 or "no significant problems found" in json_text.lower()
             ):
                 logger.info(
-                    "JSON decode error for consistency check, but text indicates no significant problems."
+                    "JSON decode error for consistency check, but text indicates"
+                    " no significant problems."
                 )
                 return []
             final_problems.append(
                 {
                     "issue_category": "consistency",
-                    "problem_description": f"Invalid JSON from LLM for consistency check: {e}",
+                    "problem_description": (
+                        f"Invalid JSON from LLM for consistency check: {e}"
+                    ),
                     "quote_from_original_text": "N/A - Invalid JSON",
                     "quote_char_start": None,
                     "quote_char_end": None,
                     "sentence_char_start": None,
                     "sentence_char_end": None,
-                    "suggested_fix_focus": "Review LLM output for JSON validity (consistency check).",
+                    "suggested_fix_focus": (
+                        "Review LLM output for JSON validity (consistency check)."
+                    ),
                 }
             )
             return final_problems
@@ -129,7 +151,9 @@ class WorldContinuityAgent:
         for i, problem_dict in enumerate(parsed_data):
             if not isinstance(problem_dict, dict):
                 logger.warning(
-                    f"Consistency problem item {i + 1} in JSON list for Ch {chapter_number} is not a dictionary. Skipping. Item: {problem_dict}"
+                    f"Consistency problem item {i + 1} in JSON list for Ch"
+                    f" {chapter_number} is not a dictionary. Skipping. Item:"
+                    f" {problem_dict}"
                 )
                 continue
 
@@ -152,13 +176,18 @@ class WorldContinuityAgent:
                 ),
             }
 
-            # Verify LLM provided 'consistency' or warn if it didn't (though we force it above)
+            # Verify LLM provided 'consistency' or warn if it didn't
+            # (though we force it above)
             llm_category_raw = (
-                str(problem_dict.get("issue_category", "consistency")).strip().lower()
+                str(problem_dict.get("issue_category", "consistency"))
+                .strip()
+                .lower()
             )
             if llm_category_raw != "consistency":
                 logger.warning(
-                    f"WorldContinuityAgent received non-consistency category '{llm_category_raw}' in problem {i + 1} for Ch {chapter_number}. It has been forced to 'consistency'."
+                    f"WorldContinuityAgent received non-consistency category"
+                    f" '{llm_category_raw}' in problem {i + 1} for Ch"
+                    f" {chapter_number}. It has been forced to 'consistency'."
                 )
 
             quote_text_from_llm = problem_meta["quote_from_original_text"]
@@ -167,10 +196,17 @@ class WorldContinuityAgent:
                 or not quote_text_from_llm.strip()
                 or quote_text_from_llm == "N/A"
             ):
-                problem_meta["quote_from_original_text"] = "N/A - General Issue"
-            elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
-                offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(
-                    original_draft_text, quote_text_from_llm
+                problem_meta["quote_from_original_text"] = (
+                    "N/A - General Issue"
+                )
+            elif (
+                utils.spacy_manager.nlp is not None
+                and original_draft_text.strip()
+            ):
+                offsets_tuple = (
+                    await utils.find_quote_and_sentence_offsets_with_spacy(
+                        original_draft_text, quote_text_from_llm
+                    )
                 )
                 if offsets_tuple:
                     q_start, q_end, s_start, s_end = offsets_tuple
@@ -184,11 +220,15 @@ class WorldContinuityAgent:
                     )
             elif not original_draft_text.strip():
                 logger.warning(
-                    f"Ch {chapter_number} consistency problem {i + 1}: Original draft text is empty for quote search: '{quote_text_from_llm[:50]}...'"
+                    f"Ch {chapter_number} consistency problem {i + 1}: Original"
+                    f" draft text is empty for quote search: '",
+                    f"{quote_text_from_llm[:50]}...'",
                 )
             else:  # spaCy not loaded
                 logger.info(
-                    f"Ch {chapter_number} consistency problem {i + 1}: spaCy not available, quote offsets not determined for: '{quote_text_from_llm[:50]}...'"
+                    f"Ch {chapter_number} consistency problem {i + 1}: spaCy not"
+                    f" available, quote offsets not determined for: '",
+                    f"{quote_text_from_llm[:50]}...'",
                 )
 
             final_problems.append(problem_meta)
@@ -211,14 +251,18 @@ class WorldContinuityAgent:
             f"WorldContinuityAgent performing focused consistency check for Chapter {chapter_number}..."
         )
 
-        protagonist_name_str = novel_props.get("protagonist_name", "The Protagonist")
+        protagonist_name_str = novel_props.get(
+            "protagonist_name", "The Protagonist"
+        )
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
                 novel_props, chapter_number - 1
             )
         )
-        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            novel_props, chapter_number - 1
+        world_building_plain_text = (
+            await get_filtered_world_data_for_prompt_plain_text(
+                novel_props, chapter_number - 1
+            )
         )
 
         plot_points_summary_lines = (
@@ -236,15 +280,24 @@ class WorldContinuityAgent:
 [
   {
     "issue_category": "consistency",
-    "problem_description": "The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.",
-    "quote_from_original_text": "She admired the brilliant blue glow of the Sunstone clutched in her hand.",
-    "suggested_fix_focus": "Change the Sunstone's color to 'crimson red' to align with established world canon."
+    "problem_description": "The 'Sunstone' is described as glowing blue in this"
+    " chapter, but the world building notes explicitly state all Sunstones are"
+    " crimson red.",
+    "quote_from_original_text": "She admired the brilliant blue glow of the"
+    " Sunstone clutched in her hand.",
+    "suggested_fix_focus": "Change the Sunstone's color to 'crimson red' to"
+    " align with established world canon."
   },
   {
     "issue_category": "consistency",
-    "problem_description": "Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states \\"Kael | mentored | Elara (Ch: 3)\\".",
-    "quote_from_original_text": "\\"I do not believe we have crossed paths before, young one,\\" Kael said, peering at Elara.",
-    "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her)."
+    "problem_description": "Character Kael claims to have never met Elara before,"
+    " but Previous Chapter Context (KG Fact) states \"Kael | mentored | Elara"
+    " (Ch: 3)\".",
+    "quote_from_original_text": "\"I do not believe we have crossed paths"
+    " before, young one,\" Kael said, peering at Elara.",
+    "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior"
+    " mentorship of Elara, or introduce a reason for his feigned ignorance"
+    " (e.g., memory loss, testing her)."
   }
 ]
 """
@@ -255,7 +308,11 @@ class WorldContinuityAgent:
 
         prompt_lines.extend(
             [
-                f'You are a World & Continuity Expert Editor for Chapter {chapter_number} of the novel "{novel_props.get("title", "Untitled Novel")}" (Protagonist: {protagonist_name_str}).',
+                (
+                    f"You are a World & Continuity Expert Editor for Chapter "
+                    f'{chapter_number} of the novel "{novel_props.get("title", "Untitled Novel")}" '
+                    f"(Protagonist: {protagonist_name_str})."
+                ),
                 "Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chapter Text** below. Focus on:",
                 "- Contradictions with the Plot Outline summary.",
                 "- Contradictions with Character Profiles (descriptions, established traits, known status, relationships).",
@@ -284,9 +341,11 @@ class WorldContinuityAgent:
                 "  ```",
                 "  **Previous Chapters Context (Includes Semantic Flow & Key Reliable KG Facts for Canon):**",
                 "  --- PREVIOUS CONTEXT ---",
-                previous_chapters_context
-                if previous_chapters_context.strip()
-                else "N/A (e.g., Chapter 1 or context retrieval failed).",
+                (
+                    previous_chapters_context
+                    if previous_chapters_context.strip()
+                    else "N/A (e.g., Chapter 1 or context retrieval failed)."
+                ),
                 "  --- END PREVIOUS CONTEXT ---",
                 "",
                 f"**Complete Chapter {chapter_number} Text (to analyze for consistency):**",
@@ -311,9 +370,13 @@ class WorldContinuityAgent:
         prompt = "\n".join(prompt_lines)
 
         logger.info(
-            f"Calling LLM ({self.model_name}) for World/Continuity consistency check of chapter {chapter_number} (expecting JSON)..."
+            f"Calling LLM ({self.model_name}) for World/Continuity consistency"
+            f" check of chapter {chapter_number} (expecting JSON)..."
         )
-        cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
+        (
+            cleaned_consistency_text,
+            usage_data,
+        ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.TEMPERATURE_CONSISTENCY_CHECK,
@@ -327,7 +390,8 @@ class WorldContinuityAgent:
         )
 
         logger.info(
-            f"World/Continuity consistency check for Ch {chapter_number} found {len(consistency_problems)} problems."
+            f"World/Continuity consistency check for Ch {chapter_number} found"
+            f" {len(consistency_problems)} problems."
         )
         return consistency_problems, usage_data
 
@@ -353,17 +417,22 @@ class WorldContinuityAgent:
         chapter_limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         logger.info(
-            f"WorldContinuityAgent: Querying KG regarding potential contradiction around '{entity1}'..."
+            f"WorldContinuityAgent: Querying KG regarding potential"
+            f" contradiction around '{entity1}'..."
         )
         facts = []
         facts.extend(
             await kg_queries.query_kg_from_db(
-                subject=entity1, chapter_limit=chapter_limit, include_provisional=False
+                subject=entity1,
+                chapter_limit=chapter_limit,
+                include_provisional=False,
             )
         )
         facts.extend(
             await kg_queries.query_kg_from_db(
-                obj_val=entity1, chapter_limit=chapter_limit, include_provisional=False
+                obj_val=entity1,
+                chapter_limit=chapter_limit,
+                include_provisional=False,
             )
         )
 
@@ -381,11 +450,16 @@ class WorldContinuityAgent:
         unique_facts_strs = set()
         formatted_facts = []
         for fact_dict in facts:
-            fact_str = f"{fact_dict.get('subject')} -{fact_dict.get('predicate')}-> {fact_dict.get('object')} (Ch: {fact_dict.get('chapter_added')}, Prov: {fact_dict.get('is_provisional')})"
+            fact_str = (
+                f"{fact_dict.get('subject')} -{fact_dict.get('predicate')}->"
+                f" {fact_dict.get('object')} (Ch: {fact_dict.get('chapter_added')}"
+                f", Prov: {fact_dict.get('is_provisional')})"
+            )
             if fact_str not in unique_facts_strs:
                 formatted_facts.append(fact_dict)
                 unique_facts_strs.add(fact_str)
         logger.info(
-            f"Found {len(formatted_facts)} non-provisional KG facts related to '{entity1}' (up to chapter {chapter_limit})."
+            f"Found {len(formatted_facts)} non-provisional KG facts related to"
+            f" '{entity1}' (up to chapter {chapter_limit})."
         )
         return formatted_facts
