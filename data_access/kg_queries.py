@@ -222,11 +222,13 @@ async def query_kg_from_db(
         parameters["predicate_param"] = predicate.strip().upper().replace(" ", "_")
     if obj_val is not None:
         obj_val_stripped = obj_val.strip()
-        conditions.append(f"""
-            ( (o:ValueNode AND o.value = $object_param ) OR 
-              (NOT o:ValueNode AND o.name = $object_param) 
+        conditions.append(
+            """
+            ( (o:ValueNode AND o.value = $object_param ) OR
+              (NOT o:ValueNode AND o.name = $object_param)
             )
-        """)
+        """
+        )
         parameters["object_param"] = obj_val_stripped
     if chapter_limit is not None:
         conditions.append(f"r.{KG_REL_CHAPTER_ADDED} <= $chapter_limit_param")

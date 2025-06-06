@@ -286,12 +286,12 @@ class NANA_Orchestrator:
             ),
             (
                 "character_profiles",
-                character_queries.save_character_profiles_to_db,
+                character_queries.sync_full_state_from_object_to_db,
                 self.character_profiles,
             ),
             (
                 "world_building",
-                world_queries.save_world_building_to_db,
+                world_queries.sync_full_state_from_object_to_db,
                 self.world_building,
             ),
         ]
@@ -955,7 +955,12 @@ class NANA_Orchestrator:
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
 
-        await self._save_core_novel_state_to_neo4j()
+        await self.kg_maintainer_agent.persist_profiles(
+            self.character_profiles, novel_chapter_number
+        )
+        await self.kg_maintainer_agent.persist_world(
+            self.world_building, novel_chapter_number
+        )
 
         return final_text_to_process
 
