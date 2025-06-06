@@ -33,6 +33,7 @@ PLOT_OUTLINE_KEY_MAP = {
     "antagonist_motivations": "antagonist_motivations",
     "genre": "genre",
     "theme": "theme",  # Added genre and theme to be fillable
+    "stakes": "stakes",
 }
 PLOT_OUTLINE_LIST_INTERNAL_KEYS = ["plot_points"]
 
@@ -287,42 +288,89 @@ def _populate_agent_state_from_user_data(
         ant_data, "motivations"
     )
 
-    conflict_data = user_data.get("conflict", {})
-    plot_outline["conflict_summary"] = _get_val_or_fill_in(
-        conflict_data, "summary"
-    )
-    plot_outline["inciting_incident"] = _get_val_or_fill_in(
-        conflict_data, "inciting_incident"
-    )
-    plot_outline["climax_event_preview"] = _get_val_or_fill_in(
-        conflict_data, "climax_event_preview"
-    )
+    # Get plot_elements data, defaulting to an empty dict if not present
+    plot_elements_data = user_data.get("plot_elements", {})
+    conflict_data = user_data.get("conflict", {}) # Still needed for climax_event_preview unless specified otherwise
 
-    raw_plot_points = user_data.get("plot_points", [])
+    if plot_elements_data:
+        logger.info("Populating plot outline from 'plot_elements' section in user data.")
+        plot_outline["inciting_incident"] = _get_val_or_fill_in(
+            plot_elements_data, "inciting_incident"
+        )
+        # Read key_plot_points from plot_elements_data
+        raw_plot_points = plot_elements_data.get("key_plot_points", [])
+        plot_outline["conflict_summary"] = _get_val_or_fill_in(
+            plot_elements_data, "central_conflict"
+        )
+        plot_outline["stakes"] = _get_val_or_fill_in(plot_elements_data, "stakes")
+        # climax_event_preview continues to be read from conflict_data as its migration was not specified.
+        # If it should also come from plot_elements, this would need adjustment.
+        plot_outline["climax_event_preview"] = _get_val_or_fill_in(
+            conflict_data, "climax_event_preview"
+        )
+    else:
+        logger.info("No 'plot_elements' section found or it is empty. Using fallback logic or default fill-ins.")
+        # If plot_elements is the sole intended source for these, they become [Fill-in]
+        plot_outline["inciting_incident"] = _get_val_or_fill_in(
+            {}, "inciting_incident"
+        )  # Results in [Fill-in]
+        # Fallback to reading plot_points from the top-level user_data if plot_elements not present
+        raw_plot_points = user_data.get("plot_points", [])
+        plot_outline["conflict_summary"] = _get_val_or_fill_in(
+            conflict_data, "summary" # Fallback to old source if plot_elements not present
+        )
+        plot_outline["stakes"] = _get_val_or_fill_in(
+            {}, "stakes"
+        )  # Results in [Fill-in] as it's new to plot_elements
+        plot_outline["climax_event_preview"] = _get_val_or_fill_in(
+            conflict_data, "climax_event_preview"
+        )
+
     if not isinstance(raw_plot_points, list):
         logger.warning(
-            f"Markdown 'plot_points' parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
+            f"Plot points ('key_plot_points' or 'plot_points') parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
+            f"Plot points ('key_plot_points' or 'plot_points') parsed as non-list: {type(raw_plot_points)}. Defaulting to [Fill-in]."
         )
         plot_outline["plot_points"] = [
             config.MARKDOWN_FILL_IN_PLACEHOLDER
         ] * config.TARGET_PLOT_POINTS_INITIAL_GENERATION
     else:
-        plot_outline["plot_points"] = [
-            str(pp).strip()
-            if isinstance(pp, str) and (pp.strip() or utils._is_fill_in(pp))
-            else config.MARKDOWN_FILL_IN_PLACEHOLDER
-            for pp in raw_plot_points
-        ]
-        while (
-            len(plot_outline["plot_points"]) > 0
-            and len(plot_outline["plot_points"])
-            < config.TARGET_PLOT_POINTS_INITIAL_GENERATION
-            and plot_outline["plot_points"][-1]
-            != config.MARKDOWN_FILL_IN_PLACEHOLDER
-        ):
-            plot_outline["plot_points"].append(
-                config.MARKDOWN_FILL_IN_PLACEHOLDER
-            )
+        # Ensure each plot point is a string, handle if not.
+        processed_plot_points = []
+        for pp in raw_plot_points:
+            if isinstance(pp, str):
+                processed_plot_points.append(pp.strip() if pp.strip() or utils._is_fill_in(pp) else config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            elif pp is None: # Handle None items in the list
+                processed_plot_points.append(config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            else: # Coerce to string if other type, e.g. number
+                processed_plot_points.append(str(pp).strip() if str(pp).strip() else config.MARKDOWN_FILL_IN_PLACEHOLDER)
+
+        plot_outline["plot_points"] = processed_plot_points
+
+        # Pad with [Fill-in] placeholders up to TARGET_PLOT_POINTS_INITIAL_GENERATION
+        # Ensure that we only pad if there are actual plot points or if the list is empty
+        # and needs to be filled to the target length.
+        # Also, ensure that if the list is shorter than target, but the last item is already a fill-in,
+        # we don't add more fill-ins unless necessary to reach the target.
+
+        # Only add fill-ins if the list is shorter than the target
+        current_length = len(plot_outline["plot_points"])
+        if current_length < config.TARGET_PLOT_POINTS_INITIAL_GENERATION:
+            # If the list is not empty and the last element is not already a fill-in,
+            # or if the list is empty, then pad.
+            # This prevents adding fill-ins if the user explicitly provided some fill-ins at the end
+            # but fewer than the target. The goal is to reach the target.
+            if current_length == 0 or \
+               (current_length > 0 and plot_outline["plot_points"][-1] != config.MARKDOWN_FILL_IN_PLACEHOLDER) or \
+               sum(1 for p in plot_outline["plot_points"] if p == config.MARKDOWN_FILL_IN_PLACEHOLDER) < (config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length):
+
+                needed_fill_ins = config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length
+                plot_outline["plot_points"].extend([config.MARKDOWN_FILL_IN_PLACEHOLDER] * needed_fill_ins)
+
+        # Ensure the list does not exceed the target length if it somehow became too long before padding
+        if len(plot_outline["plot_points"]) > config.TARGET_PLOT_POINTS_INITIAL_GENERATION:
+            plot_outline["plot_points"] = plot_outline["plot_points"][:config.TARGET_PLOT_POINTS_INITIAL_GENERATION]
+
 
     # Process 'setting' section from user_data for world_building
     setting_data_md = user_data.get("setting", {})
