@@ -62,7 +62,7 @@ def generate_character_node_cypher(
     statements.append(
         (
             """
-            MERGE (c:Entity {name: $name})
+            MERGE (c:Character:Entity {name: $name})
             ON CREATE SET
                 c:Character,
                 c += $props,
