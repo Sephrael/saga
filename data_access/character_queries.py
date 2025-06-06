@@ -206,7 +206,10 @@ async def save_character_profiles_to_db(profiles_data: Dict[str, Any]) -> bool:
 
                 rel_type_str = "RELATED_TO"
                 # Ensure rel_cypher_props is re-initialized for each relationship
-                rel_cypher_props = {"source_profile_managed": True}
+                rel_cypher_props = {
+                    "source_profile_managed": True,
+                    "confidence": 1.0,
+                }
 
                 chapter_added_val = config.KG_PREPOPULATION_CHAPTER_NUM
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:

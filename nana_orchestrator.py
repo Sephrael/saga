@@ -310,6 +310,7 @@ class NANA_Orchestrator:
                     current_data_to_save = {
                         c: {i: itm.to_dict() for i, itm in items.items()}
                         for c, items in self.world_building.items()
+                        if isinstance(items, dict)
                     }
                 else:
                     current_data_to_save = (
