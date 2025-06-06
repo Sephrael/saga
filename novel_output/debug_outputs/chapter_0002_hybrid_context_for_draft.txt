@@ -1,6 +1,6 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.711, Type: Provisional Summary)]:
-Kaelen discovers a sealed data vault containing a mysterious file labeled "Operation Skyfall," which hints at a vanished mission and a cryptic warning about the Loop. The file suggests the mission was taken, not lost, and reveals a hidden project called "Project Echo" with unexplained coordinates, awakening something within the station. He realizes he's not alone and must uncover the truth before it's too late.
+[Semantic Context from Chapter 1 (Similarity: 0.861, Type: Provisional Summary)]:
+Jules discovers an ancient, pulsating artifact in a hidden chamber beneath the city, which reveals the truth about the city's exploitation of its lower districts. The object, once just a tool for profit, now feels alive and connected to him, awakening a sense of responsibility and purpose he hadn't known before. He realizes he can no longer ignore the city's secrets and must confront the injustice he has long been complicit in.
 ---
 --- END SEMANTIC CONTEXT ---
 

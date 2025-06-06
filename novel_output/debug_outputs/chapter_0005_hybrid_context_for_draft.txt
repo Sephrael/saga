@@ -1,18 +1,18 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 4 (Similarity: 0.694, Type: Provisional Summary)]:
-Kaelen discovers a hidden message revealing the Loop's true nature as a prison rather than a sanctuary, prompting him to seek the Veil Nexus to break free. He gathers a group of outcasts who have also questioned the Loop's reality, forming an unlikely alliance to escape its grasp. As they navigate through time fractures toward the Nexus, Kaelen realizes he is no longer alone in his mission, and together they aim to rewrite their fate.
+[Semantic Context from Chapter 1 (Similarity: 0.781, Type: Provisional Summary)]:
+Jules discovers an ancient, pulsating artifact in a hidden chamber beneath the city, which reveals the truth about the city's exploitation of its lower districts. The object, once just a tool for profit, now feels alive and connected to him, awakening a sense of responsibility and purpose he hadn't known before. He realizes he can no longer ignore the city's secrets and must confront the injustice he has long been complicit in.
 ---
 
-[Semantic Context from Chapter 1 (Similarity: 0.706, Type: Provisional Summary)]:
-Kaelen discovers a sealed data vault containing a mysterious file labeled "Operation Skyfall," which hints at a vanished mission and a cryptic warning about the Loop. The file suggests the mission was taken, not lost, and reveals a hidden project called "Project Echo" with unexplained coordinates, awakening something within the station. He realizes he's not alone and must uncover the truth before it's too late.
+[Semantic Context from Chapter 4 (Similarity: 0.799, Type: Provisional Summary)]:
+Jules discovers the Grand Arcane Exchange is a system of control that siphons magic from the lower districts to sustain the elite's power, revealing his own complicity as an enforcer. Confronted by Elian, a disillusioned former mage, he realizes his role in the exploitation and vows to break the chains. The artifact, now a symbol of truth and resistance, guides him toward a ledger exposing the names of those who profited from the system, including himself, setting him on a path to rebellion.
 ---
 
-[Semantic Context from Chapter 2 (Similarity: 0.757, Type: Provisional Summary)]:
-Kaelen discovers a hidden message from his presumed-dead crew within the derelict signal relay, revealing Project Echo as a survival mission tied to the Lunar Loop Colony Eternity. The archive exposes the Loop as a deliberate time mechanism designed to preserve humanity, not an accident, and implicates the Chrono Syndicate as its curators. Kaelen confronts a mysterious figure who reveals he was never meant to be alone and that the Veil Nexus holds the key to understanding the truth, forcing him to face his past and embrace a new purpose.
+[Semantic Context from Chapter 3 (Similarity: 0.802, Type: Provisional Summary)]:
+Jules discovers an ancient artifact that reveals the city's secret magic siphoning system, forcing him to confront his role in its exploitation. Confronted by rebels who see the artifact as a tool to break the cycle, he hesitates, realizing the power's true nature as both a burden and a choice. He decides not to hand it over immediately, opting instead to seek another path that could challenge the system without destruction.
 ---
 
-[Semantic Context from Chapter 3 (Similarity: 0.780, Type: Provisional Summary)]:
-Kaelen discovers Project Echo's hidden data in a sealed vault, revealing his crew's sacrifice and the Loop's true nature as a prison designed to control time. The message warns of a failing system and the need to find the Veil Nexus before it collapses, shifting his role from an archivist to a determined seeker of truth. He now carries the weight of his past but is resolved to break the cycle and reclaim his identity.
+[Semantic Context from Chapter 2 (Similarity: 0.802, Type: Provisional Summary)]:
+Jules discovers an artifact that reveals the city's magic is siphoned from the lower districts to the elite, awakening his awareness of the system's injustice. Confronted by rebels who explain the artifact's role as a key to breaking the city's cycle of theft, Jules realizes his past actions were complicit, and he now seeks to change the status quo.
 ---
 --- END SEMANTIC CONTEXT ---
 

@@ -1,22 +1,26 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 3 (Similarity: 0.852, Type: Provisional Summary)]:
-Kaelen discovers Project Echo's hidden data in a sealed vault, revealing his crew's sacrifice and the Loop's true nature as a prison designed to control time. The message warns of a failing system and the need to find the Veil Nexus before it collapses, shifting his role from an archivist to a determined seeker of truth. He now carries the weight of his past but is resolved to break the cycle and reclaim his identity.
+[Semantic Context from Chapter 9 (Similarity: 0.811, Type: Provisional Summary)]:
+Jules discovers the Veil Shatterer is a keystone in the city's magical system that demands a sacrifice from the lower districts each time it is used, revealing his unwitting role in perpetuating the cycle of oppression. Elian confirms the artifact's true nature and the cost of its power, forcing Jules to confront his complicity and choose a new path. Jules resolves to break the cycle without taking another life, marking his transformation from smuggler to revolutionary.
 ---
 
-[Semantic Context from Chapter 8 (Similarity: 0.855, Type: Provisional Summary)]:
-Kaelen discovers the Lunar Loop Colony Eternity is a deliberate construct designed to trap people in an endless cycle of repetition, revealing it as a simulation created by the Chrono Syndicate to preserve human memory. He realizes the Loop's true purpose is a test of will and identity, and that breaking it could either free or destroy those within. With Tarek's support, he prepares to activate the core, acknowledging the profound moral and existential cost of his decision.
+[Semantic Context from Chapter 3 (Similarity: 0.817, Type: Provisional Summary)]:
+Jules discovers an ancient artifact that reveals the city's secret magic siphoning system, forcing him to confront his role in its exploitation. Confronted by rebels who see the artifact as a tool to break the cycle, he hesitates, realizing the power's true nature as both a burden and a choice. He decides not to hand it over immediately, opting instead to seek another path that could challenge the system without destruction.
 ---
 
-[Semantic Context from Chapter 2 (Similarity: 0.862, Type: Provisional Summary)]:
-Kaelen discovers a hidden message from his presumed-dead crew within the derelict signal relay, revealing Project Echo as a survival mission tied to the Lunar Loop Colony Eternity. The archive exposes the Loop as a deliberate time mechanism designed to preserve humanity, not an accident, and implicates the Chrono Syndicate as its curators. Kaelen confronts a mysterious figure who reveals he was never meant to be alone and that the Veil Nexus holds the key to understanding the truth, forcing him to face his past and embrace a new purpose.
+[Semantic Context from Chapter 4 (Similarity: 0.822, Type: Provisional Summary)]:
+Jules discovers the Grand Arcane Exchange is a system of control that siphons magic from the lower districts to sustain the elite's power, revealing his own complicity as an enforcer. Confronted by Elian, a disillusioned former mage, he realizes his role in the exploitation and vows to break the chains. The artifact, now a symbol of truth and resistance, guides him toward a ledger exposing the names of those who profited from the system, including himself, setting him on a path to rebellion.
 ---
 
-[Semantic Context from Chapter 10 (Similarity: 0.863, Type: Provisional Summary)]:
-Kaelen discovers the Loop is a controlled construct, not an accident, and uncovers Project Echo, revealing the Syndicate's manipulation of time and memory. He learns the Loop was designed to test humanity's will and preserve its memory, but the Syndicate has twisted it into a prison. The group now seeks to access the Veil Of Drift to find a failsafe and break the Loop, risking their memories and identities in the process.
+[Semantic Context from Chapter 1 (Similarity: 0.825, Type: Provisional Summary)]:
+Jules discovers an ancient, pulsating artifact in a hidden chamber beneath the city, which reveals the truth about the city's exploitation of its lower districts. The object, once just a tool for profit, now feels alive and connected to him, awakening a sense of responsibility and purpose he hadn't known before. He realizes he can no longer ignore the city's secrets and must confront the injustice he has long been complicit in.
 ---
 
-[Semantic Context from Chapter 9 (Similarity: 0.877, Type: Provisional Summary)]:
-Kaelen discovers the Loop was engineered as a test, not a punishment, to preserve humanity's memory and force its inhabitants to confront their past. He realizes he was chosen as a key, not to control time but to break free and make a critical choice for the future. The Loop becomes a portal for him to face his true purpose and the weight of his decisions.
+[Semantic Context from Chapter 6 (Similarity: 0.833, Type: Provisional Summary)]:
+Jules discovers the enchanted mirror is not just reflecting reality but rewriting his mind and identity, revealing his complicity in the city's magic theft and forcing him to confront his choices. The artifact shows him alternate lives and the consequences of his actions, awakening a hidden desire for justice and challenging his self-perception as a mere smuggler. He begins to question his role in the system and feels a new purpose stirring within him.
+---
+
+[Semantic Context from Chapter 10 (Similarity: 0.999, Type: Provisional Summary)]:
+Jules realizes the Veil Shatterer is not just a tool but a keystone that feeds the curse by draining life from the lower districts, forcing him to confront his complicity. He seeks the Mirror of Equilibrium to break the curse, discovering his own name in a ledger of stolen lives and deciding to face the truth instead of running. The Mirror, hidden beneath the Exchange, represents a chance to dismantle the system of exploitation that has shaped his life.
 ---
 --- END SEMANTIC CONTEXT ---
 
