@@ -1,4 +1,4 @@
-# config_refactored.py
+# config.py
 """
 Configuration settings for the Saga Novel Generation system.
 Centralizes constants for API endpoints, model names, file paths,
