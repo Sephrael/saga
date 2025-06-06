@@ -196,6 +196,19 @@ class NANA_Orchestrator:
             )
 
     def _update_novel_props_cache(self):
+        wb_cache = {}
+        if isinstance(self.world_building, dict):
+            for cat, items in self.world_building.items():
+                if isinstance(items, dict):
+                    wb_cache[cat] = {
+                        nm: item.to_dict()
+                        for nm, item in items.items()
+                        if hasattr(item, "to_dict")
+                    }
+                else:
+                    # copy string values like 'source' or other metadata directly
+                    wb_cache[cat] = items
+
         self.novel_props_cache = {
             "title": self.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE),
             "genre": self.plot_outline.get("genre", config.CONFIGURED_GENRE),
@@ -209,11 +222,9 @@ class NANA_Orchestrator:
             "character_profiles": {
                 name: profile.to_dict()
                 for name, profile in self.character_profiles.items()
+                if hasattr(profile, "to_dict")
             },
-            "world_building": {
-                cat: {nm: item.to_dict() for nm, item in items.items()}
-                for cat, items in self.world_building.items()
-            },
+            "world_building": wb_cache,
             "plot_outline_full": self.plot_outline,
         }
         self._update_rich_display()
@@ -934,7 +945,12 @@ class NANA_Orchestrator:
                 for name, item in items.items()
             }
             for cat, items in self.novel_props_cache.get("world_building", {}).items()
+            if isinstance(items, dict)
         }
+        # Copy over non-dict metadata like 'source'
+        for cat, items in self.novel_props_cache.get("world_building", {}).items():
+            if not isinstance(items, dict):
+                self.world_building[cat] = items
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
 

@@ -10,6 +10,7 @@ from llm_interface import llm_service
 import utils  # For _is_fill_in
 
 from yaml_parser import load_yaml_file
+from kg_maintainer.models import CharacterProfile, WorldItem
 
 logger = logging.getLogger(__name__)
 
@@ -997,11 +998,22 @@ async def generate_plot_outline_logic(
     if not isinstance(agent.character_profiles, dict):
         agent.character_profiles = {}
 
-    agent.character_profiles.setdefault(
-        final_protagonist_name,
-        {"source": agent.plot_outline.get("source", "unknown")},
-    )
-    prot_profile_ref = agent.character_profiles[final_protagonist_name]
+    if final_protagonist_name not in agent.character_profiles:
+        prot_profile_ref = CharacterProfile(name=final_protagonist_name)
+        agent.character_profiles[final_protagonist_name] = prot_profile_ref
+    else:
+        prot_profile_ref = agent.character_profiles[final_protagonist_name]
+        if not isinstance(prot_profile_ref, CharacterProfile):
+            logger.warning(
+                f"Fixing corrupted state for protagonist '{final_protagonist_name}': was dict, now CharacterProfile."
+            )
+            prot_profile_ref = CharacterProfile.from_dict(
+                final_protagonist_name,
+                prot_profile_ref if isinstance(prot_profile_ref, dict) else {},
+            )
+            agent.character_profiles[final_protagonist_name] = prot_profile_ref
+
+    prot_profile_ref.updates["source"] = agent.plot_outline.get("source", "unknown")
 
     for key, plot_key in [
         ("description", "protagonist_description"),
@@ -1009,32 +1021,39 @@ async def generate_plot_outline_logic(
     ]:
         plot_val = agent.plot_outline.get(plot_key)
         if not utils._is_fill_in(plot_val):
-            prot_profile_ref[key] = plot_val
-        elif key not in prot_profile_ref or utils._is_fill_in(
-            prot_profile_ref.get(key)
+            if key == "description":
+                prot_profile_ref.description = plot_val
+            else:
+                prot_profile_ref.updates[key] = plot_val
+        elif key == "description" and (
+            not prot_profile_ref.description
+            or utils._is_fill_in(prot_profile_ref.description)
         ):
-            prot_profile_ref[key] = (
+            prot_profile_ref.description = (
+                f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} for {key}"
+            )
+        elif key != "description" and (
+            key not in prot_profile_ref.updates
+            or utils._is_fill_in(prot_profile_ref.updates.get(key))
+        ):
+            prot_profile_ref.updates[key] = (
                 f"{config.MARKDOWN_FILL_IN_PLACEHOLDER} for {key}"
             )
 
-    prot_profile_ref["role"] = "protagonist"
+    prot_profile_ref.updates["role"] = "protagonist"
     if (
-        "traits" not in prot_profile_ref
-        or not prot_profile_ref["traits"]
+        "traits" not in prot_profile_ref.to_dict()
+        or not prot_profile_ref.traits
         or (
-            isinstance(prot_profile_ref["traits"], list)
-            and all(utils._is_fill_in(t) for t in prot_profile_ref["traits"])
+            isinstance(prot_profile_ref.traits, list)
+            and all(utils._is_fill_in(t) for t in prot_profile_ref.traits)
         )
     ):
-        prot_profile_ref["traits"] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
-    if "status" not in prot_profile_ref or utils._is_fill_in(
-        prot_profile_ref.get("status")
-    ):
-        prot_profile_ref["status"] = (
+        prot_profile_ref.traits = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+    if not prot_profile_ref.status or utils._is_fill_in(prot_profile_ref.status):
+        prot_profile_ref.status = (
             config.MARKDOWN_FILL_IN_PLACEHOLDER
-            if utils._is_fill_in(
-                agent.plot_outline.get("protagonist_description")
-            )
+            if utils._is_fill_in(agent.plot_outline.get("protagonist_description"))
             else "As described in plot outline"
         )
 
@@ -1042,23 +1061,22 @@ async def generate_plot_outline_logic(
         f"Finalized character profile for protagonist '{final_protagonist_name}'."
     )
 
-    if not hasattr(agent, "world_building") or agent.world_building is None:
-        agent.world_building = {
-            "_overview_": {},
-            "source": agent.plot_outline.get("source", "unknown"),
-        }
-    if not isinstance(agent.world_building, dict):
-        agent.world_building = {
-            "_overview_": {},
-            "source": agent.plot_outline.get("source", "unknown"),
-        }
+    if not hasattr(agent, "world_building") or not isinstance(agent.world_building, dict):
+        agent.world_building = {}
 
+    overview_items_dict = agent.world_building.setdefault("_overview_", {})
+    if "_overview_" not in overview_items_dict or not isinstance(
+        overview_items_dict["_overview_"], WorldItem
+    ):
+        overview_item = WorldItem.from_dict("_overview_", "_overview_", {})
+        overview_items_dict["_overview_"] = overview_item
+    else:
+        overview_item = overview_items_dict["_overview_"]
     overview_desc_val = agent.plot_outline.get(
         "setting_description", config.MARKDOWN_FILL_IN_PLACEHOLDER
     )
-    agent.world_building.setdefault("_overview_", {})["description"] = (
-        overview_desc_val
-    )
+    overview_item.properties["description"] = overview_desc_val
+    agent.world_building["source"] = agent.plot_outline.get("source", "unknown")
 
     return (
         agent.plot_outline,
@@ -1436,14 +1454,11 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
             "llm_generated_or_merged_json_style"  # Set source upon successful LLM parse
         )
 
-        # Ensure agent.world_building is a dict (it should be, but as a safeguard)
         if not isinstance(agent.world_building, dict):
             agent.world_building = {
                 "_overview_": {}
-            }  # Initialize if somehow it's not a dict
+            }
 
-        # The parsing logic below assumes the LLM *perfectly* follows the new JSON structure.
-        # It directly tries to map incoming JSON keys to internal agent state structure.
         for (
             json_top_level_cat_key,
             json_cat_content,
@@ -1467,100 +1482,41 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                 continue
 
             if internal_cat_name == "_overview_":
-                # json_cat_content is like {"description": "...", "mood": "..."}
-                for (
-                    json_detail_key,
-                    json_detail_value,
-                ) in json_cat_content.items():
-                    # Assuming json_detail_key is already the desired internal key, or maps directly
-                    # from WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL's keys.
-                    internal_detail_key_target = (
-                        WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                            json_detail_key, json_detail_key
-                        )
-                    )
-
-                    existing_val = target_category_in_agent.get(
-                        internal_detail_key_target
-                    )
-                    if utils._is_fill_in(existing_val) or existing_val is None:
-                        if (
-                            json_detail_value is not None
-                            and not utils._is_fill_in(json_detail_value)
-                        ):
-                            if (
-                                internal_detail_key_target
-                                in WORLD_DETAIL_LIST_INTERNAL_KEYS
-                            ):
-                                if isinstance(json_detail_value, list):
-                                    # Ensure all items are strings, filtering out any [Fill-in] from LLM if it sneaks in
-                                    processed_list = [
-                                        str(li)
-                                        for li in json_detail_value
-                                        if isinstance(
-                                            li, (str, int, float, bool)
-                                        )
-                                        and not utils._is_fill_in(str(li))
-                                    ]
-                                    if (
-                                        processed_list
-                                    ):  # Only assign if there's actual content
-                                        target_category_in_agent[
-                                            internal_detail_key_target
-                                        ] = processed_list
-                                    elif (
-                                        utils._is_fill_in(existing_val)
-                                        or existing_val is None
-                                    ):  # If existing was fill-in, and LLM provided empty/bad list
-                                        target_category_in_agent[
-                                            internal_detail_key_target
-                                        ] = [
-                                            config.MARKDOWN_FILL_IN_PLACEHOLDER
-                                        ]  # Fallback to fill-in
-                                elif isinstance(
-                                    json_detail_value, str
-                                ):  # LLM returned a string instead of a list
-                                    logger.warning(
-                                        f"LLM returned string for list key '{internal_detail_key_target}' in overview. Converting to list: '{json_detail_value}'"
-                                    )
-                                    target_category_in_agent[
-                                        internal_detail_key_target
-                                    ] = [json_detail_value]
-                                else:  # LLM returned something else problematic
-                                    logger.warning(
-                                        f"LLM returned non-list/non-string for list key '{internal_detail_key_target}' in overview: {type(json_detail_value)}. Setting to fill-in."
-                                    )
-                                    target_category_in_agent[
-                                        internal_detail_key_target
-                                    ] = [config.MARKDOWN_FILL_IN_PLACEHOLDER]
-                            else:  # Not a list key
-                                target_category_in_agent[
-                                    internal_detail_key_target
-                                ] = str(json_detail_value)  # Ensure string
-            else:  # Itemized categories like "locations", "factions"
-                # Clear the category in the agent's state before populating from the LLM's response
-                # This ensures the LLM's output is the single source of truth for this category run.
+                overview_item = WorldItem.from_dict(
+                    internal_cat_name, "_overview_", json_cat_content
+                )
+                target_category_in_agent["_overview_"] = overview_item
+            else:
                 agent.world_building[internal_cat_name] = {}
                 target_category_in_agent = agent.world_building[internal_cat_name]
+                
+                is_single_item_style = all(
+                    not isinstance(v, dict) for v in json_cat_content.values()
+                ) and bool(json_cat_content)
 
-                for item_name, item_details in json_cat_content.items():
+                items_to_process = {}
+                if is_single_item_style:
+                    logger.info(
+                        f"Category '{json_top_level_cat_key}' from LLM appears to be a single-item category. Bundling its properties into one item."
+                    )
+                    item_name = json_top_level_cat_key.replace(
+                        "_", " "
+                    ).title()
+                    items_to_process[item_name] = json_cat_content
+                else:
+                    items_to_process = json_cat_content
+
+                for item_name, item_details in items_to_process.items():
                     if not isinstance(item_details, dict):
-                        logger.warning(f"Item '{item_name}' in category '{json_top_level_cat_key}' is not a dictionary. Skipping.")
+                        logger.warning(
+                            f"Item '{item_name}' in category '{json_top_level_cat_key}' is not a dictionary. Skipping."
+                        )
                         continue
-                    
-                    agent_item_details = target_category_in_agent.setdefault(item_name, {"source": "llm_generated_json_style"})
-                    
-                    for detail_key, detail_val in item_details.items():
-                        internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(detail_key, detail_key)
-                        
-                        if internal_detail_key in WORLD_DETAIL_LIST_INTERNAL_KEYS:
-                            if isinstance(detail_val, list):
-                                agent_item_details[internal_detail_key] = [str(v) for v in detail_val if not utils._is_fill_in(str(v))]
-                            else:
-                                logger.warning(f"LLM provided non-list for list key '{detail_key}' in '{item_name}'. Value: {detail_val}")
-                                agent_item_details[internal_detail_key] = [str(detail_val)] if detail_val is not None else []
-                        else:
-                            agent_item_details[internal_detail_key] = str(detail_val)
+
+                    world_item_instance = WorldItem.from_dict(
+                        internal_cat_name, item_name, item_details
+                    )
+                    target_category_in_agent[item_name] = world_item_instance
 
 
         agent.world_building.pop("is_default", None)
@@ -1582,15 +1538,22 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                 default_wb_overview_desc = (
                     "A default world setting, to be detailed later."
                 )
+            if not isinstance(agent.world_building, dict):
+                agent.world_building = {}
+            overview_items_dict = agent.world_building.setdefault("_overview_", {})
+            if "_overview_" not in overview_items_dict or not isinstance(
+                overview_items_dict.get("_overview_"), WorldItem
+            ):
+                overview_items_dict["_overview_"] = WorldItem.from_dict(
+                    "_overview_", "_overview_", {}
+                )
+            overview_items_dict["_overview_"].properties["description"] = (
+                default_wb_overview_desc
+            )
 
-            agent.world_building.setdefault("_overview_", {})[
-                "description"
-            ] = default_wb_overview_desc
             if agent.world_building.get("source") != "user_supplied_yaml":
                 agent.world_building["source"] = "default_fallback"
-            if (
-                agent.world_building.get("source") == "default_fallback"
-            ):
+            if agent.world_building.get("source") == "default_fallback":
                 agent.world_building["is_default"] = True
 
     if llm_was_called:
