@@ -857,7 +857,9 @@ class NANA_Orchestrator:
                     revision_tuple_result,
                     revision_usage,
                 ) = await revise_chapter_draft_logic(
-                    self,
+                    self.plot_outline,
+                    self.character_profiles,
+                    self.world_building,
                     current_text_to_process,
                     novel_chapter_number,
                     evaluation_result,

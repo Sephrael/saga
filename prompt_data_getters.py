@@ -3,7 +3,6 @@
 Helper functions to prepare specific data snippets for LLM prompts in the SAGA system.
 These functions typically filter or format parts of the agent's state,
 increasingly by querying Neo4j directly for richer, graph-aware context.
-MODIFIED: To handle 'agent_or_props' for more flexible data access.
 """
 
 import asyncio
@@ -17,47 +16,26 @@ import utils  # For _is_fill_in
 
 # from state_manager import state_manager # No longer directly used
 from data_access import character_queries, kg_queries, world_queries  # MODIFIED
-from kg_maintainer.models import SceneDetail
+from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 
 logger = logging.getLogger(__name__)
 
 
-def _get_prop(agent_or_props: Any, key: str, default: Any = None) -> Any:
-    """Helper to get a property from an agent-like object or a dictionary."""
-    if isinstance(agent_or_props, dict):
-        return agent_or_props.get(key, default)
-    return getattr(agent_or_props, key, default)
-
-
-def _get_nested_prop(
-    agent_or_props: Any, primary_key: str, secondary_key: str, default: Any = None
-) -> Any:
-    """Helper to get a nested property."""
-    primary_data = _get_prop(agent_or_props, primary_key, {})
-    if isinstance(primary_data, dict):
-        return primary_data.get(secondary_key, default)
-    return getattr(primary_data, secondary_key, default)
-
-
 async def get_character_state_snippet_for_prompt(
-    agent_or_props: Any, current_chapter_num_for_filtering: Optional[int] = None
+    character_profiles: Dict[str, CharacterProfile],
+    plot_outline: Dict[str, Any],
+    current_chapter_num_for_filtering: Optional[int] = None,
 ) -> str:
     """
     Creates a concise plain text string of key character states for prompts,
     fetching data directly from Neo4j.
-    MODIFIED: Uses agent_or_props and new data_access functions.
     """
     text_output_lines_list: List[str] = []
     char_names_to_process: List[str] = []
 
-    plot_outline_data = _get_prop(
-        agent_or_props,
-        "plot_outline",
-        _get_prop(agent_or_props, "plot_outline_full", {}),
-    )
-    protagonist_name = _get_prop(plot_outline_data, "protagonist_name")
+    protagonist_name = plot_outline.get("protagonist_name")
 
-    character_profiles_data = _get_prop(agent_or_props, "character_profiles", {})
+    character_profiles_data = character_profiles
     all_known_char_names_from_state: List[str] = list(character_profiles_data.keys())
 
     if protagonist_name and protagonist_name in all_known_char_names_from_state:
@@ -216,12 +194,12 @@ async def get_character_state_snippet_for_prompt(
 
 
 async def get_world_state_snippet_for_prompt(
-    agent_or_props: Any, current_chapter_num_for_filtering: Optional[int] = None
+    world_building: Dict[str, Dict[str, WorldItem]],
+    current_chapter_num_for_filtering: Optional[int] = None,
 ) -> str:
     """
     Creates a concise plain text string of key world states for prompts,
     fetching data directly from Neo4j.
-    MODIFIED: Uses agent_or_props and new data_access functions.
     """
     text_output_lines_list: List[str] = []
     any_provisional_in_world_snippet = False
@@ -254,7 +232,7 @@ async def get_world_state_snippet_for_prompt(
     if not fetch_tasks_world:
         return "No significant world-building data available or applicable to fetch for snippet."
 
-    world_building_data = _get_prop(agent_or_props, "world_building", {})
+    world_building_data = world_building
     world_info_results = await asyncio.gather(
         *fetch_tasks_world, return_exceptions=True
     )
@@ -494,7 +472,8 @@ def _add_provisional_notes_and_filter_developments(
 
 
 async def _get_character_profiles_dict_with_notes(
-    agent_or_props: Any, up_to_chapter_inclusive: Optional[int]
+    character_profiles: Dict[str, CharacterProfile],
+    up_to_chapter_inclusive: Optional[int],
 ) -> Dict[str, Any]:
     logger.debug(
         f"Internal: Getting character profiles dict with notes up to chapter {up_to_chapter_inclusive}."
@@ -502,7 +481,7 @@ async def _get_character_profiles_dict_with_notes(
     processed_profiles: Dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
 
-    character_profiles_data = _get_prop(agent_or_props, "character_profiles", {})
+    character_profiles_data = character_profiles
 
     if not character_profiles_data:
         logger.warning("Character_profiles dictionary is empty.")
@@ -525,7 +504,8 @@ async def _get_character_profiles_dict_with_notes(
 
 
 async def get_filtered_character_profiles_for_prompt_plain_text(
-    agent_or_props: Any, up_to_chapter_inclusive: Optional[int] = None
+    character_profiles: Dict[str, CharacterProfile],
+    up_to_chapter_inclusive: Optional[int] = None,
 ) -> str:
     logger.info(
         f"Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
@@ -537,7 +517,7 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
     )
 
     profiles_dict_with_notes = await _get_character_profiles_dict_with_notes(
-        agent_or_props, filter_chapter_for_profiles
+        character_profiles, filter_chapter_for_profiles
     )
     if not profiles_dict_with_notes:
         return "No character profiles available."
@@ -560,14 +540,15 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
 
 
 async def _get_world_data_dict_with_notes(
-    agent_or_props: Any, up_to_chapter_inclusive: Optional[int]
+    world_building: Dict[str, Dict[str, WorldItem]],
+    up_to_chapter_inclusive: Optional[int],
 ) -> Dict[str, Any]:
     logger.debug(
         f"Internal: Getting world data dict with notes up to chapter {up_to_chapter_inclusive}."
     )
     processed_world_data: Dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
-    world_building_data = _get_prop(agent_or_props, "world_building", {})
+    world_building_data = world_building
 
     if not world_building_data:
         logger.warning("World_building dictionary is empty.")
@@ -617,7 +598,8 @@ async def _get_world_data_dict_with_notes(
 
 
 async def get_filtered_world_data_for_prompt_plain_text(
-    agent_or_props: Any, up_to_chapter_inclusive: Optional[int] = None
+    world_building: Dict[str, Dict[str, WorldItem]],
+    up_to_chapter_inclusive: Optional[int] = None,
 ) -> str:
     logger.info(
         f"Fetching and formatting filtered world data as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
@@ -629,7 +611,7 @@ async def get_filtered_world_data_for_prompt_plain_text(
     )
 
     world_data_dict_with_notes = await _get_world_data_dict_with_notes(
-        agent_or_props, filter_chapter_for_world
+        world_building, filter_chapter_for_world
     )
     if not world_data_dict_with_notes:
         return "No world-building data available."
@@ -694,10 +676,12 @@ async def get_filtered_world_data_for_prompt_plain_text(
 
 
 async def heuristic_entity_spotter_for_kg(
-    agent_or_props: Any, text_snippet: str
+    character_profiles: Dict[str, CharacterProfile],
+    world_building: Dict[str, Dict[str, WorldItem]],
+    text_snippet: str,
 ) -> List[str]:
-    character_profiles_data = _get_prop(agent_or_props, "character_profiles", {})
-    world_building_data = _get_prop(agent_or_props, "world_building", {})
+    character_profiles_data = character_profiles
+    world_building_data = world_building
 
     entities = set(character_profiles_data.keys())
 
@@ -751,7 +735,7 @@ async def heuristic_entity_spotter_for_kg(
 
 
 async def get_reliable_kg_facts_for_drafting_prompt(
-    agent_or_props: Any,
+    plot_outline: Dict[str, Any],
     chapter_number: int,
     chapter_plan: Optional[List[SceneDetail]] = None,
     max_facts_per_char: int = 2,
@@ -768,18 +752,9 @@ async def get_reliable_kg_facts_for_drafting_prompt(
 
     facts_for_prompt_list: List[str] = []
 
-    plot_outline_data = _get_prop(
-        agent_or_props,
-        "plot_outline",
-        _get_prop(agent_or_props, "plot_outline_full", {}),
-    )
-    protagonist_name = _get_nested_prop(
-        agent_or_props,
-        "plot_outline_full",
-        "protagonist_name",
-        config.DEFAULT_PROTAGONIST_NAME,
-    ) or _get_prop(
-        plot_outline_data, "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+    plot_outline_data = plot_outline
+    protagonist_name = plot_outline_data.get(
+        "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
     )
 
     characters_of_interest: Set[str] = (

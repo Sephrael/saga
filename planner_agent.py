@@ -3,7 +3,6 @@
 import json  # Added for JSON parsing
 import logging
 import re
-from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
@@ -222,19 +221,16 @@ class PlannerAgent:
         protagonist_name = plot_outline.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
-        props = SimpleNamespace(
-            plot_outline=plot_outline,
-            character_profiles=character_profiles,
-            world_building=world_building,
-        )
         kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
-            props, chapter_number, None
+            plot_outline, chapter_number, None
         )
         character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(props, chapter_number)
+            await get_character_state_snippet_for_prompt(
+                character_profiles, plot_outline, chapter_number
+            )
         )
         world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
-            props, chapter_number
+            world_building, chapter_number
         )
 
         future_plot_context_parts: List[str] = []
