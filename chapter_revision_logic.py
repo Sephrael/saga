@@ -331,7 +331,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
     ) = await llm_service.async_call_llm(  # MODIFIED
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
-        temperature=config.TEMPERATURE_PATCH,
+        temperature=config.Temperatures.PATCH,
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
         stream_to_disk=False,
@@ -997,7 +997,7 @@ async def revise_chapter_draft_logic(
         ) = await llm_service.async_call_llm(  # MODIFIED
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
-            temperature=config.TEMPERATURE_REVISION,
+            temperature=config.Temperatures.REVISION,
             max_tokens=None,
             allow_fallback=True,
             stream_to_disk=True,

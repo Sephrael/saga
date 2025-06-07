@@ -968,7 +968,7 @@ async def generate_plot_outline_logic(
         cleaned_outline_text, usage_data = await llm_service.async_call_llm(
             model_name=config.INITIAL_SETUP_MODEL,
             prompt=prompt,
-            temperature=config.TEMPERATURE_INITIAL_SETUP,
+            temperature=config.Temperatures.INITIAL_SETUP,
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
             presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP,
@@ -1543,7 +1543,7 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
     ) = await llm_service.async_call_llm(  # Renamed variable
         model_name=config.INITIAL_SETUP_MODEL,
         prompt=prompt,
-        temperature=config.TEMPERATURE_INITIAL_SETUP,
+        temperature=config.Temperatures.INITIAL_SETUP,
         stream_to_disk=True,
         frequency_penalty=config.FREQUENCY_PENALTY_INITIAL_SETUP,
         presence_penalty=config.PRESENCE_PENALTY_INITIAL_SETUP,

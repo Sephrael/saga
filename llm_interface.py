@@ -386,7 +386,7 @@ class LLMService:
             max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
         )
         effective_temperature = (
-            temperature if temperature is not None else config.TEMPERATURE_DEFAULT
+            temperature if temperature is not None else config.Temperatures.DEFAULT
         )
 
         headers = {

@@ -35,9 +35,9 @@ async def _llm_summarize_full_chapter_text(
         },
     )
     summary, usage_data = await llm_service.async_call_llm(
-        model_name=config.SMALL_MODEL,  # Using SMALL_MODEL for summarization
+        model_name=config.Models.SMALL,  # Using SMALL_MODEL for summarization
         prompt=prompt,
-        temperature=config.TEMPERATURE_SUMMARY,
+        temperature=config.Temperatures.SUMMARY,
         max_tokens=config.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
         stream_to_disk=False,
         frequency_penalty=config.FREQUENCY_PENALTY_SUMMARY,
@@ -188,7 +188,7 @@ class KGMaintainerAgent:
             text, usage = await llm_service.async_call_llm(
                 model_name=self.model_name,
                 prompt=prompt,
-                temperature=config.TEMPERATURE_KG_EXTRACTION,
+                temperature=config.Temperatures.KG_EXTRACTION,
                 max_tokens=config.MAX_KG_TRIPLE_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=False,

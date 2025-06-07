@@ -323,7 +323,7 @@ class ComprehensiveEvaluatorAgent:
         cleaned_evaluation_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_EVALUATION,
+            temperature=config.Temperatures.EVALUATION,
             allow_fallback=True,
             stream_to_disk=False,
             frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION,

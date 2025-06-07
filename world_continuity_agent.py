@@ -317,7 +317,7 @@ class WorldContinuityAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_CONSISTENCY_CHECK,
+            temperature=config.Temperatures.CONSISTENCY_CHECK,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,
