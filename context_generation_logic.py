@@ -308,8 +308,17 @@ async def generate_hybrid_chapter_context_logic(
     semantic_context_task = _generate_semantic_chapter_context_logic(
         agent_or_props, current_chapter_number
     )
+    if isinstance(agent_or_props, dict):
+        plot_outline_data = agent_or_props.get(
+            "plot_outline_full", agent_or_props.get("plot_outline", {})
+        )
+    else:
+        plot_outline_data = getattr(agent_or_props, "plot_outline_full", None)
+        if not plot_outline_data:
+            plot_outline_data = getattr(agent_or_props, "plot_outline", {})
+
     kg_facts_task = get_reliable_kg_facts_for_drafting_prompt(
-        agent_or_props, current_chapter_number, chapter_plan
+        plot_outline_data, current_chapter_number, chapter_plan
     )
 
     semantic_context_str, kg_facts_str = await asyncio.gather(

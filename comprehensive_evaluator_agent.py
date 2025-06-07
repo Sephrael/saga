@@ -1,7 +1,6 @@
 # comprehensive_evaluator_agent.py
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-from types import SimpleNamespace
 
 import config
 from llm_interface import llm_service  # MODIFIED
@@ -255,22 +254,16 @@ class ComprehensiveEvaluatorAgent:
         # novel_theme_str, novel_genre_str, protagonist_arc_str removed
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
 
-        props = SimpleNamespace(
-            plot_outline=plot_outline,
-            character_profiles=character_profiles,
-            world_building=world_building,
-        )
-
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                props, chapter_number - 1
+                character_profiles, chapter_number - 1
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            props, chapter_number - 1
+            world_building, chapter_number - 1
         )
         kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(
-            props, chapter_number, None
+            plot_outline, chapter_number, None
         )
 
         plot_points_summary_lines = (

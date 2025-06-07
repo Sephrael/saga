@@ -37,35 +37,11 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
     )
 
 
-def _get_prop_from_agent(agent: Any, key: str, default: Any = None) -> Any:
-    return getattr(
-        agent,
-        key,
-        agent.novel_props_cache.get(key, default)
-        if hasattr(agent, "novel_props_cache")
-        else default,
-    )
-
-
-def _get_nested_prop_from_agent(
-    agent: Any, primary_key: str, secondary_key: str, default: Any = None
-) -> Any:
-    primary_data = _get_prop_from_agent(agent, primary_key, {})
-    if isinstance(primary_data, dict):
-        return primary_data.get(secondary_key, default)
-    return getattr(primary_data, secondary_key, default)
-
-
-def _get_plot_point_info_from_agent(
-    agent: Any, chapter_number: int
+def _get_plot_point_info(
+    plot_outline: Dict[str, Any], chapter_number: int
 ) -> Tuple[Optional[str], int]:
-    plot_outline_data = _get_prop_from_agent(
-        agent, "plot_outline", {}
-    )  # 'plot_outline' on orchestrator is the full dict
-    plot_points = plot_outline_data.get("plot_points", [])
-    if not isinstance(plot_points, list) or not plot_points:
-        return None, -1
-    if chapter_number <= 0:
+    plot_points = plot_outline.get("plot_points", [])
+    if not isinstance(plot_points, list) or not plot_points or chapter_number <= 0:
         return None, -1
     plot_point_index = min(chapter_number - 1, len(plot_points) - 1)
     if 0 <= plot_point_index < len(plot_points):
@@ -142,7 +118,7 @@ def _get_context_window_for_patch_llm(
 
 
 async def _generate_single_patch_instruction_llm(
-    agent: Any,
+    plot_outline: Dict[str, Any],
     original_chapter_text_snippet_for_llm: str,
     problem: ProblemDetail,
     chapter_number: int,
@@ -154,7 +130,7 @@ async def _generate_single_patch_instruction_llm(
     referring to the SENTENCE containing the problem quote if available.
     """
     plan_focus_section_parts: List[str] = []
-    plot_point_focus, _ = _get_plot_point_info_from_agent(agent, chapter_number)
+    plot_point_focus, _ = _get_plot_point_info(plot_outline, chapter_number)
     max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
 
     if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
@@ -254,11 +230,8 @@ async def _generate_single_patch_instruction_llm(
         prompt_instruction_for_replacement_scope_parts
     )
 
-    protagonist_name = _get_nested_prop_from_agent(
-        agent,
-        "plot_outline",
-        "protagonist_name",
-        config.DEFAULT_PROTAGONIST_NAME,
+    protagonist_name = plot_outline.get(
+        "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
     )
 
     few_shot_patch_example_str = """
@@ -279,11 +252,11 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 
     prompt_lines.extend(
         [
-            f'You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled "{_get_nested_prop_from_agent(agent, "plot_outline", "title", "Untitled Novel")}" about {protagonist_name}.',
+            f'You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled "{plot_outline.get("title", "Untitled Novel")}" about {protagonist_name}.',
             "**Novel Context:**",
-            f"  - Genre: {_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'N/A')}",
-            f"  - Theme: {_get_nested_prop_from_agent(agent, 'plot_outline', 'theme', 'N/A')}",
-            f"  - Protagonist: {protagonist_name} ({_get_nested_prop_from_agent(agent, 'plot_outline', 'character_arc', 'N/A')})",
+            f"  - Genre: {plot_outline.get('genre', 'N/A')}",
+            f"  - Theme: {plot_outline.get('theme', 'N/A')}",
+            f"  - Protagonist: {protagonist_name} ({plot_outline.get('character_arc', 'N/A')})",
             "",
             plan_focus_section_str,
             "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
@@ -405,7 +378,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 
 
 async def _generate_patch_instructions_logic(
-    agent: Any,
+    plot_outline: Dict[str, Any],
     original_text: str,
     problems_to_fix: List[ProblemDetail],
     chapter_number: int,
@@ -479,7 +452,7 @@ async def _generate_patch_instructions_logic(
             original_text, problem, config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW
         )
         task = _generate_single_patch_instruction_llm(
-            agent,
+            plot_outline,
             context_snippet_for_llm,
             problem,
             chapter_number,
@@ -672,7 +645,9 @@ async def _apply_patches_to_text(
 
 
 async def revise_chapter_draft_logic(
-    agent: Any,
+    plot_outline: Dict[str, Any],
+    character_profiles: Dict[str, CharacterProfile],
+    world_building: Dict[str, Dict[str, WorldItem]],
     original_text: str,
     chapter_number: int,
     evaluation_result: EvaluationResult,
@@ -755,7 +730,7 @@ async def revise_chapter_draft_logic(
             patch_instructions,
             patch_usage,
         ) = await _generate_patch_instructions_logic(
-            agent,
+            plot_outline,
             original_text,
             problems_to_fix,
             chapter_number,
@@ -851,8 +826,8 @@ async def revise_chapter_draft_logic(
             truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)",
         )
         plan_focus_section_full_rewrite_parts: List[str] = []
-        plot_point_focus_full_rewrite, _ = _get_plot_point_info_from_agent(
-            agent, chapter_number
+        plot_point_focus_full_rewrite, _ = _get_plot_point_info(
+            plot_outline, chapter_number
         )
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
@@ -912,11 +887,8 @@ async def revise_chapter_draft_logic(
             length_issue_explicit_instruction_full_rewrite_parts
         )
 
-        protagonist_name_full_rewrite = _get_nested_prop_from_agent(
-            agent,
-            "plot_outline",
-            "protagonist_name",
-            config.DEFAULT_PROTAGONIST_NAME,
+        protagonist_name_full_rewrite = plot_outline.get(
+            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
 
         all_problem_descriptions_parts: List[str] = []
@@ -978,7 +950,7 @@ async def revise_chapter_draft_logic(
                 "2.  **Rewrite the ENTIRE chapter.** Produce a fresh, coherent, and engaging narrative.",
                 "3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite_str`, follow it closely. Otherwise, align with the `Original Chapter Focus`.",
                 "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
-                f"5.  Maintain the novel's established tone, style, and genre ('{_get_nested_prop_from_agent(agent, 'plot_outline', 'genre', 'story')}').",
+                f"5.  Maintain the novel's established tone, style, and genre ('{plot_outline.get('genre', 'story')}').",
                 f"6.  Target a substantial chapter length, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
                 '7.  Output ONLY the rewritten chapter text.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.',
                 "",

@@ -1,7 +1,6 @@
 # world_continuity_agent.py
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-from types import SimpleNamespace
 from kg_maintainer.models import CharacterProfile, ProblemDetail, WorldItem
 
 import config
@@ -244,18 +243,13 @@ class WorldContinuityAgent:
         )
 
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
-        props = SimpleNamespace(
-            plot_outline=plot_outline,
-            character_profiles=character_profiles,
-            world_building=world_building,
-        )
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                props, chapter_number - 1
+                character_profiles, chapter_number - 1
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            props, chapter_number - 1
+            world_building, chapter_number - 1
         )
 
         plot_points_summary_lines = (

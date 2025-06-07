@@ -5,11 +5,15 @@ Context data for prompts is now formatted as plain text.
 """
 
 import logging
-from typing import Tuple, Optional, List
+from typing import Dict, List, Optional, Tuple
 
 import config
 from llm_interface import llm_service
-from kg_maintainer.models import SceneDetail
+from kg_maintainer.models import (
+    CharacterProfile,
+    SceneDetail,
+    WorldItem,
+)
 import utils
 
 # No direct state_manager import needed here as orchestrator passes data
@@ -35,16 +39,16 @@ def _format_scene_plan_for_prompt(
 
 
 async def generate_chapter_draft_logic(
-    agent,
+    plot_outline: Dict[str, Any],
+    character_profiles: Dict[str, CharacterProfile],
+    world_building: Dict[str, Dict[str, WorldItem]],
     chapter_number: int,
     plot_point_focus: Optional[str],
     hybrid_context: str,
     chapter_plan: Optional[List[SceneDetail]],
 ) -> Tuple[Optional[str], Optional[str]]:
     """Generates the initial draft text for a chapter using HYBRID CONTEXT.
-    Context data and scene plan are now formatted as plain text.
-    'agent' here refers to the orchestrator or an object holding
-    plot_outline etc.
+    Context data and scene plan are formatted as plain text.
     """
     if not plot_point_focus:
         plot_point_focus = (
@@ -89,19 +93,15 @@ async def generate_chapter_draft_logic(
 
     char_profiles_plain_text = (
         await get_filtered_character_profiles_for_prompt_plain_text(
-            agent, chapter_number - 1
+            character_profiles, chapter_number - 1
         )
     )
     world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-        agent,
+        world_building,
         chapter_number - 1,
     )
 
-    plot_outline_data = getattr(
-        agent,
-        "plot_outline",
-        agent.get("plot_outline_full", agent.get("plot_outline", {})),
-    )
+    plot_outline_data = plot_outline
 
     prompt_lines = []
     if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
