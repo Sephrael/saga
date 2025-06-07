@@ -106,49 +106,58 @@ NEO4J_VECTOR_PROPERTY_NAME: str = "embedding_vector"
 NEO4J_VECTOR_DIMENSIONS: int = EXPECTED_EMBEDDING_DIM
 NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
-# Model Aliases & Defaults
-LARGE_MODEL_DEFAULT: str = "Qwen3-14B-Q4"
-MEDIUM_MODEL_DEFAULT: str = "Qwen3-8B-Q4"
-SMALL_MODEL_DEFAULT: str = "Qwen3-4B-Q4"
-NARRATOR_MODEL_DEFAULT: str = "Qwen3-14B-Q4"
 
-LARGE_MODEL: str = os.getenv("LARGE_MODEL", LARGE_MODEL_DEFAULT)
-MEDIUM_MODEL: str = os.getenv("MEDIUM_MODEL", MEDIUM_MODEL_DEFAULT)
-SMALL_MODEL: str = os.getenv("SMALL_MODEL", SMALL_MODEL_DEFAULT)
-NARRATOR_MODEL: str = os.getenv("NARRATOR_MODEL", NARRATOR_MODEL_DEFAULT)
+# Model Aliases & Defaults grouped in a nested class
+class Models:
+    """Model configuration values."""
+
+    LARGE_DEFAULT: str = "Qwen3-14B-Q4"
+    MEDIUM_DEFAULT: str = "Qwen3-8B-Q4"
+    SMALL_DEFAULT: str = "Qwen3-4B-Q4"
+    NARRATOR_DEFAULT: str = "Qwen3-14B-Q4"
+
+    LARGE: str = os.getenv("LARGE_MODEL", LARGE_DEFAULT)
+    MEDIUM: str = os.getenv("MEDIUM_MODEL", MEDIUM_DEFAULT)
+    SMALL: str = os.getenv("SMALL_MODEL", SMALL_DEFAULT)
+    NARRATOR: str = os.getenv("NARRATOR_MODEL", NARRATOR_DEFAULT)
+
 
 # --- LLM Call Settings & Fallbacks ---
 LLM_RETRY_ATTEMPTS: int = int(os.getenv("LLM_RETRY_ATTEMPTS", "3"))
 LLM_RETRY_DELAY_SECONDS: float = 3.0
 HTTPX_TIMEOUT: float = float(os.getenv("HTTPX_TIMEOUT", "600.0"))
-FALLBACK_GENERATION_MODEL: str = MEDIUM_MODEL
+FALLBACK_GENERATION_MODEL: str = Models.MEDIUM
 ENABLE_LLM_NO_THINK_DIRECTIVE: bool = (
     os.getenv("ENABLE_LLM_NO_THINK_DIRECTIVE", "True").lower() == "true"
 )
 
 # Specific model assignments for different tasks
-MAIN_GENERATION_MODEL: str = NARRATOR_MODEL
-KNOWLEDGE_UPDATE_MODEL: str = MEDIUM_MODEL
-INITIAL_SETUP_MODEL: str = MEDIUM_MODEL
-PLANNING_MODEL: str = LARGE_MODEL
-DRAFTING_MODEL: str = NARRATOR_MODEL
-REVISION_MODEL: str = NARRATOR_MODEL
-EVALUATION_MODEL: str = LARGE_MODEL
-PATCH_GENERATION_MODEL: str = MEDIUM_MODEL
+MAIN_GENERATION_MODEL: str = Models.NARRATOR
+KNOWLEDGE_UPDATE_MODEL: str = Models.MEDIUM
+INITIAL_SETUP_MODEL: str = Models.MEDIUM
+PLANNING_MODEL: str = Models.LARGE
+DRAFTING_MODEL: str = Models.NARRATOR
+REVISION_MODEL: str = Models.NARRATOR
+EVALUATION_MODEL: str = Models.LARGE
+PATCH_GENERATION_MODEL: str = Models.MEDIUM
 
-# Task-specific Temperatures
-TEMPERATURE_INITIAL_SETUP: float = float(os.getenv("TEMPERATURE_INITIAL_SETUP", "0.8"))
-TEMPERATURE_DRAFTING: float = float(os.getenv("TEMPERATURE_DRAFTING", "0.8"))
-TEMPERATURE_REVISION: float = float(os.getenv("TEMPERATURE_REVISION", "0.65"))
-TEMPERATURE_PLANNING: float = float(os.getenv("TEMPERATURE_PLANNING", "0.6"))
-TEMPERATURE_EVALUATION: float = float(os.getenv("TEMPERATURE_EVALUATION", "0.3"))
-TEMPERATURE_CONSISTENCY_CHECK: float = float(
-    os.getenv("TEMPERATURE_CONSISTENCY_CHECK", "0.2")
-)
-TEMPERATURE_KG_EXTRACTION: float = float(os.getenv("TEMPERATURE_KG_EXTRACTION", "0.4"))
-TEMPERATURE_SUMMARY: float = float(os.getenv("TEMPERATURE_SUMMARY", "0.5"))
-TEMPERATURE_PATCH: float = float(os.getenv("TEMPERATURE_PATCH", "0.7"))
-TEMPERATURE_DEFAULT: float = 0.6
+
+# Task-specific Temperatures grouped in a nested class
+class Temperatures:
+    """Temperature settings for various tasks."""
+
+    INITIAL_SETUP: float = float(os.getenv("TEMPERATURE_INITIAL_SETUP", "0.8"))
+    DRAFTING: float = float(os.getenv("TEMPERATURE_DRAFTING", "0.8"))
+    REVISION: float = float(os.getenv("TEMPERATURE_REVISION", "0.65"))
+    PLANNING: float = float(os.getenv("TEMPERATURE_PLANNING", "0.6"))
+    EVALUATION: float = float(os.getenv("TEMPERATURE_EVALUATION", "0.3"))
+    CONSISTENCY_CHECK: float = float(os.getenv("TEMPERATURE_CONSISTENCY_CHECK", "0.2"))
+    KG_EXTRACTION: float = float(os.getenv("TEMPERATURE_KG_EXTRACTION", "0.4"))
+    SUMMARY: float = float(os.getenv("TEMPERATURE_SUMMARY", "0.5"))
+    PATCH: float = float(os.getenv("TEMPERATURE_PATCH", "0.7"))
+    DEFAULT: float = 0.6
+
+
 LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.8"))
 
 # --- LLM Frequency and Presence Penalties ---

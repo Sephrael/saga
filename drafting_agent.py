@@ -95,7 +95,7 @@ class DraftingAgent:
         draft_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.TEMPERATURE_DRAFTING,
+            temperature=config.Temperatures.DRAFTING,
             max_tokens=max_gen_tokens,  # Use potentially adjusted max_gen_tokens
             allow_fallback=True,  # Allow fallback for critical drafting step
             stream_to_disk=True,  # Streaming is good for long generations

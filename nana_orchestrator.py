@@ -1097,10 +1097,10 @@ class NANA_Orchestrator:
             "OPENAI_API_BASE": config.OPENAI_API_BASE,
             "EMBEDDING_MODEL": config.EMBEDDING_MODEL,
             "NEO4J_URI": config.NEO4J_URI,
-            "LARGE_MODEL": config.LARGE_MODEL,
-            "MEDIUM_MODEL": config.MEDIUM_MODEL,
-            "SMALL_MODEL": config.SMALL_MODEL,
-            "NARRATOR_MODEL": config.NARRATOR_MODEL,
+            "LARGE_MODEL": config.Models.LARGE,
+            "MEDIUM_MODEL": config.Models.MEDIUM,
+            "SMALL_MODEL": config.Models.SMALL,
+            "NARRATOR_MODEL": config.Models.NARRATOR,
         }
         missing_or_empty_configs = []
         for name, value in critical_str_configs.items():

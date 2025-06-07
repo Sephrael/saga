@@ -235,7 +235,7 @@ async def generate_chapter_draft_logic(
     raw_llm_text_for_log, draft_usage = await llm_service.async_call_llm(
         model_name=config.DRAFTING_MODEL,
         prompt=prompt,
-        temperature=config.TEMPERATURE_DRAFTING,
+        temperature=config.Temperatures.DRAFTING,
         max_tokens=None,
         allow_fallback=True,
         stream_to_disk=True,
