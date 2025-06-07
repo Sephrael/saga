@@ -3,6 +3,7 @@
 import json  # Added for JSON parsing
 import logging
 import re
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
@@ -16,7 +17,7 @@ from prompt_data_getters import (
     get_reliable_kg_facts_for_drafting_prompt,
     get_world_state_snippet_for_prompt,
 )
-from kg_maintainer.models import SceneDetail
+from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,9 @@ class PlannerAgent:
 
     async def plan_chapter_scenes(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
         chapter_number: int,
         plot_point_focus: Optional[str],
         plot_point_index: int,
@@ -216,23 +219,26 @@ class PlannerAgent:
 
         context_summary_str = "".join(context_summary_parts)
 
-        protagonist_name = novel_props.get(
+        protagonist_name = plot_outline.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
+        props = SimpleNamespace(
+            plot_outline=plot_outline,
+            character_profiles=character_profiles,
+            world_building=world_building,
+        )
         kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
-            novel_props, chapter_number, None
+            props, chapter_number, None
         )
         character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(novel_props, chapter_number)
+            await get_character_state_snippet_for_prompt(props, chapter_number)
         )
         world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
-            novel_props, chapter_number
+            props, chapter_number
         )
 
         future_plot_context_parts: List[str] = []
-        all_plot_points = novel_props.get("plot_outline_full", {}).get(
-            "plot_points", []
-        )
+        all_plot_points = plot_outline.get("plot_points", [])
         total_plot_points_in_novel = len(all_plot_points)
 
         if plot_point_index + 1 < total_plot_points_in_novel:
@@ -293,11 +299,11 @@ class PlannerAgent:
                 "target_scenes_min": config.TARGET_SCENES_MIN,
                 "target_scenes_max": config.TARGET_SCENES_MAX,
                 "chapter_number": chapter_number,
-                "novel_title": novel_props.get("title", "Untitled"),
-                "novel_genre": novel_props.get("genre", "N/A"),
-                "novel_theme": novel_props.get("theme", "N/A"),
+                "novel_title": plot_outline.get("title", "Untitled"),
+                "novel_genre": plot_outline.get("genre", "N/A"),
+                "novel_theme": plot_outline.get("theme", "N/A"),
                 "protagonist_name": protagonist_name,
-                "protagonist_arc": novel_props.get("character_arc", "N/A"),
+                "protagonist_arc": plot_outline.get("character_arc", "N/A"),
                 "plot_point_index_plus1": plot_point_index + 1,
                 "total_plot_points_in_novel": total_plot_points_in_novel,
                 "plot_point_focus": plot_point_focus,

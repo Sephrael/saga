@@ -509,12 +509,17 @@ async def _get_character_profiles_dict_with_notes(
         return {}
     for char_name, profile_original in character_profiles_data.items():
         if not isinstance(profile_original, dict):
-            logger.warning(
-                f"Character profile for '{char_name}' is not a dict. Skipping."
-            )
-            continue
+            if hasattr(profile_original, "to_dict"):
+                profile_dict = profile_original.to_dict()
+            else:
+                logger.warning(
+                    f"Character profile for '{char_name}' is not a dict. Skipping."
+                )
+                continue
+        else:
+            profile_dict = profile_original
         processed_profiles[char_name] = _add_provisional_notes_and_filter_developments(
-            profile_original, filter_chapter, is_character=True
+            profile_dict, filter_chapter, is_character=True
         )
     return processed_profiles
 
@@ -573,11 +578,14 @@ async def _get_world_data_dict_with_notes(
             "source",
             "user_supplied_data",
         ]:
-            logger.warning(
-                f"World category '{category_name}' content is not a dict (type: {type(category_items_original)}). Skipping formatting."
-            )
-            processed_world_data[category_name] = {}
-            continue
+            if hasattr(category_items_original, "to_dict"):
+                category_items_original = category_items_original.to_dict()
+            else:
+                logger.warning(
+                    f"World category '{category_name}' content is not a dict (type: {type(category_items_original)}). Skipping formatting."
+                )
+                processed_world_data[category_name] = {}
+                continue
         if category_name in ["is_default", "source", "user_supplied_data"]:
             processed_world_data[category_name] = category_items_original
             continue
@@ -590,13 +598,18 @@ async def _get_world_data_dict_with_notes(
         else:
             for item_name, item_data_original in category_items_original.items():
                 if not isinstance(item_data_original, dict):
-                    logger.warning(
-                        f"World item '{item_name}' in category '{category_name}' is not a dict. Skipping."
-                    )
-                    continue
+                    if hasattr(item_data_original, "to_dict"):
+                        item_dict = item_data_original.to_dict()
+                    else:
+                        logger.warning(
+                            f"World item '{item_name}' in category '{category_name}' is not a dict. Skipping."
+                        )
+                        continue
+                else:
+                    item_dict = item_data_original
                 processed_category[item_name] = (
                     _add_provisional_notes_and_filter_developments(
-                        item_data_original, filter_chapter, is_character=False
+                        item_dict, filter_chapter, is_character=False
                     )
                 )
         processed_world_data[category_name] = processed_category

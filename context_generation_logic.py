@@ -60,13 +60,20 @@ async def _generate_semantic_chapter_context_logic(
         f"Retrieving and constructing SEMANTIC context for Chapter {current_chapter_number} via Neo4j vector search..."
     )
 
-    plot_outline_data = agent_or_props.get(
-        "plot_outline_full", agent_or_props.get("plot_outline", {})
-    )
+    if isinstance(agent_or_props, dict):
+        plot_outline_data = agent_or_props.get(
+            "plot_outline_full", agent_or_props.get("plot_outline", {})
+        )
+    else:
+        plot_outline_data = getattr(agent_or_props, "plot_outline_full", None)
+        if not plot_outline_data:
+            plot_outline_data = getattr(agent_or_props, "plot_outline", {})
 
     plot_points = []
     if isinstance(plot_outline_data, dict):
         plot_points = plot_outline_data.get("plot_points", [])
+    else:
+        plot_points = getattr(plot_outline_data, "plot_points", [])
 
     plot_point_focus = None
     if plot_points and isinstance(plot_points, list) and current_chapter_number > 0:

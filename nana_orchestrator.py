@@ -261,9 +261,35 @@ class NANA_Orchestrator:
                 if key == "plot":
                     self.plot_outline = value if isinstance(value, dict) else {}
                 elif key == "chars":
-                    self.character_profiles = value if isinstance(value, dict) else {}
+                    if isinstance(value, dict):
+                        self.character_profiles = {
+                            name: (
+                                val
+                                if isinstance(val, CharacterProfile)
+                                else CharacterProfile.from_dict(name, val)
+                            )
+                            for name, val in value.items()
+                        }
+                    else:
+                        self.character_profiles = {}
                 elif key == "world":
-                    self.world_building = value if isinstance(value, dict) else {}
+                    if isinstance(value, dict):
+                        rebuilt: Dict[str, Dict[str, WorldItem]] = {}
+                        for cat, items in value.items():
+                            if isinstance(items, dict):
+                                rebuilt[cat] = {
+                                    nm: (
+                                        it
+                                        if isinstance(it, WorldItem)
+                                        else WorldItem.from_dict(cat, nm, it)
+                                    )
+                                    for nm, it in items.items()
+                                }
+                            else:
+                                rebuilt[cat] = items
+                        self.world_building = rebuilt
+                    else:
+                        self.world_building = {}
 
         if not self.plot_outline.get("plot_points"):
             logger.warning(
@@ -593,11 +619,14 @@ class NANA_Orchestrator:
             return None, -1, None, None
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Planning Scenes")
+        self._update_novel_props_cache()
         (
             chapter_plan_result,
             plan_usage,
         ) = await self.planner_agent.plan_chapter_scenes(
-            self.novel_props_cache,
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
@@ -618,7 +647,7 @@ class NANA_Orchestrator:
             step=f"Ch {novel_chapter_number} - Generating Hybrid Context"
         )
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
-            self.novel_props_cache, novel_chapter_number, chapter_plan
+            self, novel_chapter_number, chapter_plan
         )
         await self._save_debug_output(
             novel_chapter_number,
@@ -648,7 +677,9 @@ class NANA_Orchestrator:
             initial_raw_llm_text,
             draft_usage,
         ) = await self.drafting_agent.draft_chapter(
-            self.novel_props_cache,
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
             novel_chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
@@ -739,7 +770,9 @@ class NANA_Orchestrator:
                 eval_result_obj,
                 eval_usage,
             ) = await self.evaluator_agent.evaluate_chapter_draft(
-                self.novel_props_cache,
+                self.plot_outline,
+                self.character_profiles,
+                self.world_building,
                 current_text_to_process,
                 novel_chapter_number,
                 plot_point_focus,
@@ -764,7 +797,9 @@ class NANA_Orchestrator:
                 continuity_problems,
                 continuity_usage,
             ) = await self.world_continuity_agent.check_consistency(
-                self.novel_props_cache,
+                self.plot_outline,
+                self.character_profiles,
+                self.world_building,
                 current_text_to_process,
                 novel_chapter_number,
                 hybrid_context_for_draft,
@@ -951,7 +986,9 @@ class NANA_Orchestrator:
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Updating KG")
         kg_merge_usage = await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.novel_props_cache,
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
             novel_chapter_number,
             final_text_to_process,
             is_from_flawed_source_for_kg,
@@ -959,29 +996,6 @@ class NANA_Orchestrator:
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
         )
-
-        self.character_profiles = {
-            name: CharacterProfile.from_dict(name, data)
-            if isinstance(data, dict)
-            else data
-            for name, data in self.novel_props_cache.get(
-                "character_profiles", {}
-            ).items()
-        }
-        self.world_building = {
-            cat: {
-                name: WorldItem.from_dict(cat, name, item)
-                if isinstance(item, dict)
-                else item
-                for name, item in items.items()
-            }
-            for cat, items in self.novel_props_cache.get("world_building", {}).items()
-            if isinstance(items, dict)
-        }
-        # Copy over non-dict metadata like 'source'
-        for cat, items in self.novel_props_cache.get("world_building", {}).items():
-            if not isinstance(items, dict):
-                self.world_building[cat] = items
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
 
