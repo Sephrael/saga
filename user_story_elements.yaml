@@ -15,11 +15,10 @@ protagonist:
   name: "Jules Vidant"
   description: "[Fill-in]"
   traits:
-    - "Clever"
-    - "Witty (Dry Humor)"
-    - "Resourceful"
-    - "Introverted"
-    - "[Fill-in]"
+    - "clever"
+    - "witty"
+    - "resourceful"
+    - "introverted"
   motivation: "[Fill-in]"
   relationships:
     tula_veridian: # Using normalized keys directly in YAML is cleaner
@@ -27,7 +26,7 @@ protagonist:
       status: "[Fill-in]"
       details: "[Fill-in]"
     sampson_taylor:
-      name: "sampson_taylor"
+      name: "Sampson Taylor"
       status: "Active"
       details: "[Fill-in]"
     # Add other key relationships as needed, e.g.:
