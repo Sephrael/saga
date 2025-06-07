@@ -1,12 +1,18 @@
 # comprehensive_evaluator_agent.py
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from types import SimpleNamespace
 
 import config
 from llm_interface import llm_service  # MODIFIED
 from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
-from kg_maintainer.models import EvaluationResult, ProblemDetail
+from kg_maintainer.models import (
+    CharacterProfile,
+    EvaluationResult,
+    ProblemDetail,
+    WorldItem,
+)
 from data_access import chapter_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -220,7 +226,9 @@ class ComprehensiveEvaluatorAgent:
 
     async def _perform_llm_comprehensive_evaluation(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
         draft_text: str,
         chapter_number: int,
         plot_point_focus: Optional[str],
@@ -245,26 +253,32 @@ class ComprehensiveEvaluatorAgent:
             )
 
         # novel_theme_str, novel_genre_str, protagonist_arc_str removed
-        protagonist_name_str = novel_props.get("protagonist_name", "The Protagonist")
+        protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
+
+        props = SimpleNamespace(
+            plot_outline=plot_outline,
+            character_profiles=character_profiles,
+            world_building=world_building,
+        )
 
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                novel_props, chapter_number - 1
+                props, chapter_number - 1
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            novel_props, chapter_number - 1
+            props, chapter_number - 1
         )
         kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(
-            novel_props, chapter_number, None
+            props, chapter_number, None
         )
 
         plot_points_summary_lines = (
             [
                 f"- PP {i + 1}: {pp[:100]}..."
-                for i, pp in enumerate(novel_props.get("plot_points", []))
+                for i, pp in enumerate(plot_outline.get("plot_points", []))
             ]
-            if novel_props.get("plot_points")
+            if plot_outline.get("plot_points")
             else ["  - Not available"]
         )
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
@@ -299,14 +313,14 @@ class ComprehensiveEvaluatorAgent:
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
-                "novel_title": novel_props.get("title", "Untitled Novel"),
+                "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,
                 "min_length": config.MIN_ACCEPTABLE_DRAFT_LENGTH,
-                "novel_genre": novel_props.get("genre", "N/A"),
-                "novel_theme": novel_props.get("theme", "N/A"),
-                "novel_protagonist": novel_props.get("protagonist_name", "N/A"),
-                "protagonist_arc": novel_props.get("character_arc", "N/A"),
-                "logline": novel_props.get("logline", "N/A"),
+                "novel_genre": plot_outline.get("genre", "N/A"),
+                "novel_theme": plot_outline.get("theme", "N/A"),
+                "novel_protagonist": plot_outline.get("protagonist_name", "N/A"),
+                "protagonist_arc": plot_outline.get("character_arc", "N/A"),
+                "logline": plot_outline.get("logline", "N/A"),
                 "plot_points_summary_str": plot_points_summary_str,
                 "char_profiles_plain_text": char_profiles_plain_text,
                 "world_building_plain_text": world_building_plain_text,
@@ -416,7 +430,9 @@ class ComprehensiveEvaluatorAgent:
 
     async def evaluate_chapter_draft(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
         draft_text: str,
         chapter_number: int,
         plot_point_focus: Optional[str],
@@ -511,7 +527,9 @@ class ComprehensiveEvaluatorAgent:
             llm_eval_output_dict,
             llm_usage,
         ) = await self._perform_llm_comprehensive_evaluation(
-            novel_props,
+            plot_outline,
+            character_profiles,
+            world_building,
             draft_text,
             chapter_number,
             plot_point_focus,

@@ -165,10 +165,13 @@ class KGMaintainerAgent:
             return None, None
 
     async def _llm_extract_updates(
-        self, novel_props: Dict[str, Any], chapter_text: str, chapter_number: int
+        self,
+        plot_outline: Dict[str, Any],
+        chapter_text: str,
+        chapter_number: int,
     ) -> Tuple[str, Optional[Dict[str, int]]]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
-        protagonist = novel_props.get(
+        protagonist = plot_outline.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
 
@@ -178,8 +181,8 @@ class KGMaintainerAgent:
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "protagonist": protagonist,
                 "chapter_number": chapter_number,
-                "novel_title": novel_props.get("title", "Untitled Novel"),
-                "novel_genre": novel_props.get("genre", "Unknown"),
+                "novel_title": plot_outline.get("title", "Untitled Novel"),
+                "novel_genre": plot_outline.get("genre", "Unknown"),
                 "chapter_text": chapter_text,
             },
         )
@@ -203,7 +206,9 @@ class KGMaintainerAgent:
 
     async def extract_and_merge_knowledge(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, models.CharacterProfile],
+        world_building: Dict[str, Dict[str, models.WorldItem]],
         chapter_number: int,
         chapter_text: str,
         is_from_flawed_draft: bool = False,
@@ -227,7 +232,7 @@ class KGMaintainerAgent:
         )
 
         raw_extracted_text, usage_data = await self._llm_extract_updates(
-            novel_props, chapter_text, chapter_number
+            plot_outline, chapter_text, chapter_number
         )
 
         if not raw_extracted_text.strip():
@@ -296,23 +301,8 @@ class KGMaintainerAgent:
             f"{len(parsed_triples_structured)} KG triples."
         )
 
-        # Convert current novel_props dicts to model instances for merge
-        current_char_profiles_dict = novel_props.get("character_profiles", {})
-        current_char_profiles_models: Dict[str, models.CharacterProfile] = {
-            name: models.CharacterProfile.from_dict(name, data)
-            for name, data in current_char_profiles_dict.items()
-            if isinstance(data, dict)
-        }
-
-        current_world_dict = novel_props.get("world_building", {})
-        current_world_models: Dict[str, Dict[str, models.WorldItem]] = {}
-        for cat, items_dict in current_world_dict.items():
-            if isinstance(items_dict, dict):
-                current_world_models[cat] = {
-                    item_name: models.WorldItem.from_dict(cat, item_name, item_data)
-                    for item_name, item_data in items_dict.items()
-                    if isinstance(item_data, dict)
-                }
+        current_char_profiles_models = character_profiles
+        current_world_models = world_building
 
         self.merge_updates(
             current_char_profiles_models,  # Pass model instances
@@ -346,15 +336,6 @@ class KGMaintainerAgent:
                     f"Failed to persist KG triples for chapter {chapter_number}: {e}",
                     exc_info=True,
                 )
-
-        # Update novel_props with the merged data (converted back to dicts)
-        novel_props["character_profiles"] = {
-            name: prof.to_dict() for name, prof in current_char_profiles_models.items()
-        }
-        novel_props["world_building"] = {
-            cat: {name: item.to_dict() for name, item in items.items()}
-            for cat, items in current_world_models.items()
-        }
 
         logger.info(
             "Knowledge extraction, in-memory merge, and delta persistence complete for chapter %d.",

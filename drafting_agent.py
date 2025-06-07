@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import config
 from llm_interface import count_tokens, llm_service
 from prompt_renderer import render_prompt
-from kg_maintainer.models import SceneDetail
+from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 from utils import format_scene_plan_for_prompt
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,9 @@ class DraftingAgent:
 
     async def draft_chapter(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
         chapter_number: int,
         plot_point_focus: str,
         hybrid_context_for_draft: str,
@@ -30,12 +32,12 @@ class DraftingAgent:
         """
         logger.info(f"DraftingAgent: Generating draft for Chapter {chapter_number}...")
 
-        protagonist_name = novel_props.get(
+        protagonist_name = plot_outline.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
-        novel_title = novel_props.get("title", "Untitled Novel")
-        novel_genre = novel_props.get("genre", "Unknown Genre")
-        novel_theme = novel_props.get("theme", "Unknown Theme")
+        novel_title = plot_outline.get("title", "Untitled Novel")
+        novel_genre = plot_outline.get("genre", "Unknown Genre")
+        novel_theme = plot_outline.get("theme", "Unknown Theme")
 
         # Prepare the scene plan part of the prompt
         # Max tokens for scene plan in prompt can be a fraction of total context, e.g., 1/4th

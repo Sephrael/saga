@@ -1,6 +1,7 @@
 import asyncio
 
 from kg_maintainer_agent import KGMaintainerAgent
+from kg_maintainer.models import CharacterProfile
 
 
 class DummyLLM:
@@ -28,11 +29,18 @@ def test_extract_and_merge(monkeypatch):
         lambda triples: asyncio.sleep(0),
     )
 
-    props = {
-        "character_profiles": {"Alice": {"description": "Old"}},
-        "world_building": {},
-    }
+    plot_outline = {}
+    character_profiles = {"Alice": CharacterProfile(name="Alice", description="Old")}
+    world_building = {}
 
-    usage = asyncio.run(agent.extract_and_merge_knowledge(props, 1, "text"))
+    usage = asyncio.run(
+        agent.extract_and_merge_knowledge(
+            plot_outline,
+            character_profiles,
+            world_building,
+            1,
+            "text",
+        )
+    )
     assert usage == {"total_tokens": 10}
-    assert props["character_profiles"]["Alice"]["traits"] == ["brave"]
+    assert character_profiles["Alice"].traits == ["brave"]

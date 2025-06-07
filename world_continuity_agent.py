@@ -1,12 +1,13 @@
 # world_continuity_agent.py
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from types import SimpleNamespace
+from kg_maintainer.models import CharacterProfile, ProblemDetail, WorldItem
 
 import config
 from llm_interface import llm_service  # MODIFIED
 from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
-from kg_maintainer.models import ProblemDetail
 from data_access import kg_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -225,7 +226,9 @@ class WorldContinuityAgent:
 
     async def check_consistency(
         self,
-        novel_props: Dict[str, Any],
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str,
@@ -240,22 +243,27 @@ class WorldContinuityAgent:
             f"WorldContinuityAgent performing focused consistency check for Chapter {chapter_number}..."
         )
 
-        protagonist_name_str = novel_props.get("protagonist_name", "The Protagonist")
+        protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
+        props = SimpleNamespace(
+            plot_outline=plot_outline,
+            character_profiles=character_profiles,
+            world_building=world_building,
+        )
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                novel_props, chapter_number - 1
+                props, chapter_number - 1
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            novel_props, chapter_number - 1
+            props, chapter_number - 1
         )
 
         plot_points_summary_lines = (
             [
                 f"- PP {i + 1}: {pp[:100]}..."
-                for i, pp in enumerate(novel_props.get("plot_points", []))
+                for i, pp in enumerate(plot_outline.get("plot_points", []))
             ]
-            if novel_props.get("plot_points")
+            if plot_outline.get("plot_points")
             else ["  - Not available"]
         )
         plot_points_summary_str = "\n".join(plot_points_summary_lines)
@@ -291,13 +299,13 @@ class WorldContinuityAgent:
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
-                "novel_title": novel_props.get("title", "Untitled Novel"),
+                "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,
-                "novel_genre": novel_props.get("genre", "N/A"),
-                "novel_theme": novel_props.get("theme", "N/A"),
-                "novel_protagonist": novel_props.get("protagonist_name", "N/A"),
-                "protagonist_arc": novel_props.get("character_arc", "N/A"),
-                "logline": novel_props.get("logline", "N/A"),
+                "novel_genre": plot_outline.get("genre", "N/A"),
+                "novel_theme": plot_outline.get("theme", "N/A"),
+                "novel_protagonist": plot_outline.get("protagonist_name", "N/A"),
+                "protagonist_arc": plot_outline.get("character_arc", "N/A"),
+                "logline": plot_outline.get("logline", "N/A"),
                 "plot_points_summary_str": plot_points_summary_str,
                 "char_profiles_plain_text": char_profiles_plain_text,
                 "world_building_plain_text": world_building_plain_text,
