@@ -1,21 +1,21 @@
 # kg_maintainer_agent.py
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
 
 import config
-from core_db.base_db_manager import neo4j_manager
 from data_access import kg_queries
+from data_access import character_queries, world_queries
 from parsing_utils import (
     parse_rdf_triples_with_rdflib,
 )  # Will be modified to custom parser
 
 # Assuming a package structure for kg_maintainer components
-from kg_maintainer import models, parsing, merge, cypher_generation
+from kg_maintainer import models, parsing, merge
 
 
 logger = logging.getLogger(__name__)
@@ -91,45 +91,20 @@ class KGMaintainerAgent:
         profiles_to_persist: Dict[str, models.CharacterProfile],
         chapter_number_for_delta: int,
     ) -> None:
-        """Persist character profiles (delta from a chapter) to Neo4j using cypher_generation."""
-        statements: List[Tuple[str, Dict[str, Any]]] = []
-        for profile_obj in profiles_to_persist.values():
-            # Pass chapter_number_for_delta for context if needed by cypher_generation
-            statements.extend(
-                cypher_generation.generate_character_node_cypher(
-                    profile_obj, chapter_number_for_delta
-                )
-            )
-        if statements:
-            await neo4j_manager.execute_cypher_batch(statements)
-            logger.info(
-                f"Persisted {len(profiles_to_persist)} character profile updates from chapter {chapter_number_for_delta} delta to Neo4j."
-            )
+        """Persist character profiles to Neo4j."""
+        await character_queries.sync_characters(
+            profiles_to_persist, chapter_number_for_delta
+        )
 
     async def persist_world(
         self,
         world_items_to_persist: Dict[str, Dict[str, models.WorldItem]],
         chapter_number_for_delta: int,
     ) -> None:
-        """Persist world elements (delta from a chapter) to Neo4j using cypher_generation."""
-        statements: List[Tuple[str, Dict[str, Any]]] = []
-        count = 0
-        for category_items in world_items_to_persist.values():
-            if not isinstance(category_items, dict):
-                continue
-            for item_obj in category_items.values():
-                # Pass chapter_number_for_delta for context
-                statements.extend(
-                    cypher_generation.generate_world_element_node_cypher(
-                        item_obj, chapter_number_for_delta
-                    )
-                )
-                count += 1
-        if statements:
-            await neo4j_manager.execute_cypher_batch(statements)
-            logger.info(
-                f"Persisted {count} world element updates from chapter {chapter_number_for_delta} delta to Neo4j."
-            )
+        """Persist world elements to Neo4j."""
+        await world_queries.sync_world_items(
+            world_items_to_persist, chapter_number_for_delta
+        )
 
     async def summarize_chapter(
         self, chapter_text: Optional[str], chapter_number: int

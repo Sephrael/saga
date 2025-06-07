@@ -1,9 +1,6 @@
-from kg_maintainer import (
-    CharacterProfile,
-    WorldItem,
-    generate_character_node_cypher,
-    generate_world_element_node_cypher,
-)
+from kg_maintainer import CharacterProfile, WorldItem
+from data_access.character_queries import generate_character_node_cypher
+from data_access.world_queries import generate_world_element_node_cypher
 
 
 def test_generate_character_node_cypher():
