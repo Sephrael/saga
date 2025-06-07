@@ -4,19 +4,17 @@ import re
 from typing import Any, Dict, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
-from llm_interface import llm_service
-from prompt_renderer import render_prompt
 
 import config
-from data_access import kg_queries
-from data_access import character_queries, world_queries
+from data_access import character_queries, kg_queries, world_queries
+
+# Assuming a package structure for kg_maintainer components
+from kg_maintainer import merge, models, parsing
+from llm_interface import llm_service
 from parsing_utils import (
     parse_rdf_triples_with_rdflib,
 )  # Will be modified to custom parser
-
-# Assuming a package structure for kg_maintainer components
-from kg_maintainer import models, parsing, merge
-
+from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -190,15 +188,10 @@ class KGMaintainerAgent:
         chapter_text: str,
         is_from_flawed_draft: bool = False,
     ) -> Optional[Dict[str, int]]:
-        if (
-            not chapter_text
-            or len(chapter_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
-        ):
+        if not chapter_text:
             logger.warning(
-                "Skipping knowledge extraction for chapter %s: text too short (%d chars, min_req: %d).",
+                "Skipping knowledge extraction for chapter %s: no text provided.",
                 chapter_number,
-                len(chapter_text or ""),
-                config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2,
             )
             return None
 
