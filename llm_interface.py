@@ -690,7 +690,7 @@ class LLMService:
                     )
 
             if last_exception_for_current_model is None:
-                pass
+                break
 
             is_fallback_attempt = True
 
