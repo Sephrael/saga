@@ -81,7 +81,14 @@ async def get_character_state_snippet_for_prompt(
             logger.error(
                 f"Error fetching snippet info for character '{char_name_for_snippet}' from Neo4j: {res_or_exc}"
             )
-            profile_fallback = character_profiles_data.get(char_name_for_snippet, {})
+            profile_fallback_obj = character_profiles_data.get(char_name_for_snippet)
+            if isinstance(profile_fallback_obj, CharacterProfile):
+                profile_fallback = profile_fallback_obj.to_dict()
+            elif isinstance(profile_fallback_obj, dict):
+                profile_fallback = profile_fallback_obj
+            else:
+                profile_fallback = {}
+
             desc_fb = (
                 (
                     str(
@@ -126,7 +133,14 @@ async def get_character_state_snippet_for_prompt(
             logger.warning(
                 f"Neo4j character snippet fetch for '{char_name_for_snippet}' was None. Using local state as fallback."
             )
-            profile_fallback = character_profiles_data.get(char_name_for_snippet, {})
+            profile_fallback_obj = character_profiles_data.get(char_name_for_snippet)
+            if isinstance(profile_fallback_obj, CharacterProfile):
+                profile_fallback = profile_fallback_obj.to_dict()
+            elif isinstance(profile_fallback_obj, dict):
+                profile_fallback = profile_fallback_obj
+            else:
+                profile_fallback = {}
+
             desc_fb = (
                 (
                     str(profile_fallback.get("description", "N/A"))[
