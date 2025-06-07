@@ -1,0 +1,11 @@
+{% if no_think %}/no_think
+{% endif %}You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {{ chapter_number }} text.
+The summary should be 1-3 sentences long and capture the most crucial information.
+Focus on what changed or was revealed.
+
+Full Chapter Text:
+--- BEGIN TEXT ---
+{{ chapter_text }}
+--- END TEXT ---
+
+Output ONLY the summary text. No extra commentary or "Summary:" prefix.

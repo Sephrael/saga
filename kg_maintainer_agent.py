@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
 from llm_interface import llm_service
+from prompt_renderer import render_prompt
 
 import config
 from core_db.base_db_manager import neo4j_manager
@@ -25,24 +26,14 @@ async def _llm_summarize_full_chapter_text(
     chapter_text: str, chapter_number: int
 ) -> Tuple[str, Optional[Dict[str, int]]]:
     """Summarize full chapter text via the configured LLM."""
-    prompt_lines = []
-    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-        prompt_lines.append("/no_think")
-    prompt_lines.extend(
-        [
-            f"You are a concise summarizer. Summarize the key events, character developments, and plot advancements from the following Chapter {chapter_number} text.",
-            "The summary should be 1-3 sentences long and capture the most crucial information.",
-            "Focus on what changed or was revealed.",
-            "",
-            "Full Chapter Text:",
-            "--- BEGIN TEXT ---",
-            chapter_text,
-            "--- END TEXT ---",
-            "",
-            'Output ONLY the summary text. No extra commentary or "Summary:" prefix.',
-        ]
+    prompt = render_prompt(
+        "kg_maintainer_agent/chapter_summary.j2",
+        {
+            "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "chapter_number": chapter_number,
+            "chapter_text": chapter_text,
+        },
     )
-    prompt = "\n".join(prompt_lines)
     summary, usage_data = await llm_service.async_call_llm(
         model_name=config.SMALL_MODEL,  # Using SMALL_MODEL for summarization
         prompt=prompt,
@@ -177,87 +168,21 @@ class KGMaintainerAgent:
         self, novel_props: Dict[str, Any], chapter_text: str, chapter_number: int
     ) -> Tuple[str, Optional[Dict[str, int]]]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
-        prompt_lines: List[str] = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-            prompt_lines.append("/no_think")
-
         protagonist = novel_props.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
 
-        prompt_lines.extend(
-            [
-                "You are an AI assistant specialized in analyzing fictional narrative text. Your task is to extract structured information about characters and world elements, and identify key relationships or events as KG triples.",
-                f"The story's protagonist is: {protagonist}.",
-                f"This is Chapter {chapter_number} of the novel titled '{novel_props.get('title', 'Untitled Novel')}' (Genre: {novel_props.get('genre', 'Unknown')}).",
-                "Focus on information explicitly stated or strongly implied in the provided chapter text.",
-                "Output the extracted information in three distinct sections, using these exact headers:",
-                "### CHARACTER UPDATES ###",
-                "### WORLD UPDATES ###",
-                "### KG TRIPLES ###",
-                "",
-                'For CHARACTER UPDATES: Output a JSON object where keys are character names. Each character\'s value should be another JSON object containing their attributes (e.g., {"status": "injured", "description": "now wears a red cloak"}).',
-                ' - For traits, use a key like "traits" with a JSON array of strings: ["trait1", "trait2"]. List only new or emphasized traits.',
-                ' - For relationships, use a key like "relationships" with a JSON object where keys are target character names and values are strings describing the relationship change/nuance: {"Target Character": "became allies"}.',
-                f' - Include a key "development_in_chapter_{chapter_number}" with a string value: "<Brief note on how the character developed or what they did in this chapter>".',
-                "Example for Character Updates (JSON format):",
-                "```json",
-                "{",
-                '  "Elara Voss": {',
-                '    "status": "determined",',
-                '    "traits": ["curious", "introspective"],',
-                '    "relationships": {"Her Father": "vanished, left clues"},',
-                f'    "development_in_chapter_{chapter_number}": "Discovered father\'s journal."',
-                "  }",
-                "}",
-                "```",
-                "",
-                'For WORLD UPDATES: Output a JSON object where keys are category names (e.g., "Locations", "Factions"). Each category\'s value should be another JSON object where keys are item names and values are their attribute objects.',
-                ' - Each item\'s attribute object should contain keys like "description", "atmosphere", etc., with string values.',
-                ' - For list-like details (e.g. "rules" for a system), use a JSON array of strings.',
-                f' - Include a key "elaboration_in_chapter_{chapter_number}" with a string value: "<Note on how this item was detailed or interacted with>".',
-                "Example for World Updates (JSON format):",
-                "```json",
-                "{",
-                '  "Locations": {',
-                '    "Ancient Cabin": {',
-                '      "description": "Wooden frame, half-buried in snow.",',
-                '      "atmosphere": "Frozen in time, eerie silence.",',
-                f'      "elaboration_in_chapter_{chapter_number}": "Visited by Elara, map found here."',
-                "    }",
-                "  },",
-                '  "WorldElements": {',
-                '    "Echoes": {',
-                '      "description": "Forces of balance, threads of memory.",',
-                f'      "elaboration_in_chapter_{chapter_number}": "Elara learns they are ancient forces."',
-                "    }",
-                "  }",
-                "}",
-                "```",
-                "",
-                "For KG TRIPLES:",
-                " - List factual statements on separate lines (plain text, NOT JSON for this section).",
-                " - Format: 'SubjectEntityType:SubjectName | Predicate | ObjectEntityType:ObjectName' OR 'SubjectEntityType:SubjectName | Predicate | LiteralValue'.",
-                " - Valid Subject/Object EntityTypes: Character, WorldElement, Location, Faction, Item, Concept, Trait, Event, PlotPoint, Organization, Species, Ability, MagicSystem, Technology, Currency, Language, Food, Plant, Animal, Vehicle, Weapon, Armor, Clothing, Tool, Building, Region, Planet, StarSystem, Galaxy, Dimension, HistoricalPeriod, CulturalAspect, SocialClass, Occupation, Title, Role, StatusEffect, Quest, LoreFragment, Prophecy, Rumor, Secret.",
-                "   If type is ambiguous or general for a specific subject/object, you can omit its type prefix (e.g., 'Lirion | DEFEATED | Goblin Chieftain').",
-                "   For WorldElements, use their human-readable name, not their category_name ID.",
-                " - Examples:",
-                "   'Character:Lirion | DISCOVERED | Location:HiddenCave'",
-                "   'WorldElement:Sunstone | HAS_PROPERTY | EmitsWarmth'",
-                "   'Character:Elara | LEARNED_SKILL | Trait:Herbalism'",
-                "   'Event:FestivalOfLights | OCCURRED_IN | Location:SilvermoonCity'",
-                "   'Lirion | HAS_STATUS | Injured' (Object is a literal string)",
-                "   'Character:Borin | HAS_AGE | 45' (Object is a literal number)",
-                " - Predicates should be concise verbs or descriptive phrases in uppercase (e.g., 'HAS_ABILITY', 'LOCATED_IN', 'DISCOVERED_ARTIFACT', 'IS_FRIENDLY_WITH', 'FEELS_EMOTION_TOWARDS').",
-                " - Subjects and Objects should be specific entity names or literal values.",
-                " - Prioritize triples that represent significant plot events, new knowledge, or changes in state.",
-                "--- BEGIN CHAPTER TEXT ---",
-                chapter_text,
-                "--- END CHAPTER TEXT ---",
-                "Ensure your output adheres strictly to this format. Provide only the requested sections and their content.",
-            ]
+        prompt = render_prompt(
+            "kg_maintainer_agent/extract_updates.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "protagonist": protagonist,
+                "chapter_number": chapter_number,
+                "novel_title": novel_props.get("title", "Untitled Novel"),
+                "novel_genre": novel_props.get("genre", "Unknown"),
+                "chapter_text": chapter_text,
+            },
         )
-        prompt = "\n".join(prompt_lines)
 
         try:
             text, usage = await llm_service.async_call_llm(
