@@ -42,6 +42,7 @@ from kg_maintainer_agent import KGMaintainerAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
 from world_continuity_agent import WorldContinuityAgent
+from story_models import UserStoryInputModel, user_story_to_objects
 
 try:
     from rich.console import Group
@@ -146,6 +147,23 @@ class NANA_Orchestrator:
             )
         utils.load_spacy_model_if_needed()
         logger.info("NANA Orchestrator initialized.")
+
+    def load_state_from_user_model(self, user_model: UserStoryInputModel) -> None:
+        """Populate orchestrator state from a ``UserStoryInputModel``."""
+        plot, characters, world_items = user_story_to_objects(user_model)
+        self.plot_outline.update(plot)
+        self.plot_outline["source"] = "user_supplied_yaml"
+        self.plot_outline["is_default"] = False
+
+        for name, profile in characters.items():
+            self.character_profiles[name] = profile
+
+        for item in world_items:
+            self.world_building.setdefault(item.category, {})[item.name] = item
+
+        self.world_building["user_supplied_data"] = True
+        self.world_building["is_default"] = False
+        self.world_building["source"] = "user_supplied_yaml"
 
     def _update_rich_display(
         self, chapter_num: Optional[int] = None, step: Optional[str] = None
@@ -399,6 +417,7 @@ class NANA_Orchestrator:
             self.character_profiles,
             config.DEFAULT_PROTAGONIST_NAME,
             config.UNHINGED_PLOT_MODE,
+            orchestrator=self,
             **generation_params,
         )
         self._accumulate_tokens("InitialSetup-PlotOutline", plot_usage)
@@ -411,9 +430,7 @@ class NANA_Orchestrator:
         (
             self.world_building,
             world_usage,
-        ) = await generate_world_building_logic(
-            self.world_building, self.plot_outline
-        )
+        ) = await generate_world_building_logic(self.world_building, self.plot_outline)
         self._accumulate_tokens("InitialSetup-WorldBuilding", world_usage)
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
@@ -440,7 +457,8 @@ class NANA_Orchestrator:
         logger.info("NANA: Checking if KG pre-population is needed...")
 
         plot_source = self.plot_outline.get("source", "")
-        is_plot_ready_for_kg = plot_source in [
+        plot_source_norm = str(plot_source).strip().lower()
+        is_plot_ready_for_kg = plot_source_norm in [
             "user_supplied_markdown",
             "default_fallback",
             "configured_or_user_markdown",
@@ -449,7 +467,7 @@ class NANA_Orchestrator:
             "user_supplied_yaml",
             "llm_generated_or_merged_json_style",
             "configured_or_user_yaml",
-        ] or plot_source.startswith("llm_generated")
+        ] or plot_source_norm.startswith("llm_generated")
 
         if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
             logger.info(
@@ -1276,9 +1294,7 @@ class NANA_Orchestrator:
                 [
                     pp
                     for pp in plot_points_list
-                    if not utils._is_fill_in(pp)
-                    and isinstance(pp, str)
-                    and pp.strip()
+                    if not utils._is_fill_in(pp) and isinstance(pp, str) and pp.strip()
                 ]
             )
 
