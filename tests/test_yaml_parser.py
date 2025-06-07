@@ -20,9 +20,7 @@ class TestYamlParsing(unittest.TestCase):
         with open(self.valid_yaml_filepath, "w", encoding="utf-8") as f:
             yaml.dump(self.valid_yaml_content, f)
 
-        self.malformed_yaml_filepath = os.path.join(
-            self.test_dir, "malformed.yaml"
-        )
+        self.malformed_yaml_filepath = os.path.join(self.test_dir, "malformed.yaml")
         with open(self.malformed_yaml_filepath, "w", encoding="utf-8") as f:
             f.write(
                 "Novel Concept: Title: Test Novel\nGenre: [Sci-Fi"
@@ -35,9 +33,7 @@ class TestYamlParsing(unittest.TestCase):
         self.non_dict_root_yaml_filepath = os.path.join(
             self.test_dir, "non_dict_root.yaml"
         )
-        with open(
-            self.non_dict_root_yaml_filepath, "w", encoding="utf-8"
-        ) as f:
+        with open(self.non_dict_root_yaml_filepath, "w", encoding="utf-8") as f:
             f.write("- item1\n- item2")  # Root is a list
 
     def tearDown(self):
@@ -77,9 +73,7 @@ class TestYamlParsing(unittest.TestCase):
 
     def test_load_empty_yaml(self):
         data = load_yaml_file(self.empty_yaml_filepath)
-        self.assertEqual(
-            data, {}
-        )  # Expecting an empty dictionary for an empty file
+        self.assertEqual(data, {})  # Expecting an empty dictionary for an empty file
 
     def test_load_non_dict_root_yaml(self):
         # Current implementation of load_yaml_file logs error and returns None if root is not dict

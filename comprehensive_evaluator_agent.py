@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import config
 from llm_interface import llm_service  # MODIFIED
+from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
 from type import EvaluationResult, ProblemDetail
 from data_access import chapter_queries
@@ -293,67 +294,28 @@ class ComprehensiveEvaluatorAgent:
 """
         # Note: The user/developer needs to update the actual LLM prompt to request JSON.
         # This tool only changes the agent's parsing logic and the example string.
-        prompt_lines = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-            prompt_lines.append("/no_think")
-
-        prompt_lines.extend(
-            [
-                f'You are a Master Editor evaluating Chapter {chapter_number} of a novel titled "{novel_props.get("title", "Untitled Novel")}" (Protagonist: {protagonist_name_str}).',
-                "Analyze the **Complete Chapter Text** provided below.",
-                "Your task is to identify specific issues related to these EXACT categories:",
-                "1.  **CONSISTENCY**",
-                "2.  **PLOT_ARC**",
-                "3.  **THEMATIC_ALIGNMENT**",
-                f"4.  **NARRATIVE_DEPTH_AND_LENGTH** (target: at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters)",
-                "",
-                "**Reference Information for CONSISTENCY Check (Summary Format):**",
-                "  **Plot Outline Summary:**",
-                "  ```text",
-                f"  Title: {novel_props.get('title', 'N/A')}",
-                f"  Genre: {novel_props.get('genre', 'N/A')}",
-                f"  Theme: {novel_props.get('theme', 'N/A')}",
-                f"  Protagonist: {novel_props.get('protagonist_name', 'N/A')} ({novel_props.get('character_arc', 'N/A')})",
-                f"  Logline: {novel_props.get('logline', 'N/A')}",
-                "  Key Plot Points (summary):",
-                plot_points_summary_str,
-                "  ```",
-                "  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**",
-                "  ```text",
-                char_profiles_plain_text,
-                "  ```",
-                "  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**",
-                "  ```text",
-                world_building_plain_text,
-                "  ```",
-                kg_check_results_text,
-                "  **Previous Chapters Context (Semantic Flow & KG Facts for Canon):**",
-                "  --- PREVIOUS CONTEXT ---",
-                previous_chapters_context
-                if previous_chapters_context.strip()
-                else "N/A (e.g., Chapter 1 or context retrieval failed).",
-                "  --- END PREVIOUS CONTEXT ---",
-                "",
-                f"**Complete Chapter {chapter_number} Text (to analyze):**",
-                "--- BEGIN COMPLETE CHAPTER TEXT ---",
-                draft_text,
-                "--- END COMPLETE CHAPTER TEXT ---",
-                "",
-                "**Output Format (CRITICAL - JSON ONLY):**",
-                'Provide your evaluation as a JSON array of problem objects. Each object must have these keys: "issue_category", "problem_description", "quote_from_original_text", "suggested_fix_focus".',
-                "For `issue_category`, use one of the EXACT category names: CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH.",
-                'The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".',
-                'If NO problems are found, output an empty JSON array `[]` or a JSON object like `{"status": "No significant problems found"}`.',
-                "",
-                "**Follow this example structure for your JSON output precisely:**",
-                "```json",
-                few_shot_eval_example_str.strip(),
-                "```",
-                "",
-                "Begin your JSON output now:",
-            ]
+        prompt = render_prompt(
+            "comprehensive_evaluator_agent/evaluate_chapter.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "novel_title": novel_props.get("title", "Untitled Novel"),
+                "protagonist_name_str": protagonist_name_str,
+                "min_length": config.MIN_ACCEPTABLE_DRAFT_LENGTH,
+                "novel_genre": novel_props.get("genre", "N/A"),
+                "novel_theme": novel_props.get("theme", "N/A"),
+                "novel_protagonist": novel_props.get("protagonist_name", "N/A"),
+                "protagonist_arc": novel_props.get("character_arc", "N/A"),
+                "logline": novel_props.get("logline", "N/A"),
+                "plot_points_summary_str": plot_points_summary_str,
+                "char_profiles_plain_text": char_profiles_plain_text,
+                "world_building_plain_text": world_building_plain_text,
+                "kg_check_results_text": kg_check_results_text,
+                "previous_chapters_context": previous_chapters_context,
+                "draft_text": draft_text,
+                "few_shot_eval_example_str": few_shot_eval_example_str,
+            },
         )
-        prompt = "\n".join(prompt_lines)
 
         logger.info(
             f"Calling LLM ({self.model_name}) for comprehensive evaluation of chapter {chapter_number} (expecting JSON)..."

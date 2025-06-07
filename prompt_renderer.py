@@ -1,12 +1,12 @@
+"""Utilities for rendering LLM prompts using Jinja2 templates."""
+
 from pathlib import Path
 from typing import Any, Dict
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 
 PROMPTS_PATH = Path(__file__).parent / "prompts"
-_env = Environment(
-    loader=FileSystemLoader(PROMPTS_PATH), autoescape=select_autoescape()
-)
+_env = Environment(loader=FileSystemLoader(PROMPTS_PATH), autoescape=False)
 
 
 def render_prompt(template_name: str, context: Dict[str, Any]) -> str:

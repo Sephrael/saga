@@ -142,10 +142,8 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Alice":
             assert (
-                "MERGE (s:Character:Entity {name: $subject_name_param})"
-                in query
-                or "MERGE (s:Character:Entity {name: $subject_name_param})"
-                in query
+                "MERGE (s:Character:Entity {name: $subject_name_param})" in query
+                or "MERGE (s:Character:Entity {name: $subject_name_param})" in query
             )  # Accommodate slight variations if any
             alice_statement_found = True
             break
@@ -158,8 +156,7 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Bob":
             assert (
-                "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
-                in query
+                "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query
                 or "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
                 in query
             )
@@ -173,10 +170,7 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     castle_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("subject_name_param") == "Castle":
-            assert (
-                "MERGE (s:Location:Entity {name: $subject_name_param})"
-                in query
-            )
+            assert "MERGE (s:Location:Entity {name: $subject_name_param})" in query
             castle_statement_found = True
             break
     assert castle_statement_found, (
@@ -187,10 +181,7 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     charles_statement_found = False
     for query, params in captured_statements_for_tests:
         if params.get("object_name_param") == "Charles":
-            assert (
-                "MERGE (o:Character:Entity {name: $object_name_param})"
-                in query
-            )
+            assert "MERGE (o:Character:Entity {name: $object_name_param})" in query
             charles_statement_found = True
             break
     assert charles_statement_found, (
@@ -202,8 +193,7 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     for query, params in captured_statements_for_tests:
         if params.get("object_name_param") == "Diana":
             assert (
-                "MERGE (o:Character:Person:Entity {name: $object_name_param})"
-                in query
+                "MERGE (o:Character:Person:Entity {name: $object_name_param})" in query
             )
             diana_statement_found = True
             break

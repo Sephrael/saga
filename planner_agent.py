@@ -10,6 +10,7 @@ import config
 # from state_manager import state_manager # No longer directly used
 from data_access import chapter_queries  # For get_chapter_data_from_db
 from llm_interface import llm_service
+from prompt_renderer import render_prompt
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
     get_reliable_kg_facts_for_drafting_prompt,
@@ -284,61 +285,30 @@ class PlannerAgent:
   }
 ]
 """
-        # Note: The user/developer needs to update the actual LLM prompt to request JSON.
-        prompt_lines = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-            prompt_lines.append("/no_think")
 
-        prompt_lines.extend(
-            [
-                f"You are a master plotter outlining **between {config.TARGET_SCENES_MIN} and {config.TARGET_SCENES_MAX} detailed scenes** for Chapter {chapter_number} of a novel.",
-                "This chapter is part of a larger narrative arc.",
-                "",
-                "**Novel Concept:**",
-                f"  - Title: {novel_props.get('title', 'Untitled')}",
-                f"  - Genre: {novel_props.get('genre', 'N/A')}",
-                f"  - Theme: {novel_props.get('theme', 'N/A')}",
-                f"  - Protagonist: {protagonist_name}",
-                f"  - Protagonist's Arc: {novel_props.get('character_arc', 'N/A')}",
-                "",
-                f"**Overall Narrative Context:** This chapter focuses on Plot Point {plot_point_index + 1} of {total_plot_points_in_novel} total major plot points in the novel.",
-                "",
-                f"**Mandatory Focus for THIS Chapter (Plot Point {plot_point_index + 1}):**",
-                plot_point_focus,
-                "",
-                future_plot_context_str,
-                "**Recent Context from Previous Chapter(s) (Semantic context & KG Facts):**",
-                context_summary_str
-                if context_summary_str
-                else "This is the first chapter, or no prior summary is available.",
-                kg_context_section,
-                "**Current Character States (Key Characters, based on profiles and recent developments - Plain Text):**",
-                character_state_snippet_plain_text,
-                "",
-                "**Current World State (Relevant Locations/Elements, based on world-building - Plain Text):**",
-                world_state_snippet_plain_text,
-                "",
-                "**Task:**",
-                f"Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}.",
-                "These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.",
-                "**Task:**",
-                f"Create a detailed plan of {config.TARGET_SCENES_MIN} to {config.TARGET_SCENES_MAX} scenes for Chapter {chapter_number}, formatted as a JSON array of scene objects.",
-                "These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.",
-                "Each scene object in the JSON array must have the following keys: "
-                '"scene_number" (integer), "summary" (string), "characters_involved" (array of strings), '
-                '"key_dialogue_points" (array of strings), "setting_details" (string), '
-                '"scene_focus_elements" (array of strings), "contribution" (string).',
-                "",
-                "**Follow this example structure for your JSON output precisely:**",
-                "```json",
-                few_shot_scene_plan_example_str.strip(),
-                "```",
-                "",
-                "Output ONLY the JSON array of scene objects.",
-            ]
+        prompt = render_prompt(
+            "planner_agent/scene_plan.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "target_scenes_min": config.TARGET_SCENES_MIN,
+                "target_scenes_max": config.TARGET_SCENES_MAX,
+                "chapter_number": chapter_number,
+                "novel_title": novel_props.get("title", "Untitled"),
+                "novel_genre": novel_props.get("genre", "N/A"),
+                "novel_theme": novel_props.get("theme", "N/A"),
+                "protagonist_name": protagonist_name,
+                "protagonist_arc": novel_props.get("character_arc", "N/A"),
+                "plot_point_index_plus1": plot_point_index + 1,
+                "total_plot_points_in_novel": total_plot_points_in_novel,
+                "plot_point_focus": plot_point_focus,
+                "future_plot_context_str": future_plot_context_str,
+                "context_summary_str": context_summary_str,
+                "kg_context_section": kg_context_section,
+                "character_state_snippet_plain_text": character_state_snippet_plain_text,
+                "world_state_snippet_plain_text": world_state_snippet_plain_text,
+                "few_shot_scene_plan_example_str": few_shot_scene_plan_example_str,
+            },
         )
-        prompt = "\n".join(prompt_lines)
-
         logger.info(
             f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
         )

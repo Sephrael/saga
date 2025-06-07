@@ -43,8 +43,7 @@ class TestRdfTripleParsing(unittest.TestCase):
             (
                 t
                 for t in parsed_triples
-                if t["subject"]["name"] == "Jax"
-                and t["predicate"] == "hasAlias"
+                if t["subject"]["name"] == "Jax" and t["predicate"] == "hasAlias"
             ),
             None,
         )
@@ -62,14 +61,11 @@ class TestRdfTripleParsing(unittest.TestCase):
             (
                 t
                 for t in parsed_triples
-                if t["subject"]["name"] == "Jax"
-                and t["predicate"] == "livesIn"
+                if t["subject"]["name"] == "Jax" and t["predicate"] == "livesIn"
             ),
             None,
         )
-        self.assertIsNotNone(
-            jax_livesin_triple, "Jax livesIn triple not found"
-        )
+        self.assertIsNotNone(jax_livesin_triple, "Jax livesIn triple not found")
         if jax_livesin_triple:
             self.assertFalse(jax_livesin_triple["is_literal_object"])
             self.assertIsNotNone(jax_livesin_triple["object_entity"])
@@ -92,9 +88,7 @@ class TestRdfTripleParsing(unittest.TestCase):
             ),
             None,
         )
-        self.assertIsNotNone(
-            jax_type_triple, "Jax rdf:type Character triple not found"
-        )
+        self.assertIsNotNone(jax_type_triple, "Jax rdf:type Character triple not found")
 
         lila_type_triple = next(
             (
@@ -115,7 +109,9 @@ class TestRdfTripleParsing(unittest.TestCase):
         self.assertEqual(len(parsed_triples), 0)
 
     def test_invalid_turtle(self):
-        invalid_turtle = r"@prefix : <http://example.org/saga/> . char:Jax prop:hasAlias 'J.X.'"
+        invalid_turtle = (
+            r"@prefix : <http://example.org/saga/> . char:Jax prop:hasAlias 'J.X.'"
+        )
         parsed_triples = parse_rdf_triples_with_rdflib(
             invalid_turtle, rdf_format="turtle"
         )
