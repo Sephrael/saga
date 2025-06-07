@@ -11,7 +11,6 @@ class ParseError(Exception):
     """Custom exception for parsing errors."""
 
 
-
 # DEFAULT_BLOCK_SEPARATOR_REGEX and split_text_into_blocks removed as they are no longer used.
 
 # --- New RDF Triple Parsing using rdflib ---

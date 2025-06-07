@@ -180,10 +180,7 @@ def truncate_text_by_tokens(
         estimated_char_limit_for_content = int(
             content_tokens_to_keep * avg_chars_per_token
         )
-        return (
-            text[:estimated_char_limit_for_content]
-            + effective_truncation_marker
-        )
+        return text[:estimated_char_limit_for_content] + effective_truncation_marker
 
 
 class LLMService:
@@ -220,9 +217,7 @@ class LLMService:
                 f"Embedding dimension mismatch: Expected ({expected_dim},), Got {embedding.shape}. Original list length: {len(embedding_list)}"
             )
         except (TypeError, ValueError) as e:
-            logger.error(
-                f"Failed to convert embedding list to numpy array: {e}"
-            )
+            logger.error(f"Failed to convert embedding list to numpy array: {e}")
         return None
 
     @alru_cache(maxsize=config.EMBEDDING_CACHE_SIZE)
@@ -388,14 +383,10 @@ class LLMService:
 
         prompt_token_count = count_tokens(prompt, model_name)
         effective_max_output_tokens = (
-            max_tokens
-            if max_tokens is not None
-            else config.MAX_GENERATION_TOKENS
+            max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
         )
         effective_temperature = (
-            temperature
-            if temperature is not None
-            else config.TEMPERATURE_DEFAULT
+            temperature if temperature is not None else config.TEMPERATURE_DEFAULT
         )
 
         headers = {
@@ -481,9 +472,7 @@ class LLMService:
                                     "w",
                                     encoding="utf-8",
                                 ) as tmp_f_write:
-                                    async for (
-                                        line
-                                    ) in response_stream.aiter_lines():
+                                    async for line in response_stream.aiter_lines():
                                         if line.startswith("data: "):
                                             data_json_str = line[
                                                 len("data: ") :
@@ -491,46 +480,38 @@ class LLMService:
                                             if data_json_str == "[DONE]":
                                                 break
                                             try:
-                                                chunk_data = json.loads(
-                                                    data_json_str
-                                                )
+                                                chunk_data = json.loads(data_json_str)
                                                 if chunk_data.get("choices"):
-                                                    delta = chunk_data[
-                                                        "choices"
-                                                    ][0].get("delta", {})
-                                                    content_piece = delta.get(
-                                                        "content"
-                                                    )
+                                                    delta = chunk_data["choices"][
+                                                        0
+                                                    ].get("delta", {})
+                                                    content_piece = delta.get("content")
                                                     if content_piece:
-                                                        accumulated_stream_content += content_piece
-                                                        tmp_f_write.write(
+                                                        accumulated_stream_content += (
                                                             content_piece
                                                         )
+                                                        tmp_f_write.write(content_piece)
 
                                                     if (
-                                                        chunk_data["choices"][
-                                                            0
-                                                        ].get("finish_reason")
+                                                        chunk_data["choices"][0].get(
+                                                            "finish_reason"
+                                                        )
                                                         is not None
                                                     ):
                                                         potential_usage = (
-                                                            chunk_data.get(
-                                                                "usage"
-                                                            )
+                                                            chunk_data.get("usage")
                                                         )
                                                         if (
                                                             not potential_usage
-                                                            and chunk_data.get(
-                                                                "x_groq"
-                                                            )
+                                                            and chunk_data.get("x_groq")
                                                             and chunk_data[
                                                                 "x_groq"
                                                             ].get("usage")
                                                         ):
                                                             potential_usage = (
-                                                                chunk_data[
-                                                                    "x_groq"
-                                                                ]["usage"]
+                                                                chunk_data["x_groq"][
+                                                                    "usage"
+                                                                ]
                                                             )
                                                         if (
                                                             potential_usage
@@ -539,7 +520,9 @@ class LLMService:
                                                                 dict,
                                                             )
                                                         ):
-                                                            stream_usage_data = potential_usage
+                                                            stream_usage_data = (
+                                                                potential_usage
+                                                            )
                                             except json.JSONDecodeError:
                                                 logger.warning(
                                                     f"Async LLM Stream: Could not decode JSON from line: {line}"
@@ -554,10 +537,8 @@ class LLMService:
                                 streamed=True,
                             )
                             if auto_clean_response:
-                                final_text_response = (
-                                    self.clean_model_response(
-                                        final_text_response
-                                    )
+                                final_text_response = self.clean_model_response(
+                                    final_text_response
                                 )
                             return final_text_response, current_usage_data
                         except Exception as stream_err:
@@ -571,10 +552,7 @@ class LLMService:
                                 temp_file_path_for_stream
                             ):
                                 try:
-                                    if (
-                                        last_exception_for_current_model
-                                        is None
-                                    ):
+                                    if last_exception_for_current_model is None:
                                         os.remove(temp_file_path_for_stream)
                                     else:
                                         with open(
@@ -604,9 +582,7 @@ class LLMService:
                             response_data.get("choices")
                             and len(response_data["choices"]) > 0
                         ):
-                            message = response_data["choices"][0].get(
-                                "message"
-                            )
+                            message = response_data["choices"][0].get("message")
                             if message and message.get("content"):
                                 raw_text_non_stream = message["content"]
                         else:
@@ -636,18 +612,13 @@ class LLMService:
                 except httpx.HTTPStatusError as e_status:
                     last_exception_for_current_model = e_status
                     response_text_snippet = (
-                        e_status.response.text[:200]
-                        if e_status.response
-                        else "N/A"
+                        e_status.response.text[:200] if e_status.response else "N/A"
                     )
                     error_message_detail = f"API HTTP status error: {e_status}. Status: {e_status.response.status_code if e_status.response else 'N/A'}, Body: {response_text_snippet}"
                     logger.warning(
                         f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt + 1}): {error_message_detail}"
                     )
-                    if (
-                        e_status.response
-                        and 400 <= e_status.response.status_code < 500
-                    ):
+                    if e_status.response and 400 <= e_status.response.status_code < 500:
                         if (
                             e_status.response.status_code == 400
                             and "context_length_exceeded"
@@ -725,13 +696,9 @@ class LLMService:
 
             if (
                 attempt_num_overall == 0
-                and isinstance(
-                    last_exception_for_current_model, httpx.HTTPStatusError
-                )
+                and isinstance(last_exception_for_current_model, httpx.HTTPStatusError)
                 and last_exception_for_current_model.response
-                and 400
-                <= last_exception_for_current_model.response.status_code
-                < 500
+                and 400 <= last_exception_for_current_model.response.status_code < 500
             ):
                 logger.error(
                     f"Async LLM: Primary model '{model_name}' failed with client error. Checking fallback conditions."
@@ -753,9 +720,7 @@ class LLMService:
                 )
 
         if auto_clean_response:
-            final_text_response = self.clean_model_response(
-                final_text_response
-            )
+            final_text_response = self.clean_model_response(final_text_response)
 
         return final_text_response, current_usage_data
 

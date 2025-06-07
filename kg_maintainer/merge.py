@@ -22,21 +22,14 @@ def initialize_new_character_profile(
             f"A character newly introduced in Chapter {chapter_number}.",
         ),
         traits=sorted(
-            {
-                t
-                for t in data.get("traits", [])
-                if isinstance(t, str) and t.strip()
-            }
+            {t for t in data.get("traits", []) if isinstance(t, str) and t.strip()}
         ),
         relationships=data.get("relationships", {}),
         status=data.get("status", "Newly introduced"),
         updates={
             dev_key: data.get(
                 dev_key,
-                (
-                    f"Character '{char_name}' introduced in "
-                    f"Chapter {chapter_number}."
-                ),
+                (f"Character '{char_name}' introduced in Chapter {chapter_number}."),
             )
         },
     )
@@ -85,20 +78,14 @@ def merge_character_profile_updates(
                     if profile.relationships.get(target) != rel:
                         profile.relationships[target] = rel
                         modified = True
-            elif (
-                isinstance(val, str)
-                and val.strip()
-                and prof_dict.get(key) != val
-            ):
+            elif isinstance(val, str) and val.strip() and prof_dict.get(key) != val:
                 profile.updates[key] = val
                 modified = True
         if dev_key in data and isinstance(data[dev_key], str):
             profile.updates[dev_key] = data[dev_key]
             modified = True
         if from_flawed_draft:
-            profile.updates[provisional_key] = (
-                "provisional_from_unrevised_draft"
-            )
+            profile.updates[provisional_key] = "provisional_from_unrevised_draft"
         if modified:
             logger.debug("Profile for %s modified", name)
 

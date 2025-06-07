@@ -163,11 +163,7 @@ def parse_unified_character_updates(
                 if isinstance(rel_entry, str):
                     if ":" in rel_entry:
                         parts = rel_entry.split(":", 1)
-                        if (
-                            len(parts) == 2
-                            and parts[0].strip()
-                            and parts[1].strip()
-                        ):
+                        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
                             rels_dict[parts[0].strip()] = parts[1].strip()
                         elif parts[0].strip():  # If only name is there before colon
                             rels_dict[parts[0].strip()] = "related"
@@ -281,9 +277,7 @@ def parse_unified_world_updates(
                 WORLD_UPDATE_DETAIL_KEY_MAP,
                 WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
             )
-            if any(
-                k != "modification_proposal" for k in processed_overview_details
-            ):
+            if any(k != "modification_proposal" for k in processed_overview_details):
                 # check if any meaningful data
                 # Add default elaboration if not present
                 if not processed_overview_details.get(elaboration_key_standard):
@@ -297,9 +291,9 @@ def parse_unified_world_updates(
                         "_overview_",
                         processed_overview_details,
                     )
-                    results.setdefault(
-                        category_name_llm, {}
-                    )["_overview_"] = overview_item
+                    results.setdefault(category_name_llm, {})["_overview_"] = (
+                        overview_item
+                    )
                 except Exception as e:
                     logger.error(
                         "Error creating WorldItem for overview in category '%s': %s",
@@ -327,7 +321,8 @@ def parse_unified_world_updates(
                 # Add default elaboration if not present and other
                 # attributes exist
                 has_other_meaningful_item_attrs = any(
-                    k not in [
+                    k
+                    not in [
                         "modification_proposal",
                         elaboration_key_standard,
                     ]

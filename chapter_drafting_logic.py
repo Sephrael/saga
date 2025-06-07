@@ -92,11 +92,9 @@ async def generate_chapter_draft_logic(
             agent, chapter_number - 1
         )
     )
-    world_building_plain_text = (
-        await get_filtered_world_data_for_prompt_plain_text(
-            agent,
-            chapter_number - 1,
-        )
+    world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
+        agent,
+        chapter_number - 1,
     )
 
     plot_outline_data = getattr(
@@ -119,10 +117,7 @@ async def generate_chapter_draft_logic(
             "**Story Bible / Core Information:**",
             f"  - Genre: {plot_outline_data.get('genre', 'N/A')}",
             f"  - Central Theme: {plot_outline_data.get('theme', 'N/A')}",
-            (
-                "  - Protagonist: "
-                f"{plot_outline_data.get('protagonist_name', 'N/A')}"
-            ),
+            (f"  - Protagonist: {plot_outline_data.get('protagonist_name', 'N/A')}"),
             (
                 "  - Protagonist's Character Arc: "
                 f"{plot_outline_data.get('character_arc', 'N/A')}"
@@ -138,8 +133,7 @@ async def generate_chapter_draft_logic(
             world_building_plain_text
             if world_building_plain_text.strip()
             else (
-                "No specific world building notes provided for this "
-                "chapter's context."
+                "No specific world building notes provided for this chapter's context."
             ),
             "```",
             (
@@ -150,14 +144,10 @@ async def generate_chapter_draft_logic(
             char_profiles_plain_text
             if char_profiles_plain_text.strip()
             else (
-                "No specific character profiles provided for this "
-                "chapter's context."
+                "No specific character profiles provided for this chapter's context."
             ),
             "```",
-            (
-                "**Hybrid Context (Semantic Context for Flow & KG Facts "
-                "for Canon):**"
-            ),
+            ("**Hybrid Context (Semantic Context for Flow & KG Facts for Canon):**"),
             "--- BEGIN HYBRID CONTEXT ---",
             hybrid_context
             if hybrid_context.strip()
@@ -261,9 +251,7 @@ async def generate_chapter_draft_logic(
         )
         return None, None
 
-    cleaned_text = llm_service.clean_model_response(
-        raw_llm_text_for_log
-    )  # MODIFIED
+    cleaned_text = llm_service.clean_model_response(raw_llm_text_for_log)  # MODIFIED
 
     if not cleaned_text or len(cleaned_text) < 50:
         logger.error(

@@ -29,9 +29,7 @@ PROBLEM_DETAIL_KEY_MAP = {
 class WorldContinuityAgent:
     def __init__(self, model_name: str = config.EVALUATION_MODEL):
         self.model_name = model_name
-        logger.info(
-            f"WorldContinuityAgent initialized with model: {self.model_name}"
-        )
+        logger.info(f"WorldContinuityAgent initialized with model: {self.model_name}")
         utils.load_spacy_model_if_needed()  # Ensure spaCy model is available
 
     async def _parse_llm_consistency_output(
@@ -121,8 +119,7 @@ class WorldContinuityAgent:
                 f" {chapter_number}: {e}. Text: {json_text[:500]}..."
             )
             if (
-                "no significant consistency problems found"
-                in json_text.lower()
+                "no significant consistency problems found" in json_text.lower()
                 or "no significant problems found" in json_text.lower()
             ):
                 logger.info(
@@ -179,9 +176,7 @@ class WorldContinuityAgent:
             # Verify LLM provided 'consistency' or warn if it didn't
             # (though we force it above)
             llm_category_raw = (
-                str(problem_dict.get("issue_category", "consistency"))
-                .strip()
-                .lower()
+                str(problem_dict.get("issue_category", "consistency")).strip().lower()
             )
             if llm_category_raw != "consistency":
                 logger.warning(
@@ -196,17 +191,10 @@ class WorldContinuityAgent:
                 or not quote_text_from_llm.strip()
                 or quote_text_from_llm == "N/A"
             ):
-                problem_meta["quote_from_original_text"] = (
-                    "N/A - General Issue"
-                )
-            elif (
-                utils.spacy_manager.nlp is not None
-                and original_draft_text.strip()
-            ):
-                offsets_tuple = (
-                    await utils.find_quote_and_sentence_offsets_with_spacy(
-                        original_draft_text, quote_text_from_llm
-                    )
+                problem_meta["quote_from_original_text"] = "N/A - General Issue"
+            elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
+                offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(
+                    original_draft_text, quote_text_from_llm
                 )
                 if offsets_tuple:
                     q_start, q_end, s_start, s_end = offsets_tuple
@@ -251,18 +239,14 @@ class WorldContinuityAgent:
             f"WorldContinuityAgent performing focused consistency check for Chapter {chapter_number}..."
         )
 
-        protagonist_name_str = novel_props.get(
-            "protagonist_name", "The Protagonist"
-        )
+        protagonist_name_str = novel_props.get("protagonist_name", "The Protagonist")
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
                 novel_props, chapter_number - 1
             )
         )
-        world_building_plain_text = (
-            await get_filtered_world_data_for_prompt_plain_text(
-                novel_props, chapter_number - 1
-            )
+        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
+            novel_props, chapter_number - 1
         )
 
         plot_points_summary_lines = (

@@ -88,16 +88,12 @@ def _get_val_or_fill_in(
     default_is_fill_in: bool = True,
 ) -> Any:
     if data_dict is None:
-        return (
-            config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
-        )
+        return config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
     val = data_dict.get(key)
     if val is None or (
         isinstance(val, str) and not val.strip()
     ):  # Empty string is also a "fill-in" case
-        return (
-            config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
-        )
+        return config.MARKDOWN_FILL_IN_PLACEHOLDER if default_is_fill_in else ""
     return val
 
 
@@ -181,9 +177,7 @@ def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
         )
         return None
     # load_yaml_file returns {} for empty file, or None for critical parse error / non-dict root
-    if (
-        not isinstance(user_data, dict) or not user_data
-    ):  # Ensure it's a non-empty dict
+    if not isinstance(user_data, dict) or not user_data:  # Ensure it's a non-empty dict
         logger.warning(
             f"User story elements file '{yaml_file_path}' was empty or invalid. "
             "Using LLM generation or defaults."
@@ -204,11 +198,7 @@ def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
     ]
     found_any_expected_key = False
     for key in expected_top_level_keys:
-        if (
-            key in user_data
-            and isinstance(user_data[key], dict)
-            and user_data[key]
-        ):
+        if key in user_data and isinstance(user_data[key], dict) and user_data[key]:
             found_any_expected_key = True
             break
         elif (
@@ -235,15 +225,11 @@ def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
         )
         return {}
 
-    logger.info(
-        f"Loaded and validated user story data from '{yaml_file_path}'."
-    )
+    logger.info(f"Loaded and validated user story data from '{yaml_file_path}'.")
     return validated
 
 
-def _populate_agent_state_from_user_data(
-    agent: Any, user_data: Dict[str, Any]
-):
+def _populate_agent_state_from_user_data(agent: Any, user_data: Dict[str, Any]):
     plot_outline: PlotOutlineData = (
         agent.plot_outline
         if hasattr(agent, "plot_outline") and agent.plot_outline
@@ -263,13 +249,9 @@ def _populate_agent_state_from_user_data(
     # Initialize world_building structure
     for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
         world_building.setdefault(cat_internal_key, {})
-    world_building["user_supplied_data"] = (
-        True  # Mark that user data was involved
-    )
+    world_building["user_supplied_data"] = True  # Mark that user data was involved
     world_building["is_default"] = False
-    world_building["source"] = (
-        "user_supplied_yaml"  # Updated source identifier
-    )
+    world_building["source"] = "user_supplied_yaml"  # Updated source identifier
 
     nc = user_data.get(
         "novel_concept", {}
@@ -284,9 +266,7 @@ def _populate_agent_state_from_user_data(
     plot_outline["protagonist_description"] = _get_val_or_fill_in(
         prot_data, "description"
     )
-    plot_outline["character_arc"] = _get_val_or_fill_in(
-        prot_data, "character_arc"
-    )
+    plot_outline["character_arc"] = _get_val_or_fill_in(prot_data, "character_arc")
 
     ant_data = user_data.get("antagonist", {})
     plot_outline["antagonist_name"] = _get_val_or_fill_in(ant_data, "name")
@@ -299,10 +279,14 @@ def _populate_agent_state_from_user_data(
 
     # Get plot_elements data, defaulting to an empty dict if not present
     plot_elements_data = user_data.get("plot_elements", {})
-    conflict_data = user_data.get("conflict", {}) # Still needed for climax_event_preview unless specified otherwise
+    conflict_data = user_data.get(
+        "conflict", {}
+    )  # Still needed for climax_event_preview unless specified otherwise
 
     if plot_elements_data:
-        logger.info("Populating plot outline from 'plot_elements' section in user data.")
+        logger.info(
+            "Populating plot outline from 'plot_elements' section in user data."
+        )
         plot_outline["inciting_incident"] = _get_val_or_fill_in(
             plot_elements_data, "inciting_incident"
         )
@@ -318,7 +302,9 @@ def _populate_agent_state_from_user_data(
             conflict_data, "climax_event_preview"
         )
     else:
-        logger.info("No 'plot_elements' section found or it is empty. Using fallback logic or default fill-ins.")
+        logger.info(
+            "No 'plot_elements' section found or it is empty. Using fallback logic or default fill-ins."
+        )
         # If plot_elements is the sole intended source for these, they become [Fill-in]
         plot_outline["inciting_incident"] = _get_val_or_fill_in(
             {}, "inciting_incident"
@@ -326,7 +312,8 @@ def _populate_agent_state_from_user_data(
         # Fallback to reading plot_points from the top-level user_data if plot_elements not present
         raw_plot_points = user_data.get("plot_points", [])
         plot_outline["conflict_summary"] = _get_val_or_fill_in(
-            conflict_data, "summary" # Fallback to old source if plot_elements not present
+            conflict_data,
+            "summary",  # Fallback to old source if plot_elements not present
         )
         plot_outline["stakes"] = _get_val_or_fill_in(
             {}, "stakes"
@@ -348,11 +335,19 @@ def _populate_agent_state_from_user_data(
         processed_plot_points = []
         for pp in raw_plot_points:
             if isinstance(pp, str):
-                processed_plot_points.append(pp.strip() if pp.strip() or utils._is_fill_in(pp) else config.MARKDOWN_FILL_IN_PLACEHOLDER)
-            elif pp is None: # Handle None items in the list
+                processed_plot_points.append(
+                    pp.strip()
+                    if pp.strip() or utils._is_fill_in(pp)
+                    else config.MARKDOWN_FILL_IN_PLACEHOLDER
+                )
+            elif pp is None:  # Handle None items in the list
                 processed_plot_points.append(config.MARKDOWN_FILL_IN_PLACEHOLDER)
-            else: # Coerce to string if other type, e.g. number
-                processed_plot_points.append(str(pp).strip() if str(pp).strip() else config.MARKDOWN_FILL_IN_PLACEHOLDER)
+            else:  # Coerce to string if other type, e.g. number
+                processed_plot_points.append(
+                    str(pp).strip()
+                    if str(pp).strip()
+                    else config.MARKDOWN_FILL_IN_PLACEHOLDER
+                )
 
         plot_outline["plot_points"] = processed_plot_points
 
@@ -369,17 +364,35 @@ def _populate_agent_state_from_user_data(
             # or if the list is empty, then pad.
             # This prevents adding fill-ins if the user explicitly provided some fill-ins at the end
             # but fewer than the target. The goal is to reach the target.
-            if current_length == 0 or \
-               (current_length > 0 and plot_outline["plot_points"][-1] != config.MARKDOWN_FILL_IN_PLACEHOLDER) or \
-               sum(1 for p in plot_outline["plot_points"] if p == config.MARKDOWN_FILL_IN_PLACEHOLDER) < (config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length):
-
-                needed_fill_ins = config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length
-                plot_outline["plot_points"].extend([config.MARKDOWN_FILL_IN_PLACEHOLDER] * needed_fill_ins)
+            if (
+                current_length == 0
+                or (
+                    current_length > 0
+                    and plot_outline["plot_points"][-1]
+                    != config.MARKDOWN_FILL_IN_PLACEHOLDER
+                )
+                or sum(
+                    1
+                    for p in plot_outline["plot_points"]
+                    if p == config.MARKDOWN_FILL_IN_PLACEHOLDER
+                )
+                < (config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length)
+            ):
+                needed_fill_ins = (
+                    config.TARGET_PLOT_POINTS_INITIAL_GENERATION - current_length
+                )
+                plot_outline["plot_points"].extend(
+                    [config.MARKDOWN_FILL_IN_PLACEHOLDER] * needed_fill_ins
+                )
 
         # Ensure the list does not exceed the target length if it somehow became too long before padding
-        if len(plot_outline["plot_points"]) > config.TARGET_PLOT_POINTS_INITIAL_GENERATION:
-            plot_outline["plot_points"] = plot_outline["plot_points"][:config.TARGET_PLOT_POINTS_INITIAL_GENERATION]
-
+        if (
+            len(plot_outline["plot_points"])
+            > config.TARGET_PLOT_POINTS_INITIAL_GENERATION
+        ):
+            plot_outline["plot_points"] = plot_outline["plot_points"][
+                : config.TARGET_PLOT_POINTS_INITIAL_GENERATION
+            ]
 
     # Process 'setting' section from user_data for world_building
     setting_data_md = user_data.get("setting", {})
@@ -394,9 +407,7 @@ def _populate_agent_state_from_user_data(
     if not utils._is_fill_in(
         overview_desc_from_setting
     ):  # Only overwrite if user provided something
-        world_building["_overview_"]["description"] = (
-            overview_desc_from_setting
-        )
+        world_building["_overview_"]["description"] = overview_desc_from_setting
 
     key_locations_md = setting_data_md.get(
         "key_locations", {}
@@ -465,12 +476,10 @@ def _populate_agent_state_from_user_data(
                         item_name_norm_md,
                         item_details_md,
                     ) in main_wd_content_md.items():
-                        item_name_display = item_name_norm_md.replace(
-                            "_", " "
-                        ).title()
-                        if not utils._is_fill_in(
-                            item_name_display
-                        ) and isinstance(item_details_md, dict):
+                        item_name_display = item_name_norm_md.replace("_", " ").title()
+                        if not utils._is_fill_in(item_name_display) and isinstance(
+                            item_details_md, dict
+                        ):
                             agent_item_details = world_building[
                                 target_category_internal
                             ].setdefault(
@@ -481,12 +490,12 @@ def _populate_agent_state_from_user_data(
                                 md_detail_key,
                                 md_detail_val,
                             ) in item_details_md.items():
-                                internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                    md_detail_key, md_detail_key
+                                internal_detail_key = (
+                                    WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
+                                        md_detail_key, md_detail_key
+                                    )
                                 )
-                                agent_item_details[internal_detail_key] = (
-                                    md_detail_val
-                                )
+                                agent_item_details[internal_detail_key] = md_detail_val
 
             elif main_wd_key_norm_md == "relevant_lore":
                 target_category_internal = "lore"
@@ -496,12 +505,10 @@ def _populate_agent_state_from_user_data(
                         item_name_norm_md,
                         item_details_md,
                     ) in main_wd_content_md.items():
-                        item_name_display = item_name_norm_md.replace(
-                            "_", " "
-                        ).title()
-                        if not utils._is_fill_in(
-                            item_name_display
-                        ) and isinstance(item_details_md, dict):
+                        item_name_display = item_name_norm_md.replace("_", " ").title()
+                        if not utils._is_fill_in(item_name_display) and isinstance(
+                            item_details_md, dict
+                        ):
                             agent_item_details = world_building[
                                 target_category_internal
                             ].setdefault(
@@ -512,12 +519,12 @@ def _populate_agent_state_from_user_data(
                                 md_detail_key,
                                 md_detail_val,
                             ) in item_details_md.items():
-                                internal_detail_key = WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
-                                    md_detail_key, md_detail_key
+                                internal_detail_key = (
+                                    WORLD_DETAIL_KEY_MAP_FROM_MARKDOWN_TO_INTERNAL.get(
+                                        md_detail_key, md_detail_key
+                                    )
                                 )
-                                agent_item_details[internal_detail_key] = (
-                                    md_detail_val
-                                )
+                                agent_item_details[internal_detail_key] = md_detail_val
             # Add other categories like "history", "society" similarly if they appear under world_details
 
     plot_outline["source"] = "user_supplied_yaml"  # Updated source identifier
@@ -525,59 +532,91 @@ def _populate_agent_state_from_user_data(
     agent.plot_outline = plot_outline
 
     # Ensure character_profiles is a dictionary of CharacterProfile instances
-    if not isinstance(character_profiles, dict): # Should have been initialized earlier, but as a safeguard
+    if not isinstance(
+        character_profiles, dict
+    ):  # Should have been initialized earlier, but as a safeguard
         character_profiles = {}
 
     prot_name_val = plot_outline.get("protagonist_name")
-    if not utils._is_fill_in(prot_name_val) and prot_name_val: # Ensure prot_name_val is not empty
-        if prot_name_val not in character_profiles or not isinstance(character_profiles[prot_name_val], CharacterProfile):
+    if (
+        not utils._is_fill_in(prot_name_val) and prot_name_val
+    ):  # Ensure prot_name_val is not empty
+        if prot_name_val not in character_profiles or not isinstance(
+            character_profiles[prot_name_val], CharacterProfile
+        ):
             profile = CharacterProfile(name=prot_name_val)
             character_profiles[prot_name_val] = profile
         else:
             profile = character_profiles[prot_name_val]
 
-        profile.description = plot_outline.get("protagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.description = plot_outline.get(
+            "protagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER
+        )
         profile.traits = [
-            t for t in prot_data.get("traits", [])
+            t
+            for t in prot_data.get("traits", [])
             if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
         ]
-        profile.status = _get_val_or_fill_in(prot_data, "initial_status") or "As described"
-        profile.relationships = prot_data.get("relationships", {}) # Direct attribute
+        profile.status = (
+            _get_val_or_fill_in(prot_data, "initial_status") or "As described"
+        )
+        profile.relationships = prot_data.get("relationships", {})  # Direct attribute
 
-        profile.updates["character_arc_summary"] = plot_outline.get("character_arc", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        profile.updates["character_arc_summary"] = plot_outline.get(
+            "character_arc", config.MARKDOWN_FILL_IN_PLACEHOLDER
+        )
         profile.updates["role"] = "protagonist"
         profile.updates["source"] = "user_supplied_yaml"
 
     ant_name_val = plot_outline.get("antagonist_name")
-    if not utils._is_fill_in(ant_name_val) and ant_name_val and ant_data: # Ensure ant_name_val is not empty
-        if ant_name_val not in character_profiles or not isinstance(character_profiles[ant_name_val], CharacterProfile):
+    if (
+        not utils._is_fill_in(ant_name_val) and ant_name_val and ant_data
+    ):  # Ensure ant_name_val is not empty
+        if ant_name_val not in character_profiles or not isinstance(
+            character_profiles[ant_name_val], CharacterProfile
+        ):
             ant_profile = CharacterProfile(name=ant_name_val)
             character_profiles[ant_name_val] = ant_profile
         else:
             ant_profile = character_profiles[ant_name_val]
 
-        ant_profile.description = plot_outline.get("antagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.description = plot_outline.get(
+            "antagonist_description", config.MARKDOWN_FILL_IN_PLACEHOLDER
+        )
         ant_profile.traits = [
-            t for t in ant_data.get("traits", [])
+            t
+            for t in ant_data.get("traits", [])
             if isinstance(t, str) and (t.strip() or utils._is_fill_in(t))
         ]
-        ant_profile.status = "As described" # Direct attribute
-        ant_profile.relationships = ant_data.get("relationships", {}) # Direct attribute
+        ant_profile.status = "As described"  # Direct attribute
+        ant_profile.relationships = ant_data.get(
+            "relationships", {}
+        )  # Direct attribute
 
-        ant_profile.updates["motivations"] = plot_outline.get("antagonist_motivations", config.MARKDOWN_FILL_IN_PLACEHOLDER)
+        ant_profile.updates["motivations"] = plot_outline.get(
+            "antagonist_motivations", config.MARKDOWN_FILL_IN_PLACEHOLDER
+        )
         ant_profile.updates["role"] = "antagonist"
         ant_profile.updates["source"] = "user_supplied_yaml"
 
-
     other_chars_data = user_data.get("other_key_characters", {})
     if isinstance(other_chars_data, dict):
-        for char_name_other_normalized_yaml, char_detail_yaml in other_chars_data.items():
-            char_name_key = char_name_other_normalized_yaml # This is already normalized key
+        for (
+            char_name_other_normalized_yaml,
+            char_detail_yaml,
+        ) in other_chars_data.items():
+            char_name_key = (
+                char_name_other_normalized_yaml  # This is already normalized key
+            )
 
-            if utils._is_fill_in(char_name_key) or not isinstance(char_detail_yaml, dict):
+            if utils._is_fill_in(char_name_key) or not isinstance(
+                char_detail_yaml, dict
+            ):
                 continue
 
-            if char_name_key not in character_profiles or not isinstance(character_profiles[char_name_key], CharacterProfile):
+            if char_name_key not in character_profiles or not isinstance(
+                character_profiles[char_name_key], CharacterProfile
+            ):
                 other_char_profile = CharacterProfile(name=char_name_key)
                 character_profiles[char_name_key] = other_char_profile
             else:
@@ -587,28 +626,45 @@ def _populate_agent_state_from_user_data(
             other_char_profile.updates["source"] = "user_supplied_yaml"
 
             for yaml_detail_key, yaml_detail_val in char_detail_yaml.items():
-                if yaml_detail_key == "name": # Name is set at construction, display_name could be an update field
-                    other_char_profile.updates["display_name"] = yaml_detail_val # Example if display name differs
-                elif yaml_detail_key == "description" and hasattr(other_char_profile, 'description'):
+                if (
+                    yaml_detail_key == "name"
+                ):  # Name is set at construction, display_name could be an update field
+                    other_char_profile.updates["display_name"] = (
+                        yaml_detail_val  # Example if display name differs
+                    )
+                elif yaml_detail_key == "description" and hasattr(
+                    other_char_profile, "description"
+                ):
                     other_char_profile.description = yaml_detail_val
-                elif yaml_detail_key == "traits" and hasattr(other_char_profile, 'traits'):
-                    other_char_profile.traits = [str(t).strip() for t in yaml_detail_val] if isinstance(yaml_detail_val, list) else [str(yaml_detail_val).strip()]
-                elif yaml_detail_key == "status" and hasattr(other_char_profile, 'status'):
+                elif yaml_detail_key == "traits" and hasattr(
+                    other_char_profile, "traits"
+                ):
+                    other_char_profile.traits = (
+                        [str(t).strip() for t in yaml_detail_val]
+                        if isinstance(yaml_detail_val, list)
+                        else [str(yaml_detail_val).strip()]
+                    )
+                elif yaml_detail_key == "status" and hasattr(
+                    other_char_profile, "status"
+                ):
                     other_char_profile.status = yaml_detail_val
-                elif yaml_detail_key == "relationships" and hasattr(other_char_profile, 'relationships'):
-                    other_char_profile.relationships = yaml_detail_val if isinstance(yaml_detail_val, dict) else {}
-                else: # Fallback to updates dictionary for other fields like role, specific motivations, etc.
+                elif yaml_detail_key == "relationships" and hasattr(
+                    other_char_profile, "relationships"
+                ):
+                    other_char_profile.relationships = (
+                        yaml_detail_val if isinstance(yaml_detail_val, dict) else {}
+                    )
+                else:  # Fallback to updates dictionary for other fields like role, specific motivations, etc.
                     other_char_profile.updates[yaml_detail_key] = yaml_detail_val
 
             # Ensure 'role' is set, defaulting to 'other_key_character' if not provided
-            if "role" not in other_char_profile.updates and not hasattr(other_char_profile, "role"):
-                 other_char_profile.updates["role"] = "other_key_character"
-
+            if "role" not in other_char_profile.updates and not hasattr(
+                other_char_profile, "role"
+            ):
+                other_char_profile.updates["role"] = "other_key_character"
 
     agent.character_profiles = character_profiles
-    agent.world_building = (
-        world_building  # world_building was modified in place
-    )
+    agent.world_building = world_building  # world_building was modified in place
     logger.info(
         "Agent state populated from user-supplied YAML data (preserving '[Fill-in]' markers)."
     )
@@ -643,14 +699,16 @@ async def generate_plot_outline_logic(
         agent.plot_outline = {}
 
     # Ensure agent.plot_outline is a dict before checking keys
-    if not isinstance(agent.plot_outline, dict): # This is line 491 in original
+    if not isinstance(agent.plot_outline, dict):  # This is line 491 in original
         agent.plot_outline = {}
 
-    logger.info(f"NANA_INIT_SETUP: State of agent.plot_outline before base_elements_for_outline construction: "
-                f"Genre='{agent.plot_outline.get('genre')}', "
-                f"Theme='{agent.plot_outline.get('theme')}', "
-                f"Setting='{agent.plot_outline.get('setting_description')}', "
-                f"Protagonist='{agent.plot_outline.get('protagonist_name')}'")
+    logger.info(
+        f"NANA_INIT_SETUP: State of agent.plot_outline before base_elements_for_outline construction: "
+        f"Genre='{agent.plot_outline.get('genre')}', "
+        f"Theme='{agent.plot_outline.get('theme')}', "
+        f"Setting='{agent.plot_outline.get('setting_description')}', "
+        f"Protagonist='{agent.plot_outline.get('protagonist_name')}'"
+    )
 
     critical_plot_fields_for_llm_check = [
         "title",
@@ -717,13 +775,10 @@ async def generate_plot_outline_logic(
                         concrete_list_items = [
                             item
                             for item in user_val
-                            if not utils._is_fill_in(item)
-                            and str(item).strip()
+                            if not utils._is_fill_in(item) and str(item).strip()
                         ]
                         fill_in_placeholders_in_list = [
-                            item
-                            for item in user_val
-                            if utils._is_fill_in(item)
+                            item for item in user_val if utils._is_fill_in(item)
                         ]
 
                         if concrete_list_items:
@@ -737,10 +792,7 @@ async def generate_plot_outline_logic(
                             has_user_context = True
                         elif concrete_list_items:
                             context_from_user_input += "This list might need expansion if below target count.\n"
-                    elif (
-                        not utils._is_fill_in(user_val)
-                        and str(user_val).strip()
-                    ):
+                    elif not utils._is_fill_in(user_val) and str(user_val).strip():
                         context_from_user_input += (
                             f"  - {display_key_title_case}: {str(user_val)}\n"
                         )
@@ -781,9 +833,7 @@ async def generate_plot_outline_logic(
                 "setting_archetype",
                 random.choice(config.UNHINGED_SETTINGS_ARCHETYPES),
             )
-            base_elements_for_outline["protagonist_name"] = (
-                default_protagonist_name
-            )
+            base_elements_for_outline["protagonist_name"] = default_protagonist_name
             base_elements_for_outline["source_hint"] = "unhinged_pure_llm"
             prompt_core_elements_intro = (
                 "You are in UNHINGED mode. Generate a novel concept based on:\n"
@@ -794,16 +844,12 @@ async def generate_plot_outline_logic(
         else:
             base_elements_for_outline["genre"] = (
                 current_agent_plot_outline.get("genre")
-                if not utils._is_fill_in(
-                    current_agent_plot_outline.get("genre")
-                )
+                if not utils._is_fill_in(current_agent_plot_outline.get("genre"))
                 else config.CONFIGURED_GENRE
             )
             base_elements_for_outline["theme"] = (
                 current_agent_plot_outline.get("theme")
-                if not utils._is_fill_in(
-                    current_agent_plot_outline.get("theme")
-                )
+                if not utils._is_fill_in(current_agent_plot_outline.get("theme"))
                 else config.CONFIGURED_THEME
             )
             base_elements_for_outline["setting_description"] = (
@@ -839,19 +885,25 @@ async def generate_plot_outline_logic(
                 f"  - Protagonist Name (if known): {base_elements_for_outline['protagonist_name']}\n"
             )
 
-        logger.info(f"NANA_INIT_SETUP: Base elements determined for LLM prompt: "
-                    f"Genre='{base_elements_for_outline.get('genre')}', "
-                    f"Theme='{base_elements_for_outline.get('theme')}', "
-                    f"Setting='{base_elements_for_outline.get('setting_description')}', "
-                    f"Protagonist='{base_elements_for_outline.get('protagonist_name')}', "
-                    f"SourceHint='{base_elements_for_outline.get('source_hint')}'")
-        logger.info(f"NANA_INIT_SETUP: Constructed prompt_core_elements_intro for LLM: {prompt_core_elements_intro}")
+        logger.info(
+            f"NANA_INIT_SETUP: Base elements determined for LLM prompt: "
+            f"Genre='{base_elements_for_outline.get('genre')}', "
+            f"Theme='{base_elements_for_outline.get('theme')}', "
+            f"Setting='{base_elements_for_outline.get('setting_description')}', "
+            f"Protagonist='{base_elements_for_outline.get('protagonist_name')}', "
+            f"SourceHint='{base_elements_for_outline.get('source_hint')}'"
+        )
+        logger.info(
+            f"NANA_INIT_SETUP: Constructed prompt_core_elements_intro for LLM: {prompt_core_elements_intro}"
+        )
         prompt_lines = []
         if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_lines.append("/no_think")
 
         json_keys_str = ", ".join([f'"{k}"' for k in PLOT_OUTLINE_KEY_MAP.keys()])
-        json_list_keys_str = ", ".join([f'"{k}"' for k in PLOT_OUTLINE_LIST_INTERNAL_KEYS])
+        json_list_keys_str = ", ".join(
+            [f'"{k}"' for k in PLOT_OUTLINE_LIST_INTERNAL_KEYS]
+        )
 
         prompt_lines.extend(
             [
@@ -896,7 +948,7 @@ async def generate_plot_outline_logic(
                 '    "Kael anticipates their move and sets a trap at the nexus.",',
                 '    "The final confrontation occurs, where Jax must make a choice with cosmic consequences.",',
                 '    "Resolution: Jax either restores the timeline and lives with the moral cost, or shatters it, creating a new, unknown future for everyone."'
-                '  ]',
+                "  ]",
                 "}",
                 "```",
                 "",
@@ -929,9 +981,7 @@ async def generate_plot_outline_logic(
             accumulated_usage_data["completion_tokens"] += usage_data.get(
                 "completion_tokens", 0
             )
-            accumulated_usage_data["total_tokens"] += usage_data.get(
-                "total_tokens", 0
-            )
+            accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
 
         parsed_llm_response = None
         try:
@@ -951,22 +1001,28 @@ async def generate_plot_outline_logic(
 
         # This is inside the if parsed_llm_response: block
         # And after it's confirmed to be a dict (or handled if not)
-        if parsed_llm_response: # Check if parsed_llm_response is not None
+        if parsed_llm_response:  # Check if parsed_llm_response is not None
             if isinstance(parsed_llm_response, dict):
-                logger.info(f"NANA_INIT_SETUP: LLM parsed response for critical fields: "
-                            f"Genre='{parsed_llm_response.get('genre')}', "
-                            f"Theme='{parsed_llm_response.get('theme')}', "
-                            f"Setting='{parsed_llm_response.get('setting_description')}'")
+                logger.info(
+                    f"NANA_INIT_SETUP: LLM parsed response for critical fields: "
+                    f"Genre='{parsed_llm_response.get('genre')}', "
+                    f"Theme='{parsed_llm_response.get('theme')}', "
+                    f"Setting='{parsed_llm_response.get('setting_description')}'"
+                )
             else:
                 # This case might be if json.loads succeeded but returned not a dict, or if parsed_llm_response was None initially
-                logger.info(f"NANA_INIT_SETUP: LLM parsed_llm_response was not a dictionary after JSON parsing. Value: {parsed_llm_response}")
+                logger.info(
+                    f"NANA_INIT_SETUP: LLM parsed_llm_response was not a dictionary after JSON parsing. Value: {parsed_llm_response}"
+                )
 
         if not isinstance(agent.plot_outline, dict):
             agent.plot_outline = {}  # Ensure it's a dict
 
         if parsed_llm_response:
             for key, llm_value in parsed_llm_response.items():
-                internal_key = PLOT_OUTLINE_KEY_MAP.get(key, key) # Normalize key from JSON
+                internal_key = PLOT_OUTLINE_KEY_MAP.get(
+                    key, key
+                )  # Normalize key from JSON
                 existing_val = agent.plot_outline.get(internal_key)
 
                 if internal_key == "plot_points":
@@ -978,11 +1034,7 @@ async def generate_plot_outline_logic(
                         and pp.strip()
                     ]
                     llm_pps = (
-                        [
-                            pp
-                            for pp in llm_value
-                            if isinstance(pp, str) and pp.strip()
-                        ]
+                        [pp for pp in llm_value if isinstance(pp, str) and pp.strip()]
                         if isinstance(llm_value, list)
                         else []
                     )
@@ -1023,23 +1075,21 @@ async def generate_plot_outline_logic(
                     llm_generated_val = parsed_llm_response.get(
                         be_key, base_elements_for_outline.get(be_key)
                     )
-                    if llm_generated_val and not utils._is_fill_in(
-                        llm_generated_val
-                    ):
+                    if llm_generated_val and not utils._is_fill_in(llm_generated_val):
                         agent.plot_outline[be_key] = llm_generated_val
                     elif base_elements_for_outline.get(
                         be_key
-                    ) and not utils._is_fill_in(
-                        base_elements_for_outline.get(be_key)
-                    ):
-                        agent.plot_outline[be_key] = (
-                            base_elements_for_outline.get(be_key)
+                    ) and not utils._is_fill_in(base_elements_for_outline.get(be_key)):
+                        agent.plot_outline[be_key] = base_elements_for_outline.get(
+                            be_key
                         )
 
-            logger.info(f"NANA_INIT_SETUP: Final agent.plot_outline after LLM processing and default application for critical fields: "
-                        f"Genre='{agent.plot_outline.get('genre')}', "
-                        f"Theme='{agent.plot_outline.get('theme')}', "
-                        f"Setting='{agent.plot_outline.get('setting_description')}'")
+            logger.info(
+                f"NANA_INIT_SETUP: Final agent.plot_outline after LLM processing and default application for critical fields: "
+                f"Genre='{agent.plot_outline.get('genre')}', "
+                f"Theme='{agent.plot_outline.get('theme')}', "
+                f"Setting='{agent.plot_outline.get('setting_description')}'"
+            )
 
             agent.plot_outline.pop("is_default", None)
             if (
@@ -1084,10 +1134,7 @@ async def generate_plot_outline_logic(
 
     final_protagonist_name = agent.plot_outline["protagonist_name"]
 
-    if (
-        not hasattr(agent, "character_profiles")
-        or agent.character_profiles is None
-    ):
+    if not hasattr(agent, "character_profiles") or agent.character_profiles is None:
         agent.character_profiles = {}
     if not isinstance(agent.character_profiles, dict):
         agent.character_profiles = {}
@@ -1155,7 +1202,9 @@ async def generate_plot_outline_logic(
         f"Finalized character profile for protagonist '{final_protagonist_name}'."
     )
 
-    if not hasattr(agent, "world_building") or not isinstance(agent.world_building, dict):
+    if not hasattr(agent, "world_building") or not isinstance(
+        agent.world_building, dict
+    ):
         agent.world_building = {}
 
     overview_items_dict = agent.world_building.setdefault("_overview_", {})
@@ -1240,8 +1289,7 @@ async def generate_world_building_logic(
                                     needs_llm_for_world = True
                                     break
                                 if isinstance(detail_value, list) and any(
-                                    utils._is_fill_in(li)
-                                    for li in detail_value
+                                    utils._is_fill_in(li) for li in detail_value
                                 ):
                                     needs_llm_for_world = True
                                     break
@@ -1272,9 +1320,9 @@ async def generate_world_building_logic(
             agent.world_building.get("_overview_", {}).get("description")
         ):
             # Set a very generic overview if nothing else is available
-            agent.world_building.setdefault("_overview_", {})[
-                "description"
-            ] = "A world to be detailed by the LLM."
+            agent.world_building.setdefault("_overview_", {})["description"] = (
+                "A world to be detailed by the LLM."
+            )
         if (
             agent.world_building.get("source") != "user_supplied_yaml"
         ):  # Avoid overwriting this if it was set
@@ -1290,15 +1338,15 @@ async def generate_world_building_logic(
     plot_genre = agent.plot_outline.get("genre", "N/A")
 
     # Prepare world_setting_desc for the prompt, prioritizing agent.world_building._overview.description
-    world_setting_desc = agent.world_building.get("_overview_", {}).get(
-        "description"
-    )
+    world_setting_desc = agent.world_building.get("_overview_", {}).get("description")
     if not world_setting_desc or utils._is_fill_in(world_setting_desc):
         world_setting_desc = agent.plot_outline.get(
             "setting_description"
         )  # Fallback to plot_outline
     if not world_setting_desc or utils._is_fill_in(world_setting_desc):
-        world_setting_desc = "A mysterious and detailed world waiting to be fleshed out by the LLM."
+        world_setting_desc = (
+            "A mysterious and detailed world waiting to be fleshed out by the LLM."
+        )
 
     user_world_context_str = "\n**User-Provided World Context (Content from user_story_elements.yaml - Respect these concrete values. Complete any '[Fill-in]' fields creatively using Markdown):**\n"  # Updated filename
     temp_user_wb_for_prompt: List[str] = []
@@ -1306,8 +1354,7 @@ async def generate_world_building_logic(
     if agent.world_building.get("source") == "user_supplied_yaml" and (
         agent.world_building.get("_overview_")
         or any(
-            k
-            not in ["_overview_", "is_default", "source", "user_supplied_data"]
+            k not in ["_overview_", "is_default", "source", "user_supplied_data"]
             for k in agent.world_building.keys()
         )
     ):  # user_supplied_data might be redundant
@@ -1337,46 +1384,35 @@ async def generate_world_building_logic(
             ]:
                 continue
 
-            cat_display_for_prompt = cat_internal.replace(
-                "_", " "
-            ).capitalize()
-            category_lines_for_prompt: List[
-                str
-            ] = []  # Lines for current category
+            cat_display_for_prompt = cat_internal.replace("_", " ").capitalize()
+            category_lines_for_prompt: List[str] = []  # Lines for current category
 
             if isinstance(items_dict, dict) and items_dict:
-                category_lines_for_prompt.append(
-                    f"## {cat_display_for_prompt}"
-                )
+                category_lines_for_prompt.append(f"## {cat_display_for_prompt}")
                 for item_display_name, details in items_dict.items():
-                    if not isinstance(
-                        details, dict
-                    ) or item_display_name.startswith("_"):
+                    if not isinstance(details, dict) or item_display_name.startswith(
+                        "_"
+                    ):
                         continue  # Skip internal markers like _is_fill_in
 
-                    category_lines_for_prompt.append(
-                        f"### {item_display_name}"
-                    )
+                    category_lines_for_prompt.append(f"### {item_display_name}")
                     item_has_details = False
                     for detail_key_internal, detail_val in details.items():
                         if detail_key_internal == "source":
                             continue
-                        detail_key_display_for_prompt = (
-                            detail_key_internal.replace("_", " ").capitalize()
-                        )
+                        detail_key_display_for_prompt = detail_key_internal.replace(
+                            "_", " "
+                        ).capitalize()
                         if isinstance(detail_val, list):
                             if detail_val:  # Only add if list has items
                                 category_lines_for_prompt.append(
                                     f"**{detail_key_display_for_prompt}**:"
                                 )
                                 for li_val in detail_val:
-                                    category_lines_for_prompt.append(
-                                        f"  - {li_val}"
-                                    )
+                                    category_lines_for_prompt.append(f"  - {li_val}")
                                 item_has_details = True
                         elif detail_val is not None and (
-                            isinstance(detail_val, bool)
-                            or str(detail_val).strip()
+                            isinstance(detail_val, bool) or str(detail_val).strip()
                         ):
                             category_lines_for_prompt.append(
                                 f"**{detail_key_display_for_prompt}**: {detail_val}"
@@ -1514,23 +1550,17 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
         auto_clean_response=True,
     )
     if usage_data:
-        accumulated_usage_data["prompt_tokens"] += usage_data.get(
-            "prompt_tokens", 0
-        )
+        accumulated_usage_data["prompt_tokens"] += usage_data.get("prompt_tokens", 0)
         accumulated_usage_data["completion_tokens"] += usage_data.get(
             "completion_tokens", 0
         )
-        accumulated_usage_data["total_tokens"] += usage_data.get(
-            "total_tokens", 0
-        )
+        accumulated_usage_data["total_tokens"] += usage_data.get("total_tokens", 0)
 
     logger.debug(
         f"Cleaned LLM world-building JSON output (len: {len(cleaned_world_text_json)}):\nSTART_OF_WB_JSON_TEXT\n{cleaned_world_text_json}\nEND_OF_WB_JSON_TEXT"
     )  # Updated log message
 
-    logger.info(
-        "Attempting to parse LLM world-building output using JSON parser..."
-    )
+    logger.info("Attempting to parse LLM world-building output using JSON parser...")
     parsed_llm_json_response: Optional[Dict[str, Any]] = None
     try:
         parsed_llm_json_response = json.loads(cleaned_world_text_json)
@@ -1549,9 +1579,7 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
         )
 
         if not isinstance(agent.world_building, dict):
-            agent.world_building = {
-                "_overview_": {}
-            }
+            agent.world_building = {"_overview_": {}}
 
         for (
             json_top_level_cat_key,
@@ -1583,7 +1611,7 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
             else:
                 agent.world_building[internal_cat_name] = {}
                 target_category_in_agent = agent.world_building[internal_cat_name]
-                
+
                 is_single_item_style = all(
                     not isinstance(v, dict) for v in json_cat_content.values()
                 ) and bool(json_cat_content)
@@ -1593,9 +1621,7 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                     logger.info(
                         f"Category '{json_top_level_cat_key}' from LLM appears to be a single-item category. Bundling its properties into one item."
                     )
-                    item_name = json_top_level_cat_key.replace(
-                        "_", " "
-                    ).title()
+                    item_name = json_top_level_cat_key.replace("_", " ").title()
                     items_to_process[item_name] = json_cat_content
                 else:
                     items_to_process = json_cat_content
@@ -1611,7 +1637,6 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
                         internal_cat_name, item_name, item_details
                     )
                     target_category_in_agent[item_name] = world_item_instance
-
 
         agent.world_building.pop("is_default", None)
         agent.world_building.pop("user_supplied_data", None)
@@ -1652,12 +1677,8 @@ Begin your single, valid JSON output now. Do NOT include any explanatory text be
 
     if llm_was_called:
         current_source = agent.world_building.get("source", "")
-        if not (
-            current_source == "user_supplied_yaml" and not needs_llm_for_world
-        ):
-            for (
-                cat_internal_key
-            ) in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
+        if not (current_source == "user_supplied_yaml" and not needs_llm_for_world):
+            for cat_internal_key in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.values():
                 agent.world_building.setdefault(cat_internal_key, {})
 
     return (

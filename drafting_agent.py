@@ -29,9 +29,7 @@ class DraftingAgent:
         Generates the initial draft for a chapter based on plot focus, context, and scene plan.
         Returns: (draft_text, raw_llm_output, usage_data)
         """
-        logger.info(
-            f"DraftingAgent: Generating draft for Chapter {chapter_number}..."
-        )
+        logger.info(f"DraftingAgent: Generating draft for Chapter {chapter_number}...")
 
         protagonist_name = novel_props.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME

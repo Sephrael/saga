@@ -152,9 +152,7 @@ class PlannerAgent:
             scenes_data.append(processed_scene_dict)  # type: ignore
 
         if not scenes_data:
-            logger.warning(
-                f"No valid scenes parsed from JSON for Ch {chapter_number}."
-            )
+            logger.warning(f"No valid scenes parsed from JSON for Ch {chapter_number}.")
             return None
 
         scenes_data.sort(key=lambda x: x.get("scene_number", float("inf")))
@@ -193,9 +191,7 @@ class PlannerAgent:
             )
             if prev_chap_data:
                 prev_summary = prev_chap_data.get("summary")
-                prev_is_provisional = prev_chap_data.get(
-                    "is_provisional", False
-                )
+                prev_is_provisional = prev_chap_data.get("is_provisional", False)
                 summary_prefix = (
                     "[Provisional Summary from Prev Ch] "
                     if prev_is_provisional and prev_summary
@@ -226,14 +222,10 @@ class PlannerAgent:
             novel_props, chapter_number, None
         )
         character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(
-                novel_props, chapter_number
-            )
+            await get_character_state_snippet_for_prompt(novel_props, chapter_number)
         )
-        world_state_snippet_plain_text = (
-            await get_world_state_snippet_for_prompt(
-                novel_props, chapter_number
-            )
+        world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
+            novel_props, chapter_number
         )
 
         future_plot_context_parts: List[str] = []
@@ -250,10 +242,7 @@ class PlannerAgent:
                 )
             if plot_point_index + 2 < total_plot_points_in_novel:
                 next_next_pp_text = all_plot_points[plot_point_index + 2]
-                if (
-                    isinstance(next_next_pp_text, str)
-                    and next_next_pp_text.strip()
-                ):
+                if isinstance(next_next_pp_text, str) and next_next_pp_text.strip():
                     future_plot_context_parts.append(
                         f"**And Then (PP {plot_point_index + 3}/{total_plot_points_in_novel} - distant context):**\n{next_next_pp_text.strip()}\n"
                     )
@@ -382,12 +371,8 @@ class PlannerAgent:
                     )
                     continue
                 required_scene_keys_internal = set(SCENE_PLAN_KEY_MAP.values())
-                if not required_scene_keys_internal.issubset(
-                    scene_dict.keys()
-                ):
-                    missing_k = required_scene_keys_internal - set(
-                        scene_dict.keys()
-                    )
+                if not required_scene_keys_internal.issubset(scene_dict.keys()):
+                    missing_k = required_scene_keys_internal - set(scene_dict.keys())
                     logger.warning(
                         f"Scene {scene_dict.get('scene_number', i + 1)} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}"
                     )
@@ -401,9 +386,7 @@ class PlannerAgent:
                     and isinstance(scene_dict.get("key_dialogue_points"), list)
                     and isinstance(scene_dict.get("setting_details"), str)
                     and scene_dict.get("setting_details", "").strip()
-                    and isinstance(
-                        scene_dict.get("scene_focus_elements"), list
-                    )
+                    and isinstance(scene_dict.get("scene_focus_elements"), list)
                     and isinstance(scene_dict.get("contribution"), str)
                     and scene_dict.get("contribution", "").strip()
                 )
