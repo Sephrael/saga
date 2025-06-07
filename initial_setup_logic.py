@@ -742,7 +742,7 @@ async def generate_plot_outline_logic(
         try:
             parsed_llm_response = json.loads(cleaned_outline_text)
             if isinstance(parsed_llm_response, dict):
-                plot_outline = parsed_llm_response
+                plot_outline.update(parsed_llm_response)
                 plot_outline['source'] = base_elements_for_outline.get("source_hint", "llm_generated_or_merged")
                 logger.info(f"LLM successfully generated plot outline '{plot_outline.get('title', 'N/A')}' with {len(plot_outline.get('plot_points', []))} points.")
             else:
