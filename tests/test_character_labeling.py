@@ -221,10 +221,12 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's modify the mock to capture the query string for query_kg_from_db
 
     captured_query_string = ""
+    captured_query_params: Dict[str, Any] = {}
 
     async def capture_read_query_mock(query: str, params: Dict[str, Any]):
-        nonlocal captured_query_string
+        nonlocal captured_query_string, captured_query_params
         captured_query_string = query
+        captured_query_params = params
         # Simulate finding relevant nodes
         if (
             ":Character" in query and params.get("subject_param") is None
@@ -295,6 +297,11 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's test that a query *for* a character uses the right label in its match
     await query_kg_from_db(subject="Alice", predicate="IS_A")
     assert "s.name = $subject_param" in captured_query_string
+    assert captured_query_params == {
+        "subject_param": "Alice",
+        "predicate_param": "IS_A",
+    }
+    assert "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string
     # The test for _get_cypher_labels and add_kg_triples_batch_to_db already ensure Alice is a :Character.
     # So, if Neo4j has Alice as :Character, the query will work.
 
@@ -311,10 +318,6 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's simplify this test to focus on the fact that query_kg_from_db *can* retrieve
     # data if the entities were labeled correctly.
 
-    await query_kg_from_db(include_provisional=True)  # general query
-    assert (
-        "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string
-    )  # default query
     # The actual filtering for :Character would happen in Cypher if one were to write:
     # MATCH (c:Character) ...
     # This python function doesn't build arbitrary node selection queries, only triple queries.
@@ -333,8 +336,9 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # This specific test for query_kg_from_db might be less critical if query_kg_from_db
     # isn't the primary tool for "get all characters".
 
-    # Let's assume for now that `test_add_entities_with_character_labeling` is sufficient
-    # to prove that the labels are correctly applied, making them queryable.
-    # This test can be a simple pass or focus on a very specific aspect of query_kg_from_db
-    # if relevant.
-    pass  # Placeholder for further refinement if a direct query test is needed.
+    # Reset query capture and test a general character retrieval
+    captured_query_string = ""
+    captured_query_params = {}
+    await query_kg_from_db(include_provisional=True)
+    assert "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o)" in captured_query_string
+    assert captured_query_params == {}
