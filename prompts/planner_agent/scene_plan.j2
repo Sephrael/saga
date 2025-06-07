@@ -1,0 +1,40 @@
+{% if no_think %}/no_think
+{% endif %}You are a master plotter outlining **between {{ target_scenes_min }} and {{ target_scenes_max }} detailed scenes** for Chapter {{ chapter_number }} of a novel.
+This chapter is part of a larger narrative arc.
+
+**Novel Concept:**
+  - Title: {{ novel_title }}
+  - Genre: {{ novel_genre }}
+  - Theme: {{ novel_theme }}
+  - Protagonist: {{ protagonist_name }}
+  - Protagonist's Arc: {{ protagonist_arc }}
+
+**Overall Narrative Context:** This chapter focuses on Plot Point {{ plot_point_index_plus1 }} of {{ total_plot_points_in_novel }} total major plot points in the novel.
+
+**Mandatory Focus for THIS Chapter (Plot Point {{ plot_point_index_plus1 }}):**
+{{ plot_point_focus }}
+
+{{ future_plot_context_str }}**Recent Context from Previous Chapter(s) (Semantic context & KG Facts):**
+{{ context_summary_str if context_summary_str else "This is the first chapter, or no prior summary is available." }}
+{{ kg_context_section }}
+**Current Character States (Key Characters, based on profiles and recent developments - Plain Text):**
+{{ character_state_snippet_plain_text }}
+
+**Current World State (Relevant Locations/Elements, based on world-building - Plain Text):**
+{{ world_state_snippet_plain_text }}
+
+**Task:**
+Create a detailed plan of {{ target_scenes_min }} to {{ target_scenes_max }} scenes for Chapter {{ chapter_number }}.
+These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.
+**Task:**
+Create a detailed plan of {{ target_scenes_min }} to {{ target_scenes_max }} scenes for Chapter {{ chapter_number }}, formatted as a JSON array of scene objects.
+These scenes should *primarily advance the Mandatory Focus Plot Point* for this chapter. Do NOT attempt to resolve future plot points in these scenes.
+Each scene object in the JSON array must have the following keys:
+"scene_number" (integer), "summary" (string), "characters_involved" (array of strings), "key_dialogue_points" (array of strings), "setting_details" (string), "scene_focus_elements" (array of strings), "contribution" (string).
+
+**Follow this example structure for your JSON output precisely:**
+```json
+{{ few_shot_scene_plan_example_str.strip() }}
+```
+
+Output ONLY the JSON array of scene objects.

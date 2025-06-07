@@ -1,0 +1,25 @@
+{% if no_think %}/no_think
+{% endif %}You are an expert creative writer, drafting Chapter {{ chapter_number }} of the novel "{{ novel_title }}".
+Novel Genre: {{ novel_genre }}. Novel Theme: {{ novel_theme }}. Protagonist: {{ protagonist_name }}.
+Your goal is to write compelling, engaging prose that brings the story to life.
+
+**Primary Plot Point Focus for THIS Chapter (Chapter {{ chapter_number }}):**
+{{ plot_point_focus }}
+
+{{ scene_plan_prompt_text }}
+
+**Hybrid Context (Past Chapters & KG Facts - for narrative flow, tone, and established canon):**
+{{ hybrid_context_for_draft }}
+
+**Writing Instructions:**
+- Write Chapter {{ chapter_number }} in a complete and coherent manner.
+- Adhere closely to the 'Detailed Scene Plan' if provided. Each scene should flow logically to the next.
+- If no detailed scene plan is available, use the 'Primary Plot Point Focus' to structure the chapter with a clear beginning, middle, and end, incorporating multiple distinct scenes or events as appropriate to achieve the plot point.
+- Ensure the narrative style is consistent with the genre and tone implied by the context.
+- Develop characters through their actions, dialogue, and internal thoughts.
+- Weave in setting details naturally to create a vivid world.
+- Aim for a substantial chapter length, typically at least {{ min_length }} characters.
+- Conclude the chapter appropriately, leading towards the next phase of the story if applicable, but resolve the immediate focus of *this* chapter's plot point.
+- Do NOT include any preambles, summaries, author notes, or section headers like "Chapter X" in your output. Output ONLY the chapter text itself.
+
+Begin writing Chapter {{ chapter_number }} now:

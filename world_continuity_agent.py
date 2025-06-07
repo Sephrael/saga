@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import config
 from llm_interface import llm_service  # MODIFIED
+from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
 from type import ProblemDetail
 from data_access import kg_queries
@@ -285,73 +286,26 @@ class WorldContinuityAgent:
   }
 ]
 """
-        # Note: The user/developer needs to update the actual LLM prompt to request JSON.
-        prompt_lines = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-            prompt_lines.append("/no_think")
-
-        prompt_lines.extend(
-            [
-                (
-                    f"You are a World & Continuity Expert Editor for Chapter "
-                    f'{chapter_number} of the novel "{novel_props.get("title", "Untitled Novel")}" '
-                    f"(Protagonist: {protagonist_name_str})."
-                ),
-                "Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chapter Text** below. Focus on:",
-                "- Contradictions with the Plot Outline summary.",
-                "- Contradictions with Character Profiles (descriptions, established traits, known status, relationships).",
-                "- Contradictions with World Building rules, descriptions, or established lore.",
-                "- Contradictions or inconsistencies with the Previous Chapters Context (which includes semantic flow and Key Reliable KG Facts).",
-                "- Internal inconsistencies of fact or established detail within THIS chapter's text.",
-                "",
-                "**Reference Information for CONSISTENCY Check (Summary Format):**",
-                "  **Plot Outline Summary:**",
-                "  ```text",
-                f"  Title: {novel_props.get('title', 'N/A')}",
-                f"  Genre: {novel_props.get('genre', 'N/A')}",
-                f"  Theme: {novel_props.get('theme', 'N/A')}",
-                f"  Protagonist: {novel_props.get('protagonist_name', 'N/A')} ({novel_props.get('character_arc', 'N/A')})",
-                f"  Logline: {novel_props.get('logline', 'N/A')}",
-                "  Key Plot Points (summary):",
-                plot_points_summary_str,
-                "  ```",
-                "  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**",
-                "  ```text",
-                char_profiles_plain_text,
-                "  ```",
-                "  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**",
-                "  ```text",
-                world_building_plain_text,
-                "  ```",
-                "  **Previous Chapters Context (Includes Semantic Flow & Key Reliable KG Facts for Canon):**",
-                "  --- PREVIOUS CONTEXT ---",
-                (
-                    previous_chapters_context
-                    if previous_chapters_context.strip()
-                    else "N/A (e.g., Chapter 1 or context retrieval failed)."
-                ),
-                "  --- END PREVIOUS CONTEXT ---",
-                "",
-                f"**Complete Chapter {chapter_number} Text (to analyze for consistency):**",
-                "--- BEGIN COMPLETE CHAPTER TEXT ---",
-                draft_text,
-                "--- END COMPLETE CHAPTER TEXT ---",
-                "",
-                "**Output Format (CRITICAL - JSON ONLY):**",
-                "If consistency problems are found, output a JSON array of problem objects.",
-                'Each object MUST have these keys: "issue_category" (fixed to "consistency"), "problem_description", "quote_from_original_text", "suggested_fix_focus".',
-                'The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".',
-                'If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like `{"status": "No significant consistency problems found"}`.',
-                "",
-                "**Follow this example structure for your JSON output precisely:**",
-                "```json",
-                few_shot_consistency_example_str.strip(),
-                "```",
-                "",
-                "Begin your JSON output now:",
-            ]
+        prompt = render_prompt(
+            "world_continuity_agent/consistency_check.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "novel_title": novel_props.get("title", "Untitled Novel"),
+                "protagonist_name_str": protagonist_name_str,
+                "novel_genre": novel_props.get("genre", "N/A"),
+                "novel_theme": novel_props.get("theme", "N/A"),
+                "novel_protagonist": novel_props.get("protagonist_name", "N/A"),
+                "protagonist_arc": novel_props.get("character_arc", "N/A"),
+                "logline": novel_props.get("logline", "N/A"),
+                "plot_points_summary_str": plot_points_summary_str,
+                "char_profiles_plain_text": char_profiles_plain_text,
+                "world_building_plain_text": world_building_plain_text,
+                "previous_chapters_context": previous_chapters_context,
+                "draft_text": draft_text,
+                "few_shot_consistency_example_str": few_shot_consistency_example_str,
+            },
         )
-        prompt = "\n".join(prompt_lines)
 
         logger.info(
             f"Calling LLM ({self.model_name}) for World/Continuity consistency"

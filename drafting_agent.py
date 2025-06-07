@@ -4,10 +4,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 from llm_interface import count_tokens, llm_service
+from prompt_renderer import render_prompt
 from type import SceneDetail  # Assuming SceneDetail is defined in type.py
-from utils import (
-    format_scene_plan_for_prompt,
-)  # Assuming this utility exists or will be created
+from utils import format_scene_plan_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -51,39 +50,21 @@ class DraftingAgent:
         elif not config.ENABLE_AGENTIC_PLANNING:
             scene_plan_prompt_text = "Agentic scene planning is disabled. Focus on the plot point for this chapter."
 
-        prompt_lines = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
-            prompt_lines.append("/no_think")
-
-        prompt_lines.extend(
-            [
-                f'You are an expert creative writer, drafting Chapter {chapter_number} of the novel "{novel_title}".',
-                f"Novel Genre: {novel_genre}. Novel Theme: {novel_theme}. Protagonist: {protagonist_name}.",
-                "Your goal is to write compelling, engaging prose that brings the story to life.",
-                "",
-                f"**Primary Plot Point Focus for THIS Chapter (Chapter {chapter_number}):**",
-                plot_point_focus,
-                "",
-                scene_plan_prompt_text,  # This includes the "Detailed Scene Plan:" header if applicable
-                "",
-                "**Hybrid Context (Past Chapters & KG Facts - for narrative flow, tone, and established canon):**",
-                hybrid_context_for_draft,
-                "",
-                "**Writing Instructions:**",
-                f"- Write Chapter {chapter_number} in a complete and coherent manner.",
-                "- Adhere closely to the 'Detailed Scene Plan' if provided. Each scene should flow logically to the next.",
-                "- If no detailed scene plan is available, use the 'Primary Plot Point Focus' to structure the chapter with a clear beginning, middle, and end, incorporating multiple distinct scenes or events as appropriate to achieve the plot point.",
-                "- Ensure the narrative style is consistent with the genre and tone implied by the context.",
-                "- Develop characters through their actions, dialogue, and internal thoughts.",
-                "- Weave in setting details naturally to create a vivid world.",
-                f"- Aim for a substantial chapter length, typically at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
-                "- Conclude the chapter appropriately, leading towards the next phase of the story if applicable, but resolve the immediate focus of *this* chapter's plot point.",
-                '- Do NOT include any preambles, summaries, author notes, or section headers like "Chapter X" in your output. Output ONLY the chapter text itself.',
-                "",
-                "Begin writing Chapter {chapter_number} now:",
-            ]
+        prompt = render_prompt(
+            "drafting_agent/draft_chapter.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "novel_title": novel_title,
+                "novel_genre": novel_genre,
+                "novel_theme": novel_theme,
+                "protagonist_name": protagonist_name,
+                "plot_point_focus": plot_point_focus,
+                "scene_plan_prompt_text": scene_plan_prompt_text,
+                "hybrid_context_for_draft": hybrid_context_for_draft,
+                "min_length": config.MIN_ACCEPTABLE_DRAFT_LENGTH,
+            },
         )
-        prompt = "\n".join(prompt_lines)
 
         # Estimate prompt tokens and adjust max_generation_tokens if necessary
         # This is a rough way to ensure the prompt itself doesn't consume the entire window
