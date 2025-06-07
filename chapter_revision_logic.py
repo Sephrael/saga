@@ -13,10 +13,12 @@ import config
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
 from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from kg_maintainer.models import (
+    CharacterProfile,
     EvaluationResult,
     PatchInstruction,
     ProblemDetail,
     SceneDetail,
+    WorldItem,
 )
 
 logger = logging.getLogger(__name__)
