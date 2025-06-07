@@ -1,11 +1,13 @@
 # data_access/kg_queries.py
 import logging
 import re
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import config
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (
-    KG_REL_CHAPTER_ADDED,
     KG_IS_PROVISIONAL,
+    KG_REL_CHAPTER_ADDED,
 )
 
 logger = logging.getLogger(__name__)
@@ -316,4 +318,26 @@ async def get_most_recent_value_from_db(
     logger.debug(
         f"Neo4j: No value found for ({subject}, {predicate}) up to Ch {chapter_limit}, include_provisional={include_provisional}."
     )
+    return None
+
+
+async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
+    """Return a property value from the NovelInfo node."""
+    if not property_key.strip():
+        logger.warning("Neo4j: empty property key for NovelInfo query")
+        return None
+
+    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
+    query = f"MATCH (ni:NovelInfo:Entity {{id: $novel_id_param}}) RETURN ni.{property_key} AS value"
+    try:
+        results = await neo4j_manager.execute_read_query(
+            query, {"novel_id_param": novel_id_param}
+        )
+        if results and results[0] and "value" in results[0]:
+            return results[0]["value"]
+    except Exception as e:  # pragma: no cover - narrow DB errors
+        logger.error(
+            f"Neo4j: Error retrieving NovelInfo property '{property_key}': {e}",
+            exc_info=True,
+        )
     return None

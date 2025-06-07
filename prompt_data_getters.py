@@ -769,7 +769,6 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         plot_outline_data, "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
     )
 
-    novel_id = config.MAIN_NOVEL_INFO_NODE_ID
     characters_of_interest: Set[str] = (
         {protagonist_name}
         if protagonist_name and not utils._is_fill_in(protagonist_name)
@@ -795,38 +794,16 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         f"KG fact gathering for Ch {chapter_number} draft: Chars of interest: {characters_of_interest}, KG chapter limit: {kg_chapter_limit}"
     )
 
-    novel_context_queries_params = [
-        (
-            "MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.theme AS value, 'The novel\\'s theme' AS description",
-            {"novel_id_param": novel_id},
-            "theme",
-        ),
-        (
-            "MATCH (ni:NovelInfo {{id: $novel_id_param}}) RETURN ni.conflict_summary AS value, 'The main conflict' AS description",
-            {"novel_id_param": novel_id},
-            "conflict_summary",
-        ),
-    ]
-    for (
-        _,
-        _,
-        desc_key,
-    ) in novel_context_queries_params:  # query and params marked as unused
+    for desc_key in ["theme", "conflict_summary"]:
         if len(facts_for_prompt_list) >= max_total_facts:
             break
         try:
-            res = await kg_queries.query_kg_from_db(
-                subject=novel_id,
-                predicate=desc_key,
-                chapter_limit=kg_chapter_limit,
-                include_provisional=False,
-                limit_results=1,
-            )
-            if res and res[0] and res[0].get("object"):
+            value = await kg_queries.get_novel_info_property_from_db(desc_key)
+            if value:
                 fact_text = (
-                    f"- The novel's central theme is: {res[0]['object']}."
+                    f"- The novel's central theme is: {value}."
                     if desc_key == "theme"
-                    else f"- The main conflict summary: {res[0]['object']}."
+                    else f"- The main conflict summary: {value}."
                 )
                 if fact_text not in facts_for_prompt_list:
                     facts_for_prompt_list.append(fact_text)
