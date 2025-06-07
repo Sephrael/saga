@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any, Tuple, Union
 import numpy as np
 
 from neo4j import AsyncGraphDatabase, AsyncManagedTransaction, AsyncDriver  # type: ignore
-from neo4j.exceptions import ServiceUnavailable, Neo4jError  # type: ignore
+from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 
@@ -165,39 +165,9 @@ class Neo4jManagerSingleton:
             "Creating/verifying Neo4j indexes and constraints (batch execution)..."
         )
 
-        try:
-            constraints_result = await self.execute_read_query(
-                "SHOW CONSTRAINTS YIELD name RETURN name"
-            )
-            indexes_result = await self.execute_read_query(
-                "SHOW INDEXES YIELD name RETURN name"
-            )
-            for record in constraints_result:
-                constraint_name = record.get("name")
-                if not constraint_name:
-                    continue
-                try:
-                    await self.execute_write_query(f"DROP CONSTRAINT {constraint_name}")
-                    self.logger.info(f"Dropped constraint '{constraint_name}'")
-                except Neo4jError as e_drop:
-                    self.logger.debug(
-                        f"Ignoring constraint drop failure for '{constraint_name}': {e_drop}"
-                    )
-            for record in indexes_result:
-                index_name = record.get("name")
-                if not index_name:
-                    continue
-                try:
-                    await self.execute_write_query(f"DROP INDEX {index_name}")
-                    self.logger.info(f"Dropped index '{index_name}'")
-                except Neo4jError as e_drop:
-                    self.logger.debug(
-                        f"Ignoring index drop failure for '{index_name}': {e_drop}"
-                    )
-        except Exception as e:
-            self.logger.error(
-                f"Failed to drop existing schema elements: {e}", exc_info=True
-            )
+        # Existing indexes and constraints are not explicitly dropped. The
+        # following `CREATE ... IF NOT EXISTS` statements will safely create any
+        # missing schema elements without affecting those already present.
 
         core_constraints_queries = [
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
