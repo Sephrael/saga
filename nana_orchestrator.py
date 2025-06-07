@@ -32,11 +32,15 @@ from initial_setup_logic import (
     generate_plot_outline_logic,
     generate_world_building_logic,
 )
-from kg_maintainer.models import CharacterProfile, WorldItem
+from kg_maintainer.models import (
+    CharacterProfile,
+    EvaluationResult,
+    SceneDetail,
+    WorldItem,
+)
 from kg_maintainer_agent import KGMaintainerAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
-from type import EvaluationResult, SceneDetail
 from world_continuity_agent import WorldContinuityAgent
 
 try:

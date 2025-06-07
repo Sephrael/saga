@@ -7,8 +7,10 @@ import numpy as np
 import logging
 import re
 import asyncio
-from typing import Optional, Tuple, List, Set, Any
-from type import SceneDetail
+from typing import TYPE_CHECKING, Any, List, Optional, Set, Tuple
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from kg_maintainer.models import SceneDetail
 
 # Local application imports - ensure these paths are correct for your project
 from llm_interface import llm_service, count_tokens
@@ -314,7 +316,7 @@ async def find_semantically_closest_segment(
 
 
 def format_scene_plan_for_prompt(
-    chapter_plan: List[SceneDetail],
+    chapter_plan: List["SceneDetail"],
     model_name_for_tokens: str,
     max_tokens_budget: int,
 ) -> str:

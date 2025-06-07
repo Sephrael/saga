@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_character_node_cypher(
-    profile: CharacterProfile, chapter_number_for_delta: int
+    profile: CharacterProfile, chapter_number_for_delta: int = 0
 ) -> List[Tuple[str, Dict[str, Any]]]:
     """Create Cypher statements for a character profile."""
     """Persist or update core attributes and direct relationships."""
@@ -233,7 +233,7 @@ def generate_character_node_cypher(
 
 
 def generate_world_element_node_cypher(
-    item: WorldItem, chapter_number_for_delta: int
+    item: WorldItem, chapter_number_for_delta: int = 0
 ) -> List[Tuple[str, Dict[str, Any]]]:
     """
     Create Cypher statements to persist or update a single world element.

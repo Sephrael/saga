@@ -12,7 +12,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import config
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
 from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
-from type import EvaluationResult, PatchInstruction, ProblemDetail, SceneDetail
+from kg_maintainer.models import (
+    EvaluationResult,
+    PatchInstruction,
+    ProblemDetail,
+    SceneDetail,
+)
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this module is imported

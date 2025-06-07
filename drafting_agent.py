@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import config
 from llm_interface import count_tokens, llm_service
 from prompt_renderer import render_prompt
-from type import SceneDetail  # Assuming SceneDetail is defined in type.py
+from kg_maintainer.models import SceneDetail
 from utils import format_scene_plan_for_prompt
 
 logger = logging.getLogger(__name__)
