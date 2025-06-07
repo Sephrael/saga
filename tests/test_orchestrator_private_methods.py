@@ -4,6 +4,13 @@ import pytest
 
 import utils
 from nana_orchestrator import NANA_Orchestrator
+from story_models import (
+    UserStoryInputModel,
+    NovelConceptModel,
+    ProtagonistModel,
+    SettingModel,
+    KeyLocationModel,
+)
 
 
 @pytest.fixture
@@ -58,3 +65,15 @@ async def test_finalize_and_log_failure(orchestrator, monkeypatch):
     )
     result = await orchestrator._finalize_and_log(1, "text", None, True)
     assert result is None
+
+
+def test_load_state_from_user_model(orchestrator):
+    model = UserStoryInputModel(
+        novel_concept=NovelConceptModel(title="My Tale"),
+        protagonist=ProtagonistModel(name="Hero"),
+        setting=SettingModel(key_locations=[KeyLocationModel(name="Town")]),
+    )
+    orchestrator.load_state_from_user_model(model)
+    assert orchestrator.plot_outline.get("title") == "My Tale"
+    assert "Hero" in orchestrator.character_profiles
+    assert orchestrator.world_building.get("Locations", {}).get("Town")
