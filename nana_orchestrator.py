@@ -477,19 +477,14 @@ class NANA_Orchestrator:
             plot_point_text = (
                 plot_point_item.get("description")
                 if isinstance(plot_point_item, dict)
-                else plot_point_item
+                else str(plot_point_item)
             )
-            if (
-                isinstance(plot_point_text, str)
-                and plot_point_text.strip()
-                and not utils._is_fill_in(plot_point_text)
-            ):
+            if isinstance(plot_point_text, str) and plot_point_text.strip():
                 return plot_point_text, plot_point_index
-            else:
-                logger.error(
-                    f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is invalid or '[Fill-in]': {plot_point_text}"
-                )
-                return None, -1
+            logger.warning(
+                f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is empty or invalid. Using placeholder."
+            )
+            return config.MARKDOWN_FILL_IN_PLACEHOLDER, plot_point_index
         else:
             logger.error(
                 f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points_list)}) for chapter {novel_chapter_number}."
@@ -1254,16 +1249,17 @@ class NANA_Orchestrator:
 
             start_novel_chapter_to_write = self.chapter_count + 1
 
-            available_plot_points = []
-            for pp in self.plot_outline.get("plot_points", []):
-                desc = pp["description"] if isinstance(pp, dict) else pp
-                if (
-                    isinstance(desc, str)
-                    and desc.strip()
-                    and not utils._is_fill_in(desc)
-                ):
-                    available_plot_points.append(pp)
-            total_concrete_plot_points = len(available_plot_points)
+            plot_points_raw = self.plot_outline.get("plot_points", [])
+            if isinstance(plot_points_raw, list):
+                plot_points_list = plot_points_raw
+            elif isinstance(plot_points_raw, dict):
+                plot_points_list = list(plot_points_raw.values())
+            elif plot_points_raw:
+                plot_points_list = [plot_points_raw]
+            else:
+                plot_points_list = []
+
+            total_concrete_plot_points = len(plot_points_list)
 
             plot_points_covered_count = self.chapter_count
             remaining_plot_points_to_address_in_novel = (

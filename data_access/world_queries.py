@@ -27,6 +27,7 @@ def generate_world_element_node_cypher(
         "category": item.category,
         KG_NODE_CREATED_CHAPTER: item.created_chapter,
     }
+    node_props["is_deleted"] = False
 
     current_chapter_source_quality_key = (
         f"source_quality_chapter_{chapter_number_for_delta}"
@@ -307,7 +308,9 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
     # 3. Get existing WorldElement IDs from DB to find orphans
     try:
         existing_we_records = await neo4j_manager.execute_read_query(
-            "MATCH (we:WorldElement:Entity) RETURN we.id AS id"
+            "MATCH (we:WorldElement:Entity)"
+            " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
+            " RETURN we.id AS id"
         )
         existing_db_we_ids: Set[str] = {
             record["id"] for record in existing_we_records if record and record["id"]
@@ -326,7 +329,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                 """
             MATCH (we:WorldElement:Entity)
             WHERE we.id IN $we_ids_to_delete
-            DETACH DELETE we 
+            SET we.is_deleted = TRUE
             """,
                 {"we_ids_to_delete": list(we_to_delete)},
             )
@@ -395,6 +398,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             ):  # Fallback to 'is_provisional'
                 is_prov = True
             we_node_props[KG_IS_PROVISIONAL] = is_prov
+            we_node_props["is_deleted"] = False
 
             # Add other direct properties
             for k_detail, v_detail in details_dict.items():
@@ -425,7 +429,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                     """
                 MERGE (we:Entity {id: $id_val})
                 ON CREATE SET we:WorldElement, we = $props, we.created_ts = timestamp()
-                ON MATCH SET  we:WorldElement, we += $props, we.updated_ts = timestamp()
+                ON MATCH SET  we:WorldElement, we = $props, we.updated_ts = timestamp()
                 """,  # Use += on match to preserve existing, unmentioned props
                     {"id_val": we_id_str, "props": we_node_props},
                 )
@@ -600,7 +604,11 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         )
 
     # Load WorldElements and their details
-    we_query = "MATCH (we:WorldElement:Entity) RETURN we"
+    we_query = (
+        "MATCH (we:WorldElement:Entity)"
+        " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
+        " RETURN we"
+    )
     we_results = await neo4j_manager.execute_read_query(we_query)
 
     if not we_results:

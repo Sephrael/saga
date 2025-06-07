@@ -52,6 +52,8 @@ def generate_character_node_cypher(
     elif KG_IS_PROVISIONAL not in basic_props:
         basic_props[KG_IS_PROVISIONAL] = False
 
+    basic_props["is_deleted"] = False
+
     statements.append(
         (
             """
@@ -62,7 +64,7 @@ def generate_character_node_cypher(
                 c.created_ts = timestamp()
             ON MATCH SET
                 c:Character,
-                c += $props,
+                c = $props,
                 c.updated_ts = timestamp()
             """,
             {"name": profile.name, "props": basic_props},
@@ -249,7 +251,9 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
 
     try:
         existing_char_records = await neo4j_manager.execute_read_query(
-            "MATCH (c:Character:Entity) RETURN c.name AS name"
+            "MATCH (c:Character:Entity)"
+            " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
+            " RETURN c.name AS name"
         )
         existing_db_char_names: Set[str] = {
             record["name"]
@@ -269,7 +273,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 """
             MATCH (c:Character:Entity)
             WHERE c.name IN $char_names_to_delete
-            DETACH DELETE c
+            SET c.is_deleted = TRUE
             """,
                 {"char_names_to_delete": list(chars_to_delete)},
             )
@@ -285,6 +289,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
             for k, v in profile_dict.items()
             if isinstance(v, (str, int, float, bool)) and k != "name"
         }
+        char_direct_props["is_deleted"] = False
 
         statements.append(
             (
@@ -295,8 +300,8 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 c += $props,
                 c.created_ts = timestamp()
             ON MATCH SET
-                c:Character, 
-                c += $props, 
+                c:Character,
+                c = $props,
                 c.updated_ts = timestamp()
             """,
                 {"char_name_val": char_name, "props": char_direct_props},
@@ -514,7 +519,11 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
     logger.info("Loading decomposed character profiles from Neo4j...")
     profiles_data: Dict[str, CharacterProfile] = {}
 
-    char_query = "MATCH (c:Character:Entity) RETURN c"
+    char_query = (
+        "MATCH (c:Character:Entity)"
+        " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
+        " RETURN c"
+    )
     char_results = await neo4j_manager.execute_read_query(char_query)
 
     if not char_results:
