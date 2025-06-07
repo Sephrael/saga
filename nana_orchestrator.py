@@ -390,8 +390,13 @@ class NANA_Orchestrator:
                 }
             )
 
-        _, plot_usage = await generate_plot_outline_logic(
-            self,
+        (
+            self.plot_outline,
+            self.character_profiles,
+            plot_usage,
+        ) = await generate_plot_outline_logic(
+            self.plot_outline,
+            self.character_profiles,
             config.DEFAULT_PROTAGONIST_NAME,
             config.UNHINGED_PLOT_MODE,
             **generation_params,
@@ -403,7 +408,12 @@ class NANA_Orchestrator:
         )
         self._update_rich_display(step="Plot Outline Generated/Loaded")
 
-        _, world_usage = await generate_world_building_logic(self)
+        (
+            self.world_building,
+            world_usage,
+        ) = await generate_world_building_logic(
+            self.world_building, self.plot_outline
+        )
         self._accumulate_tokens("InitialSetup-WorldBuilding", world_usage)
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
@@ -436,6 +446,9 @@ class NANA_Orchestrator:
             "configured_or_user_markdown",
             "unhinged_pure_llm",
             "llm_generated_or_merged",
+            "user_supplied_yaml",
+            "llm_generated_or_merged_json_style",
+            "configured_or_user_yaml",
         ] or plot_source.startswith("llm_generated")
 
         if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
@@ -1259,7 +1272,15 @@ class NANA_Orchestrator:
             else:
                 plot_points_list = []
 
-            total_concrete_plot_points = len(plot_points_list)
+            total_concrete_plot_points = len(
+                [
+                    pp
+                    for pp in plot_points_list
+                    if not utils._is_fill_in(pp)
+                    and isinstance(pp, str)
+                    and pp.strip()
+                ]
+            )
 
             plot_points_covered_count = self.chapter_count
             remaining_plot_points_to_address_in_novel = (

@@ -1,3 +1,4 @@
+      
 # data_access/character_queries.py
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -619,43 +620,65 @@ async def get_character_info_for_snippet_from_db(
 ) -> Optional[Dict[str, Any]]:
     query = """
     MATCH (c:Character:Entity {name: $char_name_param})
-    
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_np:DevelopmentEvent:Entity)
-    WHERE dev_np.chapter_updated <= $chapter_limit_param AND (dev_np.is_provisional IS NULL OR dev_np.is_provisional = FALSE)
-    WITH c, dev_np ORDER BY dev_np.chapter_updated DESC
-    WITH c, HEAD(COLLECT(dev_np)) AS latest_non_provisional_dev_event
+    WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE
 
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev_p:DevelopmentEvent:Entity)
-    WHERE dev_p.chapter_updated <= $chapter_limit_param AND dev_p.is_provisional = TRUE
-    WITH c, latest_non_provisional_dev_event, dev_p ORDER BY dev_p.chapter_updated DESC
-    WITH c, latest_non_provisional_dev_event, HEAD(COLLECT(dev_p)) AS latest_provisional_dev_event
+    // Subquery to get the most recent non-provisional development event
+    CALL (c) {
+        OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
+        WHERE dev.chapter_updated <= $chapter_limit_param
+          AND (dev.is_provisional IS NULL OR dev.is_provisional = FALSE)
+        RETURN dev AS dev_np
+        ORDER BY dev.chapter_updated DESC
+        LIMIT 1
+    }
 
-    WITH c,
+    // Subquery to get the most recent provisional development event
+    CALL (c) {
+        OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
+        WHERE dev.chapter_updated <= $chapter_limit_param
+          AND dev.is_provisional = TRUE
+        RETURN dev AS dev_p
+        ORDER BY dev.chapter_updated DESC
+        LIMIT 1
+    }
+
+    // Subquery to check for the existence of any provisional data related to the character
+    CALL (c) {
+        RETURN (
+            c.is_provisional = TRUE OR
+            EXISTS {
+                MATCH (c)-[r:DYNAMIC_REL]-(:Entity)
+                WHERE r.is_provisional = TRUE AND r.chapter_added <= $chapter_limit_param
+            } OR
+            EXISTS {
+                MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
+                WHERE dev.is_provisional = TRUE AND dev.chapter_updated <= $chapter_limit_param
+            }
+        ) AS is_provisional_flag
+    }
+
+    WITH c, dev_np, dev_p, is_provisional_flag
+
+    // Determine the single most current development event
+    WITH c, is_provisional_flag,
          CASE
-           WHEN latest_provisional_dev_event IS NOT NULL AND 
-                (latest_non_provisional_dev_event IS NULL OR latest_provisional_dev_event.chapter_updated >= latest_non_provisional_dev_event.chapter_updated) 
-           THEN latest_provisional_dev_event
-           ELSE latest_non_provisional_dev_event
+           WHEN dev_p IS NOT NULL AND (dev_np IS NULL OR dev_p.chapter_updated >= dev_np.chapter_updated)
+           THEN dev_p
+           ELSE dev_np
          END AS most_current_dev_event
 
-    OPTIONAL MATCH (c)-[any_rel:DYNAMIC_REL]-(:Entity) 
-    WHERE any_rel.is_provisional = TRUE AND any_rel.chapter_added <= $chapter_limit_param 
-    
-    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(any_prov_dev_direct:DevelopmentEvent:Entity)
-    WHERE any_prov_dev_direct.chapter_updated <= $chapter_limit_param AND any_prov_dev_direct.is_provisional = TRUE
-    
     RETURN c.description AS description,
            c.status AS current_status,
-           most_current_dev_event.summary AS most_recent_development_note,
-           (c.is_provisional = TRUE OR any_rel IS NOT NULL OR any_prov_dev_direct IS NOT NULL) AS is_provisional_overall
-    LIMIT 1
+           most_current_dev_event,
+           is_provisional_flag AS is_provisional_overall
     """
     params = {"char_name_param": char_name, "chapter_limit_param": chapter_limit}
     try:
         result = await neo4j_manager.execute_read_query(query, params)
         if result and result[0]:
             record = result[0]
-            dev_note = record.get("most_recent_development_note", "N/A")
+            most_current_dev_event_node = record.get("most_current_dev_event")
+            dev_note = most_current_dev_event_node.get("summary", "N/A") if most_current_dev_event_node else "N/A"
 
             return {
                 "description": record.get("description"),
@@ -672,3 +695,5 @@ async def get_character_info_for_snippet_from_db(
             exc_info=True,
         )
     return None
+
+    
