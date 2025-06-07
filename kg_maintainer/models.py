@@ -1,12 +1,62 @@
 # kg_maintainer/models.py
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TypedDict
 
 import utils
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CREATED_CHAPTER,
 )
+
+
+class SceneDetail(TypedDict):
+    scene_number: int
+    summary: str
+    characters_involved: List[str]
+    key_dialogue_points: List[str]
+    setting_details: str
+    scene_focus_elements: List[str]
+    contribution: str
+
+
+class ProblemDetail(TypedDict):
+    """Detailed information about a specific problem found during evaluation."""
+
+    issue_category: str
+    problem_description: str
+    quote_from_original_text: str
+    quote_char_start: Optional[int]
+    quote_char_end: Optional[int]
+    sentence_char_start: Optional[int]
+    sentence_char_end: Optional[int]
+    suggested_fix_focus: str
+
+
+class EvaluationResult(TypedDict):
+    needs_revision: bool
+    reasons: List[str]
+    problems_found: List[ProblemDetail]
+    coherence_score: Optional[float]
+    consistency_issues: Optional[str]
+    plot_deviation_reason: Optional[str]
+    thematic_issues: Optional[str]
+    narrative_depth_issues: Optional[str]
+
+
+class PatchInstruction(TypedDict):
+    """Instruction for applying a single patch to the chapter text."""
+
+    original_problem_quote_text: str
+    target_char_start: Optional[int]
+    target_char_end: Optional[int]
+    replace_with: str
+    reason_for_change: str
+
+
+class AgentStateData(TypedDict):
+    plot_outline: dict
+    character_profiles: dict
+    world_building: dict
 
 
 @dataclass
@@ -42,6 +92,22 @@ class CharacterProfile:
         }
         data.update(self.updates)
         return data
+
+    def get_development_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
+        """Return development notes up to a given chapter number."""
+        notes: List[str] = []
+        prefix = "development_in_chapter_"
+        for key, val in sorted(self.updates.items()):
+            if not key.startswith(prefix):
+                continue
+            try:
+                chap = int(key.split("_")[-1])
+            except ValueError:
+                continue
+            if up_to_chapter is None or chap <= up_to_chapter:
+                if isinstance(val, str):
+                    notes.append(val)
+        return notes
 
 
 @dataclass
@@ -117,3 +183,19 @@ class WorldItem:
         }
         data.update(self.properties)
         return data
+
+    def get_elaboration_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
+        """Return elaboration notes up to a given chapter number."""
+        notes: List[str] = []
+        prefix = "elaboration_in_chapter_"
+        for key, val in sorted(self.properties.items()):
+            if not key.startswith(prefix):
+                continue
+            try:
+                chap = int(key.split("_")[-1])
+            except ValueError:
+                continue
+            if up_to_chapter is None or chap <= up_to_chapter:
+                if isinstance(val, str):
+                    notes.append(val)
+        return notes

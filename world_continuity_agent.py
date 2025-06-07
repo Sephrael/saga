@@ -6,7 +6,7 @@ import config
 from llm_interface import llm_service  # MODIFIED
 from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
-from type import ProblemDetail
+from kg_maintainer.models import ProblemDetail
 from data_access import kg_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,

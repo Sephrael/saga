@@ -16,7 +16,7 @@ from prompt_data_getters import (
     get_reliable_kg_facts_for_drafting_prompt,
     get_world_state_snippet_for_prompt,
 )
-from type import SceneDetail
+from kg_maintainer.models import SceneDetail
 
 logger = logging.getLogger(__name__)
 

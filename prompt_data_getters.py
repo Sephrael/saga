@@ -17,7 +17,7 @@ import utils  # For _is_fill_in
 
 # from state_manager import state_manager # No longer directly used
 from data_access import character_queries, kg_queries, world_queries  # MODIFIED
-from type import SceneDetail
+from kg_maintainer.models import SceneDetail
 
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,7 @@ from llm_interface import (
     truncate_text_by_tokens,
 )  # MODIFIED
 from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt
-from type import SceneDetail
+from kg_maintainer.models import SceneDetail
 
 logger = logging.getLogger(__name__)
 

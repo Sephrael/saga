@@ -9,7 +9,7 @@ from typing import Tuple, Optional, List
 
 import config
 from llm_interface import llm_service
-from type import SceneDetail
+from kg_maintainer.models import SceneDetail
 import utils
 
 # No direct state_manager import needed here as orchestrator passes data
