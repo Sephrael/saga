@@ -115,6 +115,8 @@ class KGMaintainerAgent:
         statements: List[Tuple[str, Dict[str, Any]]] = []
         count = 0
         for category_items in world_items_to_persist.values():
+            if not isinstance(category_items, dict):
+                continue
             for item_obj in category_items.values():
                 # Pass chapter_number_for_delta for context
                 statements.extend(

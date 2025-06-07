@@ -22,8 +22,10 @@ def test_extract_and_merge(monkeypatch):
         "_llm_extract_updates",
         lambda props, text, num: llm_service_mock.async_call_llm(),
     )
-    monkeypatch.setattr(agent, "persist_profiles", lambda profiles: asyncio.sleep(0))
-    monkeypatch.setattr(agent, "persist_world", lambda world: asyncio.sleep(0))
+    monkeypatch.setattr(
+        agent, "persist_profiles", lambda profiles, chapter: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(agent, "persist_world", lambda world, chapter: asyncio.sleep(0))
     monkeypatch.setattr(
         "data_access.kg_queries.add_kg_triples_batch_to_db",
         lambda triples: asyncio.sleep(0),
