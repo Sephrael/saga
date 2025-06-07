@@ -5,16 +5,16 @@ Context data for prompts is now formatted as plain text.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import config
-from llm_interface import llm_service
+import utils
 from kg_maintainer.models import (
     CharacterProfile,
     SceneDetail,
     WorldItem,
 )
-import utils
+from llm_interface import llm_service
 
 # No direct state_manager import needed here as orchestrator passes data
 from prompt_data_getters import (
