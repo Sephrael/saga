@@ -1,7 +1,7 @@
 # kg_maintainer/parsing.py
-from typing import Dict, Any, List  # Added Any, List
 import json  # Added json
 import logging  # Added logging
+from typing import Any, Dict, List  # Added Any, List
 
 # Removed imports from parsing_utils as those functions are being replaced
 # from parsing_utils import (
@@ -77,15 +77,15 @@ def _normalize_attributes(
         if mapped_key in list_keys:
             if isinstance(value, list):
                 normalized_attrs[mapped_key] = value
-            elif isinstance(
-                value, str
-            ):  # If LLM gives a comma-separated string for a list key
+            elif isinstance(value, dict):
+                normalized_attrs[mapped_key] = value
+            elif isinstance(value, str):
                 normalized_attrs[mapped_key] = [
                     v.strip() for v in value.split(",") if v.strip()
                 ]
             elif value is None:
                 normalized_attrs[mapped_key] = []
-            else:  # If it's some other type, wrap it in a list
+            else:
                 normalized_attrs[mapped_key] = [value]
         else:
             normalized_attrs[mapped_key] = value
@@ -95,14 +95,14 @@ def _normalize_attributes(
         if l_key not in normalized_attrs:
             normalized_attrs[l_key] = []
         elif not isinstance(normalized_attrs[l_key], list):
-            # This handles a key in list_keys present in attributes_dict
-            # but with a value not converted to a list above
+            if isinstance(normalized_attrs[l_key], dict):
+                continue
             if (
                 normalized_attrs[l_key] is not None
                 and str(normalized_attrs[l_key]).strip()
             ):
                 normalized_attrs[l_key] = [str(normalized_attrs[l_key])]
-            else:  # If it's None or empty string after processing
+            else:
                 normalized_attrs[l_key] = []
 
     return normalized_attrs
@@ -154,10 +154,9 @@ def parse_unified_character_updates(
         # Assuming LLM provides relationships as a list of strings
         # like "Target: Detail" or just "Target"
         # Or ideally, as a dict: {"Target": "Detail"}
-        if "relationships" in processed_char_attributes and isinstance(
-            processed_char_attributes["relationships"], list
-        ):
-            rels_list = processed_char_attributes["relationships"]
+        rels_val = processed_char_attributes.get("relationships")
+        if isinstance(rels_val, list):
+            rels_list = rels_val
             rels_dict: Dict[str, str] = {}
             for rel_entry in rels_list:
                 if isinstance(rel_entry, str):
@@ -182,9 +181,11 @@ def parse_unified_character_updates(
                         rels_dict[target_name] = detail
 
             processed_char_attributes["relationships"] = rels_dict
-        elif (
-            "relationships" not in processed_char_attributes
-        ):  # Ensure it's always a dict
+        elif isinstance(rels_val, dict):
+            processed_char_attributes["relationships"] = {
+                str(k): str(v) for k, v in rels_val.items()
+            }
+        else:  # Ensure it's always a dict
             processed_char_attributes["relationships"] = {}
 
         dev_key_standard = f"development_in_chapter_{chapter_number}"

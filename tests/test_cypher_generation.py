@@ -1,15 +1,12 @@
-from kg_maintainer import (
-    CharacterProfile,
-    WorldItem,
-    generate_character_node_cypher,
-    generate_world_element_node_cypher,
-)
+from data_access.character_queries import generate_character_node_cypher
+from data_access.world_queries import generate_world_element_node_cypher
+from kg_maintainer import CharacterProfile, WorldItem
 
 
 def test_generate_character_node_cypher():
     profile = CharacterProfile("Alice", description="Hero", traits=["brave"])
     stmts = generate_character_node_cypher(profile)
-    assert any("MERGE (c:Entity" in s[0] for s in stmts)
+    assert any("MERGE (c:Character" in s[0] for s in stmts)
     assert any("HAS_CHARACTER" in s[0] for s in stmts)
 
 
@@ -23,7 +20,7 @@ def test_generate_world_element_node_cypher():
     stmts = generate_world_element_node_cypher(item)
     assert any("MERGE (we:Entity" in s[0] for s in stmts)
     merge_stmt = stmts[0]
-    assert merge_stmt[1]["name"] == "City"
+    assert merge_stmt[1]["id"] == "places_city"
     assert any("CONTAINS_ELEMENT" in s[0] for s in stmts)
 
 
@@ -38,6 +35,6 @@ def test_generate_world_element_node_cypher_nested_props():
     params = stmts[0][1]
     assert isinstance(params["props"]["history"], str)
 
-    stmt, params = generate_world_element_node_cypher(item)
-    assert "MERGE (we:Entity" in stmt
-    assert params["id"] == "places_city"
+    first_stmt, first_params = generate_world_element_node_cypher(item)[0]
+    assert "MERGE (we:Entity" in first_stmt
+    assert first_params["id"] == "places_forest"

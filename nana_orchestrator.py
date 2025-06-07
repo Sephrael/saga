@@ -473,7 +473,12 @@ class NANA_Orchestrator:
         plot_point_index = novel_chapter_number - 1
 
         if 0 <= plot_point_index < len(plot_points_list):
-            plot_point_text = plot_points_list[plot_point_index]
+            plot_point_item = plot_points_list[plot_point_index]
+            plot_point_text = (
+                plot_point_item.get("description")
+                if isinstance(plot_point_item, dict)
+                else plot_point_item
+            )
             if (
                 isinstance(plot_point_text, str)
                 and plot_point_text.strip()
@@ -1249,11 +1254,15 @@ class NANA_Orchestrator:
 
             start_novel_chapter_to_write = self.chapter_count + 1
 
-            available_plot_points = [
-                pp
-                for pp in self.plot_outline.get("plot_points", [])
-                if not utils._is_fill_in(pp)
-            ]
+            available_plot_points = []
+            for pp in self.plot_outline.get("plot_points", []):
+                desc = pp["description"] if isinstance(pp, dict) else pp
+                if (
+                    isinstance(desc, str)
+                    and desc.strip()
+                    and not utils._is_fill_in(desc)
+                ):
+                    available_plot_points.append(pp)
             total_concrete_plot_points = len(available_plot_points)
 
             plot_points_covered_count = self.chapter_count

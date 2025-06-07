@@ -28,7 +28,7 @@ def test_load_user_supplied_data_invalid(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "USER_STORY_ELEMENTS_FILE_PATH", str(file_path))
 
     result = _load_user_supplied_data()
-    assert result == {}
+    assert result is None
 
 
 def test_user_story_to_objects():

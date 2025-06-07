@@ -1,13 +1,13 @@
 import asyncio
 
-from kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile
+from kg_maintainer_agent import KGMaintainerAgent
 
 
 class DummyLLM:
     async def async_call_llm(self, *args, **kwargs):
         return (
-            """### CHARACTER UPDATES ###\nCharacter: Alice\nTraits: brave\nDevelopment in Chapter 1: Did stuff\n\n### KG TRIPLES ###\nAlice | visited | Town""",
+            """### CHARACTER UPDATES ###\n{\n    \"Alice\": {\"traits\": [\"brave\"], \"development_in_chapter_1\": \"Did stuff\"}\n}\n\n### KG TRIPLES ###\nAlice | visited | Town""",
             {"total_tokens": 10},
         )
 

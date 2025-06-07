@@ -13,6 +13,7 @@ from .chapter_queries import (
 from .character_queries import (
     get_character_info_for_snippet_from_db,
     get_character_profiles_from_db,
+    sync_characters,
 )
 from .character_queries import (
     sync_full_state_from_object_to_db as sync_characters_full_state_from_object_to_db,
@@ -27,6 +28,7 @@ from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
 from .world_queries import (
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
+    sync_world_items,
 )
 from .world_queries import (
     sync_full_state_from_object_to_db as sync_world_full_state_from_object_to_db,
@@ -36,9 +38,11 @@ __all__ = [
     "save_plot_outline_to_db",
     "get_plot_outline_from_db",
     "sync_characters_full_state_from_object_to_db",
+    "sync_characters",
     "get_character_profiles_from_db",
     "get_character_info_for_snippet_from_db",
     "sync_world_full_state_from_object_to_db",
+    "sync_world_items",
     "get_world_building_from_db",
     "get_world_elements_for_snippet_from_db",
     "load_chapter_count_from_db",
