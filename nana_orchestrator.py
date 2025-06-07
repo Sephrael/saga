@@ -1249,11 +1249,17 @@ class NANA_Orchestrator:
 
             start_novel_chapter_to_write = self.chapter_count + 1
 
-            plot_points_list = self.plot_outline.get("plot_points", [])
-            if isinstance(plot_points_list, list):
-                total_concrete_plot_points = len(plot_points_list)
+            plot_points_raw = self.plot_outline.get("plot_points", [])
+            if isinstance(plot_points_raw, list):
+                plot_points_list = plot_points_raw
+            elif isinstance(plot_points_raw, dict):
+                plot_points_list = list(plot_points_raw.values())
+            elif plot_points_raw:
+                plot_points_list = [plot_points_raw]
             else:
-                total_concrete_plot_points = 0
+                plot_points_list = []
+
+            total_concrete_plot_points = len(plot_points_list)
 
             plot_points_covered_count = self.chapter_count
             remaining_plot_points_to_address_in_novel = (
