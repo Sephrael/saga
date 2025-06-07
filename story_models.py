@@ -111,7 +111,7 @@ def user_story_to_objects(
         for loc in model.setting.key_locations:
             world_items.append(
                 WorldItem.from_dict(
-                    "Locations",
+                    "locations",
                     loc.name,
                     {
                         "description": loc.description or "",

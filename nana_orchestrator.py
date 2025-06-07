@@ -457,7 +457,8 @@ class NANA_Orchestrator:
         logger.info("NANA: Checking if KG pre-population is needed...")
 
         plot_source = self.plot_outline.get("source", "")
-        is_plot_ready_for_kg = plot_source in [
+        plot_source_norm = str(plot_source).strip().lower()
+        is_plot_ready_for_kg = plot_source_norm in [
             "user_supplied_markdown",
             "default_fallback",
             "configured_or_user_markdown",
@@ -466,7 +467,7 @@ class NANA_Orchestrator:
             "user_supplied_yaml",
             "llm_generated_or_merged_json_style",
             "configured_or_user_yaml",
-        ] or plot_source.startswith("llm_generated")
+        ] or plot_source_norm.startswith("llm_generated")
 
         if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
             logger.info(

@@ -76,4 +76,4 @@ def test_load_state_from_user_model(orchestrator):
     orchestrator.load_state_from_user_model(model)
     assert orchestrator.plot_outline.get("title") == "My Tale"
     assert "Hero" in orchestrator.character_profiles
-    assert orchestrator.world_building.get("Locations", {}).get("Town")
+    assert orchestrator.world_building.get("locations", {}).get("Town")
