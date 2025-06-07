@@ -1010,16 +1010,7 @@ class NANA_Orchestrator:
 
         return final_text_to_process
 
-    async def run_chapter_generation_process(
-        self, novel_chapter_number: int
-    ) -> Optional[str]:
-        logger.info(
-            f"=== NANA: Starting Novel Chapter {novel_chapter_number} Generation ==="
-        )
-        self._update_rich_display(
-            chapter_num=novel_chapter_number, step="Starting Chapter"
-        )
-
+    async def _validate_plot_outline(self, novel_chapter_number: int) -> bool:
         if (
             not self.plot_outline
             or not self.plot_outline.get("plot_points")
@@ -1031,9 +1022,16 @@ class NANA_Orchestrator:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Missing Plot Outline"
             )
-            return None
+            return False
+        return True
 
-        prereq_result = await self._prepare_chapter_prerequisites(novel_chapter_number)
+    async def _process_prereq_result(
+        self,
+        novel_chapter_number: int,
+        prereq_result: Tuple[
+            Optional[str], int, Optional[List[SceneDetail]], Optional[str]
+        ],
+    ) -> Optional[Tuple[str, int, Optional[List[SceneDetail]], str]]:
         (
             plot_point_focus,
             plot_point_index,
@@ -1046,41 +1044,46 @@ class NANA_Orchestrator:
                 step=f"Ch {novel_chapter_number} Failed - Prerequisites Incomplete"
             )
             return None
-
-        (
-            initial_draft_text,
-            initial_raw_llm_text,
-        ) = await self._draft_initial_chapter_text(
-            novel_chapter_number,
+        return (
             plot_point_focus,
-            hybrid_context_for_draft,
+            plot_point_index,
             chapter_plan,
+            hybrid_context_for_draft,
         )
+
+    async def _process_initial_draft(
+        self,
+        novel_chapter_number: int,
+        draft_result: Tuple[Optional[str], Optional[str]],
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        initial_draft_text, initial_raw_llm_text = draft_result
         if initial_draft_text is None:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - No Initial Draft"
             )
             return None
+        return initial_draft_text, initial_raw_llm_text
 
-        (
-            processed_text,
-            processed_raw_llm,
-            is_flawed,
-        ) = await self._process_and_revise_draft(
-            novel_chapter_number,
-            initial_draft_text,
-            initial_raw_llm_text,
-            plot_point_focus,
-            plot_point_index,
-            hybrid_context_for_draft,
-            chapter_plan,
-        )
+    async def _process_revision_result(
+        self,
+        novel_chapter_number: int,
+        revision_result: Tuple[Optional[str], Optional[str], bool],
+    ) -> Optional[Tuple[str, Optional[str], bool]]:
+        processed_text, processed_raw_llm, is_flawed = revision_result
         if processed_text is None:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Revision/Processing Error"
             )
             return None
+        return processed_text, processed_raw_llm, is_flawed
 
+    async def _finalize_and_log(
+        self,
+        novel_chapter_number: int,
+        processed_text: str,
+        processed_raw_llm: Optional[str],
+        is_flawed: bool,
+    ) -> Optional[str]:
         final_text_result = await self._finalize_and_save_chapter(
             novel_chapter_number, processed_text, processed_raw_llm, is_flawed
         )
@@ -1104,8 +1107,63 @@ class NANA_Orchestrator:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Finalization Error"
             )
-
         return final_text_result
+
+    async def run_chapter_generation_process(
+        self, novel_chapter_number: int
+    ) -> Optional[str]:
+        logger.info(
+            f"=== NANA: Starting Novel Chapter {novel_chapter_number} Generation ==="
+        )
+        self._update_rich_display(
+            chapter_num=novel_chapter_number, step="Starting Chapter"
+        )
+
+        if not await self._validate_plot_outline(novel_chapter_number):
+            return None
+
+        prereq_result = await self._prepare_chapter_prerequisites(novel_chapter_number)
+        processed_prereqs = await self._process_prereq_result(
+            novel_chapter_number, prereq_result
+        )
+        if processed_prereqs is None:
+            return None
+        plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft = (
+            processed_prereqs
+        )
+
+        draft_result = await self._draft_initial_chapter_text(
+            novel_chapter_number,
+            plot_point_focus,
+            hybrid_context_for_draft,
+            chapter_plan,
+        )
+        processed_draft = await self._process_initial_draft(
+            novel_chapter_number, draft_result
+        )
+        if processed_draft is None:
+            return None
+        initial_draft_text, initial_raw_llm_text = processed_draft
+
+        revision_result = await self._process_and_revise_draft(
+            novel_chapter_number,
+            initial_draft_text,
+            initial_raw_llm_text,
+            plot_point_focus,
+            plot_point_index,
+            hybrid_context_for_draft,
+            chapter_plan,
+        )
+        processed_revision = await self._process_revision_result(
+            novel_chapter_number, revision_result
+        )
+        if processed_revision is None:
+            return None
+        processed_text, processed_raw_llm, is_flawed = processed_revision
+
+        return await self._finalize_and_log(
+            novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+        )
 
     def _validate_critical_configs(self) -> bool:
         critical_str_configs = {
