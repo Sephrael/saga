@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from pydantic import ValidationError
 
@@ -230,7 +230,7 @@ def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
 
 
 def _populate_state_from_user_data(
-    user_data: Dict[str, Any]
+    user_data: Dict[str, Any],
 ) -> Tuple[PlotOutlineData, Dict[str, CharacterProfile], WorldBuildingData]:
     plot_outline: PlotOutlineData = {}
     character_profiles: Dict[str, CharacterProfile] = {}
@@ -718,8 +718,8 @@ async def generate_plot_outline_logic(
             "Your task is to generate or complete a plot outline based on the provided context.",
             "You MUST output a single, valid JSON object.",
             f"1. The root must be a single JSON object with the following keys: {json_keys_str}.",
-            f"2. The value for 'plot_points' MUST be a JSON array of strings.",
-            f"3. All other keys should have JSON string values.",
+            "2. The value for 'plot_points' MUST be a JSON array of strings.",
+            "3. All other keys should have JSON string values.",
             f"4. Ensure you generate a complete narrative arc with approximately {target_num_plot_points} distinct points in the 'plot_points' array.",
             prompt_core_elements_intro,
             context_from_user_input,
@@ -807,7 +807,31 @@ async def generate_world_building_logic(
     plot_genre = plot_outline.get("genre", "N/A")
     world_setting_desc = plot_outline.get("setting_description", "A mysterious world.")
 
-    prompt = "..." # The lengthy prompt construction for world-building is omitted for brevity, but assumed correct.
+    world_json_keys = ", ".join(
+        [f'"{k}"' for k in WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL.keys()]
+    )
+    prompt_lines = [
+        "/no_think" if config.ENABLE_LLM_NO_THINK_DIRECTIVE else "",
+        (
+            "You are a world-building assistant tasked with generating a rich "
+            "setting for the upcoming novel."
+        ),
+        (
+            f"Title: {plot_title} | Genre: {plot_genre}. The core setting "
+            f"description is: {world_setting_desc}"
+        ),
+        (
+            "Return a single JSON object using these top-level keys: "
+            f"{world_json_keys}."
+        ),
+        (
+            "The 'overview' section should summarize the world and mood. Other "
+            "sections should be objects keyed by item names with descriptive "
+            "fields. Use lists for multi-value attributes like goals or rules."
+        ),
+        "Output only the JSON object with no extra commentary.",
+    ]
+    prompt = "\n".join(filter(None, prompt_lines))
     
     logger.info("Generating/completing initial world-building data (to JSON) via LLM...")
     cleaned_world_text_json, usage_data = await llm_service.async_call_llm(
