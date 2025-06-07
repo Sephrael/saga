@@ -1,21 +1,20 @@
 # world_continuity_agent.py
+# from parsing_utils import split_text_into_blocks,
+# parse_key_value_block  # Removed
+import json  # Added for JSON parsing
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-from kg_maintainer.models import CharacterProfile, ProblemDetail, WorldItem
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import config
-from llm_interface import llm_service  # MODIFIED
-from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
 from data_access import kg_queries
+from kg_maintainer.models import CharacterProfile, ProblemDetail, WorldItem
+from llm_interface import llm_service  # MODIFIED
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
 )
-
-# from parsing_utils import split_text_into_blocks,
-# parse_key_value_block  # Removed
-import json  # Added for JSON parsing
+from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -338,15 +337,53 @@ class WorldContinuityAgent:
     async def suggest_canon_corrections(
         self, problems: List[ProblemDetail]
     ) -> List[str]:
-        logger.warning(
-            "suggest_canon_corrections method is a placeholder and not fully implemented."
-        )
-        suggestions = []
+        """Provide actionable suggestions using canonical information.
+
+        Args:
+            problems: Detected consistency issues.
+
+        Returns:
+            A list of correction messages referencing known canon.
+        """
+
+        suggestions: List[str] = []
+        if not problems:
+            return suggestions
+
+        utils.load_spacy_model_if_needed()
         for problem in problems:
-            if problem.get("issue_category") == "consistency":
-                suggestions.append(
-                    f"For consistency problem '{problem.get('problem_description', 'N/A')}': Focus on '{problem.get('suggested_fix_focus', 'N/A')}' for canon alignment."
+            if problem.get("issue_category") != "consistency":
+                continue
+
+            base_suggestion = problem.get("suggested_fix_focus", "")
+            text_for_entities = " ".join(
+                [problem.get("problem_description", ""), base_suggestion]
+            )
+            entities: Set[str] = set()
+            if utils.spacy_manager.nlp:
+                doc = utils.spacy_manager.nlp(text_for_entities)
+                entities.update(ent.text for ent in doc.ents)
+            else:
+                entities.update(
+                    word for word in text_for_entities.split() if word.istitle()
                 )
+
+            canonical_facts: List[str] = []
+            for entity in entities:
+                facts = await self.query_kg_for_contradiction(entity)
+                for fact in facts[:3]:
+                    canonical_facts.append(
+                        f"{fact.get('subject')} -{fact.get('predicate')}-> {fact.get('object')} (Ch: {fact.get('chapter_added')})"
+                    )
+                if canonical_facts:
+                    break
+
+            suggestion_text = base_suggestion
+            if canonical_facts:
+                suggestion_text += f" Reference canon: {'; '.join(canonical_facts)}."
+
+            suggestions.append(suggestion_text)
+
         return suggestions
 
     async def query_kg_for_contradiction(
