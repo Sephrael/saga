@@ -457,24 +457,6 @@ class NANA_Orchestrator:
         logger.info("NANA: Checking if KG pre-population is needed...")
 
         plot_source = self.plot_outline.get("source", "")
-        plot_source_norm = str(plot_source).strip().lower()
-        is_plot_ready_for_kg = plot_source_norm in [
-            "user_supplied_markdown",
-            "default_fallback",
-            "configured_or_user_markdown",
-            "unhinged_pure_llm",
-            "llm_generated_or_merged",
-            "user_supplied_yaml",
-            "llm_generated_or_merged_json_style",
-            "configured_or_user_yaml",
-        ] or plot_source_norm.startswith("llm_generated")
-
-        if not is_plot_ready_for_kg and not self.plot_outline.get("is_default", False):
-            logger.info(
-                f"Skipping KG pre-population: Plot outline source '{plot_source}' does not indicate it's ready for KG, and it's not a default plot."
-            )
-            return
-
         logger.info(
             f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---"
         )
