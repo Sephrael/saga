@@ -686,6 +686,20 @@ async def get_character_info_for_snippet_from_db(
         try:
             await neo4j_manager.connect()
             result = await neo4j_manager.execute_read_query(query, params)
+            if result and result[0]:
+                record = result[0]
+                most_current_dev_event_node = record.get("most_current_dev_event")
+                dev_note = most_current_dev_event_node.get("summary", "N/A") if most_current_dev_event_node else "N/A"
+
+                return {
+                    "description": record.get("description"),
+                    "current_status": record.get("current_status"),
+                    "most_recent_development_note": dev_note,
+                    "is_provisional_overall": record.get("is_provisional_overall", False),
+                }
+            logger.debug(
+                f"No detailed snippet info found for character '{char_name}' up to chapter {chapter_limit}."
+            )
         except Exception as retry_exc:  # pragma: no cover - log and return
             logger.error(
                 "Retry after reconnect failed for character '%s': %s",

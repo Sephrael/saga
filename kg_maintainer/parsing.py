@@ -3,14 +3,6 @@ import json  # Added json
 import logging  # Added logging
 from typing import Any, Dict, List  # Added Any, List
 
-# Removed imports from parsing_utils as those functions are being replaced
-# from parsing_utils import (
-#     parse_key_value_block,
-#     parse_hierarchical_structured_text,
-#     WORLD_CATEGORY_HEADER_PATTERN,
-#     WORLD_ITEM_HEADER_PATTERN,
-#     WORLD_ITEM_HEADER_PATTERN_NO_COLON_EOL,
-# )
 from .models import CharacterProfile, WorldItem
 
 logger = logging.getLogger(__name__)

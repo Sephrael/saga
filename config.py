@@ -211,7 +211,7 @@ CHAPTERS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapters")
 CHAPTER_LOGS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "chapter_logs")
 DEBUG_OUTPUTS_DIR: str = os.path.join(BASE_OUTPUT_DIR, "debug_outputs")
 
-USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.md"
+USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.yaml"
 
 UNHINGED_DATA_DIR: str = "unhinged_data"
 os.makedirs(UNHINGED_DATA_DIR, exist_ok=True)
@@ -329,24 +329,14 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-# FIX: The original code had an AttributeError here.
-# The modern `structlog` API initializes the formatter by passing processors
-# to the constructor, not via a `from_processors` class method.
-# `foreign_pre_chain` is used to process logs from non-structlog sources
-# (like standard library loggers) before they reach the main processors.
 formatter = structlog.stdlib.ProcessorFormatter(
-    # These processors are applied to log records that come from non-`structlog` loggers.
     foreign_pre_chain=[
-        # Add the name and level to the event dict.
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        # Remove processors meta that the standard library logger doesn't know about.
         structlog.stdlib.ProcessorFormatter.remove_processors_meta,
     ],
-    # These processors are applied to all log records.
     processors=[
-        # This is the last processor in the chain, rendering the log record.
-        structlog.dev.ConsoleRenderer()  # Or structlog.processors.JSONRenderer()
+        structlog.dev.ConsoleRenderer()
     ],
 )
 
@@ -414,12 +404,6 @@ async def load_unhinged_data_async():
         )
 
 
-# Example of how to run the async loading (e.g., in your main app setup):
-# if __name__ == "__main__":
-#     asyncio.run(load_unhinged_data_async())
-#     print(f"Loaded genres: {UNHINGED_GENRES}")
-
-
 # --- Tokenizer Fallback Configuration ---
 TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"
 FALLBACK_CHARS_PER_TOKEN: float = 4.0
@@ -430,3 +414,5 @@ RICH_REFRESH_PER_SECOND: float = 4.0
 
 # --- Markdown Story Parser Configuration ---
 MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
+
+    
