@@ -1,3 +1,4 @@
+# story_models.py
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -78,46 +79,84 @@ class UserStoryInputModel(BaseModel):
 
 def user_story_to_objects(
     model: UserStoryInputModel,
-) -> Tuple[Dict[str, Any], Dict[str, CharacterProfile], List[WorldItem]]:
+) -> Tuple[
+    Dict[str, Any], Dict[str, CharacterProfile], Dict[str, Dict[str, WorldItem]]
+]:
     """Convert ``UserStoryInputModel`` to internal dataclass objects."""
 
     plot_outline: Dict[str, Any] = {}
     characters: Dict[str, CharacterProfile] = {}
-    world_items: List[WorldItem] = []
+    world_items: Dict[str, Dict[str, WorldItem]] = {}
 
     if model.novel_concept:
         plot_outline.update(model.novel_concept.model_dump(exclude_none=True))
 
-    main_char = model.protagonist
-    if main_char:
-        cp = CharacterProfile(name=main_char.name)
-        cp.description = main_char.description or ""
-        cp.traits = main_char.traits
+    main_char_model = model.protagonist
+    if main_char_model:
+        plot_outline["protagonist_name"] = main_char_model.name
+
+        cp = CharacterProfile(name=main_char_model.name)
+        cp.description = main_char_model.description or ""
+        cp.traits = main_char_model.traits
         cp.relationships = {
             rel_key: rel.model_dump(exclude_none=True)
-            for rel_key, rel in main_char.relationships.items()
+            for rel_key, rel in main_char_model.relationships.items()
         }
         cp.status = "As described"
+        cp.updates["role"] = "protagonist"
+        cp.updates["motivation"] = main_char_model.motivation or ""
         characters[cp.name] = cp
+
+    antagonist_model = model.antagonist
+    if antagonist_model:
+        ant_cp = CharacterProfile(name=antagonist_model.name)
+        ant_cp.description = antagonist_model.description or ""
+        ant_cp.traits = antagonist_model.traits
+        ant_cp.relationships = {
+            rel_key: rel.model_dump(exclude_none=True)
+            for rel_key, rel in antagonist_model.relationships.items()
+        }
+        ant_cp.status = "As described"
+        ant_cp.updates["role"] = "antagonist"
+        characters[ant_cp.name] = ant_cp
 
     if model.other_key_characters:
         for name, info in model.other_key_characters.items():
             cp = CharacterProfile(name=info.name)
             cp.description = info.description or ""
             cp.traits = info.traits
+            cp.updates["role"] = "other_key_character"
             characters[cp.name] = cp
 
+    if model.plot_elements:
+        plot_outline["inciting_incident"] = model.plot_elements.inciting_incident
+        plot_outline["plot_points"] = model.plot_elements.key_plot_points
+        plot_outline["conflict_summary"] = model.plot_elements.central_conflict
+        plot_outline["stakes"] = model.plot_elements.stakes
+
     if model.setting:
+        world_items.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
+            "_overview_",
+            "_overview_",
+            {"description": model.setting.primary_setting_overview or ""},
+        )
         for loc in model.setting.key_locations:
-            world_items.append(
-                WorldItem.from_dict(
-                    "locations",
-                    loc.name,
-                    {
-                        "description": loc.description or "",
-                        "atmosphere": loc.atmosphere or "",
-                    },
-                )
+            world_items.setdefault("locations", {})[loc.name] = WorldItem.from_dict(
+                "locations",
+                loc.name,
+                {
+                    "description": loc.description or "",
+                    "atmosphere": loc.atmosphere or "",
+                },
             )
+
+    if model.world_details:
+        for category, items in model.world_details.items():
+            world_items.setdefault(category, {})
+            if isinstance(items, dict):
+                for item_name, item_details in items.items():
+                    world_items[category][item_name] = WorldItem.from_dict(
+                        category, item_name, item_details
+                    )
 
     return plot_outline, characters, world_items

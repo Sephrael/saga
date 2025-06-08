@@ -335,9 +335,7 @@ formatter = structlog.stdlib.ProcessorFormatter(
         structlog.stdlib.add_log_level,
         structlog.stdlib.ProcessorFormatter.remove_processors_meta,
     ],
-    processors=[
-        structlog.dev.ConsoleRenderer()
-    ],
+    processors=[structlog.dev.ConsoleRenderer()],
 )
 
 
@@ -414,5 +412,3 @@ RICH_REFRESH_PER_SECOND: float = 4.0
 
 # --- Markdown Story Parser Configuration ---
 MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
-
-    

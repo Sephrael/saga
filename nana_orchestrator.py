@@ -11,7 +11,6 @@ import asyncio
 import logging
 import logging.handlers
 import os
-import random
 import time  # For Rich display updates
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,8 +28,12 @@ from data_access import (
 )
 from drafting_agent import DraftingAgent
 from initial_setup_logic import (
-    generate_plot_outline_logic,
-    generate_world_building_logic,
+    bootstrap_characters,
+    bootstrap_plot_outline,
+    bootstrap_world,
+    create_default_characters,
+    create_default_plot,
+    create_default_world,
 )
 from kg_maintainer.models import (
     CharacterProfile,
@@ -41,8 +44,10 @@ from kg_maintainer.models import (
 from kg_maintainer_agent import KGMaintainerAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
-from world_continuity_agent import WorldContinuityAgent
+from pydantic import ValidationError
 from story_models import UserStoryInputModel, user_story_to_objects
+from world_continuity_agent import WorldContinuityAgent
+from yaml_parser import load_yaml_file
 
 try:
     from rich.console import Group
@@ -147,23 +152,6 @@ class NANA_Orchestrator:
             )
         utils.load_spacy_model_if_needed()
         logger.info("NANA Orchestrator initialized.")
-
-    def load_state_from_user_model(self, user_model: UserStoryInputModel) -> None:
-        """Populate orchestrator state from a ``UserStoryInputModel``."""
-        plot, characters, world_items = user_story_to_objects(user_model)
-        self.plot_outline.update(plot)
-        self.plot_outline["source"] = "user_supplied_yaml"
-        self.plot_outline["is_default"] = False
-
-        for name, profile in characters.items():
-            self.character_profiles[name] = profile
-
-        for item in world_items:
-            self.world_building.setdefault(item.category, {})[item.name] = item
-
-        self.world_building["user_supplied_data"] = True
-        self.world_building["is_default"] = False
-        self.world_building["source"] = "user_supplied_yaml"
 
     def _update_rich_display(
         self, chapter_num: Optional[int] = None, step: Optional[str] = None
@@ -326,6 +314,20 @@ class NANA_Orchestrator:
         logger.info(
             "NANA: Saving core novel state (plot, characters, world) to Neo4j sequentially..."
         )
+
+        char_profile_dicts = {
+            name: profile.to_dict() for name, profile in self.character_profiles.items()
+        }
+
+        world_building_dicts = {}
+        for cat, items in self.world_building.items():
+            if isinstance(items, dict):
+                world_building_dicts[cat] = {
+                    name: item.to_dict() for name, item in items.items()
+                }
+            else:
+                world_building_dicts[cat] = items
+
         save_operations = [
             (
                 "plot_outline",
@@ -335,12 +337,12 @@ class NANA_Orchestrator:
             (
                 "character_profiles",
                 character_queries.sync_full_state_from_object_to_db,
-                self.character_profiles,
+                char_profile_dicts,
             ),
             (
                 "world_building",
                 world_queries.sync_full_state_from_object_to_db,
-                self.world_building,
+                world_building_dicts,
             ),
         ]
 
@@ -350,22 +352,7 @@ class NANA_Orchestrator:
         for name, save_func, data_to_save in save_operations:
             try:
                 logger.info(f"Attempting to save {name}...")
-                if name == "character_profiles":
-                    current_data_to_save = {
-                        n: p.to_dict() for n, p in self.character_profiles.items()
-                    }
-                elif name == "world_building":
-                    current_data_to_save = {
-                        c: {i: itm.to_dict() for i, itm in items.items()}
-                        for c, items in self.world_building.items()
-                        if isinstance(items, dict)
-                    }
-                else:
-                    current_data_to_save = (
-                        data_to_save if isinstance(data_to_save, dict) else {}
-                    )
-
-                result = await save_func(current_data_to_save)
+                result = await save_func(data_to_save)
                 if result is True:
                     success_count += 1
                     logger.info(f"Successfully saved {name} to Neo4j.")
@@ -390,65 +377,61 @@ class NANA_Orchestrator:
         logger.info("NANA performing initial setup...")
         logger.info("\n--- NANA: Initializing Plot, Characters, and World ---")
 
-        generation_params: Dict[str, Any] = {}
-        if config.UNHINGED_PLOT_MODE and not os.path.exists(
-            config.USER_STORY_ELEMENTS_FILE_PATH
-        ):
-            generation_params.update(
-                {
-                    "genre": random.choice(config.UNHINGED_GENRES),
-                    "theme": random.choice(config.UNHINGED_THEMES),
-                    "setting_archetype": random.choice(
-                        config.UNHINGED_SETTINGS_ARCHETYPES
-                    ),
-                    "protagonist_archetype": random.choice(
-                        config.UNHINGED_PROTAGONIST_ARCHETYPES
-                    ),
-                    "conflict_archetype": random.choice(config.UNHINGED_CONFLICT_TYPES),
-                }
-            )
+        user_model_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+        if user_model_data:
+            try:
+                validated_model = UserStoryInputModel.model_validate(user_model_data)
+                (
+                    self.plot_outline,
+                    self.character_profiles,
+                    self.world_building,
+                ) = user_story_to_objects(validated_model)
+                self.plot_outline["source"] = "user_supplied_yaml"
+                self.world_building["source"] = "user_supplied_yaml"
+                logger.info(
+                    "Successfully loaded and processed user-supplied YAML data."
+                )
+            except ValidationError as e:
+                logger.error(
+                    f"Error validating user YAML data: {e}. Falling back to defaults."
+                )
+                user_model_data = None
 
-        (
-            self.plot_outline,
-            self.character_profiles,
-            plot_usage,
-        ) = await generate_plot_outline_logic(
-            self.plot_outline,
-            self.character_profiles,
-            config.DEFAULT_PROTAGONIST_NAME,
-            config.UNHINGED_PLOT_MODE,
-            orchestrator=self,
-            **generation_params,
+        if not user_model_data:
+            logger.info(
+                "No valid user YAML found. Creating default state for bootstrapping."
+            )
+            self.plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
+            self.character_profiles = create_default_characters(
+                self.plot_outline["protagonist_name"]
+            )
+            self.world_building = create_default_world()
+
+        self.plot_outline, plot_usage = await bootstrap_plot_outline(self.plot_outline)
+        self._accumulate_tokens("Bootstrap-Plot", plot_usage)
+
+        self.character_profiles, char_usage = await bootstrap_characters(
+            self.character_profiles, self.plot_outline
         )
-        self._accumulate_tokens("InitialSetup-PlotOutline", plot_usage)
+        self._accumulate_tokens("Bootstrap-Characters", char_usage)
+
+        self.world_building, world_usage = await bootstrap_world(
+            self.world_building, self.plot_outline
+        )
+        self._accumulate_tokens("Bootstrap-World", world_usage)
+
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(
-            f"   Plot Outline initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Number of plot points: {len(self.plot_outline.get('plot_points', []))}"
+            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Plot Points: {len(self.plot_outline.get('plot_points', []))}"
         )
-        self._update_rich_display(step="Plot Outline Generated/Loaded")
-
-        (
-            self.world_building,
-            world_usage,
-        ) = await generate_world_building_logic(self.world_building, self.plot_outline)
-        self._accumulate_tokens("InitialSetup-WorldBuilding", world_usage)
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
-        self._update_rich_display(step="World Building Generated/Loaded")
+        self._update_rich_display(step="Genesis State Bootstrapped")
 
         self._update_novel_props_cache()
         await self._save_core_novel_state_to_neo4j()
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
         self._update_rich_display(step="Initial State Saved")
-
-        if (
-            not self.plot_outline
-            or not self.plot_outline.get("plot_points")
-            or self.plot_outline.get("is_default")
-        ):
-            logger.warning(
-                "Initial setup resulted in a default or empty/short plot outline. This might impact generation quality."
-            )
 
         return True
 

@@ -1,0 +1,32 @@
+{% if no_think %}/no_think{% endif %}
+You are a world-building expert.
+Your task is to generate a single, compelling value for a specific field in a world element's profile, based on the provided context.
+
+**Instructions:**
+1.  Analyze the provided `NOVEL CONTEXT` and `WORLD ITEM`.
+2.  Generate a creative and fitting value for the field: `{{ field_name }}`.
+3.  Your output MUST be a single, valid JSON object with one key: `{{ field_name }}`.
+4.  Do NOT include any other text, commentary, or markdown.
+
+---
+**NOVEL CONTEXT:**
+```json
+{{ context.plot_outline | tojson(indent=2) }}
+```
+---
+**WORLD ITEM:**
+```json
+{{ context.world_item | tojson(indent=2) }}
+```
+---
+
+**FIELD TO GENERATE:** `{{ field_name }}` for world item `{{ context.world_item.name }}` in category `{{ context.world_item.category }}`
+
+**EXAMPLE OUTPUT FORMAT (for `atmosphere` on a location):**
+```json
+{
+  "atmosphere": "An electric tension hangs in the air, thick with the scent of ozone and forgotten magic. Shadows seem to stretch and twist in the periphery, and a low, constant hum resonates from the cobblestones, a sound felt more than heard."
+}
+```
+
+Now, generate the JSON for the `{{ field_name }}` field.

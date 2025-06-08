@@ -1,0 +1,27 @@
+{% if no_think %}/no_think{% endif %}
+You are a creative assistant helping to bootstrap a novel concept.
+Your task is to generate a single, compelling value for a specific field in the novel's plot outline.
+
+**Instructions:**
+1.  Analyze the provided `NOVEL CONTEXT`.
+2.  Generate a creative and fitting value for the field: `{{ field_name }}`.
+3.  Your output MUST be a single, valid JSON object with one key: `{{ field_name }}`.
+4.  Do NOT include any other text, commentary, or markdown.
+
+---
+**NOVEL CONTEXT:**
+```json
+{{ context | tojson(indent=2) }}
+```
+---
+
+**FIELD TO GENERATE:** `{{ field_name }}`
+
+**EXAMPLE OUTPUT FORMAT (for `logline`):**
+```json
+{
+  "logline": "In a city that's magically transformed by night, a cynical private investigator must unravel a conspiracy that threatens to merge the mundane and the monstrous forever."
+}
+```
+
+Now, generate the JSON for the `{{ field_name }}` field based on the provided context.

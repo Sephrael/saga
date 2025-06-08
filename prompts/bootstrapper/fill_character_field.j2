@@ -1,0 +1,32 @@
+{% if no_think %}/no_think{% endif %}
+You are a character development expert.
+Your task is to generate a single, compelling value for a specific field in a character's profile, based on the provided context.
+
+**Instructions:**
+1.  Analyze the provided `NOVEL CONTEXT` and `CHARACTER PROFILE`.
+2.  Generate a creative and fitting value for the field: `{{ field_name }}`.
+3.  Your output MUST be a single, valid JSON object with one key: `{{ field_name }}`.
+4.  Do NOT include any other text, commentary, or markdown.
+
+---
+**NOVEL CONTEXT:**
+```json
+{{ context.plot_outline | tojson(indent=2) }}
+```
+---
+**CHARACTER PROFILE:**
+```json
+{{ context.profile | tojson(indent=2) }}
+```
+---
+
+**FIELD TO GENERATE:** `{{ field_name }}` for character `{{ context.profile.name }}`
+
+**EXAMPLE OUTPUT FORMAT (for `description`):**
+```json
+{
+  "description": "Jules Vidant is a sharp-tongued private eye who navigates the city's dual nature with a weary cynicism. His wit is his shield, hiding a deep-seated desire to protect the innocent caught between the mundane world of day and the magical chaos of night."
+}
+```
+
+Now, generate the JSON for the `{{ field_name }}` field.
