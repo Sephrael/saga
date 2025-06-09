@@ -2,8 +2,6 @@
 """
 Handles the generation of contextual information for chapter writing in the SAGA system.
 Now includes a hybrid approach combining semantic context and Knowledge Graph facts.
-MODIFIED: To handle 'agent_or_props' and ensure it's passed correctly.
-MODIFIED: To use Neo4j vector similarity search for semantic context.
 """
 
 import asyncio
@@ -12,8 +10,6 @@ from typing import Any, List, Optional
 
 import config
 
-# import utils # numpy_cosine_similarity no longer needed here
-# from state_manager import state_manager # No longer directly used
 from data_access import (
     chapter_queries,
 )  # For chapter data and similarity search

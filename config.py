@@ -68,6 +68,9 @@ class SagaSettings(BaseSettings):
     OPENAI_API_KEY: str = "nope"
 
     EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+    # Reranker model needs to be loaded in Ollama and support the /api/rerank endpoint.
+    # E.g., bge-reranker-base, mxbai-rerank-large-v1, etc.
+    RERANKER_MODEL: str = "mxbai-rerank-large-v1:latest"
     EXPECTED_EMBEDDING_DIM: int = 768
     EMBEDDING_DTYPE: str = "float32"
 
@@ -169,7 +172,7 @@ class SagaSettings(BaseSettings):
     CONTEXT_CHAPTER_COUNT: int = 5
     CHAPTERS_PER_RUN: int = 3
     KG_HEALING_INTERVAL: int = 3
-    TARGET_PLOT_POINTS_INITIAL_GENERATION: int = 12
+    TARGET_PLOT_POINTS_INITIAL_GENERATION: int = 18
 
     # Caching
     EMBEDDING_CACHE_SIZE: int = 128
@@ -177,11 +180,15 @@ class SagaSettings(BaseSettings):
     KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
     TOKENIZER_CACHE_SIZE: int = 10
 
+    # Reranking Configuration
+    ENABLE_RERANKING: bool = False
+    RERANKER_CANDIDATE_COUNT: int = 15
+
     # Agentic Planning & Prompt Context Snippets
     ENABLE_AGENTIC_PLANNING: bool = True
     MAX_PLANNING_TOKENS: int = 8192
-    TARGET_SCENES_MIN: int = 3
-    TARGET_SCENES_MAX: int = 7
+    TARGET_SCENES_MIN: int = 4
+    TARGET_SCENES_MAX: int = 6
     PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80
     PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120
     PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
