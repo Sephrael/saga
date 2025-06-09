@@ -1,6 +1,7 @@
 # kg_maintainer_agent.py
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
@@ -38,7 +39,7 @@ async def _llm_summarize_full_chapter_text(
         },
     )
     summary, usage_data = await llm_service.async_call_llm(
-        model_name=config.Models.SMALL,  # Using SMALL_MODEL for summarization
+        model_name=config.SMALL_MODEL,  # Using SMALL_MODEL for summarization
         prompt=prompt,
         temperature=config.Temperatures.SUMMARY,
         max_tokens=config.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
@@ -54,7 +55,7 @@ async def _llm_summarize_full_chapter_text(
             if isinstance(parsed, dict):
                 summary_text = parsed.get("summary", "")
         except json.JSONDecodeError:
-            logger.error(f"Failed to parse summary JSON for chapter {chapter_number}.")
+            logger.debug(f"Summary for chapter {chapter_number} was not a JSON object.")
     return summary_text, usage_data
 
 
@@ -224,21 +225,73 @@ class KGMaintainerAgent:
             )
             return usage_data
 
+        char_updates_raw = "{}"
+        world_updates_raw = "{}"
+        kg_triples_text = ""
+
         try:
             parsed_json = json.loads(raw_extracted_text)
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to parse extraction JSON for chapter {chapter_number}: {e}"
-            )
-            return usage_data
+            char_updates_raw = json.dumps(parsed_json.get("character_updates", {}))
+            world_updates_raw = json.dumps(parsed_json.get("world_updates", {}))
+            kg_triples_list = parsed_json.get("kg_triples", [])
+            if isinstance(kg_triples_list, list):
+                kg_triples_text = "\n".join([str(t) for t in kg_triples_list])
+            else:
+                kg_triples_text = str(kg_triples_list)
 
-        char_updates_raw = json.dumps(parsed_json.get("character_updates", {}))
-        world_updates_raw = json.dumps(parsed_json.get("world_updates", {}))
-        kg_triples_list = parsed_json.get("kg_triples", [])
-        if isinstance(kg_triples_list, list):
-            kg_triples_text = "\n".join([str(t) for t in kg_triples_list])
-        else:
-            kg_triples_text = str(kg_triples_list)
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Failed to parse full extraction JSON for chapter {chapter_number}: {e}. "
+                f"Attempting to extract individual sections with regex."
+            )
+            # Fallback to regex extraction
+            char_match = re.search(
+                r'"character_updates"\s*:\s*({.*?})', raw_extracted_text, re.DOTALL
+            )
+            if char_match:
+                char_updates_raw = char_match.group(1)
+                logger.info(
+                    f"Regex successfully extracted character_updates block for Ch {chapter_number}."
+                )
+            else:
+                logger.warning(
+                    f"Could not find character_updates JSON block via regex for Ch {chapter_number}."
+                )
+
+            world_match = re.search(
+                r'"world_updates"\s*:\s*({.*?})', raw_extracted_text, re.DOTALL
+            )
+            if world_match:
+                world_updates_raw = world_match.group(1)
+                logger.info(
+                    f"Regex successfully extracted world_updates block for Ch {chapter_number}."
+                )
+            else:
+                logger.warning(
+                    f"Could not find world_updates JSON block via regex for Ch {chapter_number}."
+                )
+
+            triples_match = re.search(
+                r'"kg_triples"\s*:\s*(\[.*?\])', raw_extracted_text, re.DOTALL
+            )
+            if triples_match:
+                try:
+                    triples_list_from_regex = json.loads(triples_match.group(1))
+                    if isinstance(triples_list_from_regex, list):
+                        kg_triples_text = "\n".join(
+                            [str(t) for t in triples_list_from_regex]
+                        )
+                        logger.info(
+                            f"Regex successfully extracted and parsed kg_triples block for Ch {chapter_number}."
+                        )
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Found kg_triples block via regex for Ch {chapter_number}, but it was invalid JSON."
+                    )
+            else:
+                logger.warning(
+                    f"Could not find kg_triples JSON array via regex for Ch {chapter_number}."
+                )
 
         char_updates_from_llm = self.parse_character_updates(
             char_updates_raw, chapter_number
