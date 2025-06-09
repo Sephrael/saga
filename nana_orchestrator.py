@@ -141,7 +141,7 @@ class NANA_Orchestrator:
                     border_style="blue",
                     expand=True,
                 ),
-                refresh_per_second=config.RICH_REFRESH_PER_SECOND,
+                refresh_per_second=4,
                 transient=False,
                 redirect_stdout=False,
                 redirect_stderr=False,

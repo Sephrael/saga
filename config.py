@@ -1,3 +1,4 @@
+# config.py
 """Configuration settings for the Saga Novel Generation system.
 Uses Pydantic BaseSettings for automatic environment variable loading.
 """
@@ -11,7 +12,7 @@ from typing import List, Optional
 
 import structlog
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
@@ -58,39 +59,6 @@ async def _load_list_from_json_async(
         return default_if_missing
 
 
-class Models(BaseModel):
-    """Model configuration values."""
-
-    LARGE_DEFAULT: str = "Qwen3-14B-Q4"
-    MEDIUM_DEFAULT: str = "Qwen3-8B-Q4"
-    SMALL_DEFAULT: str = "Qwen3-4B-Q4"
-    NARRATOR_DEFAULT: str = "Qwen3-14B-Q4"
-
-    LARGE: str = Field(LARGE_DEFAULT, alias="LARGE_MODEL")
-    MEDIUM: str = Field(MEDIUM_DEFAULT, alias="MEDIUM_MODEL")
-    SMALL: str = Field(SMALL_DEFAULT, alias="SMALL_MODEL")
-    NARRATOR: str = Field(NARRATOR_DEFAULT, alias="NARRATOR_MODEL")
-
-    model_config = SettingsConfigDict(populate_by_name=True)
-
-
-class Temperatures(BaseModel):
-    """Temperature settings for various tasks."""
-
-    INITIAL_SETUP: float = Field(0.8, alias="TEMPERATURE_INITIAL_SETUP")
-    DRAFTING: float = Field(0.8, alias="TEMPERATURE_DRAFTING")
-    REVISION: float = Field(0.65, alias="TEMPERATURE_REVISION")
-    PLANNING: float = Field(0.6, alias="TEMPERATURE_PLANNING")
-    EVALUATION: float = Field(0.3, alias="TEMPERATURE_EVALUATION")
-    CONSISTENCY_CHECK: float = Field(0.2, alias="TEMPERATURE_CONSISTENCY_CHECK")
-    KG_EXTRACTION: float = Field(0.4, alias="TEMPERATURE_KG_EXTRACTION")
-    SUMMARY: float = Field(0.5, alias="TEMPERATURE_SUMMARY")
-    PATCH: float = Field(0.7, alias="TEMPERATURE_PATCH")
-    DEFAULT: float = 0.6
-
-    model_config = SettingsConfigDict(populate_by_name=True)
-
-
 class SagaSettings(BaseSettings):
     """Full configuration for the Saga system."""
 
@@ -116,26 +84,44 @@ class SagaSettings(BaseSettings):
     NEO4J_VECTOR_DIMENSIONS: int = 768
     NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
-    # Model aliases
-    Models: Models = Field(default_factory=Models)
+    # Base Model Definitions
+    LARGE_MODEL: str = "Qwen3-14B-Q4"
+    MEDIUM_MODEL: str = "Qwen3-8B-Q4"
+    SMALL_MODEL: str = "Qwen3-4B-Q4"
+    NARRATOR_MODEL: str = "Qwen3-14B-Q4"
+
+    # Temperature Settings
+    TEMPERATURE_INITIAL_SETUP: float = 0.8
+    TEMPERATURE_DRAFTING: float = 0.8
+    TEMPERATURE_REVISION: float = 0.65
+    TEMPERATURE_PLANNING: float = 0.6
+    TEMPERATURE_EVALUATION: float = 0.3
+    TEMPERATURE_CONSISTENCY_CHECK: float = 0.2
+    TEMPERATURE_KG_EXTRACTION: float = 0.4
+    TEMPERATURE_SUMMARY: float = 0.5
+    TEMPERATURE_PATCH: float = 0.7
+
+    # Placeholder fill-in
+    MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
 
     # LLM Call Settings & Fallbacks
     LLM_RETRY_ATTEMPTS: int = 3
     LLM_RETRY_DELAY_SECONDS: float = 3.0
     HTTPX_TIMEOUT: float = 600.0
-    FALLBACK_GENERATION_MODEL: str = Field(default_factory=lambda: Models().MEDIUM)
     ENABLE_LLM_NO_THINK_DIRECTIVE: bool = True
+    TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"
+    FALLBACK_CHARS_PER_TOKEN: float = 4.0
 
-    MAIN_GENERATION_MODEL: str = Field(default_factory=lambda: Models().NARRATOR)
-    KNOWLEDGE_UPDATE_MODEL: str = Field(default_factory=lambda: Models().MEDIUM)
-    INITIAL_SETUP_MODEL: str = Field(default_factory=lambda: Models().MEDIUM)
-    PLANNING_MODEL: str = Field(default_factory=lambda: Models().LARGE)
-    DRAFTING_MODEL: str = Field(default_factory=lambda: Models().NARRATOR)
-    REVISION_MODEL: str = Field(default_factory=lambda: Models().NARRATOR)
-    EVALUATION_MODEL: str = Field(default_factory=lambda: Models().LARGE)
-    PATCH_GENERATION_MODEL: str = Field(default_factory=lambda: Models().MEDIUM)
-
-    Temperatures: Temperatures = Field(default_factory=Temperatures)
+    # Dynamic Model Assignments (set from base models if not specified in env)
+    FALLBACK_GENERATION_MODEL: Optional[str] = None
+    MAIN_GENERATION_MODEL: Optional[str] = None
+    KNOWLEDGE_UPDATE_MODEL: Optional[str] = None
+    INITIAL_SETUP_MODEL: Optional[str] = None
+    PLANNING_MODEL: Optional[str] = None
+    DRAFTING_MODEL: Optional[str] = None
+    REVISION_MODEL: Optional[str] = None
+    EVALUATION_MODEL: Optional[str] = None
+    PATCH_GENERATION_MODEL: Optional[str] = None
 
     LLM_TOP_P: float = 0.8
 
@@ -161,23 +147,21 @@ class SagaSettings(BaseSettings):
 
     # Output and File Paths
     BASE_OUTPUT_DIR: str = "novel_output"
-    PLOT_OUTLINE_FILE: str = Field(default="plot_outline.json")
-    CHARACTER_PROFILES_FILE: str = Field(default="character_profiles.json")
-    WORLD_BUILDER_FILE: str = Field(default="world_building.json")
-    CHAPTERS_DIR: str = Field(default="chapters")
-    CHAPTER_LOGS_DIR: str = Field(default="chapter_logs")
-    DEBUG_OUTPUTS_DIR: str = Field(default="debug_outputs")
+    PLOT_OUTLINE_FILE: str = "plot_outline.json"
+    CHARACTER_PROFILES_FILE: str = "character_profiles.json"
+    WORLD_BUILDER_FILE: str = "world_building.json"
+    CHAPTERS_DIR: str = "chapters"
+    CHAPTER_LOGS_DIR: str = "chapter_logs"
+    DEBUG_OUTPUTS_DIR: str = "debug_outputs"
 
     USER_STORY_ELEMENTS_FILE_PATH: str = "user_story_elements.yaml"
 
     UNHINGED_DATA_DIR: str = "unhinged_data"
-    UNHINGED_GENRES_FILE: str = Field(default="unhinged_genres.json")
-    UNHINGED_THEMES_FILE: str = Field(default="unhinged_themes.json")
-    UNHINGED_SETTINGS_FILE: str = Field(default="unhinged_settings_archetypes.json")
-    UNHINGED_PROTAGONISTS_FILE: str = Field(
-        default="unhinged_protagonist_archetypes.json"
-    )
-    UNHINGED_CONFLICTS_FILE: str = Field(default="unhinged_conflict_types.json")
+    UNHINGED_GENRES_FILE: str = "unhinged_genres.json"
+    UNHINGED_THEMES_FILE: str = "unhinged_themes.json"
+    UNHINGED_SETTINGS_FILE: str = "unhinged_settings_archetypes.json"
+    UNHINGED_PROTAGONISTS_FILE: str = "unhinged_protagonist_archetypes.json"
+    UNHINGED_CONFLICTS_FILE: str = "unhinged_conflict_types.json"
 
     # Generation Parameters
     MAX_CONTEXT_TOKENS: int = 40960
@@ -227,13 +211,14 @@ class SagaSettings(BaseSettings):
     DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.90
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
-    # Logging
+    # Logging & UI
     LOG_LEVEL_STR: str = Field("INFO", alias="LOG_LEVEL")
     LOG_FORMAT: str = (
         "%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s"
     )
     LOG_DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
-    LOG_FILE: Optional[str] = Field("saga_run.log")
+    LOG_FILE: Optional[str] = "saga_run.log"
+    ENABLE_RICH_PROGRESS: bool = True
 
     # Novel Configuration (Defaults / Placeholders)
     UNHINGED_PLOT_MODE: bool = False
@@ -247,9 +232,29 @@ class SagaSettings(BaseSettings):
     MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container"
     MAIN_WORLD_CONTAINER_NODE_ID: str = "saga_main_world_container"
 
-    model_config = SettingsConfigDict(
-        env_prefix="", env_file=".env", env_nested_delimiter="__"
-    )
+    @model_validator(mode="after")
+    def set_dynamic_model_defaults(self) -> "SagaSettings":
+        if self.FALLBACK_GENERATION_MODEL is None:
+            self.FALLBACK_GENERATION_MODEL = self.MEDIUM_MODEL
+        if self.MAIN_GENERATION_MODEL is None:
+            self.MAIN_GENERATION_MODEL = self.NARRATOR_MODEL
+        if self.KNOWLEDGE_UPDATE_MODEL is None:
+            self.KNOWLEDGE_UPDATE_MODEL = self.MEDIUM_MODEL
+        if self.INITIAL_SETUP_MODEL is None:
+            self.INITIAL_SETUP_MODEL = self.MEDIUM_MODEL
+        if self.PLANNING_MODEL is None:
+            self.PLANNING_MODEL = self.LARGE_MODEL
+        if self.DRAFTING_MODEL is None:
+            self.DRAFTING_MODEL = self.NARRATOR_MODEL
+        if self.REVISION_MODEL is None:
+            self.REVISION_MODEL = self.NARRATOR_MODEL
+        if self.EVALUATION_MODEL is None:
+            self.EVALUATION_MODEL = self.LARGE_MODEL
+        if self.PATCH_GENERATION_MODEL is None:
+            self.PATCH_GENERATION_MODEL = self.MEDIUM_MODEL
+        return self
+
+    model_config = SettingsConfigDict(env_prefix="", env_file=".env")
 
 
 # --- Unhinged Mode Data (Loaded from JSON files) ---
@@ -301,14 +306,39 @@ async def load_unhinged_data_async() -> None:
 
 settings = SagaSettings()
 
-# Update module level variables for backward compatibility
-Models = settings.Models
-Temperatures = settings.Temperatures
 
+# --- Reconstruct objects for backward compatibility ---
+class ModelsCompat:
+    pass
+
+
+class TempsCompat:
+    pass
+
+
+Models = ModelsCompat()
+Models.LARGE = settings.LARGE_MODEL
+Models.MEDIUM = settings.MEDIUM_MODEL
+Models.SMALL = settings.SMALL_MODEL
+Models.NARRATOR = settings.NARRATOR_MODEL
+
+Temperatures = TempsCompat()
+Temperatures.INITIAL_SETUP = settings.TEMPERATURE_INITIAL_SETUP
+Temperatures.DRAFTING = settings.TEMPERATURE_DRAFTING
+Temperatures.REVISION = settings.TEMPERATURE_REVISION
+Temperatures.PLANNING = settings.TEMPERATURE_PLANNING
+Temperatures.EVALUATION = settings.TEMPERATURE_EVALUATION
+Temperatures.CONSISTENCY_CHECK = settings.TEMPERATURE_CONSISTENCY_CHECK
+Temperatures.KG_EXTRACTION = settings.TEMPERATURE_KG_EXTRACTION
+Temperatures.SUMMARY = settings.TEMPERATURE_SUMMARY
+Temperatures.PATCH = settings.TEMPERATURE_PATCH
+Temperatures.DEFAULT = 0.6  # Set default explicitly
+
+
+# Update module level variables for backward compatibility
 for _field in settings.model_fields:
-    if _field in {"Models", "Temperatures"}:
-        continue
     globals()[_field] = getattr(settings, _field)
+
 
 PLOT_OUTLINE_FILE = os.path.join(settings.BASE_OUTPUT_DIR, settings.PLOT_OUTLINE_FILE)
 CHARACTER_PROFILES_FILE = os.path.join(
