@@ -23,6 +23,7 @@ def generate_character_node_cypher(
     statements: List[Tuple[str, Dict[str, Any]]] = []
 
     props_from_profile = profile.to_dict()
+    # Create a clean property dictionary for the node, excluding complex types.
     basic_props = {
         k: v
         for k, v in props_from_profile.items()
@@ -32,6 +33,7 @@ def generate_character_node_cypher(
         and not k.startswith("source_quality_chapter_")
     }
 
+    # Add any updates from the profile's 'updates' field.
     if isinstance(profile.updates, dict):
         for k_update, v_update in profile.updates.items():
             if (
@@ -42,6 +44,7 @@ def generate_character_node_cypher(
                 if k_update not in basic_props:
                     basic_props[k_update] = v_update
 
+    # Determine provisional status based on the current chapter's update source.
     current_chapter_source_quality_key = (
         f"source_quality_chapter_{chapter_number_for_delta}"
     )
@@ -52,27 +55,30 @@ def generate_character_node_cypher(
     ):
         basic_props[KG_IS_PROVISIONAL] = True
     elif KG_IS_PROVISIONAL not in basic_props:
+        # Default to False if not explicitly set by the update.
         basic_props[KG_IS_PROVISIONAL] = False
 
+    # Ensure is_deleted is explicitly set to False for active characters.
     basic_props["is_deleted"] = False
 
     statements.append(
         (
             """
-            MERGE (c:Character:Entity {name: $name})
+            MERGE (c:Entity {name: $name})
             ON CREATE SET
                 c:Character,
                 c += $props,
                 c.created_ts = timestamp()
             ON MATCH SET
                 c:Character,
-                c = $props,
+                c += $props,
                 c.updated_ts = timestamp()
             """,
             {"name": profile.name, "props": basic_props},
         )
     )
 
+    # Ensure the character is linked to the main novel node.
     statements.append(
         (
             """
@@ -84,6 +90,7 @@ def generate_character_node_cypher(
         )
     )
 
+    # Process and link traits.
     if profile.traits:
         for trait_name in profile.traits:
             if isinstance(trait_name, str) and trait_name.strip():
@@ -103,6 +110,7 @@ def generate_character_node_cypher(
                     )
                 )
 
+    # Process and link development events for the current chapter.
     dev_event_key = f"development_in_chapter_{chapter_number_for_delta}"
     if isinstance(profile.updates, dict) and dev_event_key in profile.updates:
         dev_event_summary = profile.updates[dev_event_key]
@@ -140,6 +148,7 @@ def generate_character_node_cypher(
                 )
             )
 
+    # Process and link relationships.
     if profile.relationships:
         for target_char_name, rel_detail in profile.relationships.items():
             if isinstance(target_char_name, str) and target_char_name.strip():
@@ -172,13 +181,14 @@ def generate_character_node_cypher(
                         MATCH (c1:Character:Entity {name: $source_name})
                         MERGE (c2:Entity {name: $target_name})
                             ON CREATE SET
-                                c2:Character,
                                 c2.description = (
                                     'Auto-created via relationship from '
                                     + $source_name
                                 ),
                                 c2.created_ts = timestamp()
-                            ON MATCH SET c2:Character
+                        // CORRECTED: Removed "SET c2:Character" and "ON MATCH SET c2:Character"
+                        // Now, it only creates a generic :Entity stub, which the Healer agent can enrich later.
+                        // This prevents wrongly labeling a location like "Slums" as a "Character".
 
                         MERGE (
                             c1
@@ -303,7 +313,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 c.created_ts = timestamp()
             ON MATCH SET
                 c:Character,
-                c = $props,
+                c += $props,
                 c.updated_ts = timestamp()
             """,
                 {"char_name_val": char_name, "props": char_direct_props},
@@ -420,10 +430,11 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
         statements.append(
             (
                 """
-            MATCH (c1:Character:Entity {name: $char_name_val})-[r:DYNAMIC_REL]->(c2:Character:Entity)
+            MATCH (c1:Character:Entity {name: $char_name_val})-[r:DYNAMIC_REL]->(c2:Entity)
             WHERE r.source_profile_managed = TRUE AND NOT c2.name IN $target_chars_list
             DELETE r
             """,
+                # CORRECTED: Changed `c2:Character:Entity` to `c2:Entity` to catch relationships to non-character entities.
                 {
                     "char_name_val": char_name,
                     "target_chars_list": list(target_chars_in_profile_rels),
@@ -479,11 +490,13 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     (
                         """
                     MATCH (s:Character:Entity {name: $subject_param})
-                    MATCH (o:Character:Entity {name: $object_param})
+                    MERGE (o:Entity {name: $object_param})
                     MERGE (s)-[r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_val }]->(o)
                     ON CREATE SET r = $props_param, r.created_ts = timestamp()
-                    ON MATCH SET  r = $props_param, r.updated_ts = timestamp()
+                    ON MATCH SET  r += $props_param, r.updated_ts = timestamp()
                     """,
+                        # CORRECTED: Changed `MATCH (o:Character...)` to `MERGE (o:Entity...)` to handle any entity type.
+                        # Also changed `r = $props_param` on MATCH to `r += $props_param` to be non-destructive.
                         {
                             "subject_param": char_name,
                             "object_param": target_char_name,
@@ -554,10 +567,11 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
         )
 
         rels_query = """
-        MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Character:Entity)
-        WHERE r.source_profile_managed = TRUE // Only fetch relationships managed by profiles
+        MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Entity)
+        WHERE r.source_profile_managed = TRUE
         RETURN target.name AS target_name, properties(r) AS rel_props
         """
+        # CORRECTED: `target:Character:Entity` changed to `target:Entity` to fetch all relationship types.
         rel_results = await neo4j_manager.execute_read_query(
             rels_query, {"char_name": char_name}
         )
@@ -742,3 +756,21 @@ async def get_character_info_for_snippet_from_db(
         chapter_limit,
     )
     return None
+
+
+async def find_thin_characters_for_enrichment() -> List[Dict[str, Any]]:
+    """Finds character nodes that are considered 'thin' (e.g., auto-created stubs)."""
+    query = """
+    MATCH (c:Character)
+    WHERE c.description STARTS WITH 'Auto-created via relationship'
+       OR c.description IS NULL
+       OR c.description = ''
+    RETURN c.name AS name
+    LIMIT 20 // Limit to avoid overwhelming the LLM in one cycle
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+        return results if results else []
+    except Exception as e:
+        logger.error(f"Error finding thin characters: {e}", exc_info=True)
+        return []

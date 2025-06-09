@@ -341,3 +341,117 @@ async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
             exc_info=True,
         )
     return None
+
+
+async def get_chapter_context_for_entity(
+    entity_name: Optional[str] = None, entity_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Finds chapters where an entity was mentioned or involved to provide context for enrichment.
+    Searches by name for Characters/ValueNodes or by ID for WorldElements.
+    """
+    if not entity_name and not entity_id:
+        return []
+
+    match_clause = (
+        "MATCH (e {id: $id_param})" if entity_id else "MATCH (e {name: $name_param})"
+    )
+    params = {"id_param": entity_id} if entity_id else {"name_param": entity_name}
+
+    # CORRECTED QUERY
+    query = f"""
+    {match_clause}
+
+    // Get all paths to potential chapter number sources
+    OPTIONAL MATCH (e)-[]->(event) WHERE (event:DevelopmentEvent OR event:WorldElaborationEvent) AND event.chapter_updated IS NOT NULL
+    OPTIONAL MATCH (e)-[r:DYNAMIC_REL]-() WHERE r.chapter_added IS NOT NULL
+
+    // Collect all numbers into one list, then process
+    WITH
+      CASE WHEN e.created_chapter IS NOT NULL THEN [e.created_chapter] ELSE [] END as created_chapter_list,
+      COLLECT(DISTINCT event.chapter_updated) as event_chapters,
+      COLLECT(DISTINCT r.chapter_added) as rel_chapters
+
+    // Combine, filter out nulls, unwind, get distinct
+    WITH created_chapter_list + event_chapters + rel_chapters as all_chapters
+    UNWIND all_chapters as chapter_num
+    WITH DISTINCT chapter_num
+    WHERE chapter_num IS NOT NULL AND chapter_num > 0
+
+    // Now fetch the chapter data
+    MATCH (c:{config.NEO4J_VECTOR_NODE_LABEL} {{number: chapter_num}})
+    RETURN c.number as chapter_number, c.summary as summary, c.text as text
+    ORDER BY c.number DESC
+    LIMIT 5 // Limit context to most recent 5 chapters
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query, params)
+        return results if results else []
+    except Exception as e:
+        logger.error(
+            f"Error getting chapter context for entity '{entity_name or entity_id}': {e}",
+            exc_info=True,
+        )
+        return []
+
+
+async def find_contradictory_trait_characters(
+    contradictory_trait_pairs: List[Tuple[str, str]],
+) -> List[Dict[str, Any]]:
+    """
+    Finds characters who have contradictory traits based on a provided list of pairs.
+    e.g. [('Brave', 'Cowardly'), ('Honest', 'Deceitful')]
+    """
+    if not contradictory_trait_pairs:
+        return []
+
+    all_findings = []
+    for trait1, trait2 in contradictory_trait_pairs:
+        query = """
+        MATCH (c:Character)-[:HAS_TRAIT]->(t1:Trait {name: $trait1_param}),
+              (c)-[:HAS_TRAIT]->(t2:Trait {name: $trait2_param})
+        RETURN c.name AS character_name, t1.name AS trait1, t2.name AS trait2
+        """
+        params = {"trait1_param": trait1, "trait2_param": trait2}
+        try:
+            results = await neo4j_manager.execute_read_query(query, params)
+            if results:
+                all_findings.extend(results)
+        except Exception as e:
+            logger.error(
+                f"Error checking for contradictory traits '{trait1}' vs '{trait2}': {e}",
+                exc_info=True,
+            )
+
+    return all_findings
+
+
+async def find_post_mortem_activity() -> List[Dict[str, Any]]:
+    """
+    Finds characters who have relationships or activities recorded in chapters
+    after they were marked as dead.
+    """
+    query = """
+    MATCH (c:Character)-[death_rel:DYNAMIC_REL {type: 'IS_DEAD'}]->()
+    WHERE death_rel.is_provisional = false
+    WITH c, death_rel.chapter_added AS death_chapter
+
+    MATCH (c)-[activity_rel:DYNAMIC_REL]->()
+    WHERE activity_rel.chapter_added > death_chapter
+      AND NOT activity_rel.type IN ['IS_REMEMBERED_AS', 'WAS_FRIEND_OF'] // Exclude retrospective rels
+    RETURN DISTINCT c.name as character_name,
+           death_chapter,
+           collect(
+             {
+               activity_type: activity_rel.type,
+               activity_chapter: activity_rel.chapter_added
+             }
+           ) AS post_mortem_activities
+    LIMIT 20
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+        return results if results else []
+    except Exception as e:
+        logger.error(f"Error checking for post-mortem activity: {e}", exc_info=True)
+        return []

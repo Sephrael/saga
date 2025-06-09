@@ -238,6 +238,9 @@ MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "40960"))
 MAX_GENERATION_TOKENS: int = int(os.getenv("MAX_GENERATION_TOKENS", "16384"))
 CONTEXT_CHAPTER_COUNT: int = 5
 CHAPTERS_PER_RUN: int = int(os.getenv("CHAPTERS_PER_RUN", "3"))
+KG_HEALING_INTERVAL: int = int(
+    os.getenv("KG_HEALING_INTERVAL", "3")
+)  # Run healing every 5 chapters
 TARGET_PLOT_POINTS_INITIAL_GENERATION: int = int(
     os.getenv("TARGET_PLOT_POINTS_INITIAL_GENERATION", "12")
 )

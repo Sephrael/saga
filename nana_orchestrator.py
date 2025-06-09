@@ -1321,6 +1321,25 @@ class NANA_Orchestrator:
                             logger.info(
                                 f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}..."
                             )
+
+                            # --- HEALER/ENRICHER CALL ---
+                            if (
+                                current_novel_chapter_number > 0
+                                and current_novel_chapter_number
+                                % config.KG_HEALING_INTERVAL
+                                == 0
+                            ):
+                                logger.info(
+                                    f"\n--- NANA: Triggering KG Healing/Enrichment after Chapter {current_novel_chapter_number} ---"
+                                )
+                                self._update_rich_display(
+                                    step=f"Ch {current_novel_chapter_number} - KG Maintenance"
+                                )
+                                await self.kg_maintainer_agent.heal_and_enrich_kg()
+                                logger.info(
+                                    "--- NANA: KG Healing/Enrichment cycle complete. ---"
+                                )
+
                         else:
                             logger.error(
                                 f"NANA: Novel Chapter {current_novel_chapter_number}: Failed to generate or save. Halting run."

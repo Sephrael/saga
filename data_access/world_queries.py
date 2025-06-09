@@ -776,3 +776,19 @@ async def get_world_elements_for_snippet_from_db(
             exc_info=True,
         )
     return items
+
+
+async def find_thin_world_elements_for_enrichment() -> List[Dict[str, Any]]:
+    """Finds WorldElement nodes that are considered 'thin' (e.g., missing description)."""
+    query = """
+    MATCH (we:WorldElement)
+    WHERE we.description IS NULL OR we.description = ''
+    RETURN we.id AS id, we.name AS name, we.category as category
+    LIMIT 20 // Limit to avoid overwhelming the LLM in one cycle
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+        return results if results else []
+    except Exception as e:
+        logger.error(f"Error finding thin world elements: {e}", exc_info=True)
+        return []

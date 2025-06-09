@@ -1,12 +1,17 @@
 # kg_maintainer_agent.py
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
 
 import config
-from data_access import character_queries, kg_queries, world_queries
+from core_db.base_db_manager import neo4j_manager
+from data_access import (
+    character_queries,
+    kg_queries,
+    world_queries,
+)
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
@@ -292,6 +297,168 @@ class KGMaintainerAgent:
             chapter_number,
         )
         return usage_data
+
+    async def heal_and_enrich_kg(self):
+        """
+        Performs maintenance on the Knowledge Graph by enriching thin nodes
+        and checking for inconsistencies.
+        """
+        logger.info("KG Healer/Enricher: Starting maintenance cycle.")
+
+        # 1. Enrichment (which includes healing orphans/stubs)
+        enrichment_cypher = await self._find_and_enrich_thin_nodes()
+
+        if enrichment_cypher:
+            logger.info(
+                f"Applying {len(enrichment_cypher)} enrichment updates to the KG."
+            )
+            try:
+                await neo4j_manager.execute_cypher_batch(enrichment_cypher)
+            except Exception as e:
+                logger.error(
+                    f"KG Healer/Enricher: Error applying enrichment batch: {e}",
+                    exc_info=True,
+                )
+        else:
+            logger.info(
+                "KG Healer/Enricher: No thin nodes found for enrichment in this cycle."
+            )
+
+        # 2. Consistency Checks
+        await self._run_consistency_checks()
+
+        logger.info("KG Healer/Enricher: Maintenance cycle complete.")
+
+    async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
+        """Finds thin characters and world elements and generates enrichment updates."""
+        statements: List[Tuple[str, Dict[str, Any]]] = []
+
+        # Enrich Characters
+        thin_chars = await character_queries.find_thin_characters_for_enrichment()
+        for char_info in thin_chars:
+            char_name = char_info.get("name")
+            if not char_name:
+                continue
+
+            logger.info(
+                f"KG Healer: Found thin character '{char_name}' for enrichment."
+            )
+            context_chapters = await kg_queries.get_chapter_context_for_entity(
+                entity_name=char_name
+            )
+
+            prompt = render_prompt(
+                "kg_maintainer_agent/enrich_character.j2",
+                {"character_name": char_name, "chapter_context": context_chapters},
+            )
+
+            enrichment_text, _ = await llm_service.async_call_llm(
+                model_name=config.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=config.Temperatures.KG_EXTRACTION,
+                auto_clean_response=True,
+            )
+
+            if enrichment_text:
+                try:
+                    data = json.loads(enrichment_text)
+                    new_description = data.get("description")
+                    if new_description and isinstance(new_description, str):
+                        statements.append(
+                            (
+                                "MATCH (c:Character {name: $name}) SET c.description = $desc",
+                                {"name": char_name, "desc": new_description},
+                            )
+                        )
+                        logger.info(
+                            f"KG Healer: Generated new description for '{char_name}'."
+                        )
+                except json.JSONDecodeError:
+                    logger.error(
+                        f"KG Healer: Failed to parse enrichment JSON for character '{char_name}': {enrichment_text}"
+                    )
+
+        # Enrich World Elements
+        thin_elements = await world_queries.find_thin_world_elements_for_enrichment()
+        for element_info in thin_elements:
+            element_id = element_info.get("id")
+            if not element_id:
+                continue
+
+            logger.info(
+                f"KG Healer: Found thin world element '{element_info.get('name')}' (id: {element_id}) for enrichment."
+            )
+            context_chapters = await kg_queries.get_chapter_context_for_entity(
+                entity_id=element_id
+            )
+
+            prompt = render_prompt(
+                "kg_maintainer_agent/enrich_world_element.j2",
+                {"element": element_info, "chapter_context": context_chapters},
+            )
+
+            enrichment_text, _ = await llm_service.async_call_llm(
+                model_name=config.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=config.Temperatures.KG_EXTRACTION,
+                auto_clean_response=True,
+            )
+
+            if enrichment_text:
+                try:
+                    data = json.loads(enrichment_text)
+                    new_description = data.get("description")
+                    if new_description and isinstance(new_description, str):
+                        statements.append(
+                            (
+                                "MATCH (we:WorldElement {id: $id}) SET we.description = $desc",
+                                {"id": element_id, "desc": new_description},
+                            )
+                        )
+                        logger.info(
+                            f"KG Healer: Generated new description for world element id '{element_id}'."
+                        )
+                except json.JSONDecodeError:
+                    logger.error(
+                        f"KG Healer: Failed to parse enrichment JSON for world element id '{element_id}': {enrichment_text}"
+                    )
+
+        return statements
+
+    async def _run_consistency_checks(self) -> None:
+        """Runs various consistency checks on the KG and logs findings."""
+        logger.info("KG Healer: Running consistency checks...")
+
+        # 1. Check for contradictory traits
+        contradictory_pairs = [
+            ("Brave", "Cowardly"),
+            ("Honest", "Deceitful"),
+            ("Kind", "Cruel"),
+            ("Generous", "Selfish"),
+            ("Loyal", "Treacherous"),
+        ]
+        trait_findings = await kg_queries.find_contradictory_trait_characters(
+            contradictory_pairs
+        )
+        if trait_findings:
+            for finding in trait_findings:
+                logger.warning(
+                    f"KG Consistency Alert: Character '{finding.get('character_name')}' has contradictory traits: "
+                    f"'{finding.get('trait1')}' and '{finding.get('trait2')}'."
+                )
+        else:
+            logger.info("KG Consistency Check: No contradictory traits found.")
+
+        # 2. Check for post-mortem activity
+        activity_findings = await kg_queries.find_post_mortem_activity()
+        if activity_findings:
+            for finding in activity_findings:
+                logger.warning(
+                    f"KG Consistency Alert: Character '{finding.get('character_name')}' was marked dead in chapter "
+                    f"{finding.get('death_chapter')} but has later activities: {finding.get('post_mortem_activities')}."
+                )
+        else:
+            logger.info("KG Consistency Check: No post-mortem activity found.")
 
 
 __all__ = ["KGMaintainerAgent"]
