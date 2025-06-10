@@ -42,6 +42,7 @@ Provide your evaluation as a JSON array of problem objects. Each object must hav
 For `issue_category`, use one of the EXACT category names: CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH.
 The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".
 If NO problems are found, output an empty JSON array `[]` or a JSON object like {"status": "No significant problems found"}.
+If information is incomplete for any category, explain the limitation within your problem descriptions.
 
 **Follow this example structure for your JSON output precisely:**
 ```json
