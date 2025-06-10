@@ -6,37 +6,33 @@
 
 novel_concept:
   title: "Saga" # Quotes optional for simple strings, good for strings with special chars
-  genre: "Gritty Fantasy"
-  setting: "a city that appears normal by day but transforms into something otherworldly at night"
+  genre: "technothriller"
+  setting: "a massive neural network physically manifested as an explorable landscape"
   logline: "[Fill-in]"
-  theme: "the impact of economic disparity"
+  theme: "the cost of loyalty"
 
 protagonist:
   name: "Jules Vidant"
   description: "[Fill-in]"
   traits:
-    - "clever"
-    - "witty"
-    - "resourceful"
-    - "introverted"
+    - "Clever"
+    - "Resourceful"
+    - "Inventive"
+    - "Witty"
   motivation: "[Fill-in]"
-  relationships:
-    tula_veridian: # Using normalized keys directly in YAML is cleaner
-      name: "Tula Veridian"
-      status: "[Fill-in]"
-      details: "[Fill-in]"
-    sampson_taylor:
-      name: "Sampson Taylor"
-      status: "Active"
-      details: "[Fill-in]"
-    # Add other key relationships as needed, e.g.:
-    #警部_k:  # Example of a non-English key, if needed (YAML supports Unicode)
-    #  name: "Inspector K"
-    #  status: "Antagonist / Ally?"
-    #  details: "A temporal police inspector who's sometimes on Jax's tail, sometimes needs his help."
+
+antagonist:
+  name: "Tula Veridian"
+  description: "[Fill-in]"
+  traits:
+    - "Resourceful"
+    - "Intimidating"
+    - "Intelligent"
+    - "Crafty"
+  motivation: "[Fill-in]"
 
 setting:
-  primary_setting_overview: "a city that appears normal by day but transforms into something otherworldly at night"
+  primary_setting_overview: "a massive neural network physically manifested as an explorable landscape"
   key_locations:
     - name: "[Fill-in]"
       description: "[Fill-in]"
