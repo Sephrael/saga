@@ -1524,4 +1524,3 @@ if __name__ == "__main__":
                 logger.warning(
                     f"Could not explicitly close driver from main (event loop might be closed or other issue): {e}"
                 )
-                

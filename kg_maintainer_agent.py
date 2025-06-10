@@ -21,6 +21,7 @@ from parsing_utils import (
     parse_rdf_triples_with_rdflib,
 )  # Will be modified to custom parser
 from prompt_renderer import render_prompt
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -383,100 +384,119 @@ class KGMaintainerAgent:
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
     async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
-        """Finds thin characters and world elements and generates enrichment updates."""
+        """Finds thin characters and world elements and generates enrichment updates in parallel."""
         statements: List[Tuple[str, Dict[str, Any]]] = []
+        enrichment_tasks = []
 
-        # Enrich Characters
+        # Find all thin nodes first
         thin_chars = await character_queries.find_thin_characters_for_enrichment()
-        for char_info in thin_chars:
-            char_name = char_info.get("name")
-            if not char_name:
-                continue
-
-            logger.info(
-                f"KG Healer: Found thin character '{char_name}' for enrichment."
-            )
-            context_chapters = await kg_queries.get_chapter_context_for_entity(
-                entity_name=char_name
-            )
-
-            prompt = render_prompt(
-                "kg_maintainer_agent/enrich_character.j2",
-                {"character_name": char_name, "chapter_context": context_chapters},
-            )
-
-            enrichment_text, _ = await llm_service.async_call_llm(
-                model_name=config.KNOWLEDGE_UPDATE_MODEL,
-                prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
-                auto_clean_response=True,
-            )
-
-            if enrichment_text:
-                try:
-                    data = json.loads(enrichment_text)
-                    new_description = data.get("description")
-                    if new_description and isinstance(new_description, str):
-                        statements.append(
-                            (
-                                "MATCH (c:Character {name: $name}) SET c.description = $desc",
-                                {"name": char_name, "desc": new_description},
-                            )
-                        )
-                        logger.info(
-                            f"KG Healer: Generated new description for '{char_name}'."
-                        )
-                except json.JSONDecodeError:
-                    logger.error(
-                        f"KG Healer: Failed to parse enrichment JSON for character '{char_name}': {enrichment_text}"
-                    )
-
-        # Enrich World Elements
         thin_elements = await world_queries.find_thin_world_elements_for_enrichment()
+
+        # Create tasks for enriching characters
+        for char_info in thin_chars:
+            enrichment_tasks.append(self._create_character_enrichment_task(char_info))
+
+        # Create tasks for enriching world elements
         for element_info in thin_elements:
-            element_id = element_info.get("id")
-            if not element_id:
-                continue
-
-            logger.info(
-                f"KG Healer: Found thin world element '{element_info.get('name')}' (id: {element_id}) for enrichment."
-            )
-            context_chapters = await kg_queries.get_chapter_context_for_entity(
-                entity_id=element_id
+            enrichment_tasks.append(
+                self._create_world_element_enrichment_task(element_info)
             )
 
-            prompt = render_prompt(
-                "kg_maintainer_agent/enrich_world_element.j2",
-                {"element": element_info, "chapter_context": context_chapters},
-            )
+        if not enrichment_tasks:
+            return []
 
-            enrichment_text, _ = await llm_service.async_call_llm(
-                model_name=config.KNOWLEDGE_UPDATE_MODEL,
-                prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
-                auto_clean_response=True,
-            )
+        logger.info(
+            f"KG Healer: Found {len(enrichment_tasks)} thin nodes to enrich. Running LLM calls in parallel."
+        )
+        results = await asyncio.gather(*enrichment_tasks, return_exceptions=True)
 
-            if enrichment_text:
-                try:
-                    data = json.loads(enrichment_text)
-                    new_description = data.get("description")
-                    if new_description and isinstance(new_description, str):
-                        statements.append(
-                            (
-                                "MATCH (we:WorldElement {id: $id}) SET we.description = $desc",
-                                {"id": element_id, "desc": new_description},
-                            )
-                        )
-                        logger.info(
-                            f"KG Healer: Generated new description for world element id '{element_id}'."
-                        )
-                except json.JSONDecodeError:
-                    logger.error(
-                        f"KG Healer: Failed to parse enrichment JSON for world element id '{element_id}': {enrichment_text}"
-                    )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"KG Healer: An enrichment task failed: {result}")
+            elif result:
+                statements.append(result)
 
         return statements
+
+    async def _create_character_enrichment_task(
+        self, char_info: Dict[str, Any]
+    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        char_name = char_info.get("name")
+        if not char_name:
+            return None
+
+        logger.info(f"KG Healer: Found thin character '{char_name}' for enrichment.")
+        context_chapters = await kg_queries.get_chapter_context_for_entity(
+            entity_name=char_name
+        )
+        prompt = render_prompt(
+            "kg_maintainer_agent/enrich_character.j2",
+            {"character_name": char_name, "chapter_context": context_chapters},
+        )
+        enrichment_text, _ = await llm_service.async_call_llm(
+            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            prompt=prompt,
+            temperature=config.Temperatures.KG_EXTRACTION,
+            auto_clean_response=True,
+        )
+        if enrichment_text:
+            try:
+                data = json.loads(enrichment_text)
+                new_description = data.get("description")
+                if new_description and isinstance(new_description, str):
+                    logger.info(
+                        f"KG Healer: Generated new description for '{char_name}'."
+                    )
+                    return (
+                        "MATCH (c:Character {name: $name}) SET c.description = $desc",
+                        {"name": char_name, "desc": new_description},
+                    )
+            except json.JSONDecodeError:
+                logger.error(
+                    f"KG Healer: Failed to parse enrichment JSON for character '{char_name}': {enrichment_text}"
+                )
+        return None
+
+    async def _create_world_element_enrichment_task(
+        self, element_info: Dict[str, Any]
+    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        element_id = element_info.get("id")
+        if not element_id:
+            return None
+
+        logger.info(
+            f"KG Healer: Found thin world element '{element_info.get('name')}' (id: {element_id}) for enrichment."
+        )
+        context_chapters = await kg_queries.get_chapter_context_for_entity(
+            entity_id=element_id
+        )
+        prompt = render_prompt(
+            "kg_maintainer_agent/enrich_world_element.j2",
+            {"element": element_info, "chapter_context": context_chapters},
+        )
+        enrichment_text, _ = await llm_service.async_call_llm(
+            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            prompt=prompt,
+            temperature=config.Temperatures.KG_EXTRACTION,
+            auto_clean_response=True,
+        )
+        if enrichment_text:
+            try:
+                data = json.loads(enrichment_text)
+                new_description = data.get("description")
+                if new_description and isinstance(new_description, str):
+                    logger.info(
+                        f"KG Healer: Generated new description for world element id '{element_id}'."
+                    )
+                    return (
+                        "MATCH (we:WorldElement {id: $id}) SET we.description = $desc",
+                        {"id": element_id, "desc": new_description},
+                    )
+            except json.JSONDecodeError:
+                logger.error(
+                    f"KG Healer: Failed to parse enrichment JSON for world element id '{element_id}': {enrichment_text}"
+                )
+        return None
 
     async def _run_consistency_checks(self) -> None:
         """Runs various consistency checks on the KG and logs findings."""
