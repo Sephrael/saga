@@ -7,10 +7,46 @@ from typing import Any, Coroutine, Dict, List, Optional, Tuple
 import config
 import utils
 from kg_maintainer.models import CharacterProfile, WorldItem
+from yaml_parser import load_yaml_file
+from story_models import UserStoryInputModel
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
+
+WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: Dict[str, str] = {
+    "overview": "_overview_",
+    "locations": "locations",
+    "society": "society",
+    "systems": "systems",
+    "lore": "lore",
+    "history": "history",
+    "factions": "factions",
+}
+
+WORLD_DETAIL_LIST_INTERNAL_KEYS: List[str] = []
+
+
+def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
+    """Load story elements from YAML if available."""
+    data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+    if not data:
+        return None
+    try:
+        return UserStoryInputModel(**data)
+    except Exception as exc:  # pragma: no cover - simple validation wrapper
+        logger.error("Failed to parse user story YAML: %s", exc)
+        return None
+
+
+async def generate_world_building_logic(
+    world_building: Dict[str, Any], plot_outline: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    """Stub world-building generation function."""
+    logger.warning("generate_world_building_logic stub called")
+    if not world_building:
+        world_building = create_default_world()
+    return world_building, None
 
 
 async def _bootstrap_field(
@@ -112,6 +148,25 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
         "is_default": True,
         "source": "default_fallback",
     }
+
+    standard_categories = [
+        "locations",
+        "society",
+        "systems",
+        "lore",
+        "history",
+        "factions",
+    ]
+
+    for cat_key in standard_categories:
+        world_data[cat_key] = {
+            config.MARKDOWN_FILL_IN_PLACEHOLDER: WorldItem.from_dict(
+                cat_key,
+                config.MARKDOWN_FILL_IN_PLACEHOLDER,
+                {"description": config.MARKDOWN_FILL_IN_PLACEHOLDER},
+            )
+        }
+
     return world_data
 
 

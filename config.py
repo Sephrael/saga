@@ -12,7 +12,7 @@ from typing import List, Optional
 
 import structlog
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()

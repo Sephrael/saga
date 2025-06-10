@@ -205,6 +205,13 @@ class NANA_Orchestrator:
                 f"NANA Activity: '{operation_name}' - 'completion_tokens' missing or not int in usage_data. Tokens not added. Usage: {usage_data}"
             )
 
+    def load_state_from_user_model(self, model: UserStoryInputModel) -> None:
+        """Populate orchestrator state from a user-provided model."""
+        plot_outline, characters, world_items = user_story_to_objects(model)
+        self.plot_outline = plot_outline
+        self.character_profiles = characters
+        self.world_building = world_items
+
     def _update_novel_props_cache(self):
         wb_cache = {}
         if isinstance(self.world_building, dict):

@@ -159,4 +159,4 @@ def user_story_to_objects(
                         category, item_name, item_details
                     )
 
-    return plot_outline, characters, world_items
+    return plot_outline, characters, world_items if world_items else []

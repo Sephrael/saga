@@ -1,5 +1,4 @@
 # drafting_agent.py
-import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -46,7 +45,7 @@ class DraftingAgent:
             )
 
         prompt = render_prompt(
-            "drafting_agent/plan_detailed_beats.j2", # A NEW PROMPT TEMPLATE IS NEEDED
+            "drafting_agent/plan_detailed_beats.j2",  # A NEW PROMPT TEMPLATE IS NEEDED
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
@@ -61,7 +60,7 @@ class DraftingAgent:
         detailed_beats_json, usage_data = await llm_service.async_call_llm(
             model_name=self.architect_model,
             prompt=prompt,
-            temperature=config.Temperatures.PLANNING, # Use a more controlled temperature
+            temperature=config.Temperatures.PLANNING,  # Use a more controlled temperature
             max_tokens=config.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=False,
@@ -91,9 +90,9 @@ class DraftingAgent:
         logger.info(
             f"DraftingAgent (Artist): Writing Chapter {chapter_number} from detailed beats with {self.artist_model}..."
         )
-        
+
         prompt = render_prompt(
-            "drafting_agent/write_from_beats.j2", # A NEW PROMPT TEMPLATE IS NEEDED
+            "drafting_agent/write_from_beats.j2",  # A NEW PROMPT TEMPLATE IS NEEDED
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
@@ -126,7 +125,7 @@ class DraftingAgent:
             stream_to_disk=True,
             frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
             presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
-            auto_clean_response=True, # We want the cleaned raw prose
+            auto_clean_response=True,  # We want the cleaned raw prose
         )
 
         if not draft_text or not draft_text.strip():
@@ -134,7 +133,7 @@ class DraftingAgent:
                 f"Artist model failed to write prose for Chapter {chapter_number} from detailed beats."
             )
             return None, draft_text, usage_data
-            
+
         return draft_text, draft_text, usage_data
 
     async def draft_chapter(
@@ -194,14 +193,14 @@ class DraftingAgent:
             plot_outline, chapter_number, detailed_beats
         )
         _add_usage(artist_usage)
-        
+
         if not final_draft:
-             return (
+            return (
                 None,
                 raw_artist_output,
                 cumulative_usage,
             )
-            
+
         logger.info(
             f"DraftingAgent: Successfully generated draft for Chapter {chapter_number} via Architect/Artist pattern. Length: {len(final_draft)} characters."
         )

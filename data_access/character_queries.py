@@ -64,13 +64,11 @@ def generate_character_node_cypher(
     statements.append(
         (
             """
-            MERGE (c:Entity {name: $name})
+            MERGE (c:Character:Entity {name: $name})
             ON CREATE SET
-                c:Character,
                 c += $props,
                 c.created_ts = timestamp()
             ON MATCH SET
-                c:Character,
                 c += $props,
                 c.updated_ts = timestamp()
             """,
@@ -306,13 +304,11 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
         statements.append(
             (
                 """
-            MERGE (c:Entity {name: $char_name_val})
+            MERGE (c:Character:Entity {name: $char_name_val})
             ON CREATE SET
-                c:Character,
                 c += $props,
                 c.created_ts = timestamp()
             ON MATCH SET
-                c:Character,
                 c += $props,
                 c.updated_ts = timestamp()
             """,
