@@ -41,6 +41,7 @@ If consistency problems are found, output a JSON array of problem objects.
 Each object MUST have these keys: "issue_category" (fixed to "consistency"), "problem_description", "quote_from_original_text", "suggested_fix_focus".
 The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".
 If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like {"status": "No significant consistency problems found"}.
+If any part of the reference material is unclear or incomplete, note the uncertainty in your problem descriptions.
 
 **Follow this example structure for your JSON output precisely:**
 ```json

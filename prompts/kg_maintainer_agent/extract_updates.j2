@@ -3,6 +3,7 @@
 The story's protagonist is: {{ protagonist }}.
 This is Chapter {{ chapter_number }} of the novel titled '{{ novel_title }}' (Genre: {{ novel_genre }}).
 Focus on information explicitly stated or strongly implied in the provided chapter text.
+If details are vague, infer cautiously and avoid contradicting established facts.
 Output the extracted information as a single JSON object with these keys:
 `character_updates` - JSON object as described below.
 `world_updates` - JSON object as described below.
@@ -66,3 +67,4 @@ For KG TRIPLES:
 {{ chapter_text }}
 --- END CHAPTER TEXT ---
 Ensure your output adheres strictly to this format. Provide only the requested sections and their content.
+Begin your JSON output now:
