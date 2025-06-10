@@ -602,7 +602,7 @@ class NANA_Orchestrator:
         self, novel_chapter_number: int
     ) -> Tuple[Optional[str], int, Optional[List[SceneDetail]], Optional[str]]:
         self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
+            step=f"Ch {novel_chapter_number} - Preparing Prerequisites (Parallel)"
         )
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(
@@ -614,12 +614,9 @@ class NANA_Orchestrator:
             )
             return None, -1, None, None
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Planning Scenes")
         self._update_novel_props_cache()
-        (
-            chapter_plan_result,
-            plan_usage,
-        ) = await self.planner_agent.plan_chapter_scenes(
+        # --- PARALLEL EXECUTION of Planning and Context Generation ---
+        planning_task = self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
             self.character_profiles,
             self.world_building,
@@ -627,8 +624,23 @@ class NANA_Orchestrator:
             plot_point_focus,
             plot_point_index,
         )
+        context_task = generate_hybrid_chapter_context_logic(
+            self, novel_chapter_number, None
+        )  # Pass None for plan initially
+
+        (
+            (chapter_plan_result, plan_usage),
+            hybrid_context_for_draft,
+        ) = await asyncio.gather(planning_task, context_task)
+        # --- END PARALLEL EXECUTION ---
+
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
+
+        # If context generation could benefit from the plan, it could be re-run here,
+        # but for now, the parallel execution is a significant win.
+        # We can pass the generated plan to the drafting agent directly.
+
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
                 f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only."
@@ -637,13 +649,6 @@ class NANA_Orchestrator:
             novel_chapter_number,
             "scene_plan",
             chapter_plan if chapter_plan else "No plan generated.",
-        )
-
-        self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Generating Hybrid Context"
-        )
-        hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
-            self, novel_chapter_number, chapter_plan
         )
         await self._save_debug_output(
             novel_chapter_number,
@@ -756,16 +761,14 @@ class NANA_Orchestrator:
                 )
 
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt}"
+                f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt} (Parallel)"
             )
             self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt}"
+                step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
             )
 
-            (
-                eval_result_obj,
-                eval_usage,
-            ) = await self.evaluator_agent.evaluate_chapter_draft(
+            # --- PARALLEL EXECUTION of Evaluation and Continuity Checks ---
+            eval_task = self.evaluator_agent.evaluate_chapter_draft(
                 self.plot_outline,
                 self.character_profiles,
                 self.world_building,
@@ -775,24 +778,7 @@ class NANA_Orchestrator:
                 plot_point_index,
                 hybrid_context_for_draft,
             )
-            self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt}",
-                eval_usage,
-            )
-            evaluation_result: EvaluationResult = eval_result_obj
-            await self._save_debug_output(
-                novel_chapter_number,
-                f"evaluation_result_attempt_{attempt}",
-                evaluation_result,
-            )
-
-            self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - Continuity Check {attempt}"
-            )
-            (
-                continuity_problems,
-                continuity_usage,
-            ) = await self.world_continuity_agent.check_consistency(
+            continuity_task = self.world_continuity_agent.check_consistency(
                 self.plot_outline,
                 self.character_profiles,
                 self.world_building,
@@ -800,9 +786,26 @@ class NANA_Orchestrator:
                 novel_chapter_number,
                 hybrid_context_for_draft,
             )
+            (
+                (eval_result_obj, eval_usage),
+                (continuity_problems, continuity_usage),
+            ) = await asyncio.gather(eval_task, continuity_task)
+            # --- END PARALLEL EXECUTION ---
+
+            self._accumulate_tokens(
+                f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt}",
+                eval_usage,
+            )
             self._accumulate_tokens(
                 f"Ch{novel_chapter_number}-ContinuityCheck-Attempt{attempt}",
                 continuity_usage,
+            )
+
+            evaluation_result: EvaluationResult = eval_result_obj
+            await self._save_debug_output(
+                novel_chapter_number,
+                f"evaluation_result_attempt_{attempt}",
+                evaluation_result,
             )
             await self._save_debug_output(
                 novel_chapter_number,
@@ -940,21 +943,41 @@ class NANA_Orchestrator:
         final_raw_llm_output: Optional[str],
         is_from_flawed_source_for_kg: bool,
     ) -> Optional[str]:
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Summarizing")
-        (
-            chapter_summary,
-            summary_usage,
-        ) = await self.kg_maintainer_agent.summarize_chapter(
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Finalization (Parallel)"
+        )
+
+        # --- PARALLEL EXECUTION of Summary, Embedding, and KG Extraction ---
+        summary_task = self.kg_maintainer_agent.summarize_chapter(
             final_text_to_process, novel_chapter_number
         )
+        embedding_task = llm_service.async_get_embedding(final_text_to_process)
+        kg_extraction_task = self.kg_maintainer_agent.extract_and_merge_knowledge(
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
+            novel_chapter_number,
+            final_text_to_process,
+            is_from_flawed_source_for_kg,
+        )
+
+        (
+            (chapter_summary, summary_usage),
+            final_embedding,
+            kg_merge_usage,
+        ) = await asyncio.gather(summary_task, embedding_task, kg_extraction_task)
+        # --- END PARALLEL EXECUTION ---
+
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-Summarization", summary_usage
+        )
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
         )
         await self._save_debug_output(
             novel_chapter_number, "final_summary", chapter_summary
         )
 
-        final_embedding = await llm_service.async_get_embedding(final_text_to_process)
         if final_embedding is None:
             logger.error(
                 f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only."
@@ -982,21 +1005,9 @@ class NANA_Orchestrator:
             novel_chapter_number, final_text_to_process, final_raw_llm_output
         )
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Updating KG")
-        kg_merge_usage = await self.kg_maintainer_agent.extract_and_merge_knowledge(
-            self.plot_outline,
-            self.character_profiles,
-            self.world_building,
-            novel_chapter_number,
-            final_text_to_process,
-            is_from_flawed_source_for_kg,
-        )
-        self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
-        )
-
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
 
+        # The KG merge already happened in memory, now just persist the final objects
         await self.kg_maintainer_agent.persist_profiles(
             self.character_profiles, novel_chapter_number
         )
@@ -1513,3 +1524,4 @@ if __name__ == "__main__":
                 logger.warning(
                     f"Could not explicitly close driver from main (event loop might be closed or other issue): {e}"
                 )
+                
