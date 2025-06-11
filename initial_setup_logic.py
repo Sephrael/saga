@@ -119,10 +119,7 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
         "inciting_incident": config.FILL_IN,
         "central_conflict": config.FILL_IN,
         "stakes": config.FILL_IN,
-        "plot_points": [
-            f"{config.FILL_IN}"
-            for _ in range(num_default_plot_points)
-        ],
+        "plot_points": [f"{config.FILL_IN}" for _ in range(num_default_plot_points)],
         "narrative_style": config.FILL_IN,
         "tone": config.FILL_IN,
         "pacing": config.FILL_IN,
