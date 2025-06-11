@@ -556,6 +556,30 @@ async def deduplicate_text_segments(
                             pass
                     else:
                         is_duplicate = True
+
+
+def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
+    """Remove character spans from ``text``.
+
+    Args:
+        text: The original text.
+        spans: List of ``(start, end)`` tuples specifying spans to remove.
+
+    Returns:
+        The text with the specified spans removed.
+    """
+    if not spans:
+        return text
+
+    spans_sorted = sorted(spans, key=lambda x: x[0])
+    result_parts = []
+    last_end = 0
+    for start, end in spans_sorted:
+        if start > last_end:
+            result_parts.append(text[last_end:start])
+        last_end = max(last_end, end)
+    result_parts.append(text[last_end:])
+    return "".join(result_parts)
             if not is_duplicate or prefer_newer:
                 kept_segment_info_for_semantic.append(
                     (seg_start, seg_end, current_seg_embedding)

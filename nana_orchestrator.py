@@ -731,6 +731,7 @@ class NANA_Orchestrator:
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
         is_from_flawed_source_for_kg = False
         de_duplication_occurred_this_chapter = False
+        patched_spans: List[Tuple[int, int]] = []
 
         revisions_made = 0
         needs_revision = True
@@ -790,6 +791,7 @@ class NANA_Orchestrator:
                 plot_point_focus,
                 plot_point_index,
                 hybrid_context_for_draft,
+                ignore_spans=patched_spans,
             )
             continuity_task = self.world_continuity_agent.check_consistency(
                 self.plot_outline,
@@ -798,6 +800,7 @@ class NANA_Orchestrator:
                 current_text_to_process,
                 novel_chapter_number,
                 hybrid_context_for_draft,
+                ignore_spans=patched_spans,
             )
             (
                 (eval_result_obj, eval_usage),
@@ -878,6 +881,7 @@ class NANA_Orchestrator:
                     hybrid_context_for_draft,
                     chapter_plan,
                     is_from_flawed_source=de_duplication_occurred_this_chapter,
+                    already_patched_spans=patched_spans,
                 )
                 self._accumulate_tokens(
                     f"Ch{novel_chapter_number}-Revision-Attempt{attempt}",
@@ -889,7 +893,8 @@ class NANA_Orchestrator:
                     and revision_tuple_result[0]
                     and len(revision_tuple_result[0]) > 50
                 ):
-                    new_text, rev_raw_output = revision_tuple_result
+                    new_text, rev_raw_output, new_spans = revision_tuple_result
+                    patched_spans.extend(new_spans)
                     new_embedding, prev_embedding = await asyncio.gather(
                         llm_service.async_get_embedding(new_text),
                         llm_service.async_get_embedding(current_text_to_process),

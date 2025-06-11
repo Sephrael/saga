@@ -230,6 +230,7 @@ class WorldContinuityAgent:
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str,
+        ignore_spans: Optional[List[Tuple[int, int]]] | None = None,
     ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
         if not draft_text:
             logger.warning(
@@ -237,6 +238,7 @@ class WorldContinuityAgent:
             )
             return [], None
 
+        processed_text = utils.remove_spans_from_text(draft_text, ignore_spans or [])
         logger.info(
             f"WorldContinuityAgent performing focused consistency check for Chapter {chapter_number}..."
         )
@@ -303,7 +305,7 @@ class WorldContinuityAgent:
                 "char_profiles_plain_text": char_profiles_plain_text,
                 "world_building_plain_text": world_building_plain_text,
                 "previous_chapters_context": previous_chapters_context,
-                "draft_text": draft_text,
+                "draft_text": processed_text,
                 "few_shot_consistency_example_str": few_shot_consistency_example_str,
             },
         )
