@@ -90,6 +90,8 @@ def user_story_to_objects(
 
     if model.novel_concept:
         plot_outline.update(model.novel_concept.model_dump(exclude_none=True))
+        if model.novel_concept.setting is not None:
+            plot_outline["setting"] = model.novel_concept.setting
 
     main_char_model = model.protagonist
     if main_char_model:
@@ -130,8 +132,8 @@ def user_story_to_objects(
 
     if model.plot_elements:
         plot_outline["inciting_incident"] = model.plot_elements.inciting_incident
-        plot_outline["plot_points"] = model.plot_elements.key_plot_points
-        plot_outline["conflict_summary"] = model.plot_elements.central_conflict
+        plot_outline["key_plot_points"] = model.plot_elements.key_plot_points
+        plot_outline["central_conflict"] = model.plot_elements.central_conflict
         plot_outline["stakes"] = model.plot_elements.stakes
 
     if model.setting:
@@ -149,6 +151,14 @@ def user_story_to_objects(
                     "atmosphere": loc.atmosphere or "",
                 },
             )
+
+    if model.style_and_tone:
+        if "narrative_style" in model.style_and_tone:
+            plot_outline["narrative_style"] = model.style_and_tone["narrative_style"]
+        if "tone" in model.style_and_tone:
+            plot_outline["tone"] = model.style_and_tone["tone"]
+        if "pacing" in model.style_and_tone:
+            plot_outline["pacing"] = model.style_and_tone["pacing"]
 
     if model.world_details:
         for category, items in model.world_details.items():

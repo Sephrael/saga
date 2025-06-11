@@ -235,7 +235,13 @@ class NANA_Orchestrator:
             ),
             "character_arc": self.plot_outline.get("character_arc", "N/A"),
             "logline": self.plot_outline.get("logline", "N/A"),
-            "plot_points": self.plot_outline.get("plot_points", []),
+            "setting": self.plot_outline.get(
+                "setting", config.CONFIGURED_SETTING_DESCRIPTION
+            ),
+            "narrative_style": self.plot_outline.get("narrative_style", "N/A"),
+            "tone": self.plot_outline.get("tone", "N/A"),
+            "pacing": self.plot_outline.get("pacing", "N/A"),
+            "key_plot_points": self.plot_outline.get("key_plot_points", []),
             "character_profiles": {
                 name: profile.to_dict()
                 for name, profile in self.character_profiles.items()
@@ -304,13 +310,13 @@ class NANA_Orchestrator:
                     else:
                         self.world_building = {}
 
-        if not self.plot_outline.get("plot_points"):
+        if not self.plot_outline.get("key_plot_points"):
             logger.warning(
                 "Orchestrator init: Plot outline loaded from DB has no plot points. Initial setup might be needed or DB is empty/corrupt."
             )
         else:
             logger.info(
-                f"Orchestrator init: Loaded {len(self.plot_outline.get('plot_points', []))} plot points from DB."
+                f"Orchestrator init: Loaded {len(self.plot_outline.get('key_plot_points', []))} plot points from DB."
             )
 
         self._update_novel_props_cache()
@@ -429,7 +435,7 @@ class NANA_Orchestrator:
 
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(
-            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Plot Points: {len(self.plot_outline.get('plot_points', []))}"
+            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Plot Points: {len(self.plot_outline.get('key_plot_points', []))}"
         )
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
@@ -466,7 +472,7 @@ class NANA_Orchestrator:
     def _get_plot_point_info_for_chapter(
         self, novel_chapter_number: int
     ) -> Tuple[Optional[str], int]:
-        plot_points_list = self.plot_outline.get("plot_points", [])
+        plot_points_list = self.plot_outline.get("key_plot_points", [])
         if not isinstance(plot_points_list, list) or not plot_points_list:
             logger.error(
                 f"No plot points available in orchestrator state for chapter {novel_chapter_number}."
@@ -1027,7 +1033,7 @@ class NANA_Orchestrator:
     async def _validate_plot_outline(self, novel_chapter_number: int) -> bool:
         if (
             not self.plot_outline
-            or not self.plot_outline.get("plot_points")
+            or not self.plot_outline.get("key_plot_points")
             or not self.plot_outline.get("protagonist_name")
         ):
             logger.error(
@@ -1231,11 +1237,11 @@ class NANA_Orchestrator:
 
             plot_points_exist = (
                 self.plot_outline
-                and self.plot_outline.get("plot_points")
+                and self.plot_outline.get("key_plot_points")
                 and len(
                     [
                         pp
-                        for pp in self.plot_outline.get("plot_points", [])
+                        for pp in self.plot_outline.get("key_plot_points", [])
                         if not utils._is_fill_in(pp)
                     ]
                 )
@@ -1263,7 +1269,7 @@ class NANA_Orchestrator:
 
             start_novel_chapter_to_write = self.chapter_count + 1
 
-            plot_points_raw = self.plot_outline.get("plot_points", [])
+            plot_points_raw = self.plot_outline.get("key_plot_points", [])
             if isinstance(plot_points_raw, list):
                 plot_points_list = plot_points_raw
             elif isinstance(plot_points_raw, dict):

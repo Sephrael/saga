@@ -234,7 +234,7 @@ class PlannerAgent:
         )
 
         future_plot_context_parts: List[str] = []
-        all_plot_points = plot_outline.get("plot_points", [])
+        all_plot_points = plot_outline.get("key_plot_points", [])
         total_plot_points_in_novel = len(all_plot_points)
 
         if plot_point_index + 1 < total_plot_points_in_novel:

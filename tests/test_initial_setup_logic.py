@@ -23,7 +23,7 @@ class MockAgent:
         self.plot_outline = {
             "title": "Test Novel",
             "genre": "Fantasy",
-            "setting_description": "A land of high mountains and deep valleys.",
+            "setting": "A land of high mountains and deep valleys.",
         }
         # World building can start empty or with some pre-existing user data
         self.world_building = {}
@@ -118,7 +118,7 @@ async def test_invalid_json_output_decode_error(agent_instance):
         {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
     )
 
-    initial_setting_desc = agent_instance.plot_outline["setting_description"]
+    initial_setting_desc = agent_instance.plot_outline["setting"]
 
     with patch(
         "initial_setup_logic.llm_service.async_call_llm",
@@ -422,7 +422,7 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     agent_instance.plot_outline = {
         "title": "Test Novel",
         "genre": "Fantasy",
-        "setting_description": "A world of tests",
+        "setting": "A world of tests",
     }
     agent_instance.world_building = {}  # Start fresh
 

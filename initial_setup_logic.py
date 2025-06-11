@@ -113,15 +113,19 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
         "title": config.DEFAULT_PLOT_OUTLINE_TITLE,
         "protagonist_name": default_protagonist_name,
         "genre": config.CONFIGURED_GENRE,
+        "setting": config.CONFIGURED_SETTING_DESCRIPTION,
         "theme": config.CONFIGURED_THEME,
         "logline": config.MARKDOWN_FILL_IN_PLACEHOLDER,
         "inciting_incident": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "conflict_summary": config.MARKDOWN_FILL_IN_PLACEHOLDER,
+        "central_conflict": config.MARKDOWN_FILL_IN_PLACEHOLDER,
         "stakes": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "plot_points": [
+        "key_plot_points": [
             f"{config.MARKDOWN_FILL_IN_PLACEHOLDER}"
             for _ in range(num_default_plot_points)
         ],
+        "narrative_style": config.MARKDOWN_FILL_IN_PLACEHOLDER,
+        "tone": config.MARKDOWN_FILL_IN_PLACEHOLDER,
+        "pacing": config.MARKDOWN_FILL_IN_PLACEHOLDER,
         "is_default": True,
         "source": "default_fallback",
     }
@@ -194,6 +198,10 @@ async def bootstrap_plot_outline(
             not plot_outline.get("genre")
             or utils._is_fill_in(plot_outline.get("genre"))
         ),
+        "setting": (
+            not plot_outline.get("setting")
+            or utils._is_fill_in(plot_outline.get("setting"))
+        ),
         "theme": (
             not plot_outline.get("theme")
             or utils._is_fill_in(plot_outline.get("theme"))
@@ -206,13 +214,24 @@ async def bootstrap_plot_outline(
             not plot_outline.get("inciting_incident")
             or utils._is_fill_in(plot_outline.get("inciting_incident"))
         ),
-        "conflict_summary": (
-            not plot_outline.get("conflict_summary")
-            or utils._is_fill_in(plot_outline.get("conflict_summary"))
+        "central_conflict": (
+            not plot_outline.get("central_conflict")
+            or utils._is_fill_in(plot_outline.get("central_conflict"))
         ),
         "stakes": (
             not plot_outline.get("stakes")
             or utils._is_fill_in(plot_outline.get("stakes"))
+        ),
+        "narrative_style": (
+            not plot_outline.get("narrative_style")
+            or utils._is_fill_in(plot_outline.get("narrative_style"))
+        ),
+        "tone": (
+            not plot_outline.get("tone") or utils._is_fill_in(plot_outline.get("tone"))
+        ),
+        "pacing": (
+            not plot_outline.get("pacing")
+            or utils._is_fill_in(plot_outline.get("pacing"))
         ),
     }
 
@@ -222,7 +241,7 @@ async def bootstrap_plot_outline(
                 field, plot_outline, "bootstrapper/fill_plot_field.j2"
             )
 
-    plot_points = plot_outline.get("plot_points", [])
+    plot_points = plot_outline.get("key_plot_points", [])
     fill_in_count = sum(1 for p in plot_points if utils._is_fill_in(p))
     needed_plot_points = max(
         0,
@@ -231,8 +250,8 @@ async def bootstrap_plot_outline(
     )
 
     if needed_plot_points > 0:
-        tasks["plot_points"] = _bootstrap_field(
-            "plot_points",
+        tasks["key_plot_points"] = _bootstrap_field(
+            "key_plot_points",
             plot_outline,
             "bootstrapper/fill_plot_points.j2",
             is_list=True,
@@ -250,15 +269,15 @@ async def bootstrap_plot_outline(
         if usage:
             for k, v in usage.items():
                 usage_data[k] = usage_data.get(k, 0) + v
-        if field == "plot_points":
+        if field == "key_plot_points":
             new_points = value
             final_points = [
                 p
-                for p in plot_outline.get("plot_points", [])
+                for p in plot_outline.get("key_plot_points", [])
                 if not utils._is_fill_in(p)
             ]
             final_points.extend(new_points)
-            plot_outline["plot_points"] = final_points[
+            plot_outline["key_plot_points"] = final_points[
                 : config.TARGET_PLOT_POINTS_INITIAL_GENERATION
             ]
         elif value:

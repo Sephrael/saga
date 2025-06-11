@@ -254,9 +254,9 @@ class WorldContinuityAgent:
         plot_points_summary_lines = (
             [
                 f"- PP {i + 1}: {pp[:100]}..."
-                for i, pp in enumerate(plot_outline.get("plot_points", []))
+                for i, pp in enumerate(plot_outline.get("key_plot_points", []))
             ]
-            if plot_outline.get("plot_points")
+            if plot_outline.get("key_plot_points")
             else ["  - Not available"]
         )
         plot_points_summary_str = "\n".join(plot_points_summary_lines)

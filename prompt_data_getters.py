@@ -796,7 +796,7 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         f"KG fact gathering for Ch {chapter_number} draft: Chars of interest: {characters_of_interest}, KG chapter limit: {kg_chapter_limit}"
     )
 
-    for desc_key in ["theme", "conflict_summary"]:
+    for desc_key in ["theme", "central_conflict"]:
         if len(facts_for_prompt_list) >= max_total_facts:
             break
         try:
