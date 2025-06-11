@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
-from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
@@ -20,6 +19,7 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
+from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this module is imported
@@ -648,23 +648,8 @@ async def _apply_patches_to_text(
         )
         return original_text
 
-    applied_spans: List[Tuple[int, int]] = []
-    applied_texts: List[str] = []
-        applied_spans.append((start_index, start_index + len(replace_with_text)))
-        applied_texts.append(replace_with_text)
-
-    final_spans: List[Tuple[int, int]] = []
-    for repl_text in applied_texts:
-        idx = patched_text.find(repl_text)
-        if idx != -1:
-            final_spans.append((idx, idx + len(repl_text)))
-
-    return patched_text, final_spans
-    already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
-) -> Tuple[Optional[Tuple[str, str, List[Tuple[int, int]]]], Optional[Dict[str, int]]]:
-    if already_patched_spans is None:
-        already_patched_spans = []
-
+    replacements.sort(key=lambda x: x[0])
+    parts: List[str] = []
     applied_count = 0
     last_index = 0
 
@@ -776,9 +761,8 @@ async def revise_chapter_draft_logic(
                 or p.get("quote_char_start") is not None
             )
         )
-            patched_text, new_spans = await _apply_patches_to_text(
-                original_text, patch_instructions, already_patched_spans
-            already_patched_spans.extend(new_spans)
+        or (
+            p["quote_from_original_text"] == "N/A - General Issue"
             and p["issue_category"] == "narrative_depth_and_length"
             and (
                 "short" in p["problem_description"].lower()
@@ -1084,7 +1068,7 @@ async def revise_chapter_draft_logic(
     if final_revised_text is not patched_text:
         (
             original_embedding_full_final,
-        already_patched_spans,
+            already_patched_spans,
             revised_embedding_full_final,
         ) = await asyncio.gather(
             llm_service.async_get_embedding(original_text),
