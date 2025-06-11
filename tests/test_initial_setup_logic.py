@@ -210,9 +210,7 @@ async def test_llm_provides_integer_for_expected_list(agent_instance):
     wb = agent_instance.world_building
     assert "Magic System" in wb["systems"]
     # The code should replace this with a fill-in placeholder list
-    assert wb["systems"]["Magic System"]["rules"] == [
-        config.FILL_IN
-    ]
+    assert wb["systems"]["Magic System"]["rules"] == [config.FILL_IN]
 
 
 @pytest.mark.asyncio
@@ -295,9 +293,7 @@ async def test_llm_output_empty_list_for_list_field(agent_instance):
     # The current logic, if an empty list is provided by LLM for a list key,
     # and the existing value was [Fill-in] or None, it will replace it with [config.FILL_IN]
     # This is because `processed_list` will be empty, and it hits the `elif utils._is_fill_in(existing_item_val) or existing_item_val is None:`
-    assert wb["factions"]["Silent Monks"]["goals"] == [
-        config.FILL_IN
-    ]
+    assert wb["factions"]["Silent Monks"]["goals"] == [config.FILL_IN]
 
 
 @pytest.mark.asyncio

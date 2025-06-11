@@ -501,8 +501,11 @@ async def _apply_patches_to_text(
 ) -> str:
     """
     Applies patch instructions to the original text.
-    Prioritizes precise target_char_start/end from PatchInstruction (which should be sentence boundaries).
-    Falls back to semantic paragraph search if precise offsets are missing.
+    Prioritizes precise ``target_char_start``/``target_char_end`` from
+    ``PatchInstruction`` (expected to be sentence boundaries). Falls back to
+    semantic paragraph search if precise offsets are missing. Patches whose
+    replacement text is almost identical to the original segment (cosine
+    similarity > config.REVISION_SIMILARITY_ACCEPTANCE) are skipped.
     """
     if not patch_instructions:
         return original_text
@@ -632,6 +635,18 @@ async def _apply_patches_to_text(
     applied_count = 0
 
     for start_index, end_index, replace_with_text in replacements:
+        original_segment = original_text[start_index:end_index]
+        original_emb = await llm_service.async_get_embedding(original_segment)
+        replace_emb = await llm_service.async_get_embedding(replace_with_text)
+        similarity = utils.numpy_cosine_similarity(original_emb, replace_emb)
+        if similarity > config.REVISION_SIMILARITY_ACCEPTANCE:
+            logger.warning(
+                "Patch for segment %s-%s skipped due to high similarity %.2f",
+                start_index,
+                end_index,
+                similarity,
+            )
+            continue
         current_text_list[start_index:end_index] = list(replace_with_text)
         applied_count += 1
         logger.info(
