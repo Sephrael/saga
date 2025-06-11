@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
+from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
@@ -19,7 +20,6 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
-from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this module is imported
@@ -648,13 +648,13 @@ async def _apply_patches_to_text(
         )
         return original_text
 
-    replacements.sort(key=lambda x: x[0])
-    parts: List[str] = []
+    replacements.sort(key=lambda x: x[0], reverse=True)
+    current_text_list = list(original_text)
     applied_count = 0
-    last_index = 0
+    applied_spans: List[Tuple[int, int]] = []
+    applied_texts: List[str] = []
 
     for start_index, end_index, replace_with_text in replacements:
-        parts.append(original_text[last_index:start_index])
         original_segment = original_text[start_index:end_index]
         original_emb = await llm_service.async_get_embedding(original_segment)
         replace_emb = await llm_service.async_get_embedding(replace_with_text)
@@ -666,24 +666,22 @@ async def _apply_patches_to_text(
                 end_index,
                 similarity,
             )
-            parts.append(original_segment)
-        else:
-            parts.append(replace_with_text)
-            applied_count += 1
-            logger.info(
-                f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
-                f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
-            )
-        last_index = end_index
-
-    parts.append(original_text[last_index:])
+            continue
+        current_text_list[start_index:end_index] = list(replace_with_text)
+        applied_count += 1
+        applied_spans.append((start_index, start_index + len(replace_with_text)))
+        applied_texts.append(replace_with_text)
+        logger.info(
+            f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
+            f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
+        )
 
     num_patches_attempted = len(applicable_patches) - failed_patches_target_not_found
     logger.info(
         f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
     )
 
-    patched_text = "".join(parts)
+    patched_text = "".join(current_text_list)
     patched_text, _ = await utils.deduplicate_text_segments(
         patched_text,
         segment_level="paragraph",
@@ -692,8 +690,14 @@ async def _apply_patches_to_text(
         min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
         prefer_newer=True,
     )
-    return patched_text
 
+    final_spans: List[Tuple[int, int]] = []
+    for repl_text in applied_texts:
+        idx = patched_text.find(repl_text)
+        if idx != -1:
+            final_spans.append((idx, idx + len(repl_text)))
+
+    return patched_text, final_spans
 
 async def revise_chapter_draft_logic(
     plot_outline: Dict[str, Any],
@@ -705,7 +709,11 @@ async def revise_chapter_draft_logic(
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]],
     is_from_flawed_source: bool = False,
-) -> Tuple[Optional[Tuple[str, str]], Optional[Dict[str, int]]]:
+    already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
+) -> Tuple[Optional[Tuple[str, str, List[Tuple[int, int]]]], Optional[Dict[str, int]]]:
+    if already_patched_spans is None:
+        already_patched_spans = []
+
     cumulative_usage_data: Dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -760,9 +768,6 @@ async def revise_chapter_draft_logic(
                 p.get("sentence_char_start") is not None
                 or p.get("quote_char_start") is not None
             )
-        )
-        or (
-            p["quote_from_original_text"] == "N/A - General Issue"
             and p["issue_category"] == "narrative_depth_and_length"
             and (
                 "short" in p["problem_description"].lower()
@@ -790,9 +795,10 @@ async def revise_chapter_draft_logic(
         )
         _add_usage(patch_usage)
         if patch_instructions:
-            patched_text = await _apply_patches_to_text(
-                original_text, patch_instructions
+            patched_text, new_spans = await _apply_patches_to_text(
+                original_text, patch_instructions, already_patched_spans
             )
+            already_patched_spans.extend(new_spans)
             raw_patch_llm_outputs_combined_parts.append(
                 f"Chapter revised using {len(patch_instructions)} generated patch instructions. "
                 f"(Note: Not all generated patches may have been auto-applied if they were for 'N/A - General Issue' or target segment not found.)\n"
@@ -1100,4 +1106,5 @@ async def revise_chapter_draft_logic(
     return (
         final_revised_text,
         final_raw_llm_output,
+        already_patched_spans,
     ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None

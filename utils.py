@@ -580,42 +580,43 @@ def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
         last_end = max(last_end, end)
     result_parts.append(text[last_end:])
     return "".join(result_parts)
-            if not is_duplicate or prefer_newer:
-                kept_segment_info_for_semantic.append(
-                    (seg_start, seg_end, current_seg_embedding)
-                )
-                segments_to_build_final_text.append((seg_start, seg_end))
-        else:  # Normalized string comparison
-            normalized_current_seg = _normalize_text_for_matching(seg_text)
-            if normalized_current_seg in seen_normalized_texts_for_string:
-                is_duplicate = True
-                if prefer_newer:
-                    replaced_span = seen_normalized_texts_for_string[
-                        normalized_current_seg
-                    ]
-                    segments_to_build_final_text.remove(replaced_span)
-                    seen_normalized_texts_for_string[normalized_current_seg] = (
-                        seg_start,
-                        seg_end,
-                    )
-                    segments_to_build_final_text.append((seg_start, seg_end))
-            else:
+    
+    if not is_duplicate or prefer_newer:
+            kept_segment_info_for_semantic.append(
+                (seg_start, seg_end, current_seg_embedding)
+            )
+            segments_to_build_final_text.append((seg_start, seg_end))
+    else:  # Normalized string comparison
+        normalized_current_seg = _normalize_text_for_matching(seg_text)
+        if normalized_current_seg in seen_normalized_texts_for_string:
+            is_duplicate = True
+            if prefer_newer:
+                replaced_span = seen_normalized_texts_for_string[
+                    normalized_current_seg
+                ]
+                segments_to_build_final_text.remove(replaced_span)
                 seen_normalized_texts_for_string[normalized_current_seg] = (
                     seg_start,
                     seg_end,
                 )
                 segments_to_build_final_text.append((seg_start, seg_end))
+        else:
+            seen_normalized_texts_for_string[normalized_current_seg] = (
+                seg_start,
+                seg_end,
+            )
+            segments_to_build_final_text.append((seg_start, seg_end))
 
-        if is_duplicate:
-            method_used = "semantic" if use_semantic_comparison else "normalized string"
-            if prefer_newer and replaced_span is not None:
-                logger.info(
-                    f"De-duplication: Replacing earlier segment {replaced_span[0]}-{replaced_span[1]} with later segment {seg_start}-{seg_end}"
-                )
-            else:
-                logger.info(
-                    f"De-duplication: Removing segment (idx {i}, chars {seg_start}-{seg_end}, method: {method_used}) starting with: '{seg_text[:60].replace(chr(10), ' ')}...'"
-                )
+    if is_duplicate:
+        method_used = "semantic" if use_semantic_comparison else "normalized string"
+        if prefer_newer and replaced_span is not None:
+            logger.info(
+                f"De-duplication: Replacing earlier segment {replaced_span[0]}-{replaced_span[1]} with later segment {seg_start}-{seg_end}"
+            )
+        else:
+            logger.info(
+                f"De-duplication: Removing segment (idx {i}, chars {seg_start}-{seg_end}, method: {method_used}) starting with: '{seg_text[:60].replace(chr(10), ' ')}...'"
+            )
 
     if len(segments_to_build_final_text) == len(segments_with_offsets):
         return original_text, 0
