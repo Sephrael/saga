@@ -469,8 +469,9 @@ async def deduplicate_text_segments(
 ) -> Tuple[str, int]:
     """
     Removes near-duplicate segments from text.
-    Supports normalized string comparison or semantic comparison (async).
-    If ``prefer_newer`` is True, later duplicate segments replace earlier ones.
+    
+    If ``prefer_newer`` is ``True`` in semantic mode, a newer duplicate will
+    replace an older kept segment rather than being discarded.
     """
     if not original_text.strip():
         return original_text, 0
@@ -524,11 +525,14 @@ async def deduplicate_text_segments(
                     current_seg_embedding, kept_embedding
                 )
                 if similarity > similarity_threshold:
-                    is_duplicate = True
                     if prefer_newer:
-                        replaced_span = (k_start, k_end)
                         kept_segment_info_for_semantic.pop(idx_kept)
-                    break
+                        try:
+                            segments_to_build_final_text.remove((k_start, k_end))
+                        except ValueError:
+                            pass
+                    else:
+                        is_duplicate = True
             if not is_duplicate or prefer_newer:
                 kept_segment_info_for_semantic.append(
                     (seg_start, seg_end, current_seg_embedding)
