@@ -6,8 +6,9 @@ General utility functions for the Saga Novel Generation system.
 import asyncio
 import logging
 import re
-import asyncio
-from typing import TYPE_CHECKING, Any, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from kg_maintainer.models import SceneDetail
