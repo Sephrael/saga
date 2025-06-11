@@ -630,11 +630,13 @@ async def _apply_patches_to_text(
         )
         return original_text
 
-    replacements.sort(key=lambda x: x[0], reverse=True)
-    current_text_list = list(original_text)
+    replacements.sort(key=lambda x: x[0])
+    parts: List[str] = []
     applied_count = 0
+    last_index = 0
 
     for start_index, end_index, replace_with_text in replacements:
+        parts.append(original_text[last_index:start_index])
         original_segment = original_text[start_index:end_index]
         original_emb = await llm_service.async_get_embedding(original_segment)
         replace_emb = await llm_service.async_get_embedding(replace_with_text)
@@ -646,20 +648,24 @@ async def _apply_patches_to_text(
                 end_index,
                 similarity,
             )
-            continue
-        current_text_list[start_index:end_index] = list(replace_with_text)
-        applied_count += 1
-        logger.info(
-            f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
-            f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
-        )
+            parts.append(original_segment)
+        else:
+            parts.append(replace_with_text)
+            applied_count += 1
+            logger.info(
+                f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
+                f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
+            )
+        last_index = end_index
+
+    parts.append(original_text[last_index:])
 
     num_patches_attempted = len(applicable_patches) - failed_patches_target_not_found
     logger.info(
         f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
     )
 
-    patched_text = "".join(current_text_list)
+    patched_text = "".join(parts)
     patched_text, _ = await utils.deduplicate_text_segments(
         patched_text,
         segment_level="paragraph",
