@@ -46,7 +46,7 @@ setting:
 
 plot_elements:
   inciting_incident: "[Fill-in]"
-  key_plot_points: # List of major turning points or events
+  plot_points: # List of major turning points or events
     - "[Fill-in]"
     - "[Fill-in]"
     - "[Fill-in]"

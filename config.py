@@ -105,7 +105,7 @@ class SagaSettings(BaseSettings):
     TEMPERATURE_PATCH: float = 0.7
 
     # Placeholder fill-in
-    MARKDOWN_FILL_IN_PLACEHOLDER: str = "[Fill-in]"
+    FILL_IN: str = "[Fill-in]"
 
     # LLM Call Settings & Fallbacks
     LLM_RETRY_ATTEMPTS: int = 3

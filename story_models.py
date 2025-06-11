@@ -55,7 +55,7 @@ class PlotElementsModel(BaseModel):
     """Major plot elements provided by the user."""
 
     inciting_incident: Optional[str] = None
-    key_plot_points: List[str] = []
+    plot_points: List[str] = []
     central_conflict: Optional[str] = None
     stakes: Optional[str] = None
 
@@ -132,7 +132,7 @@ def user_story_to_objects(
 
     if model.plot_elements:
         plot_outline["inciting_incident"] = model.plot_elements.inciting_incident
-        plot_outline["key_plot_points"] = model.plot_elements.key_plot_points
+        plot_outline["plot_points"] = model.plot_elements.plot_points
         plot_outline["central_conflict"] = model.plot_elements.central_conflict
         plot_outline["stakes"] = model.plot_elements.stakes
 

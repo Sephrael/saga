@@ -115,17 +115,17 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
         "genre": config.CONFIGURED_GENRE,
         "setting": config.CONFIGURED_SETTING_DESCRIPTION,
         "theme": config.CONFIGURED_THEME,
-        "logline": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "inciting_incident": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "central_conflict": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "stakes": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "key_plot_points": [
-            f"{config.MARKDOWN_FILL_IN_PLACEHOLDER}"
+        "logline": config.FILL_IN,
+        "inciting_incident": config.FILL_IN,
+        "central_conflict": config.FILL_IN,
+        "stakes": config.FILL_IN,
+        "plot_points": [
+            f"{config.FILL_IN}"
             for _ in range(num_default_plot_points)
         ],
-        "narrative_style": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "tone": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "pacing": config.MARKDOWN_FILL_IN_PLACEHOLDER,
+        "narrative_style": config.FILL_IN,
+        "tone": config.FILL_IN,
+        "pacing": config.FILL_IN,
         "is_default": True,
         "source": "default_fallback",
     }
@@ -134,7 +134,7 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
 def create_default_characters(protagonist_name: str) -> Dict[str, CharacterProfile]:
     """Creates a default character profile for the protagonist."""
     profile = CharacterProfile(name=protagonist_name)
-    profile.description = config.MARKDOWN_FILL_IN_PLACEHOLDER
+    profile.description = config.FILL_IN
     profile.updates["role"] = "protagonist"
     return {protagonist_name: profile}
 
@@ -164,10 +164,10 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
 
     for cat_key in standard_categories:
         world_data[cat_key] = {
-            config.MARKDOWN_FILL_IN_PLACEHOLDER: WorldItem.from_dict(
+            config.FILL_IN: WorldItem.from_dict(
                 cat_key,
-                config.MARKDOWN_FILL_IN_PLACEHOLDER,
-                {"description": config.MARKDOWN_FILL_IN_PLACEHOLDER},
+                config.FILL_IN,
+                {"description": config.FILL_IN},
             )
         }
 
@@ -241,7 +241,7 @@ async def bootstrap_plot_outline(
                 field, plot_outline, "bootstrapper/fill_plot_field.j2"
             )
 
-    plot_points = plot_outline.get("key_plot_points", [])
+    plot_points = plot_outline.get("plot_points", [])
     fill_in_count = sum(1 for p in plot_points if utils._is_fill_in(p))
     needed_plot_points = max(
         0,
@@ -250,8 +250,8 @@ async def bootstrap_plot_outline(
     )
 
     if needed_plot_points > 0:
-        tasks["key_plot_points"] = _bootstrap_field(
-            "key_plot_points",
+        tasks["plot_points"] = _bootstrap_field(
+            "plot_points",
             plot_outline,
             "bootstrapper/fill_plot_points.j2",
             is_list=True,
@@ -269,15 +269,15 @@ async def bootstrap_plot_outline(
         if usage:
             for k, v in usage.items():
                 usage_data[k] = usage_data.get(k, 0) + v
-        if field == "key_plot_points":
+        if field == "plot_points":
             new_points = value
             final_points = [
                 p
-                for p in plot_outline.get("key_plot_points", [])
+                for p in plot_outline.get("plot_points", [])
                 if not utils._is_fill_in(p)
             ]
             final_points.extend(new_points)
-            plot_outline["key_plot_points"] = final_points[
+            plot_outline["plot_points"] = final_points[
                 : config.TARGET_PLOT_POINTS_INITIAL_GENERATION
             ]
         elif value:
