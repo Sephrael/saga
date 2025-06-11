@@ -3,19 +3,20 @@
 General utility functions for the Saga Novel Generation system.
 """
 
-import numpy as np
+import asyncio
 import logging
 import re
 import asyncio
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from kg_maintainer.models import SceneDetail
 
 # Local application imports - ensure these paths are correct for your project
-from llm_interface import llm_service, count_tokens
 import spacy
+
 import config  # For FILL_IN
+from llm_interface import count_tokens, llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -467,11 +468,27 @@ async def deduplicate_text_segments(
     min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,  # Use config
     prefer_newer: bool = False,
 ) -> Tuple[str, int]:
-    """
-    Removes near-duplicate segments from text.
-    
-    If ``prefer_newer`` is ``True`` in semantic mode, a newer duplicate will
-    replace an older kept segment rather than being discarded.
+    """Remove near-duplicate segments from text.
+
+    Parameters
+    ----------
+    original_text : str
+        Text from which to remove duplicates.
+    segment_level : str, optional
+        Segment type ("paragraph" or "sentence").
+    similarity_threshold : float, optional
+        Threshold for semantic duplicate detection.
+    use_semantic_comparison : bool, optional
+        Whether to use embeddings for comparison.
+    min_segment_length_chars : int, optional
+        Minimum length of segments considered.
+    prefer_newer : bool, optional
+        If ``True``, keep the newest instance of each duplicate segment.
+
+    Returns
+    -------
+    Tuple[str, int]
+        The deduplicated text and number of characters removed.
     """
     if not original_text.strip():
         return original_text, 0
@@ -497,7 +514,12 @@ async def deduplicate_text_segments(
     else:
         embeddings = [None] * len(segments_with_offsets)
 
-    for i, (seg_text, seg_start, seg_end) in enumerate(segments_with_offsets):
+    indices = range(len(segments_with_offsets))
+    if prefer_newer:
+        indices = range(len(segments_with_offsets) - 1, -1, -1)
+
+    for i in indices:
+        seg_text, seg_start, seg_end = segments_with_offsets[i]
         seg_embedding = embeddings[i]
         if len(seg_text) < min_segment_length_chars:
             segments_to_build_final_text.append((seg_start, seg_end))
@@ -575,10 +597,9 @@ async def deduplicate_text_segments(
 
     segments_to_build_final_text.sort(key=lambda x: x[0])
 
-    deduplicated_parts = [
-        original_text[start:end].strip() for start, end in segments_to_build_final_text
-    ]
-    deduplicated_text = "\n\n".join(deduplicated_parts)
+    deduplicated_text = "".join(
+        original_text[start:end] for start, end in segments_to_build_final_text
+    )
 
     deduplicated_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", deduplicated_text)
     deduplicated_text = re.sub(r"\n{3,}", "\n\n", deduplicated_text).strip()
