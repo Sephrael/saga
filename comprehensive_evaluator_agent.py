@@ -431,9 +431,11 @@ class ComprehensiveEvaluatorAgent:
         plot_point_focus: Optional[str],
         plot_point_index: int,
         previous_chapters_context: str,
+        ignore_spans: Optional[List[Tuple[int, int]]] | None = None,
     ) -> Tuple[EvaluationResult, Optional[Dict[str, int]]]:
+        processed_text = utils.remove_spans_from_text(draft_text, ignore_spans or [])
         logger.info(
-            f"ComprehensiveEvaluatorAgent evaluating chapter {chapter_number} draft (length: {len(draft_text)} chars)..."
+            f"ComprehensiveEvaluatorAgent evaluating chapter {chapter_number} draft (length: {len(processed_text)} chars)..."
         )
         reasons_for_revision_summary: list[str] = []
         problem_details_list: List[ProblemDetail] = []
@@ -523,7 +525,7 @@ class ComprehensiveEvaluatorAgent:
             plot_outline,
             character_profiles,
             world_building,
-            draft_text,
+            processed_text,
             chapter_number,
             plot_point_focus,
             plot_point_index,

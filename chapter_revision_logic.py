@@ -497,8 +497,10 @@ async def _generate_patch_instructions_logic(
 
 
 async def _apply_patches_to_text(
-    original_text: str, patch_instructions: List[PatchInstruction]
-) -> str:
+    original_text: str,
+    patch_instructions: List[PatchInstruction],
+    already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
+) -> Tuple[str, List[Tuple[int, int]]]:
     """
     Applies patch instructions to the original text.
     Prioritizes precise ``target_char_start``/``target_char_end`` from
@@ -508,7 +510,10 @@ async def _apply_patches_to_text(
     similarity > config.REVISION_SIMILARITY_ACCEPTANCE) are skipped.
     """
     if not patch_instructions:
-        return original_text
+        return original_text, []
+
+    if already_patched_spans is None:
+        already_patched_spans = []
 
     applicable_patches: List[PatchInstruction] = []
     for p_idx, p_item in enumerate(patch_instructions):
@@ -606,6 +611,19 @@ async def _apply_patches_to_text(
                     f"overlaps with a previously determined patch for segment {r_start}-{r_end}. Skipping."
                 )
                 break
+        if not has_overlap:
+            for prev_start, prev_end in already_patched_spans:
+                if max(segment_to_replace_start, prev_start) < min(
+                    segment_to_replace_end, prev_end
+                ):
+                    has_overlap = True
+                    logger.info(
+                        "Patch %s overlaps previously patched span %s-%s. Skipping.",
+                        patch_idx + 1,
+                        prev_start,
+                        prev_end,
+                    )
+                    break
 
         if not has_overlap:
             replacements.append(
@@ -630,11 +648,28 @@ async def _apply_patches_to_text(
         )
         return original_text
 
-    replacements.sort(key=lambda x: x[0], reverse=True)
-    current_text_list = list(original_text)
+    applied_spans: List[Tuple[int, int]] = []
+    applied_texts: List[str] = []
+        applied_spans.append((start_index, start_index + len(replace_with_text)))
+        applied_texts.append(replace_with_text)
+
+    final_spans: List[Tuple[int, int]] = []
+    for repl_text in applied_texts:
+        idx = patched_text.find(repl_text)
+        if idx != -1:
+            final_spans.append((idx, idx + len(repl_text)))
+
+    return patched_text, final_spans
+    already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
+) -> Tuple[Optional[Tuple[str, str, List[Tuple[int, int]]]], Optional[Dict[str, int]]]:
+    if already_patched_spans is None:
+        already_patched_spans = []
+
     applied_count = 0
+    last_index = 0
 
     for start_index, end_index, replace_with_text in replacements:
+        parts.append(original_text[last_index:start_index])
         original_segment = original_text[start_index:end_index]
         original_emb = await llm_service.async_get_embedding(original_segment)
         replace_emb = await llm_service.async_get_embedding(replace_with_text)
@@ -646,19 +681,33 @@ async def _apply_patches_to_text(
                 end_index,
                 similarity,
             )
-            continue
-        current_text_list[start_index:end_index] = list(replace_with_text)
-        applied_count += 1
-        logger.info(
-            f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
-            f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
-        )
+            parts.append(original_segment)
+        else:
+            parts.append(replace_with_text)
+            applied_count += 1
+            logger.info(
+                f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
+                f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
+            )
+        last_index = end_index
+
+    parts.append(original_text[last_index:])
 
     num_patches_attempted = len(applicable_patches) - failed_patches_target_not_found
     logger.info(
         f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
     )
-    return "".join(current_text_list)
+
+    patched_text = "".join(parts)
+    patched_text, _ = await utils.deduplicate_text_segments(
+        patched_text,
+        segment_level="paragraph",
+        similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
+        use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
+        min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+        prefer_newer=True,
+    )
+    return patched_text
 
 
 async def revise_chapter_draft_logic(
@@ -727,8 +776,9 @@ async def revise_chapter_draft_logic(
                 or p.get("quote_char_start") is not None
             )
         )
-        or (
-            p["quote_from_original_text"] == "N/A - General Issue"
+            patched_text, new_spans = await _apply_patches_to_text(
+                original_text, patch_instructions, already_patched_spans
+            already_patched_spans.extend(new_spans)
             and p["issue_category"] == "narrative_depth_and_length"
             and (
                 "short" in p["problem_description"].lower()
@@ -1034,6 +1084,7 @@ async def revise_chapter_draft_logic(
     if final_revised_text is not patched_text:
         (
             original_embedding_full_final,
+        already_patched_spans,
             revised_embedding_full_final,
         ) = await asyncio.gather(
             llm_service.async_get_embedding(original_text),
