@@ -186,6 +186,18 @@ async def bootstrap_plot_outline(
             not plot_outline.get("title")
             or utils._is_fill_in(plot_outline.get("title"))
         ),
+        "protagonist_name": (
+            not plot_outline.get("protagonist_name")
+            or utils._is_fill_in(plot_outline.get("protagonist_name"))
+        ),
+        "genre": (
+            not plot_outline.get("genre")
+            or utils._is_fill_in(plot_outline.get("genre"))
+        ),
+        "theme": (
+            not plot_outline.get("theme")
+            or utils._is_fill_in(plot_outline.get("theme"))
+        ),
         "logline": (
             not plot_outline.get("logline")
             or utils._is_fill_in(plot_outline.get("logline"))
@@ -270,16 +282,38 @@ async def bootstrap_characters(
 
     for name, profile in character_profiles.items():
         context = {"profile": profile.to_dict(), "plot_outline": plot_outline}
+
         if not profile.description or utils._is_fill_in(profile.description):
             tasks[(name, "description")] = _bootstrap_field(
-                "description", context, "bootstrapper/fill_character_field.j2"
+                "description",
+                context,
+                "bootstrapper/fill_character_field.j2",
+            )
+
+        if not profile.status or utils._is_fill_in(profile.status):
+            tasks[(name, "status")] = _bootstrap_field(
+                "status",
+                context,
+                "bootstrapper/fill_character_field.j2",
+            )
+
+        trait_fill_count = sum(1 for t in profile.traits if utils._is_fill_in(t))
+        if trait_fill_count or not profile.traits:
+            tasks[(name, "traits")] = _bootstrap_field(
+                "traits",
+                context,
+                "bootstrapper/fill_character_field.j2",
+                is_list=True,
+                list_count=max(trait_fill_count, 3),
             )
 
         if "motivation" in profile.updates and utils._is_fill_in(
             profile.updates["motivation"]
         ):
             tasks[(name, "motivation")] = _bootstrap_field(
-                "motivation", context, "bootstrapper/fill_character_field.j2"
+                "motivation",
+                context,
+                "bootstrapper/fill_character_field.j2",
             )
 
     if not tasks:
@@ -296,6 +330,10 @@ async def bootstrap_characters(
         if value:
             if field == "description":
                 character_profiles[name].description = value
+            elif field == "traits":
+                character_profiles[name].traits = value
+            elif field == "status":
+                character_profiles[name].status = value
             else:
                 character_profiles[name].updates[field] = value
         character_profiles[name].updates["source"] = "bootstrapped"
