@@ -7,10 +7,46 @@ from typing import Any, Coroutine, Dict, List, Optional, Tuple
 import config
 import utils
 from kg_maintainer.models import CharacterProfile, WorldItem
+from yaml_parser import load_yaml_file
+from story_models import UserStoryInputModel
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
+
+WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: Dict[str, str] = {
+    "overview": "_overview_",
+    "locations": "locations",
+    "society": "society",
+    "systems": "systems",
+    "lore": "lore",
+    "history": "history",
+    "factions": "factions",
+}
+
+WORLD_DETAIL_LIST_INTERNAL_KEYS: List[str] = []
+
+
+def _load_user_supplied_data() -> Optional[UserStoryInputModel]:
+    """Load story elements from YAML if available."""
+    data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+    if not data:
+        return None
+    try:
+        return UserStoryInputModel(**data)
+    except Exception as exc:  # pragma: no cover - simple validation wrapper
+        logger.error("Failed to parse user story YAML: %s", exc)
+        return None
+
+
+async def generate_world_building_logic(
+    world_building: Dict[str, Any], plot_outline: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    """Stub world-building generation function."""
+    logger.warning("generate_world_building_logic stub called")
+    if not world_building:
+        world_building = create_default_world()
+    return world_building, None
 
 
 async def _bootstrap_field(
@@ -77,15 +113,19 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
         "title": config.DEFAULT_PLOT_OUTLINE_TITLE,
         "protagonist_name": default_protagonist_name,
         "genre": config.CONFIGURED_GENRE,
+        "setting": config.CONFIGURED_SETTING_DESCRIPTION,
         "theme": config.CONFIGURED_THEME,
-        "logline": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "inciting_incident": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "conflict_summary": config.MARKDOWN_FILL_IN_PLACEHOLDER,
-        "stakes": config.MARKDOWN_FILL_IN_PLACEHOLDER,
+        "logline": config.FILL_IN,
+        "inciting_incident": config.FILL_IN,
+        "central_conflict": config.FILL_IN,
+        "stakes": config.FILL_IN,
         "plot_points": [
-            f"{config.MARKDOWN_FILL_IN_PLACEHOLDER}"
+            f"{config.FILL_IN}"
             for _ in range(num_default_plot_points)
         ],
+        "narrative_style": config.FILL_IN,
+        "tone": config.FILL_IN,
+        "pacing": config.FILL_IN,
         "is_default": True,
         "source": "default_fallback",
     }
@@ -94,7 +134,7 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
 def create_default_characters(protagonist_name: str) -> Dict[str, CharacterProfile]:
     """Creates a default character profile for the protagonist."""
     profile = CharacterProfile(name=protagonist_name)
-    profile.description = config.MARKDOWN_FILL_IN_PLACEHOLDER
+    profile.description = config.FILL_IN
     profile.updates["role"] = "protagonist"
     return {protagonist_name: profile}
 
@@ -112,6 +152,25 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
         "is_default": True,
         "source": "default_fallback",
     }
+
+    standard_categories = [
+        "locations",
+        "society",
+        "systems",
+        "lore",
+        "history",
+        "factions",
+    ]
+
+    for cat_key in standard_categories:
+        world_data[cat_key] = {
+            config.FILL_IN: WorldItem.from_dict(
+                cat_key,
+                config.FILL_IN,
+                {"description": config.FILL_IN},
+            )
+        }
+
     return world_data
 
 
@@ -131,6 +190,22 @@ async def bootstrap_plot_outline(
             not plot_outline.get("title")
             or utils._is_fill_in(plot_outline.get("title"))
         ),
+        "protagonist_name": (
+            not plot_outline.get("protagonist_name")
+            or utils._is_fill_in(plot_outline.get("protagonist_name"))
+        ),
+        "genre": (
+            not plot_outline.get("genre")
+            or utils._is_fill_in(plot_outline.get("genre"))
+        ),
+        "setting": (
+            not plot_outline.get("setting")
+            or utils._is_fill_in(plot_outline.get("setting"))
+        ),
+        "theme": (
+            not plot_outline.get("theme")
+            or utils._is_fill_in(plot_outline.get("theme"))
+        ),
         "logline": (
             not plot_outline.get("logline")
             or utils._is_fill_in(plot_outline.get("logline"))
@@ -139,13 +214,24 @@ async def bootstrap_plot_outline(
             not plot_outline.get("inciting_incident")
             or utils._is_fill_in(plot_outline.get("inciting_incident"))
         ),
-        "conflict_summary": (
-            not plot_outline.get("conflict_summary")
-            or utils._is_fill_in(plot_outline.get("conflict_summary"))
+        "central_conflict": (
+            not plot_outline.get("central_conflict")
+            or utils._is_fill_in(plot_outline.get("central_conflict"))
         ),
         "stakes": (
             not plot_outline.get("stakes")
             or utils._is_fill_in(plot_outline.get("stakes"))
+        ),
+        "narrative_style": (
+            not plot_outline.get("narrative_style")
+            or utils._is_fill_in(plot_outline.get("narrative_style"))
+        ),
+        "tone": (
+            not plot_outline.get("tone") or utils._is_fill_in(plot_outline.get("tone"))
+        ),
+        "pacing": (
+            not plot_outline.get("pacing")
+            or utils._is_fill_in(plot_outline.get("pacing"))
         ),
     }
 
@@ -215,16 +301,38 @@ async def bootstrap_characters(
 
     for name, profile in character_profiles.items():
         context = {"profile": profile.to_dict(), "plot_outline": plot_outline}
+
         if not profile.description or utils._is_fill_in(profile.description):
             tasks[(name, "description")] = _bootstrap_field(
-                "description", context, "bootstrapper/fill_character_field.j2"
+                "description",
+                context,
+                "bootstrapper/fill_character_field.j2",
+            )
+
+        if not profile.status or utils._is_fill_in(profile.status):
+            tasks[(name, "status")] = _bootstrap_field(
+                "status",
+                context,
+                "bootstrapper/fill_character_field.j2",
+            )
+
+        trait_fill_count = sum(1 for t in profile.traits if utils._is_fill_in(t))
+        if trait_fill_count or not profile.traits:
+            tasks[(name, "traits")] = _bootstrap_field(
+                "traits",
+                context,
+                "bootstrapper/fill_character_field.j2",
+                is_list=True,
+                list_count=max(trait_fill_count, 3),
             )
 
         if "motivation" in profile.updates and utils._is_fill_in(
             profile.updates["motivation"]
         ):
             tasks[(name, "motivation")] = _bootstrap_field(
-                "motivation", context, "bootstrapper/fill_character_field.j2"
+                "motivation",
+                context,
+                "bootstrapper/fill_character_field.j2",
             )
 
     if not tasks:
@@ -241,6 +349,10 @@ async def bootstrap_characters(
         if value:
             if field == "description":
                 character_profiles[name].description = value
+            elif field == "traits":
+                character_profiles[name].traits = value
+            elif field == "status":
+                character_profiles[name].status = value
             else:
                 character_profiles[name].updates[field] = value
         character_profiles[name].updates["source"] = "bootstrapped"

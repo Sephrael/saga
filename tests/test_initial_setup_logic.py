@@ -9,7 +9,7 @@ from initial_setup_logic import (
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
 )
-import config  # For config.MARKDOWN_FILL_IN_PLACEHOLDER and other config values if needed
+import config  # For config.FILL_IN and other config values if needed
 
 pytestmark = pytest.mark.xfail(
     reason="generate_world_building_logic interface updated",
@@ -23,7 +23,7 @@ class MockAgent:
         self.plot_outline = {
             "title": "Test Novel",
             "genre": "Fantasy",
-            "setting_description": "A land of high mountains and deep valleys.",
+            "setting": "A land of high mountains and deep valleys.",
         }
         # World building can start empty or with some pre-existing user data
         self.world_building = {}
@@ -118,7 +118,7 @@ async def test_invalid_json_output_decode_error(agent_instance):
         {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
     )
 
-    initial_setting_desc = agent_instance.plot_outline["setting_description"]
+    initial_setting_desc = agent_instance.plot_outline["setting"]
 
     with patch(
         "initial_setup_logic.llm_service.async_call_llm",
@@ -211,7 +211,7 @@ async def test_llm_provides_integer_for_expected_list(agent_instance):
     assert "Magic System" in wb["systems"]
     # The code should replace this with a fill-in placeholder list
     assert wb["systems"]["Magic System"]["rules"] == [
-        config.MARKDOWN_FILL_IN_PLACEHOLDER
+        config.FILL_IN
     ]
 
 
@@ -293,10 +293,10 @@ async def test_llm_output_empty_list_for_list_field(agent_instance):
 
     wb = agent_instance.world_building
     # The current logic, if an empty list is provided by LLM for a list key,
-    # and the existing value was [Fill-in] or None, it will replace it with [config.MARKDOWN_FILL_IN_PLACEHOLDER]
+    # and the existing value was [Fill-in] or None, it will replace it with [config.FILL_IN]
     # This is because `processed_list` will be empty, and it hits the `elif utils._is_fill_in(existing_item_val) or existing_item_val is None:`
     assert wb["factions"]["Silent Monks"]["goals"] == [
-        config.MARKDOWN_FILL_IN_PLACEHOLDER
+        config.FILL_IN
     ]
 
 
@@ -307,7 +307,7 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
         "source": "user_supplied_yaml",  # Mark as user-supplied
         "_overview_": {
             "description": "User's original world description.",
-            "mood": config.MARKDOWN_FILL_IN_PLACEHOLDER,  # User wants LLM to fill this
+            "mood": config.FILL_IN,  # User wants LLM to fill this
         },
         "locations": {
             "User Keep": {
@@ -422,7 +422,7 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     agent_instance.plot_outline = {
         "title": "Test Novel",
         "genre": "Fantasy",
-        "setting_description": "A world of tests",
+        "setting": "A world of tests",
     }
     agent_instance.world_building = {}  # Start fresh
 

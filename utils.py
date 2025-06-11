@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 # Local application imports - ensure these paths are correct for your project
 from llm_interface import llm_service, count_tokens
 import spacy
-import config  # For MARKDOWN_FILL_IN_PLACEHOLDER
+import config  # For FILL_IN
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ spacy_manager = SpaCyModelManager()
 
 def _is_fill_in(value: Any) -> bool:
     """Checks if a value is the [Fill-in] placeholder."""
-    return isinstance(value, str) and value == config.MARKDOWN_FILL_IN_PLACEHOLDER
+    return isinstance(value, str) and value == config.FILL_IN
 
 
 def load_spacy_model_if_needed() -> None:
