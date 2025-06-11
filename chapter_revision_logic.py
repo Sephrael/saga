@@ -658,7 +658,17 @@ async def _apply_patches_to_text(
     logger.info(
         f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
     )
-    return "".join(current_text_list)
+
+    patched_text = "".join(current_text_list)
+    patched_text, _ = await utils.deduplicate_text_segments(
+        patched_text,
+        segment_level="paragraph",
+        similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
+        use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
+        min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+        prefer_newer=True,
+    )
+    return patched_text
 
 
 async def revise_chapter_draft_logic(

@@ -913,6 +913,20 @@ class NANA_Orchestrator:
                     current_raw_llm_output = (
                         rev_raw_output if rev_raw_output else current_raw_llm_output
                     )
+                    (
+                        current_text_to_process,
+                        removed_after_patch,
+                    ) = await self.perform_deduplication(
+                        current_text_to_process, novel_chapter_number
+                    )
+                    if removed_after_patch > 0:
+                        de_duplication_occurred_this_chapter = True
+                        is_from_flawed_source_for_kg = True
+                        await self._save_debug_output(
+                            novel_chapter_number,
+                            f"post_patch_dedup_attempt_{attempt}",
+                            current_text_to_process,
+                        )
                     logger.info(
                         f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval)."
                     )
