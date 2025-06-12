@@ -464,32 +464,29 @@ def get_text_segments(
 async def deduplicate_text_segments(
     original_text: str,
     segment_level: str = "paragraph",
-    similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD,  # Use config
-    use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,  # Use config
-    min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,  # Use config
+    similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD,
+    use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,
+    min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
     prefer_newer: bool = False,
 ) -> Tuple[str, int]:
-    """Remove near-duplicate segments from text.
+    """
+    Remove near-duplicate segments from text. A more robust implementation.
 
-    Parameters
-    ----------
-    original_text : str
-        Text from which to remove duplicates.
-    segment_level : str, optional
-        Segment type ("paragraph" or "sentence").
-    similarity_threshold : float, optional
-        Threshold for semantic duplicate detection.
-    use_semantic_comparison : bool, optional
-        Whether to use embeddings for comparison.
-    min_segment_length_chars : int, optional
-        Minimum length of segments considered.
-    prefer_newer : bool, optional
-        If ``True``, keep the newest instance of each duplicate segment.
+    This function identifies duplicate segments (paragraphs or sentences) and
+    rebuilds the text with only the unique ones. It can use either semantic
+    similarity (via embeddings) or normalized string comparison.
 
-    Returns
-    -------
-    Tuple[str, int]
-        The deduplicated text and number of characters removed.
+    Args:
+        original_text: The text to deduplicate.
+        segment_level: "paragraph" or "sentence".
+        similarity_threshold: Threshold for semantic duplicate detection.
+        use_semantic_comparison: Whether to use embeddings for comparison.
+        min_segment_length_chars: Segments shorter than this are ignored.
+        prefer_newer: If True, keeps the last occurrence of a duplicate set.
+                      If False, keeps the first.
+
+    Returns:
+        A tuple containing the deduplicated text and the number of characters removed.
     """
     if not original_text.strip():
         return original_text, 0
@@ -498,11 +495,13 @@ async def deduplicate_text_segments(
     if not segments_with_offsets:
         return original_text, 0
 
-    kept_segment_info_for_semantic: List[Tuple[int, int, np.ndarray]] = []
-    seen_normalized_texts_for_string: Dict[str, Tuple[int, int]] = {}
-    segments_to_build_final_text: List[Tuple[int, int]] = []
+    num_segments = len(segments_with_offsets)
+    indices_to_remove = set()
 
-    embeddings: List[Optional[np.ndarray]]
+    # Pre-calculate embeddings or normalized texts
+    embeddings: List[Optional[np.ndarray]] = []
+    normalized_texts: List[str] = []
+
     if use_semantic_comparison:
         tasks = [
             llm_service.async_get_embedding(seg_text)
@@ -513,49 +512,87 @@ async def deduplicate_text_segments(
             res if not isinstance(res, Exception) else None for res in results
         ]
     else:
-        embeddings = [None] * len(segments_with_offsets)
+        normalized_texts = [
+            _normalize_text_for_matching(seg[0]) for seg in segments_with_offsets
+        ]
 
-    indices = range(len(segments_with_offsets))
-    if prefer_newer:
-        indices = range(len(segments_with_offsets) - 1, -1, -1)
+    # The loop direction determines which duplicate is kept
+    iteration_range = (
+        range(num_segments - 1, -1, -1) if prefer_newer else range(num_segments)
+    )
 
-    for i in indices:
-        seg_text, seg_start, seg_end = segments_with_offsets[i]
-        seg_embedding = embeddings[i]
-        if len(seg_text) < min_segment_length_chars:
-            segments_to_build_final_text.append((seg_start, seg_end))
-            if use_semantic_comparison and seg_embedding is not None:
-                kept_segment_info_for_semantic.append(
-                    (seg_start, seg_end, seg_embedding)
-                )
+    for i in iteration_range:
+        if i in indices_to_remove:
             continue
 
-        is_duplicate = False
-        replaced_span: Optional[Tuple[int, int]] = None
-        if use_semantic_comparison:
-            current_seg_embedding = seg_embedding
-            if current_seg_embedding is None:
-                logger.warning(
-                    f"De-duplication: Could not get embedding for segment (idx {i}, chars {seg_start}-{seg_end}). Keeping it."
-                )
-                segments_to_build_final_text.append((seg_start, seg_end))
-                continue  # Skip to next segment
+        text_i, start_i, end_i = segments_with_offsets[i]
+        if len(text_i) < min_segment_length_chars:
+            continue
 
-            for idx_kept, (k_start, k_end, kept_embedding) in enumerate(
-                kept_segment_info_for_semantic
-            ):
-                similarity = numpy_cosine_similarity(
-                    current_seg_embedding, kept_embedding
-                )
-                if similarity > similarity_threshold:
-                    if prefer_newer:
-                        kept_segment_info_for_semantic.pop(idx_kept)
-                        try:
-                            segments_to_build_final_text.remove((k_start, k_end))
-                        except ValueError:
-                            pass
-                    else:
+        # Compare with other segments
+        # The inner loop direction depends on the outer loop direction
+        # to ensure we compare each pair only once.
+        inner_range = range(i - 1, -1, -1) if prefer_newer else range(i + 1, num_segments)
+
+        for j in inner_range:
+            if j in indices_to_remove:
+                continue
+
+            text_j, start_j, end_j = segments_with_offsets[j]
+            if len(text_j) < min_segment_length_chars:
+                continue
+
+            is_duplicate = False
+            if use_semantic_comparison:
+                emb_i = embeddings[i] if embeddings else None
+                emb_j = embeddings[j] if embeddings else None
+                if emb_i is not None and emb_j is not None:
+                    similarity = numpy_cosine_similarity(emb_i, emb_j)
+                    if similarity > similarity_threshold:
                         is_duplicate = True
+                else:  # Fallback to string if embedding failed for one
+                    is_duplicate = _normalize_text_for_matching(
+                        text_i
+                    ) == _normalize_text_for_matching(text_j)
+            else:
+                is_duplicate = normalized_texts[i] == normalized_texts[j]
+
+            if is_duplicate:
+                # 'j' is always the one to be removed because of the loop structure.
+                indices_to_remove.add(j)
+                method_used = "semantic" if use_semantic_comparison else "normalized string"
+                logger.info(
+                    f"De-duplication: Marking segment (idx {j}, chars {start_j}-{end_j}) for removal as duplicate of (idx {i}, chars {start_i}-{end_i}). Method: {method_used}."
+                )
+
+    if not indices_to_remove:
+        return original_text, 0
+
+    indices_to_keep = sorted(
+        [i for i in range(num_segments) if i not in indices_to_remove]
+    )
+
+    # Rebuild the text from non-duplicate segments using their original offsets
+    # This preserves interstitial whitespace correctly.
+    result_parts = []
+    last_end = 0
+    for i in indices_to_keep:
+        _, seg_start, seg_end = segments_with_offsets[i]
+        result_parts.append(original_text[last_end:seg_start])
+        result_parts.append(original_text[seg_start:seg_end])
+        last_end = seg_end
+    
+    # Append any trailing content after the last kept segment
+    result_parts.append(original_text[last_end:])
+    
+    deduplicated_text = "".join(result_parts)
+
+    # Final cleanup of excessive newlines
+    deduplicated_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", deduplicated_text)
+    deduplicated_text = re.sub(r"\n{3,}", "\n\n", deduplicated_text).strip()
+
+    characters_removed_count = len(original_text) - len(deduplicated_text)
+    return deduplicated_text, characters_removed_count
 
 
 def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
@@ -580,55 +617,3 @@ def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
         last_end = max(last_end, end)
     result_parts.append(text[last_end:])
     return "".join(result_parts)
-    
-    if not is_duplicate or prefer_newer:
-            kept_segment_info_for_semantic.append(
-                (seg_start, seg_end, current_seg_embedding)
-            )
-            segments_to_build_final_text.append((seg_start, seg_end))
-    else:  # Normalized string comparison
-        normalized_current_seg = _normalize_text_for_matching(seg_text)
-        if normalized_current_seg in seen_normalized_texts_for_string:
-            is_duplicate = True
-            if prefer_newer:
-                replaced_span = seen_normalized_texts_for_string[
-                    normalized_current_seg
-                ]
-                segments_to_build_final_text.remove(replaced_span)
-                seen_normalized_texts_for_string[normalized_current_seg] = (
-                    seg_start,
-                    seg_end,
-                )
-                segments_to_build_final_text.append((seg_start, seg_end))
-        else:
-            seen_normalized_texts_for_string[normalized_current_seg] = (
-                seg_start,
-                seg_end,
-            )
-            segments_to_build_final_text.append((seg_start, seg_end))
-
-    if is_duplicate:
-        method_used = "semantic" if use_semantic_comparison else "normalized string"
-        if prefer_newer and replaced_span is not None:
-            logger.info(
-                f"De-duplication: Replacing earlier segment {replaced_span[0]}-{replaced_span[1]} with later segment {seg_start}-{seg_end}"
-            )
-        else:
-            logger.info(
-                f"De-duplication: Removing segment (idx {i}, chars {seg_start}-{seg_end}, method: {method_used}) starting with: '{seg_text[:60].replace(chr(10), ' ')}...'"
-            )
-
-    if len(segments_to_build_final_text) == len(segments_with_offsets):
-        return original_text, 0
-
-    segments_to_build_final_text.sort(key=lambda x: x[0])
-
-    deduplicated_text = "".join(
-        original_text[start:end] for start, end in segments_to_build_final_text
-    )
-
-    deduplicated_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", deduplicated_text)
-    deduplicated_text = re.sub(r"\n{3,}", "\n\n", deduplicated_text).strip()
-
-    characters_removed_count = len(original_text) - len(deduplicated_text)
-    return deduplicated_text, characters_removed_count

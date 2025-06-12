@@ -26,14 +26,11 @@ utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this mod
 
 
 def _get_formatted_scene_plan_from_agent_or_fallback(
-    # agent: Any, # This 'agent' is the orchestrator - No longer needed for this specific function
     chapter_plan: List[SceneDetail],
     model_name_for_tokens: str,
     max_tokens_budget: int,
 ) -> str:
     """Formats a chapter plan into plain text for LLM prompts using the central utility."""
-    # The previous attempt to call agent.drafting_agent._format_scene_plan_for_prompt was incorrect
-    # as DraftingAgent does not have this method. The utility is in utils.py.
     return utils.format_scene_plan_for_prompt(
         chapter_plan, model_name_for_tokens, max_tokens_budget
     )
@@ -139,7 +136,7 @@ async def _generate_single_patch_instruction_llm(
         formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback(
             chapter_plan,
             config.PATCH_GENERATION_MODEL,
-            max_plan_tokens_for_patch_prompt,  # Removed agent argument
+            max_plan_tokens_for_patch_prompt,
         )
         plan_focus_section_parts.append(formatted_plan)
         if "plan truncated" in formatted_plan:
@@ -218,7 +215,7 @@ async def _generate_single_patch_instruction_llm(
         original_snippet_tokens = count_tokens(
             original_chapter_text_snippet_for_llm,
             config.PATCH_GENERATION_MODEL,
-        )  # MODIFIED
+        )
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
         max_patch_output_tokens = min(
@@ -303,7 +300,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
     (
         replace_with_text_cleaned,
         usage_data,
-    ) = await llm_service.async_call_llm(  # MODIFIED
+    ) = await llm_service.async_call_llm(
         model_name=config.PATCH_GENERATION_MODEL,
         prompt=prompt,
         temperature=config.Temperatures.PATCH,
@@ -502,202 +499,115 @@ async def _apply_patches_to_text(
     already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
 ) -> Tuple[str, List[Tuple[int, int]]]:
     """
-    Applies patch instructions to the original text.
-    Prioritizes precise ``target_char_start``/``target_char_end`` from
-    ``PatchInstruction`` (expected to be sentence boundaries). Falls back to
-    semantic paragraph search if precise offsets are missing. Patches whose
-    replacement text is almost identical to the original segment (cosine
-    similarity > config.REVISION_SIMILARITY_ACCEPTANCE) are skipped.
+    Applies patch instructions to the original text and returns the new text and a
+    comprehensive, re-mapped list of all patched spans (old and new).
     """
-    if not patch_instructions:
-        return original_text, []
-
     if already_patched_spans is None:
         already_patched_spans = []
 
-    applicable_patches: List[PatchInstruction] = []
-    for p_idx, p_item in enumerate(patch_instructions):
-        has_content = p_item["replace_with"].strip()
-        has_precise_offsets = (
-            p_item.get("target_char_start") is not None
-            and p_item.get("target_char_end") is not None
-        )
-        has_specific_quote_text = (
-            p_item["original_problem_quote_text"] != "N/A - General Issue"
-            and p_item["original_problem_quote_text"].strip()
-        )
+    if not patch_instructions:
+        return original_text, already_patched_spans
 
-        if has_content and (has_precise_offsets or has_specific_quote_text):
-            applicable_patches.append(p_item)
-        elif (
-            p_item["original_problem_quote_text"] == "N/A - General Issue"
-            and has_content
-        ):
-            logger.info(
-                f"Patch {p_idx + 1} for 'N/A - General Issue' (expansion) generated new content. This patch type is not auto-inserted here."
-            )
-        else:
-            logger.debug(
-                f"Skipping patch application for (Problem {p_idx + 1}): '{p_item['original_problem_quote_text'][:50]}' (no target info or no replacement content)."
-            )
-
-    if not applicable_patches:
-        logger.info(
-            "No patches with specific target information or content to apply for segment replacement."
-        )
-        return original_text
-
+    # 1. Prepare new replacements, filtering out overlaps with existing patched spans.
     replacements: List[Tuple[int, int, str]] = []
-    failed_patches_target_not_found = 0
+    for patch_idx, patch in enumerate(patch_instructions):
+        segment_start: Optional[int] = patch.get("target_char_start")
+        segment_end: Optional[int] = patch.get("target_char_end")
+        method_used = "direct offsets"
 
-    for patch_idx, patch in enumerate(applicable_patches):
-        segment_to_replace_start: Optional[int] = patch.get("target_char_start")
-        segment_to_replace_end: Optional[int] = patch.get("target_char_end")
-        method_used = "spaCy-derived sentence/quote offsets"
-
-        if segment_to_replace_start is None or segment_to_replace_end is None:
-            quote_text_for_semantic_search = patch["original_problem_quote_text"]
-            if (
-                quote_text_for_semantic_search != "N/A - General Issue"
-                and quote_text_for_semantic_search.strip()
-            ):
+        if segment_start is None or segment_end is None:
+            quote_text = patch["original_problem_quote_text"]
+            if quote_text != "N/A - General Issue" and quote_text.strip():
                 logger.info(
-                    f"Patch {patch_idx + 1}: Missing precise offsets for problem '{quote_text_for_semantic_search[:50]}'. Attempting semantic paragraph search."
+                    f"Patch {patch_idx+1}: Missing direct offsets for '{quote_text[:50]}...'. Using semantic search."
                 )
-                method_used = "Semantic paragraph search (fallback)"
-                semantic_match_info = await utils.find_semantically_closest_segment(
-                    original_text,
-                    quote_text_for_semantic_search,
-                    segment_type="paragraph",
-                    min_similarity_threshold=0.60,
+                method_used = "semantic search"
+                match = await utils.find_semantically_closest_segment(
+                    original_text, quote_text, "paragraph"
                 )
-                if semantic_match_info:
-                    segment_to_replace_start, segment_to_replace_end, score = (
-                        semantic_match_info
-                    )
-                    logger.info(
-                        f"Patch {patch_idx + 1} ({method_used}): Identified target paragraph "
-                        f"at original chars {segment_to_replace_start}-{segment_to_replace_end} (Score: {score:.2f})."
-                    )
-                else:
-                    logger.warning(
-                        f"Patching (Patch {patch_idx + 1}): Fallback semantic search failed for '{quote_text_for_semantic_search[:100]}'. Skipping this patch."
-                    )
-                    failed_patches_target_not_found += 1
-                    continue
+                if match:
+                    segment_start, segment_end, _ = match
             else:
                 logger.warning(
-                    f"Patch {patch_idx + 1}: Skipping as it has no precise offsets and no specific quote text for semantic search. Quote: '{quote_text_for_semantic_search}'"
+                    f"Patch {patch_idx+1}: Cannot apply, no quote text for search and no offsets."
                 )
-                failed_patches_target_not_found += 1
                 continue
 
-        if segment_to_replace_start is None or segment_to_replace_end is None:
-            logger.error(
-                f"Patch {patch_idx + 1}: Logic error, segment_to_replace offsets are still None after checks. Skipping. Patch: {patch}"
+        if segment_start is None or segment_end is None:
+            logger.warning(
+                f"Patch {patch_idx+1}: Failed to find target segment via {method_used}."
             )
-            failed_patches_target_not_found += 1
             continue
 
-        has_overlap = False
-        for r_start, r_end, _ in replacements:
-            if max(segment_to_replace_start, r_start) < min(
-                segment_to_replace_end, r_end
-            ):
-                has_overlap = True
-                logger.warning(
-                    f"Patch {patch_idx + 1} for problem '{patch['original_problem_quote_text'][:50]}' "
-                    f"(targets {segment_to_replace_start}-{segment_to_replace_end} via {method_used}) "
-                    f"overlaps with a previously determined patch for segment {r_start}-{r_end}. Skipping."
-                )
-                break
-        if not has_overlap:
-            for prev_start, prev_end in already_patched_spans:
-                if max(segment_to_replace_start, prev_start) < min(
-                    segment_to_replace_end, prev_end
-                ):
-                    has_overlap = True
-                    logger.info(
-                        "Patch %s overlaps previously patched span %s-%s. Skipping.",
-                        patch_idx + 1,
-                        prev_start,
-                        prev_end,
-                    )
-                    break
+        # Check for overlaps with already patched spans and other new patches in this batch
+        is_overlapping = any(
+            max(segment_start, old_start) < min(segment_end, old_end)
+            for old_start, old_end in already_patched_spans
+        ) or any(
+            max(segment_start, r_start) < min(segment_end, r_end)
+            for r_start, r_end, _ in replacements
+        )
 
-        if not has_overlap:
-            replacements.append(
-                (
-                    segment_to_replace_start,
-                    segment_to_replace_end,
-                    patch["replace_with"],
-                )
+        if is_overlapping:
+            logger.warning(
+                f"Patch {patch_idx+1} for segment {segment_start}-{segment_end} overlaps with a previously patched area or another new patch. Skipping."
             )
-            logger.info(
-                f"Patch {patch_idx + 1} ({method_used}): Queued replacement for segment {segment_to_replace_start}-{segment_to_replace_end}."
-            )
+            continue
 
-    if failed_patches_target_not_found > 0:
-        logger.warning(
-            f"{failed_patches_target_not_found}/{len(applicable_patches)} applicable patches failed (target segment not found)."
+        replacements.append((segment_start, segment_end, patch["replace_with"]))
+        logger.info(
+            f"Patch {patch_idx+1}: Queued replacement for {segment_start}-{segment_end} via {method_used}."
         )
 
     if not replacements:
-        logger.info(
-            "No patches could be confidently mapped to text segments for replacement."
+        logger.info("No non-overlapping patches to apply in this cycle.")
+        return original_text, already_patched_spans
+
+    # 2. Build the new text and remap all spans in a single pass.
+    # Create a unified list of all operations (old spans to copy, new spans to insert).
+    all_ops: List[Dict[str, Any]] = []
+    for start, end in already_patched_spans:
+        all_ops.append(
+            {"type": "old", "start": start, "end": end, "text": original_text[start:end]}
         )
-        return original_text
+    for start, end, text in replacements:
+        all_ops.append({"type": "new", "start": start, "end": end, "text": text})
 
-    replacements.sort(key=lambda x: x[0], reverse=True)
-    current_text_list = list(original_text)
-    applied_count = 0
-    applied_spans: List[Tuple[int, int]] = []
-    applied_texts: List[str] = []
+    all_ops.sort(key=lambda x: x["start"])
 
-    for start_index, end_index, replace_with_text in replacements:
-        original_segment = original_text[start_index:end_index]
-        original_emb = await llm_service.async_get_embedding(original_segment)
-        replace_emb = await llm_service.async_get_embedding(replace_with_text)
-        similarity = utils.numpy_cosine_similarity(original_emb, replace_emb)
-        if similarity > config.REVISION_SIMILARITY_ACCEPTANCE:
-            logger.warning(
-                "Patch for segment %s-%s skipped due to high similarity %.2f",
-                start_index,
-                end_index,
-                similarity,
-            )
-            continue
-        current_text_list[start_index:end_index] = list(replace_with_text)
-        applied_count += 1
-        applied_spans.append((start_index, start_index + len(replace_with_text)))
-        applied_texts.append(replace_with_text)
-        logger.info(
-            f"Applied patch: Replaced original segment from char {start_index} to {end_index} "
-            f"(length {end_index - start_index}) with new text (length {len(replace_with_text)})."
-        )
+    result_parts = []
+    all_spans_in_new_text = []
+    last_original_end = 0
 
-    num_patches_attempted = len(applicable_patches) - failed_patches_target_not_found
+    for op in all_ops:
+        # Copy the text from the end of the last operation to the start of this one
+        result_parts.append(original_text[last_original_end : op["start"]])
+
+        # Calculate the starting position of the new span in the constructed text
+        new_span_start = len("".join(result_parts))
+
+        # Append the operation's text (either old text or new replacement text)
+        result_parts.append(op["text"])
+
+        # Calculate the end position and add the span to our list
+        new_span_end = len("".join(result_parts))
+        all_spans_in_new_text.append((new_span_start, new_span_end))
+
+        # Update the pointer for the next iteration
+        last_original_end = op["end"]
+
+    # Append any remaining text after the last operation
+    result_parts.append(original_text[last_original_end:])
+
+    patched_text = "".join(result_parts)
+    final_spans = sorted(all_spans_in_new_text)
+
     logger.info(
-        f"Applied {applied_count} out of {num_patches_attempted if num_patches_attempted >= 0 else len(applicable_patches)} patches that targeted specific segments."
+        f"Applied {len(replacements)} new patches. Total protected spans in new text: {len(final_spans)}."
     )
-
-    patched_text = "".join(current_text_list)
-    patched_text, _ = await utils.deduplicate_text_segments(
-        patched_text,
-        segment_level="paragraph",
-        similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
-        use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
-        min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
-        prefer_newer=True,
-    )
-
-    final_spans: List[Tuple[int, int]] = []
-    for repl_text in applied_texts:
-        idx = patched_text.find(repl_text)
-        if idx != -1:
-            final_spans.append((idx, idx + len(repl_text)))
 
     return patched_text, final_spans
+
 
 async def revise_chapter_draft_logic(
     plot_outline: Dict[str, Any],
@@ -743,7 +653,10 @@ async def revise_chapter_draft_logic(
         logger.info(
             f"No specific problems found for ch {chapter_number}, and not marked for revision. No revision performed."
         )
-        return None, None
+        return (
+            (original_text, "No revision performed.", []),
+            None,
+        )
 
     revision_reason_str_list = evaluation_result.get("reasons", [])
     revision_reason_str = (
@@ -756,31 +669,11 @@ async def revise_chapter_draft_logic(
     )
 
     patched_text: Optional[str] = None
-    raw_patch_llm_outputs_combined_parts: List[str] = []
+    all_spans_in_patched_text: List[Tuple[int, int]] = already_patched_spans
 
-    actionable_problems_for_patch_gen_check = [
-        p
-        for p in problems_to_fix
-        if (
-            p["quote_from_original_text"] != "N/A - General Issue"
-            and p["quote_from_original_text"].strip()
-            and (
-                p.get("sentence_char_start") is not None
-                or p.get("quote_char_start") is not None
-            )
-            and p["issue_category"] == "narrative_depth_and_length"
-            and (
-                "short" in p["problem_description"].lower()
-                or "length" in p["problem_description"].lower()
-                or "expand" in p["suggested_fix_focus"].lower()
-                or "depth" in p["problem_description"].lower()
-            )
-        )
-    ]
-
-    if config.ENABLE_PATCH_BASED_REVISION and actionable_problems_for_patch_gen_check:
+    if config.ENABLE_PATCH_BASED_REVISION:
         logger.info(
-            f"Attempting patch-based revision for Ch {chapter_number} with {len(actionable_problems_for_patch_gen_check)} potentially actionable problem(s)."
+            f"Attempting patch-based revision for Ch {chapter_number} with {len(problems_to_fix)} problem(s)."
         )
         (
             patch_instructions,
@@ -795,88 +688,44 @@ async def revise_chapter_draft_logic(
         )
         _add_usage(patch_usage)
         if patch_instructions:
-            patched_text, new_spans = await _apply_patches_to_text(
+            (
+                patched_text,
+                all_spans_in_patched_text,
+            ) = await _apply_patches_to_text(
                 original_text, patch_instructions, already_patched_spans
             )
-            already_patched_spans.extend(new_spans)
-            raw_patch_llm_outputs_combined_parts.append(
-                f"Chapter revised using {len(patch_instructions)} generated patch instructions. "
-                f"(Note: Not all generated patches may have been auto-applied if they were for 'N/A - General Issue' or target segment not found.)\n"
-            )
             logger.info(
-                f"Patch process for Ch {chapter_number}: Generated {len(patch_instructions)} patch instructions. "
-                f"Original len: {len(original_text)}, Patched text len (after auto-application): {len(patched_text if patched_text else '')}."
+                f"Patch process for Ch {chapter_number}: Generated {len(patch_instructions)} patch instructions and applied them. "
+                f"Original len: {len(original_text)}, Patched text len: {len(patched_text if patched_text else '')}."
             )
         else:
             logger.warning(
                 f"Patch-based revision for Ch {chapter_number}: No valid patch instructions were generated. Will consider full rewrite if needed."
             )
 
-    raw_patch_llm_outputs_combined_str = "".join(raw_patch_llm_outputs_combined_parts)
-
     final_revised_text: Optional[str] = None
-    final_raw_llm_output: Optional[str] = None
+    final_raw_llm_output: Optional[
+        str
+    ] = f"Chapter revised using {len(all_spans_in_patched_text) - len(already_patched_spans)} new patches."
+    final_spans_for_next_cycle = all_spans_in_patched_text
+
     use_patched_text_as_final = False
-
     if patched_text is not None and patched_text != original_text:
-        if len(patched_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH * 0.7:
-            logger.warning(
-                f"Patched draft for ch {chapter_number} is quite short ({len(patched_text)} chars). May still fall back to full rewrite if major issues remain."
-            )
-        sim_original_embedding, sim_patched_embedding = await asyncio.gather(
-            llm_service.async_get_embedding(original_text),
-            llm_service.async_get_embedding(patched_text),
+        use_patched_text_as_final = True
+
+    if use_patched_text_as_final:
+        final_revised_text = patched_text
+        logger.info(
+            f"Ch {chapter_number}: Using patched text as the revised version."
         )
-        if sim_original_embedding is not None and sim_patched_embedding is not None:
-            similarity_score = utils.numpy_cosine_similarity(
-                sim_original_embedding, sim_patched_embedding
-            )
-            logger.info(
-                f"Patched text similarity with original: {similarity_score:.4f}"
-            )
-            if similarity_score >= config.REVISION_SIMILARITY_ACCEPTANCE:
-                logger.warning(
-                    f"Patched text for ch {chapter_number} is very similar to original (Score: {similarity_score:.4f}). Patches might have been ineffective or minor. May consider full rewrite if problems persist."
-                )
-            else:
-                use_patched_text_as_final = True
-        else:
-            logger.warning(
-                f"Could not get embeddings for patched text similarity check of ch {chapter_number}. Assuming patched text is different enough if it exists and changed."
-            )
-            use_patched_text_as_final = True
-        if use_patched_text_as_final:
-            final_revised_text = patched_text
-            final_raw_llm_output = raw_patch_llm_outputs_combined_str
-            logger.info(
-                f"Ch {chapter_number}: Tentatively using patched text as the revised version. Final decision after re-evaluation (if any problems necessitate full rewrite)."
-            )
 
+    # Decide if a full rewrite is still necessary
     if not use_patched_text_as_final and evaluation_result.get("needs_revision"):
-        if (
-            config.ENABLE_PATCH_BASED_REVISION
-            and actionable_problems_for_patch_gen_check
-            and patched_text is None
-        ):
-            logger.warning(
-                f"Patching attempted for Ch {chapter_number} but produced no usable text. Falling back to full rewrite."
-            )
-        elif not actionable_problems_for_patch_gen_check and evaluation_result.get(
-            "needs_revision"
-        ):
-            logger.info(
-                f"No problems suitable for patching in Ch {chapter_number}, but revision needed. Proceeding with full rewrite."
-            )
-        elif not config.ENABLE_PATCH_BASED_REVISION and evaluation_result.get(
-            "needs_revision"
-        ):
-            logger.info(
-                f"Patching disabled, and revision needed. Proceeding with full rewrite for Ch {chapter_number}."
-            )
-
-        logger.info(f"Proceeding with full chapter rewrite for Ch {chapter_number}.")
+        logger.info(
+            f"Proceeding with full chapter rewrite for Ch {chapter_number} as patching was ineffective or disabled."
+        )
         max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
-        original_snippet = truncate_text_by_tokens(  # MODIFIED
+        original_snippet = truncate_text_by_tokens(
             original_text,
             config.REVISION_MODEL,
             max_original_snippet_tokens,
@@ -888,7 +737,7 @@ async def revise_chapter_draft_logic(
         )
         max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
-            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(  # Removed agent argument
+            formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(
                 chapter_plan,
                 config.REVISION_MODEL,
                 max_plan_tokens_for_full_rewrite,
@@ -919,20 +768,7 @@ async def revise_chapter_draft_logic(
             )
             for p in problems_to_fix
         )
-        needs_expansion_from_reasons = any(
-            kw in revision_reason_str.lower()
-            for kw in [
-                "too short",
-                "lacking in depth",
-                "brief",
-                "expand",
-                "length",
-                "narrative depth",
-                "detail",
-                "insufficient",
-            ]
-        )
-        if needs_expansion_from_problems or needs_expansion_from_reasons:
+        if needs_expansion_from_problems:
             length_issue_explicit_instruction_full_rewrite_parts.extend(
                 [
                     "\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. ",
@@ -982,9 +818,7 @@ async def revise_chapter_draft_logic(
                 f"You are an expert novelist rewriting Chapter {chapter_number} featuring protagonist {protagonist_name_full_rewrite}.",
                 "**Critique/Reason(s) for Revision (MUST be addressed comprehensively):**",
                 "--- FEEDBACK START ---",
-                llm_service.clean_model_response(
-                    revision_reason_str
-                ).strip(),  # MODIFIED
+                llm_service.clean_model_response(revision_reason_str).strip(),
                 "--- FEEDBACK END ---",
                 all_problem_descriptions_str,
                 deduplication_note,
@@ -1023,7 +857,7 @@ async def revise_chapter_draft_logic(
         (
             raw_revised_llm_output_for_log,
             full_rewrite_usage,
-        ) = await llm_service.async_call_llm(  # MODIFIED
+        ) = await llm_service.async_call_llm(
             model_name=config.REVISION_MODEL,
             prompt=prompt_full_rewrite,
             temperature=config.Temperatures.REVISION,
@@ -1036,69 +870,33 @@ async def revise_chapter_draft_logic(
         )
         _add_usage(full_rewrite_usage)
 
-        if not raw_revised_llm_output_for_log:
-            logger.error(
-                f"Full rewrite LLM failed for ch {chapter_number} (returned empty). Original text will be kept if patching also failed."
-            )
-            return None, cumulative_usage_data if cumulative_usage_data[
-                "total_tokens"
-            ] > 0 else None
-
         final_revised_text = llm_service.clean_model_response(
             raw_revised_llm_output_for_log
-        )  # MODIFIED
+        )
         final_raw_llm_output = raw_revised_llm_output_for_log
+        final_spans_for_next_cycle = (
+            []
+        )  # A full rewrite resets the patched spans.
 
         logger.info(
             f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}."
         )
-    elif not use_patched_text_as_final and not evaluation_result.get("needs_revision"):
-        logger.info(
-            f"No revision performed for Ch {chapter_number} (original deemed acceptable or patching ineffective but not critical as no revision was strictly needed)."
-        )
-        return None, cumulative_usage_data if cumulative_usage_data[
-            "total_tokens"
-        ] > 0 else None
 
-    if not final_revised_text or len(final_revised_text) < 50:
+    if not final_revised_text:
         logger.error(
-            f"Revision process for ch {chapter_number} resulted in no usable content. Original len: {len(original_text)}"
+            f"Revision process for ch {chapter_number} resulted in no usable content."
         )
-        return None, cumulative_usage_data if cumulative_usage_data[
-            "total_tokens"
-        ] > 0 else None
+        return (
+            None,
+            cumulative_usage_data
+            if cumulative_usage_data["total_tokens"] > 0
+            else None,
+        )
+
     if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(
             f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}."
         )
-    if final_revised_text is not patched_text:
-        (
-            original_embedding_full_final,
-            already_patched_spans,
-            revised_embedding_full_final,
-        ) = await asyncio.gather(
-            llm_service.async_get_embedding(original_text),
-            llm_service.async_get_embedding(final_revised_text),  # MODIFIED
-        )
-        if (
-            original_embedding_full_final is not None
-            and revised_embedding_full_final is not None
-        ):
-            similarity_score_full_final = utils.numpy_cosine_similarity(
-                original_embedding_full_final, revised_embedding_full_final
-            )
-            logger.info(
-                f"Full rewrite similarity with original text (final check): {similarity_score_full_final:.4f}"
-            )
-            if similarity_score_full_final >= config.REVISION_SIMILARITY_ACCEPTANCE:
-                logger.warning(
-                    f"Full rewrite for ch {chapter_number} is very similar to original (Score: {similarity_score_full_final:.4f}). "
-                    f"The LLM may not have made sufficient changes despite instructions."
-                )
-        else:
-            logger.warning(
-                f"Could not get embeddings for full rewrite similarity check (final check) of ch {chapter_number}."
-            )
 
     logger.info(
         f"Revision process for ch {chapter_number} produced a candidate text (Length: {len(final_revised_text)} chars)."
@@ -1106,5 +904,5 @@ async def revise_chapter_draft_logic(
     return (
         final_revised_text,
         final_raw_llm_output,
-        already_patched_spans,
+        final_spans_for_next_cycle,
     ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None

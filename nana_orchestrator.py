@@ -894,7 +894,8 @@ class NANA_Orchestrator:
                     and len(revision_tuple_result[0]) > 50
                 ):
                     new_text, rev_raw_output, new_spans = revision_tuple_result
-                    patched_spans.extend(new_spans)
+                    # 'new_spans' now contains ALL patched spans (old and new) correctly remapped relative to the new_text.
+                    patched_spans = new_spans
                     new_embedding, prev_embedding = await asyncio.gather(
                         llm_service.async_get_embedding(new_text),
                         llm_service.async_get_embedding(current_text_to_process),
