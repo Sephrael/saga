@@ -15,20 +15,20 @@ protagonist:
   name: "Jules Vidant"
   description: "[Fill-in]"
   traits:
-    - "Clever"
-    - "Resourceful"
-    - "Inventive"
-    - "Witty"
+    - "clever"
+    - "resourceful"
+    - "inventive"
+    - "witty"
   motivation: "[Fill-in]"
 
 antagonist:
   name: "Tula Veridian"
   description: "[Fill-in]"
   traits:
-    - "Resourceful"
-    - "Intimidating"
-    - "Intelligent"
-    - "Crafty"
+    - "resourceful"
+    - "intimidating"
+    - "intelligent"
+    - "crafty"
   motivation: "[Fill-in]"
 
 setting:

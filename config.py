@@ -215,7 +215,7 @@ class SagaSettings(BaseSettings):
 
     # De-duplication Configuration
     DEDUPLICATION_USE_SEMANTIC: bool = True
-    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.90
+    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85 # MODIFIED
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
     # Logging & UI

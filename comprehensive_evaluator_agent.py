@@ -19,8 +19,6 @@ from prompt_data_getters import (
     get_reliable_kg_facts_for_drafting_prompt,
 )
 
-# from parsing_utils import split_text_into_blocks # No longer needed if parsing JSON list
-# from parsing_utils import parse_key_value_block # Removed
 import json  # Added for JSON parsing
 
 logger = logging.getLogger(__name__)
@@ -38,6 +36,7 @@ INTERNAL_VALID_CATEGORIES = {
     "plot_arc",
     "thematic_alignment",  # Standardized internal name
     "narrative_depth_and_length",  # Standardized internal name
+    "repetition_and_redundancy", # ADDED
     "meta",
 }
 
@@ -51,6 +50,8 @@ def _normalize_llm_category_to_internal(llm_category_str: str) -> str:
         "narrative_depth" in normalized
     ):  # Catches "narrative_depth_and_length" or "narrative_depth"
         return "narrative_depth_and_length"
+    if "repetition" in normalized or "redundancy" in normalized: # ADDED
+        return "repetition_and_redundancy" # ADDED
     # For exact matches or other categories like consistency, plot_arc, meta
     if normalized in INTERNAL_VALID_CATEGORIES:
         return normalized
@@ -290,6 +291,12 @@ class ComprehensiveEvaluatorAgent:
     "problem_description": "The chapter focuses heavily on a minor side character's backstory, which doesn't significantly advance the intended plot point about finding the Sunstone.",
     "quote_from_original_text": "The old merchant then spent a long while recounting his youthful adventures in the spice trade, detailing three different voyages.",
     "suggested_fix_focus": "Reduce the side character's backstory significantly or tie it directly into how it helps or hinders the search for the Sunstone. Ensure the main plot point progression is central."
+  },
+  {
+    "issue_category": "REPETITION_AND_REDUNDANCY",
+    "problem_description": "The phrase 'the cost of loyalty' is repeated almost verbatim in three separate paragraphs, diminishing its impact.",
+    "quote_from_original_text": "The cost of loyalty was not just in what he gave, but in what he lost.",
+    "suggested_fix_focus": "Rephrase the concept in subsequent mentions. Explore different facets of this theme instead of restating the same sentence. For example, show the cost through a character's actions or a difficult choice, rather than repeating the phrase."
   },
   {
     "issue_category": "NARRATIVE_DEPTH_AND_LENGTH",
@@ -553,6 +560,7 @@ class ComprehensiveEvaluatorAgent:
                 "plot_arc": "Plot Arc deviation identified by LLM.",
                 "thematic_alignment": "Thematic Alignment issues identified by LLM.",
                 "narrative_depth_and_length": "Narrative Depth/Length issues identified by LLM.",
+                "repetition_and_redundancy": "Repetition/Redundancy issues identified by LLM.", # ADDED
                 "meta": "Meta/Uncategorized issues identified by LLM.",
             }
             for prob in parsed_problems_from_llm:

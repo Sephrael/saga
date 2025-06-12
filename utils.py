@@ -582,8 +582,10 @@ async def deduplicate_text_segments(
         result_parts.append(original_text[seg_start:seg_end])
         last_end = seg_end
     
-    # Append any trailing content after the last kept segment
-    result_parts.append(original_text[last_end:])
+    # Append any trailing content after the last kept segment, which is correct.
+    # The previous bug was here.
+    if last_end < len(original_text):
+        result_parts.append(original_text[last_end:])
     
     deduplicated_text = "".join(result_parts)
 
