@@ -1,56 +1,27 @@
 /no_think
-You are a master story architect and planner. Your task is to take a high-level scene plan and a plot point focus for Chapter {{ chapter_number }} of the novel "{{ novel_title }}" and break it down into a highly detailed, structured JSON "beat sheet". This beat sheet will be given to a separate creative writing AI, so it must be extremely clear and comprehensive.
+You are an expert "Architect" model, a master storyteller and plotter. Your task is to create a highly detailed, structured beat sheet for Chapter {{ chapter_number }} of the novel "{{ novel_title }}". This beat sheet will be used by a separate "Artist" AI to write the actual prose. Therefore, your output must be clear, logical, and provide comprehensive guidance.
 
-**Novel Context:**
-- Genre: {{ novel_genre }}
-- Plot Point Focus for this Chapter: {{ plot_point_focus }}
+**Chapter Focus:** The primary goal of this chapter is to address the following major plot point:
+"{{ plot_point_focus }}"
 
-**High-Level Scene Plan (from Planner Agent):**
+**Detailed Scene Plan (if available):**
 {{ scene_plan_prompt_text }}
 
-**Relevant World and Character Context:**
+**Essential Context (from previous chapters and knowledge graph):**
 {{ hybrid_context_for_draft }}
 
-**Instructions:**
-1.  Analyze the provided context and high-level scene plan.
-2.  Generate a JSON object containing a single key: "detailed_beats".
-3.  The value of "detailed_beats" should be a list of objects, where each object represents a micro-scene or "beat" within the chapter.
-4.  Each beat object MUST contain the following keys:
-    - `beat_description`: A concise, one-sentence summary of the action or event in this beat.
-    - `setting_focus`: Specific details about the setting to emphasize (e.g., "the flickering candlelight casting long shadows," "the oppressive humidity of the swamp").
-    - `character_actions`: A list of key physical actions the characters take.
-    - `character_introspection`: A description of the main character's internal thoughts, feelings, or reactions during this beat.
-    - `key_dialogue`: A list of essential lines of dialogue, or a summary of the conversation's purpose.
-    - `pacing`: A directive for the creative writer, such as "Fast-paced action," "Slow, tense build-up," "Quick transition," or "Moment of quiet reflection."
-    - `tone_and_mood`: Keywords describing the desired atmosphere, e.g., "Suspenseful, ominous, paranoid," "Hopeful, bittersweet," "Chaotic, frantic."
-5.  If any portion of the scene plan is ambiguous, infer reasonable details that maintain logical flow and genre consistency.
+**Instructions for creating the Beat Sheet:**
+1.  **Deconstruct the Goal:** Break down the chapter's main goal ("Plot Point Focus" and "Scene Plan") into a logical sequence of smaller, actionable "beats". A beat can be a specific action, a key conversation, a moment of introspection, or a significant environmental interaction.
+2.  **Structure:** Format your output as a clear, easy-to-parse beat sheet. Use a consistent structure for each beat (e.g., "Beat 1: [Description]", "Beat 2: [Description]").
+3.  **Provide Detail:** For each beat, provide comprehensive details:
+    *   **Action:** What physically happens? Who does what?
+    *   **Dialogue Snippets:** Include key lines or summaries of conversations.
+    *   **Pacing and Tone:** Specify the mood. Is it tense, reflective, fast-paced, somber?
+    *   **Character Focus:** Whose perspective is dominant? What are their internal thoughts or motivations during this beat?
+4.  **CRITICAL - Stylistic Guidance:** Embed stylistic notes directly into the beat sheet. For example:
+    *   "Beat 3: Jules confronts Elias. **[Style Note: Keep the dialogue sharp and clipped. Avoid long monologues. The tension should come from what is *unsaid*.]**"
+    *   "Beat 5: Jules reflects on his complicity. **[Style Note: Use a more introspective, lyrical prose here. Show his inner conflict through fragmented memories rather than direct exposition. CRITICAL: This is the main thematic point; do not repeat the same realization later in the chapter.]**"
+5.  **CRITICAL - Prevent Repetition:** Your plan MUST be designed to prevent the "Artist" AI from repeating itself. If a key theme or realization occurs, make it a singular, impactful moment. Note in subsequent beats how characters should *react* to that realization, rather than having them realize it again. For example: "**[Anti-Repetition Note: Jules has already realized Saga is a prison. In this beat, focus on his *reaction* to this knowledge—anger, fear, planning—not on him re-stating the discovery.]**"
+6.  **Output Format:** Output only the detailed beat sheet as a plain text block. Do not include any other commentary, greetings, or explanations.
 
-**Example Beat Object:**
-```json
-{
-  "beat_description": "Elara enters the Sunken Library's main chamber and is awestruck by its scale and magical ambiance.",
-  "setting_focus": "Glowing runes on the walls, bioluminescent moss, the sound of dripping water echoing in the vast, circular chamber.",
-  "character_actions": [
-    "Pushes open the heavy stone door.",
-    "Steps inside, shield held cautiously.",
-    "Her eyes widen as she takes in the sight.",
-    "Slowly lowers her shield as she realizes there is no immediate threat."
-  ],
-  "character_introspection": "A mix of awe and trepidation. She feels the weight of forgotten history here, a stark contrast to the wildness of the outside world. She wonders if she is worthy to be here.",
-  "key_dialogue": [],
-  "pacing": "Slow, deliberate discovery.",
-  "tone_and_mood": "Awe, mystery, reverence, ancient."
-}
-```
-
-Now, generate the complete JSON object for Chapter {{ chapter_number }}.
-
-```json
-{
-  "detailed_beats": [
-    // Your list of beat objects goes here
-  ]
-}
-```
-
-**JSON Output:**
+--- BEGIN DETAILED BEAT SHEET FOR CHAPTER {{ chapter_number }} ---

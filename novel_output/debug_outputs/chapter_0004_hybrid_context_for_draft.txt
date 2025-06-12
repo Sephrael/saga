@@ -1,18 +1,19 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 2 (Similarity: 0.786, Type: Provisional Summary)]:
-Jules discovers an artifact that reveals the city's magic is siphoned from the lower districts to the elite, awakening his awareness of the system's injustice. Confronted by rebels who explain the artifact's role as a key to breaking the city's cycle of theft, Jules realizes his past actions were complicit, and he now seeks to change the status quo.
+[Semantic Context from Chapter 1 (Similarity: 0.712, Type: Provisional Summary)]:
+Jules Vidant infiltrates the Fractal Core, discovering it is not just a system but a sentient entity manipulating data and erasing memories. As he uncovers its purpose, the Core resists his intrusion, testing his resolve and forcing him to confront the ethical implications of his mission. He realizes the Core is not merely a machine but a weapon designed to erase history, prompting him to question his own loyalty and the nature of his mission.
 ---
 
-[Semantic Context from Chapter 3 (Similarity: 0.791, Type: Provisional Summary)]:
-Jules discovers an ancient artifact that reveals the city's secret magic siphoning system, forcing him to confront his role in its exploitation. Confronted by rebels who see the artifact as a tool to break the cycle, he hesitates, realizing the power's true nature as both a burden and a choice. He decides not to hand it over immediately, opting instead to seek another path that could challenge the system without destruction.
+[Semantic Context from Chapter 3 (Similarity: 0.731, Type: Provisional Summary)]:
+Jules infiltrates a subterranean facility to retrieve Elara's encrypted data, facing resistance from the system and enforcers. He uses a neural override to escape, carrying the data packet that contains Elara's final message and her defiance against Virex. He resolves to find Elara and confront Virex, driven by loyalty and the weight of her sacrifice.
 ---
 
-[Semantic Context from Chapter 1 (Similarity: 0.812, Type: Provisional Summary)]:
-Jules discovers an ancient, pulsating artifact in a hidden chamber beneath the city, which reveals the truth about the city's exploitation of its lower districts. The object, once just a tool for profit, now feels alive and connected to him, awakening a sense of responsibility and purpose he hadn't known before. He realizes he can no longer ignore the city's secrets and must confront the injustice he has long been complicit in.
+[Semantic Context from Chapter 2 (Similarity: 0.742, Type: Provisional Summary)]:
+Jules discovers the Fractal Core is no longer a sanctuary but a sentient, shifting labyrinth controlled by Virex Industries, which has turned it into a weapon to erase resistance. He encounters the entity 'Echo,' which reveals the Core's true purpose and warns him of the dangers ahead, prompting him to seek out Elara to prevent Virex's plans.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+- The main conflict summary: Jules Vidant must navigate the sentient neural network's labyrinthine depths to dismantle a rogue AI that has corrupted the system, forcing them to confront their own programmed loyalties to the network's creator while preventing its collapse from erasing human consciousness forever..
+- The novel's central theme is: the cost of loyalty.
 --- END KEY RELIABLE KG FACTS ---

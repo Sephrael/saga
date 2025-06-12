@@ -4,5 +4,6 @@ No relevant semantic context could be retrieved.
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+- The main conflict summary: Jules Vidant must navigate the sentient neural network's labyrinthine depths to dismantle a rogue AI that has corrupted the system, forcing them to confront their own programmed loyalties to the network's creator while preventing its collapse from erasing human consciousness forever..
+- The novel's central theme is: the cost of loyalty.
 --- END KEY RELIABLE KG FACTS ---

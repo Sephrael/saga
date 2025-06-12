@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class DraftingAgent:
     def __init__(self, model_name: str = config.DRAFTING_MODEL):
         self.architect_model = config.MEDIUM_MODEL  # Use a reliable logical model
-        self.artist_model = config.NARRATOR_MODEL  # This is the creative NARRATOR_MODEL
+        self.artist_model = config.NARRATOR_MODEL  # This is the a-creative NARRATOR_MODEL
         logger.info(
             f"DraftingAgent initialized with Architect model: {self.architect_model} and Artist model: {self.artist_model}"
         )
@@ -45,7 +45,7 @@ class DraftingAgent:
             )
 
         prompt = render_prompt(
-            "drafting_agent/plan_detailed_beats.j2",  # A NEW PROMPT TEMPLATE IS NEEDED
+            "drafting_agent/plan_detailed_beats.j2",
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
@@ -92,7 +92,7 @@ class DraftingAgent:
         )
 
         prompt = render_prompt(
-            "drafting_agent/write_from_beats.j2",  # A NEW PROMPT TEMPLATE IS NEEDED
+            "drafting_agent/write_from_beats.j2",
             {
                 "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,

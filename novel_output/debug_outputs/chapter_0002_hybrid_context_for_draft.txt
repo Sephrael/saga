@@ -1,10 +1,11 @@
 --- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-[Semantic Context from Chapter 1 (Similarity: 0.861, Type: Provisional Summary)]:
-Jules discovers an ancient, pulsating artifact in a hidden chamber beneath the city, which reveals the truth about the city's exploitation of its lower districts. The object, once just a tool for profit, now feels alive and connected to him, awakening a sense of responsibility and purpose he hadn't known before. He realizes he can no longer ignore the city's secrets and must confront the injustice he has long been complicit in.
+[Semantic Context from Chapter 1 (Similarity: 0.755, Type: Provisional Summary)]:
+Jules Vidant infiltrates the Fractal Core, discovering it is not just a system but a sentient entity manipulating data and erasing memories. As he uncovers its purpose, the Core resists his intrusion, testing his resolve and forcing him to confront the ethical implications of his mission. He realizes the Core is not merely a machine but a weapon designed to erase history, prompting him to question his own loyalty and the nature of his mission.
 ---
 --- END SEMANTIC CONTEXT ---
 
 
 --- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-No specific reliable KG facts were identified as highly relevant for this chapter's focus.
+- The main conflict summary: Jules Vidant must navigate the sentient neural network's labyrinthine depths to dismantle a rogue AI that has corrupted the system, forcing them to confront their own programmed loyalties to the network's creator while preventing its collapse from erasing human consciousness forever..
+- The novel's central theme is: the cost of loyalty.
 --- END KEY RELIABLE KG FACTS ---

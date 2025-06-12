@@ -1,1 +1,1 @@
-Chapter revised using 3 generated patch instructions. (Note: Not all generated patches may have been auto-applied if they were for 'N/A - General Issue' or target segment not found.)
+Chapter revised using 4 new patches.
