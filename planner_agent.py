@@ -1,14 +1,11 @@
 # planner_agent.py
-# from parsing_utils import split_text_into_blocks, parse_key_value_block # Removed
-import json  # Added for JSON parsing
+import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
-
-# from state_manager import state_manager # No longer directly used
-from data_access import chapter_queries  # For get_chapter_data_from_db
+from data_access import chapter_queries
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
 from prompt_data_getters import (
@@ -21,21 +18,25 @@ from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 logger = logging.getLogger(__name__)
 
 SCENE_PLAN_KEY_MAP = {
-    "scene": "scene_number",  # LLM often uses "SCENE:" or "Scene Number:"
-    "scene_number": "scene_number",  # Explicitly map "scene_number" as well
+    "scene": "scene_number",
+    "scene_number": "scene_number",
     "summary": "summary",
     "characters_involved": "characters_involved",
     "key_dialogue_points": "key_dialogue_points",
     "setting_details": "setting_details",
     "scene_focus_elements": "scene_focus_elements",
     "contribution": "contribution",
+    # NEW: Add the directorial fields to the key map
+    "scene_type": "scene_type",
+    "pacing": "pacing",
+    "character_arc_focus": "character_arc_focus",
+    "relationship_development": "relationship_development",
 }
 SCENE_PLAN_LIST_INTERNAL_KEYS = [
     "key_dialogue_points",
     "scene_focus_elements",
     "characters_involved",
 ]
-# SCENE_PLAN_SPECIAL_LIST_HANDLING removed as JSON should provide lists directly.
 
 
 class PlannerAgent:
@@ -62,7 +63,6 @@ class PlannerAgent:
             logger.error(
                 f"Failed to decode JSON scene plan for Ch {chapter_number}: {e}. Text: {json_text[:500]}..."
             )
-            # Try to find a JSON array within the text if LLM wrapped it
             match = re.search(r"\[\s*\{.*\}\s*\]", json_text, re.DOTALL)
             if match:
                 logger.info(
@@ -84,7 +84,7 @@ class PlannerAgent:
             )
             return None
 
-        if not parsed_data:  # Empty list
+        if not parsed_data:
             logger.warning(
                 f"Parsed scene plan for Ch {chapter_number} is an empty list."
             )
@@ -98,8 +98,6 @@ class PlannerAgent:
                 )
                 continue
 
-            # Map keys from JSON to SceneDetail keys, defaulting to original if not in map
-            # Prefer LLM to output keys matching SceneDetail directly.
             processed_scene_dict: Dict[str, Any] = {}
             for llm_key, value in scene_item.items():
                 internal_key = SCENE_PLAN_KEY_MAP.get(
@@ -107,15 +105,12 @@ class PlannerAgent:
                 )
                 processed_scene_dict[internal_key] = value
 
-            # Validate essential keys and types
             scene_num = processed_scene_dict.get("scene_number")
             if not isinstance(scene_num, int):
                 logger.warning(
                     f"Scene {i + 1} in Ch {chapter_number} has invalid or missing 'scene_number'. Assigning {i + 1}. Value: {scene_num}"
                 )
-                processed_scene_dict["scene_number"] = (
-                    i + 1
-                )  # Assign sequential if missing/invalid
+                processed_scene_dict["scene_number"] = i + 1
 
             summary = processed_scene_dict.get("summary")
             if not isinstance(summary, str) or not summary.strip():
@@ -124,10 +119,9 @@ class PlannerAgent:
                 )
                 continue
 
-            # Ensure list types for specific fields
             for list_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
                 val = processed_scene_dict.get(list_key)
-                if isinstance(val, str):  # If LLM gave comma-separated string
+                if isinstance(val, str):
                     processed_scene_dict[list_key] = [
                         v.strip() for v in val.split(",") if v.strip()
                     ]
@@ -136,19 +130,14 @@ class PlannerAgent:
                         [str(val)] if val is not None else []
                     )
 
-            # Fill missing optional keys with defaults
             for key_internal_name in SCENE_PLAN_KEY_MAP.values():
                 if key_internal_name not in processed_scene_dict:
                     if key_internal_name in SCENE_PLAN_LIST_INTERNAL_KEYS:
                         processed_scene_dict[key_internal_name] = []
                     else:
-                        processed_scene_dict[key_internal_name] = (
-                            "N/A - Missing from LLM JSON"
-                        )
+                        # For optional fields, this will be None.
+                        processed_scene_dict[key_internal_name] = None
 
-            # Ensure all SceneDetail keys are present, even if some were not in SCENE_PLAN_KEY_MAP
-            # This is important if SceneDetail has more fields than the map covers.
-            # For now, assuming SCENE_PLAN_KEY_MAP covers all required fields of SceneDetail.
 
             scenes_data.append(processed_scene_dict)  # type: ignore
 
@@ -251,7 +240,6 @@ class PlannerAgent:
                     )
         future_plot_context_str = "".join(future_plot_context_parts)
 
-        # This whole block will replace the existing few_shot_scene_plan_example_str
         few_shot_scene_plan_example_str = """
 [
   {
@@ -262,12 +250,13 @@ class PlannerAgent:
       "Elara (internal): \\"This riddle... it speaks of starlight and shadow. What reflects both?\\"",
       "Elara (to herself, solving): \\"The water! The entrance must be beneath the lake's surface.\\""
     ],
-    "setting_details": "A mist-shrouded, unnaturally still lake. Crumbling, moss-covered ruins of a tower are visible on a small island in the center.",
-    "scene_focus_elements": [
-      "Elara's deductive reasoning to solve the riddle.",
-      "Building atmosphere of mystery and ancient magic around the library."
-    ],
-    "contribution": "Introduces the challenge of accessing the Sunken Library and showcases Elara's intellect."
+    "setting_details": "A mist-shrouded, unnaturally still lake. Crumbling, moss-covered ruins of a tower are visible on a small island.",
+    "scene_focus_elements": ["Elara's deductive reasoning", "Building atmosphere of mystery and ancient magic"],
+    "contribution": "Introduces the challenge of accessing the Sunken Library and showcases Elara's intellect.",
+    "scene_type": "ATMOSPHERE_BUILDING",
+    "pacing": "SLOW",
+    "character_arc_focus": "Establishes Elara's scholarly and determined nature when faced with a puzzle.",
+    "relationship_development": null
   },
   {
     "scene_number": 2,
@@ -275,19 +264,34 @@ class PlannerAgent:
     "characters_involved": ["Elara Vance", "Master Kael"],
     "key_dialogue_points": [
       "Kael: \\"Many seek what is lost. Few understand its price. Why do you search, child of the shifting stars?\\"",
-      "Elara: \\"I seek knowledge not for power, but to mend what was broken.\\"",
-      "Kael: \\"A noble sentiment. The map's first secret lies in the reflection of true north...\\""
+      "Elara: \\"I seek knowledge not for power, but to mend what was broken.\\""
     ],
-    "setting_details": "Inside the Sunken Library's main chamber: vast, circular, dimly lit by glowing runes on the walls and bioluminescent moss. Water drips softly.",
-    "scene_focus_elements": [
-      "The cryptic nature and wisdom of Master Kael.",
-      "The initial reveal of a clue related to the Starfall Map."
+    "setting_details": "Inside the Sunken Library: vast, circular, dimly lit by glowing runes and bioluminescent moss.",
+    "scene_focus_elements": ["The cryptic nature and wisdom of Master Kael", "The initial reveal of a clue for the Starfall Map"],
+    "contribution": "Elara gains a crucial piece of information and a potential ally/gatekeeper in Kael, advancing the plot.",
+    "scene_type": "DIALOGUE",
+    "pacing": "MEDIUM",
+    "character_arc_focus": "Elara must articulate her noble motivations, reinforcing her core identity.",
+    "relationship_development": "The relationship between Elara and Kael is established as one of a student and a gatekeeper/mentor."
+  },
+  {
+    "scene_number": 3,
+    "summary": "As Elara leaves, she is ambushed by rival Seekers who try to steal the clue from her. She uses her wits and a minor magical artifact to escape.",
+    "characters_involved": ["Elara Vance", "Rival Seeker (Thane)"],
+    "key_dialogue_points": [
+      "Thane: \\"The old man was a fool to trust you. The map belongs to the Crimson Hand!\\"",
+      "Elara (activating artifact): \\"It belongs to those who would protect it!\\""
     ],
-    "contribution": "Elara gains a crucial piece of information and a potential ally (or gatekeeper) in Kael, advancing the plot point about finding the map."
+    "setting_details": "The narrow, crumbling causeway leading away from the library island.",
+    "scene_focus_elements": ["Sudden danger and threat", "Elara's quick thinking under pressure", "First use of her 'Silvershard' artifact"],
+    "contribution": "Introduces the antagonist faction and demonstrates that Elara is capable of defending herself.",
+    "scene_type": "ACTION",
+    "pacing": "FAST",
+    "character_arc_focus": "Elara is forced from a purely intellectual challenge to a physical one, showing her resilience.",
+    "relationship_development": "An antagonistic relationship with Thane and the Crimson Hand is established."
   }
 ]
 """
-
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
             {
@@ -342,29 +346,11 @@ class PlannerAgent:
                         f"Parsed scene item {i + 1} for ch {chapter_number} is not a dict. Skipping. Item: {scene_dict}"
                     )
                     continue
-                required_scene_keys_internal = set(SCENE_PLAN_KEY_MAP.values())
-                if not required_scene_keys_internal.issubset(scene_dict.keys()):
-                    missing_k = required_scene_keys_internal - set(scene_dict.keys())
-                    logger.warning(
-                        f"Scene {scene_dict.get('scene_number', i + 1)} from parser for ch {chapter_number} has missing keys ({missing_k}). Skipping. Scene: {scene_dict}"
-                    )
-                    continue
 
-                valid_types = (
-                    isinstance(scene_dict.get("scene_number"), int)
-                    and isinstance(scene_dict.get("summary"), str)
-                    and scene_dict.get("summary", "").strip()
-                    and isinstance(scene_dict.get("characters_involved"), list)
-                    and isinstance(scene_dict.get("key_dialogue_points"), list)
-                    and isinstance(scene_dict.get("setting_details"), str)
-                    and scene_dict.get("setting_details", "").strip()
-                    and isinstance(scene_dict.get("scene_focus_elements"), list)
-                    and isinstance(scene_dict.get("contribution"), str)
-                    and scene_dict.get("contribution", "").strip()
-                )
-                if not valid_types:
+                # Basic validation for required fields
+                if not scene_dict.get("summary"):
                     logger.warning(
-                        f"Scene {scene_dict.get('scene_number', i + 1)} from parser for ch {chapter_number} has invalid types or empty required strings. Skipping. Scene: {scene_dict}"
+                        f"Scene {scene_dict.get('scene_number', i + 1)} from parser for ch {chapter_number} has a missing summary. Skipping."
                     )
                     continue
 
@@ -372,16 +358,16 @@ class PlannerAgent:
 
             if final_scenes_typed:
                 logger.info(
-                    f"Generated valid detailed scene plan for chapter {chapter_number} with {len(final_scenes_typed)} scenes from plain text."
+                    f"Generated valid detailed scene plan for chapter {chapter_number} with {len(final_scenes_typed)} scenes."
                 )
                 return final_scenes_typed, usage_data
             else:
                 logger.error(
-                    f"Parsed list was empty or all scenes were invalid after parsing plain text for chapter {chapter_number}. Cleaned LLM output: '{cleaned_plan_text_from_llm[:500]}...'"
+                    f"Parsed list was empty or all scenes were invalid after parsing for chapter {chapter_number}. Cleaned LLM output: '{cleaned_plan_text_from_llm[:500]}...'"
                 )
                 return None, usage_data
         else:
             logger.error(
-                f"Failed to parse a valid list of scenes from plain text for chapter {chapter_number}. Cleaned LLM output: '{cleaned_plan_text_from_llm[:500]}...'"
+                f"Failed to parse a valid list of scenes for chapter {chapter_number}. Cleaned LLM output: '{cleaned_plan_text_from_llm[:500]}...'"
             )
             return None, usage_data

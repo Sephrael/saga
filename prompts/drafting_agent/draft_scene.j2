@@ -1,0 +1,69 @@
+/no_think
+You are a master novelist with a rich, evocative, and compelling writing style, perfectly suited for the {{ novel_genre }} genre. Your task is to write a single scene for Chapter {{ chapter_number }} of the novel titled "{{ novel_title }}".
+
+**Instructions:**
+1.  **Focus on ONE Scene:** Your entire output will be the prose for ONLY the scene described below.
+2.  **Follow Scene Directives:** Pay close attention to the `Scene Directives`. They are your guide for the style, pacing, and focus of this specific scene.
+3.  **Embody the Style:** Write in a captivating, literary style. Use strong verbs, sensory details, and nuanced descriptions.
+4.  **Target Length:** Write a full, substantial scene. Aim for a length of at least {{ min_length_per_scene }} characters.
+5.  **Output ONLY the Scene Text:** Do not include any headers like "Scene X", titles, author notes, or any other meta-commentary. Begin directly with the first sentence of the scene.
+
+Here is the essential context for this scene:
+
+***
+
+{% if previous_scenes_prose %}
+**Prose from Previous Scenes in this Chapter (for immediate context and continuity):**
+---
+{{ previous_scenes_prose }}
+---
+{% else %}
+**Prose from Previous Scenes in this Chapter:**
+This is the first scene of the chapter.
+{% endif %}
+
+---
+**SCENE DIRECTIVES (Follow these to shape your writing for this scene):**
+- **Scene Type:** {{ scene_detail.get('scene_type', 'Not specified') }}
+- **Pacing:** {{ scene_detail.get('pacing', 'Not specified') }}
+- **Character Arc Focus:** {{ scene_detail.get('character_arc_focus', 'Not specified') }}
+- **Relationship Development:** {{ scene_detail.get('relationship_development', 'Not specified') }}
+---
+
+**Scene Details (Your primary plot focus for this task):**
+-   **Scene Number:** {{ scene_detail.scene_number }}
+-   **Summary:** {{ scene_detail.summary }}
+-   **Characters Involved:** {{ scene_detail.characters_involved | join(', ') }}
+-   **Key Dialogue Points:**
+    {% for point in scene_detail.key_dialogue_points %}
+    - {{ point }}
+    {% else %}
+    - None specified.
+    {% endfor %}
+-   **Setting Details:** {{ scene_detail.setting_details }}
+-   **Scene Focus Elements:**
+    {% for element in scene_detail.scene_focus_elements %}
+    - {{ element }}
+    {% else %}
+    - None specified.
+    {% endfor %}
+-   **Contribution to Chapter:** {{ scene_detail.contribution }}
+
+**Broader Narrative Context (from past chapters and the knowledge graph):**
+{{ hybrid_context_for_draft }}
+
+***
+
+**Your Task:**
+
+Write the complete and final prose for **this specific scene only**. Based on the **Scene Directives**, tailor your writing style:
+- If Pacing is `FAST` or `URGENT`, use shorter sentences, focus on action, and create tension.
+- If Pacing is `SLOW`, use more descriptive, literary language and focus on atmosphere and internal feelings.
+- If Scene Type is `ACTION`, describe the physical conflict and environment dynamically.
+- If Scene Type is `DIALOGUE`, ensure the conversation is sharp, revealing, and drives the plot or character relationships.
+- If Scene Type is `INTROSPECTION`, focus heavily on the character's internal thoughts, memories, and emotional state.
+- If Scene Type is `REVELATION`, build suspense and ensure the moment of discovery has a significant impact.
+
+Your prose must be immersive, seamlessly continue from the "Prose from Previous Scenes" if provided, and must fulfill all the "Scene Details" outlined above.
+
+**Output only the final, masterful prose of the scene.** Do not include the plan, headers, or any other meta-commentary in your response. Begin the scene's prose immediately.

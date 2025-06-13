@@ -1,6 +1,9 @@
 # kg_maintainer/models.py
-from dataclasses import dataclass, field
+"""Data models for SAGA's state and knowledge graph objects."""
+
 from typing import Any, Dict, List, Optional, TypedDict
+
+from pydantic import BaseModel, Field
 
 import utils
 from kg_constants import (
@@ -9,7 +12,11 @@ from kg_constants import (
 )
 
 
-class SceneDetail(TypedDict):
+class SceneDetail(TypedDict, total=False):
+    """
+    A detailed plan for a single scene in a chapter.
+    This is the contract between the PlannerAgent and DraftingAgent.
+    """
     scene_number: int
     summary: str
     characters_involved: List[str]
@@ -17,11 +24,15 @@ class SceneDetail(TypedDict):
     setting_details: str
     scene_focus_elements: List[str]
     contribution: str
+    # NEW: Directorial fields for controlling narrative texture and variety.
+    scene_type: str  # e.g., 'ACTION', 'DIALOGUE', 'INTROSPECTION', 'REVELATION', 'ATMOSPHERE_BUILDING', 'TRANSITION'
+    pacing: str  # e.g., 'SLOW', 'MEDIUM', 'FAST', 'URGENT'
+    character_arc_focus: Optional[str]  # e.g., "Isabelle confronts her past trauma, moving from fear to defiance."
+    relationship_development: Optional[str]  # e.g., "The trust between Isabelle and Lysander is tested by a new revelation."
 
 
-class ProblemDetail(TypedDict):
+class ProblemDetail(TypedDict, total=False):
     """Detailed information about a specific problem found during evaluation."""
-
     issue_category: str
     problem_description: str
     quote_from_original_text: str
@@ -32,7 +43,8 @@ class ProblemDetail(TypedDict):
     suggested_fix_focus: str
 
 
-class EvaluationResult(TypedDict):
+class EvaluationResult(TypedDict, total=False):
+    """Structured result from the evaluator agent."""
     needs_revision: bool
     reasons: List[str]
     problems_found: List[ProblemDetail]
@@ -43,9 +55,8 @@ class EvaluationResult(TypedDict):
     narrative_depth_issues: Optional[str]
 
 
-class PatchInstruction(TypedDict):
+class PatchInstruction(TypedDict, total=False):
     """Instruction for applying a single patch to the chapter text."""
-
     original_problem_quote_text: str
     target_char_start: Optional[int]
     target_char_end: Optional[int]
@@ -54,43 +65,44 @@ class PatchInstruction(TypedDict):
 
 
 class AgentStateData(TypedDict):
+    """Legacy type hint for core state objects."""
     plot_outline: dict
     character_profiles: dict
     world_building: dict
 
 
-@dataclass
-class CharacterProfile:
-    """Structured information about a character."""
-
+class CharacterProfile(BaseModel):
+    """Structured information about a character, using Pydantic for validation."""
     name: str
     description: str = ""
-    traits: List[str] = field(default_factory=list)
-    relationships: Dict[str, Any] = field(default_factory=dict)
-    status: str = ""
-    updates: Dict[str, Any] = field(default_factory=dict)
+    traits: List[str] = Field(default_factory=list)
+    relationships: Dict[str, Any] = Field(default_factory=dict)
+    status: str = "Unknown"
+    updates: Dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, name: str, data: Dict[str, Any]) -> "CharacterProfile":
-        description = data.get("description", "")
-        traits = list(data.get("traits", []))
-        relationships = dict(data.get("relationships", {}))
-        status = data.get("status", "")
-        remaining = {
-            k: v
-            for k, v in data.items()
-            if k not in {"description", "traits", "relationships", "status"}
-        }
-        return cls(name, description, traits, relationships, status, remaining)
+        """Creates a CharacterProfile from a dictionary, maintaining compatibility."""
+        # Pydantic automatically handles mapping, but we can keep this for explicit control.
+        # It also handles separating known fields from 'updates' if we used extra='allow'.
+        # For simplicity and compatibility, we'll manually handle the 'updates' field.
+        known_fields = cls.model_fields.keys()
+        profile_data = {k: v for k, v in data.items() if k in known_fields}
+        updates_data = {k: v for k, v in data.items() if k not in known_fields}
+
+        # Combine the explicitly defined 'updates' dict with any extra fields
+        if 'updates' in profile_data:
+            updates_data.update(profile_data['updates'])
+        profile_data['updates'] = updates_data
+
+        return cls(name=name, **profile_data)
 
     def to_dict(self) -> Dict[str, Any]:
-        data = {
-            "description": self.description,
-            "traits": self.traits,
-            "relationships": self.relationships,
-            "status": self.status,
-        }
-        data.update(self.updates)
+        """Converts the CharacterProfile to a dictionary for serialization."""
+        data = self.model_dump(exclude={"name"})
+        # Flatten the 'updates' dict into the main dict for compatibility with old format
+        updates_data = data.pop('updates', {})
+        data.update(updates_data)
         return data
 
     def get_development_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
@@ -102,7 +114,7 @@ class CharacterProfile:
                 continue
             try:
                 chap = int(key.split("_")[-1])
-            except ValueError:
+            except (ValueError, IndexError):
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):
@@ -110,78 +122,56 @@ class CharacterProfile:
         return notes
 
 
-@dataclass
-class WorldItem:
-    """Structured information about a world element."""
-
+class WorldItem(BaseModel):
+    """Structured information about a world element, using Pydantic for validation."""
     id: str  # Canonical ID derived from normalized category and name
     category: str  # Display/canonical category
     name: str  # Display/canonical name
     created_chapter: int = 0
     is_provisional: bool = False
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: Dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, category: str, name: str, data: Dict[str, Any]) -> "WorldItem":
         """
-        Creates a WorldItem.
-        'category' and 'name' are the intended display/canonical values.
-        The 'id' is always generated deterministically from normalized
-        versions of these.
-        Any 'id' in the 'data' dict is ignored.
+        Creates a WorldItem from a dictionary, generating a canonical ID.
+        This classmethod is the primary entry point for creating WorldItem objects.
         """
         if not category or not isinstance(category, str) or not category.strip():
             raise ValueError("WorldItem category must be a non-empty string.")
         if not name or not isinstance(name, str) or not name.strip():
             raise ValueError(
-                "WorldItem name must be a non-empty string "
-                f"(for category '{category}')."
+                f"WorldItem name must be a non-empty string (for category '{category}')."
             )
 
-        # Generate canonical ID from normalized category and name.
-        # The 'name' and 'category' stored on the instance are the ones
-        # passed as arguments.
         normalized_id_category = utils._normalize_for_id(category)
         normalized_id_name = utils._normalize_for_id(name)
-
-        # Ensure no empty parts in ID after normalization
-        if not normalized_id_category:
-            normalized_id_category = "unknown_category"
-        if not normalized_id_name:
-            normalized_id_name = "unknown_name"
-
         item_id = f"{normalized_id_category}_{normalized_id_name}"
 
         created_chapter = int(data.get(KG_NODE_CREATED_CHAPTER, 0))
         is_provisional = bool(data.get(KG_IS_PROVISIONAL, False))
 
-        # Properties from 'data', excluding any 'id' passed in, and KG flags
         props = {
-            k: v
-            for k, v in data.items()
-            if k not in {"id", KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL}
+            k: v for k, v in data.items()
+            if k not in {"id", "category", "name", KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL}
         }
 
         return cls(
-            item_id,
-            category,
-            name,
-            created_chapter,
-            is_provisional,
-            props,
+            id=item_id,
+            category=category,
+            name=name,
+            created_chapter=created_chapter,
+            is_provisional=is_provisional,
+            properties=props,
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        data = {
-            "id": self.id,
-            KG_NODE_CREATED_CHAPTER: self.created_chapter,
-            KG_IS_PROVISIONAL: self.is_provisional,
-            "created_chapter": self.created_chapter,  # convenience duplicate
-            "is_provisional": self.is_provisional,  # convenience duplicate
-            # name and category are top-level attributes, not in properties
-            # dict for this method's output
-        }
-        data.update(self.properties)
+        """Converts the WorldItem to a dictionary for serialization."""
+        # Pydantic's model_dump is the modern way to do this.
+        data = self.model_dump(exclude={"id", "category", "name"})
+        # For compatibility with any old code expecting properties at the top level
+        properties_data = data.pop('properties', {})
+        data.update(properties_data)
         return data
 
     def get_elaboration_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
@@ -193,7 +183,7 @@ class WorldItem:
                 continue
             try:
                 chap = int(key.split("_")[-1])
-            except ValueError:
+            except (ValueError, IndexError):
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):
