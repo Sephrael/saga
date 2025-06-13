@@ -66,7 +66,7 @@ async def test_dedup_prefer_newer(monkeypatch):
 
     dedup, _ = await utils.deduplicate_text_segments(
         text,
-        segment_level="paragraph",
+        segment_level="sentence",
         use_semantic_comparison=False,
         min_segment_length_chars=0,
         prefer_newer=True,

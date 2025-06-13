@@ -285,9 +285,12 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             "2.  Generate a `replace_with` text according to the following:",
             prompt_instruction_for_replacement_scope_str,
             '3.  The `replace_with` text MUST address the "Problem Description" and "Suggested Fix Focus".',
-            "4.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).",
-            "5.  If `length_expansion_instruction_header_str` is present, ensure substantial expansion as guided for the targeted segment or new passage.",
-            '6.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any "Replace with:" prefixes. Just the raw text intended for replacement/insertion. (See example above for how to format the text).',
+            # MODIFICATION START: Added instruction for deletion via empty string.
+            "4.  If the best way to fix the problem is to **completely remove** the 'Original Quote' segment (e.g., it is redundant or unnecessary), then you **MUST output an empty string**. Do not write a justification; simply provide no text as the `replace_with` output.",
+            # MODIFICATION END
+            "5.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).",
+            "6.  If `length_expansion_instruction_header_str` is present, ensure substantial expansion as guided for the targeted segment or new passage.",
+            '7.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any "Replace with:" prefixes. Just the raw text intended for replacement/insertion. (See example above for how to format the text).',
             "",
             f'--- BEGIN REPLACE_WITH TEXT (for the segment related to "{original_quote_text_from_problem}" or as a new passage if quote is "N/A - General Issue") ---',
         ]
@@ -313,17 +316,19 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         auto_clean_response=True,
     )
 
-    if not replace_with_text_cleaned:
+    # MODIFICATION: No longer check if the cleaned text is empty here, as an empty string is now a valid "deletion" instruction.
+    # The check for a failed LLM call (returning None) is implicitly handled by the structure below.
+    if replace_with_text_cleaned is None:
         logger.error(
-            f"Patch LLM returned no content for Ch {chapter_number} problem: {problem['problem_description']}"
+            f"Patch LLM call failed and returned None for Ch {chapter_number} problem: {problem['problem_description']}"
         )
         return None, usage_data
 
+    # Log if a deletion is being suggested
     if not replace_with_text_cleaned.strip():
-        logger.warning(
-            f"Patch LLM returned empty after cleaning for Ch {chapter_number} problem: {problem['problem_description']}"
+        logger.info(
+            f"Patch LLM suggested DELETION (empty output) for Ch {chapter_number} problem: {problem['problem_description']}"
         )
-        return None, usage_data
 
     if length_expansion_instruction_header_str:
         if not is_general_expansion_task:
@@ -371,7 +376,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         "original_problem_quote_text": original_quote_text_from_problem,
         "target_char_start": target_start_for_patch,
         "target_char_end": target_end_for_patch,
-        "replace_with": replace_with_text_cleaned,
+        "replace_with": replace_with_text_cleaned, # This can now be ""
         "reason_for_change": f"Fixing '{problem['issue_category']}': {problem['problem_description']}",
     }
     return patch_instruction, usage_data
@@ -607,6 +612,13 @@ async def _apply_patches_to_text(
     # 1. Prepare new replacements, filtering out overlaps with existing patched spans.
     replacements: List[Tuple[int, int, str]] = []
     for patch_idx, patch in enumerate(patch_instructions):
+        # MODIFICATION START: Handle empty replace_with as a valid deletion instruction.
+        # An empty or whitespace-only replace_with string is now a valid patch.
+        replacement_text = patch.get("replace_with", "")
+        if replacement_text is None: # handle case where key is missing
+            replacement_text = ""
+        # MODIFICATION END
+
         segment_start: Optional[int] = patch.get("target_char_start")
         segment_end: Optional[int] = patch.get("target_char_end")
         method_used = "direct offsets"
@@ -619,7 +631,7 @@ async def _apply_patches_to_text(
                 )
                 method_used = "semantic search"
                 match = await utils.find_semantically_closest_segment(
-                    original_text, quote_text, "paragraph"
+                    original_text, quote_text, "sentence" # MODIFIED: Changed to 'sentence' for more precision
                 )
                 if match:
                     segment_start, segment_end, _ = match
@@ -650,9 +662,10 @@ async def _apply_patches_to_text(
             )
             continue
 
-        replacements.append((segment_start, segment_end, patch["replace_with"]))
+        replacements.append((segment_start, segment_end, replacement_text))
+        log_action = "DELETION" if not replacement_text.strip() else "REPLACEMENT"
         logger.info(
-            f"Patch {patch_idx+1}: Queued replacement for {segment_start}-{segment_end} via {method_used}."
+            f"Patch {patch_idx+1}: Queued {log_action} for {segment_start}-{segment_end} via {method_used}."
         )
 
     if not replacements:
@@ -687,7 +700,11 @@ async def _apply_patches_to_text(
 
         # Calculate the end position and add the span to our list
         new_span_end = len("".join(result_parts))
-        all_spans_in_new_text.append((new_span_start, new_span_end))
+
+        # MODIFICATION: Only add a protected span if the replacement was not a deletion.
+        # A deleted segment should not be protected from future patches.
+        if new_span_end > new_span_start:
+            all_spans_in_new_text.append((new_span_start, new_span_end))
 
         # Update the pointer for the next iteration
         last_original_end = op["end"]
@@ -698,8 +715,10 @@ async def _apply_patches_to_text(
     patched_text = "".join(result_parts)
     final_spans = sorted(all_spans_in_new_text)
 
+    num_deletions = sum(1 for _, _, txt in replacements if not txt.strip())
+    num_replacements = len(replacements) - num_deletions
     logger.info(
-        f"Applied {len(replacements)} new patches. Total protected spans in new text: {len(final_spans)}."
+        f"Applied {num_replacements} replacements and {num_deletions} deletions. Total protected spans in new text: {len(final_spans)}."
     )
 
     return patched_text, final_spans

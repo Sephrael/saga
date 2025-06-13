@@ -584,7 +584,7 @@ class NANA_Orchestrator:
                 chars_removed,
             ) = await utils.deduplicate_text_segments(
                 original_text=text_to_dedup,
-                segment_level="paragraph",
+                segment_level="sentence",
                 similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
                 use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
                 min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
