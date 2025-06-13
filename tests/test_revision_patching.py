@@ -73,7 +73,6 @@ async def test_dedup_prefer_newer(monkeypatch):
     )
 
 
-
 @pytest.mark.asyncio
 async def test_skip_repatch_same_segment(monkeypatch):
     text = "Hello world!"

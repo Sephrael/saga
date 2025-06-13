@@ -1,3 +1,4 @@
+      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
@@ -376,6 +377,99 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
     return patch_instruction, usage_data
 
 
+def _consolidate_overlapping_problems(
+    problems: List[ProblemDetail],
+) -> List[ProblemDetail]:
+    """
+    Groups problems by their overlapping text spans and consolidates them.
+    This prevents generating multiple patches for the same or overlapping sentences.
+    """
+    if not problems:
+        return []
+
+    # Separate problems that have a specific sentence span from those that are general.
+    span_problems = [
+        p
+        for p in problems
+        if p.get("sentence_char_start") is not None
+        and p.get("sentence_char_end") is not None
+    ]
+    general_problems = [
+        p
+        for p in problems
+        if p.get("sentence_char_start") is None or p.get("sentence_char_end") is None
+    ]
+
+    if not span_problems:
+        return general_problems
+
+    # Sort problems by their start offset to enable linear merging
+    span_problems.sort(key=lambda p: p["sentence_char_start"])  # type: ignore
+
+    merged_groups: List[List[ProblemDetail]] = []
+    if span_problems:
+        current_group = [span_problems[0]]
+        current_group_end = span_problems[0]["sentence_char_end"]
+
+        for i in range(1, len(span_problems)):
+            next_problem = span_problems[i]
+            next_start = next_problem["sentence_char_start"]
+            next_end = next_problem["sentence_char_end"]
+
+            # If the next problem starts before the current group's span ends, it overlaps.
+            if next_start < current_group_end:  # type: ignore
+                current_group.append(next_problem)
+                current_group_end = max(current_group_end, next_end)  # type: ignore
+            else:
+                # The next problem does not overlap, so finalize the current group and start a new one.
+                merged_groups.append(current_group)
+                current_group = [next_problem]
+                current_group_end = next_end
+
+        merged_groups.append(current_group)  # Add the last group
+
+    consolidated_problems: List[ProblemDetail] = []
+    for group in merged_groups:
+        if len(group) == 1:
+            consolidated_problems.append(group[0])
+            continue
+
+        # Consolidate the group into a single new ProblemDetail
+        first_problem = group[0]
+        # Calculate the union of all spans in the group
+        group_start_offset = min(p["sentence_char_start"] for p in group)  # type: ignore
+        group_end_offset = max(p["sentence_char_end"] for p in group)  # type: ignore
+
+        # Combine all details from the problems in the group
+        all_categories = sorted(list(set(p["issue_category"] for p in group)))
+        all_descriptions = "; ".join(
+            f"({p['issue_category']}) {p['problem_description']}" for p in group
+        )
+        all_fix_foci = "; ".join(
+            f"({p['issue_category']}) {p['suggested_fix_focus']}" for p in group
+        )
+        # Use the quote from the first problem in the span as a representative
+        representative_quote = first_problem["quote_from_original_text"]
+
+        consolidated_problem: ProblemDetail = {
+            "issue_category": ", ".join(all_categories),
+            "problem_description": f"Multiple issues in one segment: {all_descriptions}",
+            "quote_from_original_text": f"Representative quote: {representative_quote}",
+            "quote_char_start": first_problem.get("quote_char_start"),
+            "quote_char_end": first_problem.get("quote_char_end"),
+            "sentence_char_start": group_start_offset,
+            "sentence_char_end": group_end_offset,
+            "suggested_fix_focus": f"Holistically revise the segment to address all points: {all_fix_foci}",
+        }
+        consolidated_problems.append(consolidated_problem)
+        logger.info(
+            f"Consolidated {len(group)} overlapping problems into one targeting span {group_start_offset}-{group_end_offset}."
+        )
+
+    consolidated_problems.extend(general_problems)
+    return consolidated_problems
+
+
 async def _generate_patch_instructions_logic(
     plot_outline: Dict[str, Any],
     original_text: str,
@@ -391,8 +485,11 @@ async def _generate_patch_instructions_logic(
         "total_tokens": 0,
     }
 
+    # Consolidate problems before generating patches
+    consolidated_problems = _consolidate_overlapping_problems(problems_to_fix)
+
     actionable_problems_for_patch_generation = []
-    for p_idx, p_item in enumerate(problems_to_fix):
+    for p_idx, p_item in enumerate(consolidated_problems):
         is_specific_and_located = (
             p_item["quote_from_original_text"] != "N/A - General Issue"
             and p_item["quote_from_original_text"].strip()
@@ -403,7 +500,7 @@ async def _generate_patch_instructions_logic(
         )
         is_expansion_depth_issue_general = (
             p_item["quote_from_original_text"] == "N/A - General Issue"
-            and p_item["issue_category"] == "narrative_depth_and_length"
+            and "narrative_depth_and_length" in p_item["issue_category"]
             and (
                 "short" in p_item["problem_description"].lower()
                 or "length" in p_item["problem_description"].lower()
@@ -433,10 +530,9 @@ async def _generate_patch_instructions_logic(
     problems_to_process = actionable_problems_for_patch_generation[
         : config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE
     ]
-    if len(problems_to_fix) > len(problems_to_process):
+    if len(consolidated_problems) > len(problems_to_process):
         logger.warning(
-            f"Found {len(problems_to_fix)} problems for Ch {chapter_number}. "
-            f"{len(actionable_problems_for_patch_generation)} were actionable for patch generation. "
+            f"Found {len(consolidated_problems)} unique patch targets for Ch {chapter_number}. "
             f"Attempting to generate patches for the first {len(problems_to_process)} of these."
         )
     elif not problems_to_process:
@@ -906,3 +1002,5 @@ async def revise_chapter_draft_logic(
         final_raw_llm_output,
         final_spans_for_next_cycle,
     ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
+
+    

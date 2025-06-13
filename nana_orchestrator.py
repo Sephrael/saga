@@ -1,4 +1,3 @@
-# nana_orchestrator.py
 """Central orchestration loop for the Saga story generator.
 
 This module coordinates initial setup, chapter generation, and knowledge graph
@@ -730,8 +729,38 @@ class NANA_Orchestrator:
         current_text_to_process: Optional[str] = initial_draft_text
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
         is_from_flawed_source_for_kg = False
-        de_duplication_occurred_this_chapter = False
         patched_spans: List[Tuple[int, int]] = []
+
+        # FIX: The de-duplication step was inside the revision loop.
+        # It should be a single, definitive cleaning step after drafting and before evaluation.
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Post-Draft De-duplication"
+        )
+        logger.info(
+            f"NANA: Ch {novel_chapter_number} - Applying post-draft de-duplication."
+        )
+        (
+            deduplicated_text,
+            removed_char_count,
+        ) = await self.perform_deduplication(
+            current_text_to_process, novel_chapter_number
+        )
+        if removed_char_count > 0:
+            is_from_flawed_source_for_kg = True
+            logger.info(
+                f"NANA: Ch {novel_chapter_number} - De-duplication removed {removed_char_count} characters. Text marked as potentially flawed for KG."
+            )
+            current_text_to_process = deduplicated_text
+            await self._save_debug_output(
+                novel_chapter_number,
+                "deduplicated_text_after_draft",
+                current_text_to_process,
+            )
+        else:
+            logger.info(
+                f"NANA: Ch {novel_chapter_number} - Post-draft de-duplication found no significant changes."
+            )
+
 
         revisions_made = 0
         needs_revision = True
@@ -744,35 +773,6 @@ class NANA_Orchestrator:
                     f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt}. Aborting chapter."
                 )
                 return None, None, True
-
-            self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - De-duplication Attempt {attempt}"
-            )
-            logger.info(
-                f"NANA: Ch {novel_chapter_number} - Pre-Evaluation De-duplication, Cycle Attempt {attempt}"
-            )
-            (
-                deduplicated_text,
-                removed_char_count,
-            ) = await self.perform_deduplication(
-                current_text_to_process, novel_chapter_number
-            )
-            if removed_char_count > 0:
-                de_duplication_occurred_this_chapter = True
-                is_from_flawed_source_for_kg = True
-                logger.info(
-                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt}) removed {removed_char_count} characters. Text marked as potentially flawed for KG."
-                )
-                current_text_to_process = deduplicated_text
-                await self._save_debug_output(
-                    novel_chapter_number,
-                    f"deduplicated_text_attempt_{attempt}",
-                    current_text_to_process,
-                )
-            else:
-                logger.info(
-                    f"NANA: Ch {novel_chapter_number} - De-duplication (Attempt {attempt}) found no significant changes."
-                )
 
             logger.info(
                 f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt} (Parallel)"
@@ -880,7 +880,7 @@ class NANA_Orchestrator:
                     evaluation_result,
                     hybrid_context_for_draft,
                     chapter_plan,
-                    is_from_flawed_source=de_duplication_occurred_this_chapter,
+                    is_from_flawed_source=is_from_flawed_source_for_kg, # Use the flag
                     already_patched_spans=patched_spans,
                 )
                 self._accumulate_tokens(
@@ -919,22 +919,10 @@ class NANA_Orchestrator:
                     current_raw_llm_output = (
                         rev_raw_output if rev_raw_output else current_raw_llm_output
                     )
-                    (
-                        current_text_to_process,
-                        removed_after_patch,
-                    ) = await self.perform_deduplication(
-                        current_text_to_process, novel_chapter_number
-                    )
-                    if removed_after_patch > 0:
-                        de_duplication_occurred_this_chapter = True
-                        is_from_flawed_source_for_kg = True
-                        await self._save_debug_output(
-                            novel_chapter_number,
-                            f"post_patch_dedup_attempt_{attempt}",
-                            current_text_to_process,
-                        )
+                    # A post-patch de-duplication could be added here if patching itself introduces loops,
+                    # but for now, we assume the main looping is from the initial draft.
                     logger.info(
-                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text_to_process)}. Re-processing (de-dup & eval)."
+                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text_to_process)}. Re-evaluating."
                     )
                     await self._save_debug_output(
                         novel_chapter_number,

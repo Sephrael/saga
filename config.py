@@ -114,6 +114,8 @@ class SagaSettings(BaseSettings):
     ENABLE_LLM_NO_THINK_DIRECTIVE: bool = True
     TIKTOKEN_DEFAULT_ENCODING: str = "cl100k_base"
     FALLBACK_CHARS_PER_TOKEN: float = 4.0
+    # Concurrency and Rate Limiting
+    MAX_CONCURRENT_LLM_CALLS: int = 4
 
     # Dynamic Model Assignments (set from base models if not specified in env)
     FALLBACK_GENERATION_MODEL: Optional[str] = None
@@ -215,7 +217,7 @@ class SagaSettings(BaseSettings):
 
     # De-duplication Configuration
     DEDUPLICATION_USE_SEMANTIC: bool = True
-    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85 # MODIFIED
+    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
     # Logging & UI
@@ -229,9 +231,9 @@ class SagaSettings(BaseSettings):
 
     # Novel Configuration (Defaults / Placeholders)
     UNHINGED_PLOT_MODE: bool = False
-    CONFIGURED_GENRE: str = "gritty fantasy"
-    CONFIGURED_THEME: str = "the cost of historical revisionism"
-    CONFIGURED_SETTING_DESCRIPTION: str = "a city that appears normal by day but transforms into something otherworldly at night"
+    CONFIGURED_GENRE: str = "occult mystery"
+    CONFIGURED_THEME: str = "the contrast between appearance and reality"
+    CONFIGURED_SETTING_DESCRIPTION: str = "a perpetual carnival that appears in different locations, collecting lost souls and broken dreams"
     DEFAULT_PROTAGONIST_NAME: str = "Saga"
     DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
 

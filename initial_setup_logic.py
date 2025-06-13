@@ -84,10 +84,24 @@ async def _bootstrap_field(
         parsed_json = json.loads(response_text)
         if isinstance(parsed_json, dict):
             value = parsed_json.get(field_name)
-            if is_list and isinstance(value, list):
-                return value, usage_data
-            if not is_list and isinstance(value, str):
+
+            if is_list:
+                if isinstance(value, list):
+                    return value, usage_data
+                elif isinstance(value, str):
+                    # FIX: Handle the case where LLM returns a comma or newline-separated string for a list.
+                    logger.info(
+                        f"LLM returned a string for list field '{field_name}'. Parsing string into list."
+                    )
+                    items = [
+                        item.strip().lstrip("-* ").strip()
+                        for item in value.replace("\n", ",").split(",")
+                        if item.strip()
+                    ]
+                    return items, usage_data
+            elif isinstance(value, str):  # if not is_list
                 return value.strip(), usage_data
+
             logger.warning(
                 f"LLM JSON for '{field_name}' had unexpected type. Got: {type(value)}"
             )

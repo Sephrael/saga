@@ -36,7 +36,7 @@ INTERNAL_VALID_CATEGORIES = {
     "plot_arc",
     "thematic_alignment",  # Standardized internal name
     "narrative_depth_and_length",  # Standardized internal name
-    "repetition_and_redundancy", # ADDED
+    "repetition_and_redundancy",
     "meta",
 }
 
@@ -50,8 +50,8 @@ def _normalize_llm_category_to_internal(llm_category_str: str) -> str:
         "narrative_depth" in normalized
     ):  # Catches "narrative_depth_and_length" or "narrative_depth"
         return "narrative_depth_and_length"
-    if "repetition" in normalized or "redundancy" in normalized: # ADDED
-        return "repetition_and_redundancy" # ADDED
+    if "repetition" in normalized or "redundancy" in normalized:
+        return "repetition_and_redundancy"
     # For exact matches or other categories like consistency, plot_arc, meta
     if normalized in INTERNAL_VALID_CATEGORIES:
         return normalized
@@ -560,7 +560,7 @@ class ComprehensiveEvaluatorAgent:
                 "plot_arc": "Plot Arc deviation identified by LLM.",
                 "thematic_alignment": "Thematic Alignment issues identified by LLM.",
                 "narrative_depth_and_length": "Narrative Depth/Length issues identified by LLM.",
-                "repetition_and_redundancy": "Repetition/Redundancy issues identified by LLM.", # ADDED
+                "repetition_and_redundancy": "Repetition/Redundancy issues identified by LLM.",
                 "meta": "Meta/Uncategorized issues identified by LLM.",
             }
             for prob in parsed_problems_from_llm:

@@ -6,7 +6,7 @@ General utility functions for the Saga Novel Generation system.
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 import numpy as np
 
@@ -532,7 +532,9 @@ async def deduplicate_text_segments(
         # Compare with other segments
         # The inner loop direction depends on the outer loop direction
         # to ensure we compare each pair only once.
-        inner_range = range(i - 1, -1, -1) if prefer_newer else range(i + 1, num_segments)
+        inner_range = (
+            range(i - 1, -1, -1) if prefer_newer else range(i + 1, num_segments)
+        )
 
         for j in inner_range:
             if j in indices_to_remove:
@@ -560,7 +562,9 @@ async def deduplicate_text_segments(
             if is_duplicate:
                 # 'j' is always the one to be removed because of the loop structure.
                 indices_to_remove.add(j)
-                method_used = "semantic" if use_semantic_comparison else "normalized string"
+                method_used = (
+                    "semantic" if use_semantic_comparison else "normalized string"
+                )
                 logger.info(
                     f"De-duplication: Marking segment (idx {j}, chars {start_j}-{end_j}) for removal as duplicate of (idx {i}, chars {start_i}-{end_i}). Method: {method_used}."
                 )
@@ -568,28 +572,26 @@ async def deduplicate_text_segments(
     if not indices_to_remove:
         return original_text, 0
 
-    indices_to_keep = sorted(
-        [i for i in range(num_segments) if i not in indices_to_remove]
-    )
+    # Build the new text by cutting out the segments marked for removal.
+    # We use the start/end offsets from the original text.
+    spans_to_remove_offsets = [
+        segments_with_offsets[i][1:] for i in sorted(list(indices_to_remove))
+    ]
+    spans_to_remove_offsets.sort(key=lambda x: x[0])
 
-    # Rebuild the text from non-duplicate segments using their original offsets
-    # This preserves interstitial whitespace correctly.
-    result_parts = []
-    last_end = 0
-    for i in indices_to_keep:
-        _, seg_start, seg_end = segments_with_offsets[i]
-        result_parts.append(original_text[last_end:seg_start])
-        result_parts.append(original_text[seg_start:seg_end])
-        last_end = seg_end
-    
-    # Append any trailing content after the last kept segment, which is correct.
-    # The previous bug was here.
-    if last_end < len(original_text):
-        result_parts.append(original_text[last_end:])
-    
-    deduplicated_text = "".join(result_parts)
+    new_text_parts = []
+    last_pos = 0
+    for start, end in spans_to_remove_offsets:
+        if start > last_pos:
+            new_text_parts.append(original_text[last_pos:start])
+        last_pos = max(last_pos, end)
 
-    # Final cleanup of excessive newlines
+    if last_pos < len(original_text):
+        new_text_parts.append(original_text[last_pos:])
+
+    deduplicated_text = "".join(new_text_parts)
+
+    # Final cleanup of excessive newlines that might result from removal.
     deduplicated_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", deduplicated_text)
     deduplicated_text = re.sub(r"\n{3,}", "\n\n", deduplicated_text).strip()
 
