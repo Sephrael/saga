@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
+import utils
 from chapter_revision_logic import _apply_patches_to_text
 from llm_interface import llm_service
-import utils
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_patch_skipped_when_high_similarity(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result, _ = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
     assert result == original
 
 
@@ -51,7 +51,7 @@ async def test_patch_applied_when_low_similarity(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result, _ = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
     assert result == "Hi world!"
 
 
@@ -103,8 +103,8 @@ async def test_skip_repatch_same_segment(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    patched1, spans1 = await _apply_patches_to_text(text, first_patch)
-    patched2, _ = await _apply_patches_to_text(patched1, second_patch, spans1)
+    patched1, spans1 = await _apply_patches_to_text(text, first_patch, None, None)
+    patched2, _ = await _apply_patches_to_text(patched1, second_patch, spans1, None)
 
     assert patched2 == patched1
     dedup, _ = await utils.deduplicate_text_segments(
@@ -149,7 +149,7 @@ async def test_multiple_patches_applied(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result, _ = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
     assert result == "Hi world! See ya world!"
 
 
@@ -185,6 +185,6 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result, _ = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
     # Only the first patch should be applied because the second overlaps exactly
     assert result == "Hi world!"
