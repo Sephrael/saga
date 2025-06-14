@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent

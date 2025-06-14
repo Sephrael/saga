@@ -1,5 +1,4 @@
 import json
-import pytest
 from problem_parser import parse_problem_list
 
 
