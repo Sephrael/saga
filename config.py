@@ -187,7 +187,7 @@ class SagaSettings(BaseSettings):
     RERANKER_CANDIDATE_COUNT: int = 15
 
     # Agentic Planning & Prompt Context Snippets
-    ENABLE_AGENTIC_PLANNING: bool = True
+    ENABLE_AGENTIC_PLANNING: bool = False
     MAX_PLANNING_TOKENS: int = 16384
     TARGET_SCENES_MIN: int = 4
     TARGET_SCENES_MAX: int = 6
