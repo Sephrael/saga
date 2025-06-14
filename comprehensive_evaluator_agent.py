@@ -19,7 +19,7 @@ from prompt_data_getters import (
     get_reliable_kg_facts_for_drafting_prompt,
 )
 
-import json  # Added for JSON parsing
+from problem_parser import parse_problem_list
 
 logger = logging.getLogger(__name__)
 
@@ -75,86 +75,10 @@ class ComprehensiveEvaluatorAgent:
         """
         final_problems: List[ProblemDetail] = []
 
-        if not json_text or not json_text.strip():
-            logger.info(
-                f"JSON evaluation for Ch {chapter_number} is empty. No problems parsed."
-            )
+        parsed_data = parse_problem_list(json_text)
+        if not parsed_data:
+            logger.info(f"JSON evaluation for Ch {chapter_number} yielded no problems.")
             return []
-
-        try:
-            # LLM is expected to output a JSON list of problem objects.
-            # Each object should have keys like: issue_category, problem_description,
-            # quote_from_original_text, suggested_fix_focus
-            parsed_data = json.loads(json_text)
-            if not isinstance(parsed_data, list):
-                # Handle cases where LLM might return a single JSON object or a dict with a status
-                if (
-                    isinstance(parsed_data, dict)
-                    and "status" in parsed_data
-                    and "no significant problems found" in parsed_data["status"].lower()
-                ):
-                    logger.info(
-                        f"JSON evaluation for Ch {chapter_number} indicates no problems: {parsed_data}"
-                    )
-                    return []
-                if (
-                    isinstance(parsed_data, dict)
-                    and "problems" in parsed_data
-                    and isinstance(parsed_data["problems"], list)
-                ):
-                    logger.info(
-                        f"JSON evaluation for Ch {chapter_number} has problems nested under 'problems' key."
-                    )
-                    parsed_data = parsed_data[
-                        "problems"
-                    ]  # Process the list of problems
-                else:
-                    logger.error(
-                        f"LLM evaluation output was not a JSON list of problems as expected. Received type: {type(parsed_data)}. Content: {json_text[:300]}"
-                    )
-                    final_problems.append(
-                        {
-                            "issue_category": "meta",
-                            "problem_description": "LLM output was not a list of problems.",
-                            "quote_from_original_text": "N/A - LLM Output Format Error",
-                            "quote_char_start": None,
-                            "quote_char_end": None,
-                            "sentence_char_start": None,
-                            "sentence_char_end": None,
-                            "suggested_fix_focus": "Ensure LLM outputs a JSON list of problem objects.",
-                        }
-                    )
-                    return final_problems
-
-            if not parsed_data:  # Empty list from JSON
-                logger.info(
-                    f"JSON evaluation for Ch {chapter_number} was an empty list. No problems parsed."
-                )
-                return []
-
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to decode JSON from LLM evaluation output for Ch {chapter_number}: {e}. Text: {json_text[:500]}..."
-            )
-            # Check for common "no problems" text even if JSON is malformed around it
-            if "no significant problems found" in json_text.lower():
-                logger.info(
-                    "JSON decode error, but text indicates no significant problems."
-                )
-                return []
-            final_problems.append(
-                {
-                    "issue_category": "meta",
-                    "problem_description": f"Invalid JSON from LLM: {e}",
-                    "quote_from_original_text": "N/A - Invalid JSON",
-                    "quote_char_start": None,
-                    "quote_char_end": None,
-                    "sentence_char_start": None,
-                    "sentence_char_end": None,
-                    "suggested_fix_focus": "Review LLM output for JSON validity.",
-                }
-            )
-            return final_problems
 
         for i, problem_dict in enumerate(parsed_data):
             if not isinstance(problem_dict, dict):
