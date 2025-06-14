@@ -561,8 +561,9 @@ class NANA_Orchestrator:
     async def _prepare_chapter_prerequisites(
         self, novel_chapter_number: int
     ) -> Tuple[Optional[str], int, Optional[List[SceneDetail]], Optional[str]]:
+        """Gather planning and context needed before drafting a chapter."""
         self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Preparing Prerequisites (Parallel)"
+            step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
         )
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(
@@ -575,8 +576,8 @@ class NANA_Orchestrator:
             return None, -1, None, None
 
         self._update_novel_props_cache()
-        # --- PARALLEL EXECUTION of Planning and Context Generation ---
-        planning_task = self.planner_agent.plan_chapter_scenes(
+
+        chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
             self.character_profiles,
             self.world_building,
@@ -584,22 +585,15 @@ class NANA_Orchestrator:
             plot_point_focus,
             plot_point_index,
         )
-        context_task = generate_hybrid_chapter_context_logic(
-            self, novel_chapter_number, None
-        )  # Pass None for plan initially
-
-        (
-            (chapter_plan_result, plan_usage),
-            hybrid_context_for_draft,
-        ) = await asyncio.gather(planning_task, context_task)
-        # --- END PARALLEL EXECUTION ---
-
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
+
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
 
-        # If context generation could benefit from the plan, it could be re-run here,
-        # but for now, the parallel execution is a significant win.
-        # We can pass the generated plan to the drafting agent directly.
+        hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
+            self, novel_chapter_number, chapter_plan
+        )
+
+        # Context generation already used the plan, so rerunning is unnecessary.
 
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
