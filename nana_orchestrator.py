@@ -28,6 +28,7 @@ from kg_maintainer.models import (
     WorldItem,
 )
 from kg_maintainer_agent import KGMaintainerAgent
+from finalize_agent import FinalizeAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
 from story_models import UserStoryInputModel, user_story_to_objects
@@ -93,6 +94,7 @@ class NANA_Orchestrator:
         self.evaluator_agent = ComprehensiveEvaluatorAgent()
         self.world_continuity_agent = WorldContinuityAgent()
         self.kg_maintainer_agent = KGMaintainerAgent()
+        self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
 
         self.plot_outline: Dict[str, Any] = {}
         self.character_profiles: Dict[str, CharacterProfile] = {}
@@ -1032,44 +1034,32 @@ class NANA_Orchestrator:
         final_raw_llm_output: Optional[str],
         is_from_flawed_source_for_kg: bool,
     ) -> Optional[str]:
-        self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Finalization (Parallel)"
-        )
+        self._update_rich_display(step=f"Ch {novel_chapter_number} - Finalization")
 
-        # --- PARALLEL EXECUTION of Summary, Embedding, and KG Extraction ---
-        summary_task = self.kg_maintainer_agent.summarize_chapter(
-            final_text_to_process, novel_chapter_number
-        )
-        embedding_task = llm_service.async_get_embedding(final_text_to_process)
-        kg_extraction_task = self.kg_maintainer_agent.extract_and_merge_knowledge(
+        result = await self.finalize_agent.finalize_chapter(
             self.plot_outline,
             self.character_profiles,
             self.world_building,
             novel_chapter_number,
             final_text_to_process,
+            final_raw_llm_output,
             is_from_flawed_source_for_kg,
         )
 
-        (
-            (chapter_summary, summary_usage),
-            final_embedding,
-            kg_merge_usage,
-        ) = await asyncio.gather(summary_task, embedding_task, kg_extraction_task)
-        # --- END PARALLEL EXECUTION ---
-
         self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-Summarization", summary_usage
+            f"Ch{novel_chapter_number}-Summarization", result.get("summary_usage")
         )
         self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
+            f"Ch{novel_chapter_number}-KGExtractionMerge", result.get("kg_usage")
         )
         await self._save_debug_output(
-            novel_chapter_number, "final_summary", chapter_summary
+            novel_chapter_number, "final_summary", result.get("summary")
         )
 
-        if final_embedding is None:
+        if result.get("embedding") is None:
             logger.error(
-                f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only."
+                "NANA CRITICAL: Failed to generate embedding for final text of Chapter %s. Text saved to file system only.",
+                novel_chapter_number,
             )
             await self._save_chapter_text_and_log(
                 novel_chapter_number,
@@ -1081,28 +1071,11 @@ class NANA_Orchestrator:
             )
             return None
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Saving to DB")
-        await chapter_queries.save_chapter_data_to_db(
-            novel_chapter_number,
-            final_text_to_process,
-            final_raw_llm_output or "N/A",
-            chapter_summary,
-            final_embedding,
-            is_from_flawed_source_for_kg,
-        )
         await self._save_chapter_text_and_log(
             novel_chapter_number, final_text_to_process, final_raw_llm_output
         )
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
-
-        # The KG merge already happened in memory, now just persist the final objects
-        await self.kg_maintainer_agent.persist_profiles(
-            self.character_profiles, novel_chapter_number
-        )
-        await self.kg_maintainer_agent.persist_world(
-            self.world_building, novel_chapter_number
-        )
 
         return final_text_to_process
 
