@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
-import utils
 from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from prompt_renderer import render_prompt
 from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
@@ -72,7 +71,11 @@ class DraftingAgent:
                 logger.error(
                     f"Drafting failed for Chapter {chapter_number} (whole chapter mode): LLM returned empty text."
                 )
-                return None, "LLM returned empty text in whole chapter drafting mode.", usage_data
+                return (
+                    None,
+                    "LLM returned empty text in whole chapter drafting mode.",
+                    usage_data,
+                )
 
             logger.info(
                 f"DraftingAgent: Successfully generated draft for Chapter {chapter_number} (whole chapter mode). Length: {len(draft_text)} characters."

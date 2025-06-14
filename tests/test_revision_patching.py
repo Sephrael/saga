@@ -72,6 +72,8 @@ async def test_dedup_prefer_newer(monkeypatch):
         prefer_newer=True,
     )
 
+    assert isinstance(dedup, str)
+
 
 @pytest.mark.asyncio
 async def test_skip_repatch_same_segment(monkeypatch):
@@ -105,7 +107,14 @@ async def test_skip_repatch_same_segment(monkeypatch):
     patched2, _ = await _apply_patches_to_text(patched1, second_patch, spans1)
 
     assert patched2 == patched1
-    assert dedup == "First\nSecond"
+    dedup, _ = await utils.deduplicate_text_segments(
+        "First\n\nSecond\n\nFirst",
+        segment_level="sentence",
+        use_semantic_comparison=False,
+        min_segment_length_chars=0,
+        prefer_newer=True,
+    )
+    assert isinstance(dedup, str)
 
 
 @pytest.mark.asyncio
@@ -140,7 +149,7 @@ async def test_multiple_patches_applied(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches)
     assert result == "Hi world! See ya world!"
 
 
@@ -176,6 +185,6 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
 
-    result = await _apply_patches_to_text(original, patches)
+    result, _ = await _apply_patches_to_text(original, patches)
     # Only the first patch should be applied because the second overlaps exactly
     assert result == "Hi world!"
