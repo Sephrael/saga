@@ -18,14 +18,7 @@ from data_access import (
     world_queries,
 )
 from drafting_agent import DraftingAgent
-from initial_setup_logic import (
-    bootstrap_characters,
-    bootstrap_plot_outline,
-    bootstrap_world,
-    create_default_characters,
-    create_default_plot,
-    create_default_world,
-)
+from initial_setup_logic import run_genesis_phase
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
@@ -35,10 +28,8 @@ from kg_maintainer.models import (
 from kg_maintainer_agent import KGMaintainerAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
-from pydantic import ValidationError
 from story_models import UserStoryInputModel, user_story_to_objects
 from world_continuity_agent import WorldContinuityAgent
-from yaml_parser import load_yaml_file
 
 try:
     from rich.console import Group
@@ -379,54 +370,19 @@ class NANA_Orchestrator:
     async def perform_initial_setup(self):
         self._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
-        logger.info("\n--- NANA: Initializing Plot, Characters, and World ---")
-
-        user_model_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
-        if user_model_data:
-            try:
-                validated_model = UserStoryInputModel.model_validate(user_model_data)
-                (
-                    self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
-                ) = user_story_to_objects(validated_model)
-                self.plot_outline["source"] = "user_supplied_yaml"
-                self.world_building["source"] = "user_supplied_yaml"
-                logger.info(
-                    "Successfully loaded and processed user-supplied YAML data."
-                )
-            except ValidationError as e:
-                logger.error(
-                    f"Error validating user YAML data: {e}. Falling back to defaults."
-                )
-                user_model_data = None
-
-        if not user_model_data:
-            logger.info(
-                "No valid user YAML found. Creating default state for bootstrapping."
-            )
-            self.plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
-            self.character_profiles = create_default_characters(
-                self.plot_outline["protagonist_name"]
-            )
-            self.world_building = create_default_world()
-
-        self.plot_outline, plot_usage = await bootstrap_plot_outline(self.plot_outline)
-        self._accumulate_tokens("Bootstrap-Plot", plot_usage)
-
-        self.character_profiles, char_usage = await bootstrap_characters(
-            self.character_profiles, self.plot_outline
-        )
-        self._accumulate_tokens("Bootstrap-Characters", char_usage)
-
-        self.world_building, world_usage = await bootstrap_world(
-            self.world_building, self.plot_outline
-        )
-        self._accumulate_tokens("Bootstrap-World", world_usage)
+        (
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
+            usage,
+        ) = await run_genesis_phase()
+        self._accumulate_tokens("Genesis-Phase", usage)
 
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(
-            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Plot Points: {len(self.plot_outline.get('plot_points', []))}"
+            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). "
+            f"Title: '{self.plot_outline.get('title', 'N/A')}'. "
+            f"Plot Points: {len(self.plot_outline.get('plot_points', []))}"
         )
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
@@ -1328,8 +1284,7 @@ class NANA_Orchestrator:
                     return
                 self._update_novel_props_cache()
 
-            await self._prepopulate_kg_if_needed()
-            self._update_novel_props_cache()
+            # KG pre-population handled within run_genesis_phase
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
 

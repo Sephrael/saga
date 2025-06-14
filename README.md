@@ -56,7 +56,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **Load Existing State (if any):** Attempts to load plot outline, character profiles, world-building, and chapter count from Neo4j.
     *   **Initial Story Generation (if needed):**
         *   If `user_story_elements.md` is provided and contains content, it's parsed by `MarkdownStoryParser` to bootstrap the plot, characters, and world.
-        *   Otherwise, or if key elements are marked `[Fill-in]`, `InitialSetupLogic` uses LLMs to generate a plot outline, initial character profiles, and core world-building elements. This can be influenced by "Unhinged Mode" or default configurations.
+        *   Otherwise, or if key elements are marked `[Fill-in]`, `run_genesis_phase` fills in the plot outline, character profiles, and world-building details via targeted LLM calls. This can be influenced by "Unhinged Mode" or default configurations.
     *   **KG Pre-population:** The `KGMaintainerAgent` populates the Neo4j graph with this foundational story data.
 
 2.  **Chapter Generation Loop (Iterates for `CHAPTERS_PER_RUN`):**
