@@ -462,19 +462,28 @@ async def find_candidate_duplicate_entities(
     similarity_threshold: float = 0.85, limit: int = 50
 ) -> List[Dict[str, Any]]:
     """
-    Finds pairs of entities with similar names using APOC's Levenshtein similarity.
+    Finds pairs of entities with similar names using APOC's Levenshtein distance.
     This requires the APOC plugin to be installed in Neo4j.
     """
+    # This query now uses `apoc.coll.max` which is the correct scalar function
+    # for finding the max value within a single row's context.
     query = """
     MATCH (e1:Entity), (e2:Entity)
     WHERE id(e1) < id(e2)
       AND e1.name IS NOT NULL AND e2.name IS NOT NULL
-      AND NOT e1:ValueNode AND NOT e2:ValueNode // Exclude ValueNodes
-      AND apoc.text.levenshteinSimilarity(e1.name, e2.name) >= $threshold
+      AND NOT e1:ValueNode AND NOT e2:ValueNode
+    WITH e1, e2, apoc.text.distance(e1.name, e2.name) AS distance
+    
+    // CORRECTED LINE: Use apoc.coll.max on a list of the two sizes.
+    WITH e1, e2, distance, apoc.coll.max([size(e1.name), size(e2.name)]) as max_len
+
+    // Calculate similarity using the new max_len variable
+    WHERE (1 - (distance / toFloat(max_len))) >= $threshold
+    
     RETURN
       e1.id AS id1, e1.name AS name1, labels(e1) AS labels1,
       e2.id AS id2, e2.name AS name2, labels(e2) AS labels2,
-      apoc.text.levenshteinSimilarity(e1.name, e2.name) as similarity
+      (1 - (distance / toFloat(max_len))) as similarity
     ORDER BY similarity DESC
     LIMIT $limit
     """
@@ -483,11 +492,10 @@ async def find_candidate_duplicate_entities(
         results = await neo4j_manager.execute_read_query(query, params)
         return results if results else []
     except Exception as e:
-        if "Unknown function 'apoc.text.levenshteinSimilarity'" in str(e):
+        if "apoc.text.distance" in str(e) or "apoc.coll.max" in str(e):
             logger.error(
-                "APOC Library not found or configured in Neo4j. "
-                "Entity resolution via name similarity is disabled. "
-                "Please install the APOC plugin for your Neo4j version."
+                "A required APOC function was not found. "
+                "Please ensure the full APOC Extended plugin is installed."
             )
         else:
             logger.error(
