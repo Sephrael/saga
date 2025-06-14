@@ -29,6 +29,49 @@ class FinalizeAgent:
         self.kg_agent = kg_agent or KGMaintainerAgent()
         logger.info("FinalizeAgent initialized")
 
+    def _extract_json_block(self, text: str, key: str) -> str:
+        """Extract a JSON object associated with a key using brace counting."""
+        pattern = re.compile(rf'"{re.escape(key)}"\s*:\s*{{')
+        match = pattern.search(text)
+        if not match:
+            return "{}"
+        start = match.end() - 1
+        brace_count = 0
+        for idx in range(start, len(text)):
+            char = text[idx]
+            if char == "{":
+                brace_count += 1
+            elif char == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    return text[start : idx + 1]
+        return "{}"
+
+    def _extract_array_block(self, text: str, key: str) -> str:
+        """Extract and join array text for KG triples."""
+        pattern = re.compile(rf'"{re.escape(key)}"\s*:\s*\[')
+        match = pattern.search(text)
+        if not match:
+            return ""
+        start = match.end() - 1
+        bracket_count = 0
+        for idx in range(start, len(text)):
+            char = text[idx]
+            if char == "[":
+                bracket_count += 1
+            elif char == "]":
+                bracket_count -= 1
+                if bracket_count == 0:
+                    block = text[start : idx + 1]
+                    try:
+                        arr = json.loads(block)
+                        if isinstance(arr, list):
+                            return "\n".join(str(v) for v in arr)
+                    except json.JSONDecodeError:
+                        pass
+                    return block
+        return ""
+
     def _validate_character_updates(self, updates: Dict[str, CharacterProfile]) -> bool:
         for name, profile in updates.items():
             if not name or not profile.name:
@@ -79,32 +122,12 @@ class FinalizeAgent:
                 triples_text = str(triples_list)
         except json.JSONDecodeError:
             logger.warning(
-                "Failed to parse extraction JSON, attempting regex",
+                "Failed to parse extraction JSON, attempting manual extraction",
                 chapter=chapter_number,
             )
-            char_match = re.search(
-                r'"character_updates"\s*:\s*({.*?})', raw_text, re.DOTALL
-            )
-            if char_match:
-                char_updates_raw = char_match.group(1)
-            world_match = re.search(
-                r'"world_updates"\s*:\s*({.*?})', raw_text, re.DOTALL
-            )
-            if world_match:
-                world_updates_raw = world_match.group(1)
-            triples_match = re.search(
-                r'"kg_triples"\s*:\s*(\[.*?\])', raw_text, re.DOTALL
-            )
-            if triples_match:
-                try:
-                    triples_list = json.loads(triples_match.group(1))
-                    if isinstance(triples_list, list):
-                        triples_text = "\n".join([str(t) for t in triples_list])
-                except json.JSONDecodeError:
-                    logger.warning(
-                        "Regex found kg_triples but JSON invalid",
-                        chapter=chapter_number,
-                    )
+            char_updates_raw = self._extract_json_block(raw_text, "character_updates")
+            world_updates_raw = self._extract_json_block(raw_text, "world_updates")
+            triples_text = self._extract_array_block(raw_text, "kg_triples")
 
         char_updates = self.kg_agent.parse_character_updates(
             char_updates_raw, chapter_number
@@ -156,6 +179,20 @@ class FinalizeAgent:
         raw_llm_output: Optional[str] = None,
         from_flawed_draft: bool = False,
     ) -> FinalizationResult:
+        """Finalize a chapter and persist all related updates.
+
+        Args:
+            plot_outline: The current plot outline for the novel.
+            character_profiles: Known character profiles before this chapter.
+            world_building: Known world elements before this chapter.
+            chapter_number: The chapter number being finalized.
+            final_text: The approved chapter text.
+            raw_llm_output: Optional raw draft from the LLM.
+            from_flawed_draft: Whether the text came from a flawed draft.
+
+        Returns:
+            A dictionary containing the summary, embedding, and token usage data.
+        """
         summary_task = self.kg_agent.summarize_chapter(final_text, chapter_number)
         embedding_task = llm_service.async_get_embedding(final_text)
         kg_task = self._extract_merge_and_persist(
