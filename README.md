@@ -17,7 +17,7 @@ SAGA is an autonomous, agentic creative-writing system designed to generate enti
 SAGA, with its NANA engine, is an ambitious project designed to autonomously craft entire novels. It transcends simple text generation by employing a collaborative team of specialized AI agents:
 
 *   **`PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression.
-*   **`DraftingAgent`:** Weaves the initial prose for chapters, guided by the `PlannerAgent`'s blueprints and rich contextual information.
+*   **`DraftingAgent`:** Weaves the initial prose for chapters, guided by the `PlannerAgent`'s blueprints and rich contextual information. It uses two Jinja templates: `draft_chapter_from_plot_point.j2` for single-pass chapter drafting and `draft_scene.j2` when generating chapters scene by scene.
 *   **`ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality.
 *   **`WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories within the narrative.
 *   **`ChapterRevisionLogic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.

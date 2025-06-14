@@ -634,7 +634,6 @@ class NANA_Orchestrator:
         ) = await self.drafting_agent.draft_chapter(
             self.plot_outline,
             self.character_profiles,
-            self.world_building,
             novel_chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
