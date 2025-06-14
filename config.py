@@ -171,9 +171,9 @@ class SagaSettings(BaseSettings):
     # Generation Parameters
     MAX_CONTEXT_TOKENS: int = 40960
     MAX_GENERATION_TOKENS: int = 16384
-    CONTEXT_CHAPTER_COUNT: int = 5
+    CONTEXT_CHAPTER_COUNT: int = 3
     CHAPTERS_PER_RUN: int = 3
-    KG_HEALING_INTERVAL: int = 3
+    KG_HEALING_INTERVAL: int = 2
     TARGET_PLOT_POINTS_INITIAL_GENERATION: int = 18
 
     # Caching
@@ -188,7 +188,7 @@ class SagaSettings(BaseSettings):
 
     # Agentic Planning & Prompt Context Snippets
     ENABLE_AGENTIC_PLANNING: bool = True
-    MAX_PLANNING_TOKENS: int = 8192
+    MAX_PLANNING_TOKENS: int = 16384
     TARGET_SCENES_MIN: int = 4
     TARGET_SCENES_MAX: int = 6
     PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80
@@ -199,9 +199,11 @@ class SagaSettings(BaseSettings):
     PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET: int = 2
 
     # Revision and Validation
+    ENABLE_COMPREHENSIVE_EVALUATION: bool = True
+    ENABLE_WORLD_CONTINUITY_CHECK: bool = True
     ENABLE_PATCH_BASED_REVISION: bool = True
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 3
-    MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 8192
+    MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 16384
     REVISION_COHERENCE_THRESHOLD: float = 0.60
     REVISION_SIMILARITY_ACCEPTANCE: float = 0.995
     MAX_REVISION_CYCLES_PER_CHAPTER: int = 2

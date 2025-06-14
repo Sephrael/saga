@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache  # type: ignore
+from jinja2 import Template
 
 import config
 from core_db.base_db_manager import neo4j_manager
@@ -58,6 +59,51 @@ async def _llm_summarize_full_chapter_text(
         except json.JSONDecodeError:
             logger.debug(f"Summary for chapter {chapter_number} was not a JSON object.")
     return summary_text, usage_data
+
+
+# Prompt template for entity resolution, embedded to avoid new file dependency
+ENTITY_RESOLUTION_PROMPT_TEMPLATE = """
+You are an expert knowledge graph analyst for a creative writing project. Your task is to determine if two entities from the narrative's knowledge graph are referring to the same canonical thing based on their names, properties, and relationships.
+
+**Entity 1 Details:**
+- Name: {{ entity1.name }}
+- Labels: {{ entity1.labels }}
+- Properties:
+{{ entity1.properties | tojson(indent=2) }}
+- Key Relationships (up to 10):
+{% if entity1.relationships %}
+{% for rel in entity1.relationships %}
+  - Related to '{{ rel.other_node_name }}' (Labels: {{ rel.other_node_labels }}) via relationship of type '{{ rel.rel_type }}'
+{% endfor %}
+{% else %}
+  - No relationships found.
+{% endif %}
+
+**Entity 2 Details:**
+- Name: {{ entity2.name }}
+- Labels: {{ entity2.labels }}
+- Properties:
+{{ entity2.properties | tojson(indent=2) }}
+- Key Relationships (up to 10):
+{% if entity2.relationships %}
+{% for rel in entity2.relationships %}
+  - Related to '{{ rel.other_node_name }}' (Labels: {{ rel.other_node_labels }}) via relationship of type '{{ rel.rel_type }}'
+{% endfor %}
+{% else %}
+  - No relationships found.
+{% endif %}
+
+**Analysis Task:**
+Based on all the provided context, including name similarity, properties (like descriptions), and shared relationships, are "Entity 1" and "Entity 2" the same entity within the story's canon? For example, "The Locket" and "The Pendant" might be the same item, or "The Shattered Veil" and "Shattered Veil" are likely the same faction.
+
+**Response Format:**
+Respond in JSON format only, with no other text, commentary, or markdown. Your entire response must be a single, valid JSON object with the following structure:
+{
+  "is_same_entity": boolean,
+  "confidence_score": float (from 0.0 to 1.0, representing your certainty),
+  "reason": "A brief explanation for your decision."
+}
+"""
 
 
 class KGMaintainerAgent:
@@ -354,8 +400,8 @@ class KGMaintainerAgent:
 
     async def heal_and_enrich_kg(self):
         """
-        Performs maintenance on the Knowledge Graph by enriching thin nodes
-        and checking for inconsistencies.
+        Performs maintenance on the Knowledge Graph by enriching thin nodes,
+        checking for inconsistencies, and resolving duplicate entities.
         """
         logger.info("KG Healer/Enricher: Starting maintenance cycle.")
 
@@ -380,6 +426,9 @@ class KGMaintainerAgent:
 
         # 2. Consistency Checks
         await self._run_consistency_checks()
+        
+        # 3. Entity Resolution
+        await self._run_entity_resolution()
 
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
@@ -532,6 +581,86 @@ class KGMaintainerAgent:
                 )
         else:
             logger.info("KG Consistency Check: No post-mortem activity found.")
+
+    async def _run_entity_resolution(self) -> None:
+        """Finds and resolves potential duplicate entities in the KG."""
+        logger.info("KG Healer: Running entity resolution...")
+        candidate_pairs = await kg_queries.find_candidate_duplicate_entities()
+
+        if not candidate_pairs:
+            logger.info("KG Healer: No candidate duplicate entities found.")
+            return
+
+        logger.info(
+            f"KG Healer: Found {len(candidate_pairs)} candidate pairs for entity resolution."
+        )
+
+        jinja_template = Template(ENTITY_RESOLUTION_PROMPT_TEMPLATE)
+
+        for pair in candidate_pairs:
+            id1, id2 = pair.get("id1"), pair.get("id2")
+            if not id1 or not id2:
+                continue
+
+            # Fetch context for both entities in parallel
+            context1_task = kg_queries.get_entity_context_for_resolution(id1)
+            context2_task = kg_queries.get_entity_context_for_resolution(id2)
+            context1, context2 = await asyncio.gather(context1_task, context2_task)
+
+            if not context1 or not context2:
+                logger.warning(
+                    f"Could not fetch full context for pair ({id1}, {id2}). Skipping."
+                )
+                continue
+
+            prompt = jinja_template.render(entity1=context1, entity2=context2)
+            llm_response, _ = await llm_service.async_call_llm(
+                model_name=config.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=0.1,
+                auto_clean_response=True,
+            )
+
+            try:
+                decision_data = json.loads(llm_response)
+                if (
+                    decision_data.get("is_same_entity") is True
+                    and decision_data.get("confidence_score", 0.0) > 0.8
+                ):
+                    logger.info(
+                        f"LLM confirmed merge for '{context1.get('name')}' (id: {id1}) and "
+                        f"'{context2.get('name')}' (id: {id2}). Reason: {decision_data.get('reason')}"
+                    )
+
+                    # Heuristic to decide which node to keep
+                    degree1 = context1.get("degree", 0)
+                    degree2 = context2.get("degree", 0)
+                    
+                    # Prefer node with more relationships
+                    if degree1 > degree2:
+                        target_id, source_id = id1, id2
+                    elif degree2 > degree1:
+                        target_id, source_id = id2, id1
+                    else:
+                        # Tie-breaker: prefer the one with a more detailed description
+                        desc1_len = len(context1.get("properties", {}).get("description", ""))
+                        desc2_len = len(context2.get("properties", {}).get("description", ""))
+                        if desc1_len >= desc2_len:
+                             target_id, source_id = id1, id2
+                        else:
+                             target_id, source_id = id2, id1
+
+                    await kg_queries.merge_entities(target_id, source_id)
+                else:
+                    logger.info(
+                        f"LLM decided NOT to merge '{context1.get('name')}' and '{context2.get('name')}'. "
+                        f"Reason: {decision_data.get('reason')}"
+                    )
+
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(
+                    f"Failed to parse entity resolution response from LLM for pair ({id1}, {id2}): {e}. Response: {llm_response}"
+                )
 
 
 __all__ = ["KGMaintainerAgent"]

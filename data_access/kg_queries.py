@@ -1,3 +1,4 @@
+      
 # data_access/kg_queries.py
 import logging
 import re
@@ -455,3 +456,112 @@ async def find_post_mortem_activity() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error checking for post-mortem activity: {e}", exc_info=True)
         return []
+
+
+async def find_candidate_duplicate_entities(
+    similarity_threshold: float = 0.85, limit: int = 50
+) -> List[Dict[str, Any]]:
+    """
+    Finds pairs of entities with similar names using APOC's Levenshtein similarity.
+    This requires the APOC plugin to be installed in Neo4j.
+    """
+    query = """
+    MATCH (e1:Entity), (e2:Entity)
+    WHERE id(e1) < id(e2)
+      AND e1.name IS NOT NULL AND e2.name IS NOT NULL
+      AND NOT e1:ValueNode AND NOT e2:ValueNode // Exclude ValueNodes
+      AND apoc.text.levenshteinSimilarity(e1.name, e2.name) >= $threshold
+    RETURN
+      e1.id AS id1, e1.name AS name1, labels(e1) AS labels1,
+      e2.id AS id2, e2.name AS name2, labels(e2) AS labels2,
+      apoc.text.levenshteinSimilarity(e1.name, e2.name) as similarity
+    ORDER BY similarity DESC
+    LIMIT $limit
+    """
+    params = {"threshold": similarity_threshold, "limit": limit}
+    try:
+        results = await neo4j_manager.execute_read_query(query, params)
+        return results if results else []
+    except Exception as e:
+        if "Unknown function 'apoc.text.levenshteinSimilarity'" in str(e):
+            logger.error(
+                "APOC Library not found or configured in Neo4j. "
+                "Entity resolution via name similarity is disabled. "
+                "Please install the APOC plugin for your Neo4j version."
+            )
+        else:
+            logger.error(
+                f"Error finding candidate duplicate entities: {e}", exc_info=True
+            )
+        return []
+
+
+async def get_entity_context_for_resolution(
+    entity_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Gathers comprehensive context for an entity to help an LLM decide on a merge.
+    """
+    query = """
+    MATCH (e:Entity {id: $entity_id})
+    OPTIONAL MATCH (e)-[r]-(o:Entity)
+    WITH e,
+         COUNT(r) as degree,
+         COLLECT({
+           rel_type: r.type,
+           rel_props: properties(r),
+           other_node_name: o.name,
+           other_node_labels: labels(o)
+         })[..10] AS relationships // Limit relationships for context brevity
+    RETURN
+      e.id AS id,
+      e.name AS name,
+      labels(e) AS labels,
+      properties(e) AS properties,
+      degree,
+      relationships
+    """
+    params = {"entity_id": entity_id}
+    try:
+        results = await neo4j_manager.execute_read_query(query, params)
+        return results[0] if results else None
+    except Exception as e:
+        logger.error(
+            f"Error getting context for entity resolution (id: {entity_id}): {e}",
+            exc_info=True,
+        )
+        return None
+
+
+async def merge_entities(target_id: str, source_id: str) -> bool:
+    """
+    Merges one entity (source) into another (target) using APOC procedures.
+    The source node will be deleted after its relationships are moved.
+    """
+    query = """
+    MATCH (target:Entity {id: $target_id}), (source:Entity {id: $source_id})
+    CALL apoc.refactor.mergeNodes([source], target, {
+      properties: 'combine',
+      mergeRels: true
+    }) YIELD node
+    RETURN node
+    """
+    params = {"target_id": target_id, "source_id": source_id}
+    try:
+        await neo4j_manager.execute_write_query(query, params)
+        logger.info(f"Successfully merged node {source_id} into {target_id}.")
+        return True
+    except Exception as e:
+        if "apoc.refactor.mergeNodes" in str(e):
+            logger.error(
+                "APOC Library not found or configured in Neo4j. "
+                "Cannot merge entities. Please install the APOC plugin."
+            )
+        else:
+            logger.error(
+                f"Error merging entities ({source_id} -> {target_id}): {e}",
+                exc_info=True,
+            )
+        return False
+
+    

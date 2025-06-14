@@ -1,11 +1,3 @@
-"""Central orchestration loop for the Saga story generator.
-
-This module coordinates initial setup, chapter generation, and knowledge graph
-updates.  It interacts with multiple agents to draft and revise chapters while
-persisting relevant state to the Neo4j knowledge graph.  The project is
-distributed under the Apache-2.0 license; see the LICENSE file for details.
-"""
-
 import asyncio
 import logging
 import logging.handlers
@@ -726,13 +718,44 @@ class NANA_Orchestrator:
         hybrid_context_for_draft: str,
         chapter_plan: Optional[List[SceneDetail]],
     ) -> Tuple[Optional[str], Optional[str], bool]:
+        # FAST PATH: If all evaluation agents are disabled, just de-duplicate and return.
+        if (
+            not config.ENABLE_COMPREHENSIVE_EVALUATION
+            and not config.ENABLE_WORLD_CONTINUITY_CHECK
+        ):
+            logger.info(
+                f"NANA: Ch {novel_chapter_number} - All evaluation agents disabled. Applying de-duplication and finalizing draft."
+            )
+            self._update_rich_display(
+                step=f"Ch {novel_chapter_number} - Skipping Revisions (disabled)"
+            )
+
+            deduplicated_text, removed_char_count = await self.perform_deduplication(
+                initial_draft_text, novel_chapter_number
+            )
+            is_from_flawed_source_for_kg = removed_char_count > 0
+            if is_from_flawed_source_for_kg:
+                logger.info(
+                    f"NANA: Ch {novel_chapter_number} - Text marked as flawed for KG due to de-duplication removing {removed_char_count} characters."
+                )
+                await self._save_debug_output(
+                    novel_chapter_number,
+                    "deduplicated_text_no_eval_path",
+                    deduplicated_text,
+                )
+
+            return (
+                deduplicated_text,
+                initial_raw_llm_text,
+                is_from_flawed_source_for_kg,
+            )
+
         current_text_to_process: Optional[str] = initial_draft_text
         current_raw_llm_output: Optional[str] = initial_raw_llm_text
         is_from_flawed_source_for_kg = False
         patched_spans: List[Tuple[int, int]] = []
 
-        # FIX: The de-duplication step was inside the revision loop.
-        # It should be a single, definitive cleaning step after drafting and before evaluation.
+        # The de-duplication step is a single, definitive cleaning step after drafting and before evaluation.
         self._update_rich_display(
             step=f"Ch {novel_chapter_number} - Post-Draft De-duplication"
         )
@@ -761,7 +784,6 @@ class NANA_Orchestrator:
                 f"NANA: Ch {novel_chapter_number} - Post-draft de-duplication found no significant changes."
             )
 
-
         revisions_made = 0
         needs_revision = True
         while (
@@ -781,32 +803,68 @@ class NANA_Orchestrator:
                 step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
             )
 
-            # --- PARALLEL EXECUTION of Evaluation and Continuity Checks ---
-            eval_task = self.evaluator_agent.evaluate_chapter_draft(
-                self.plot_outline,
-                self.character_profiles,
-                self.world_building,
-                current_text_to_process,
-                novel_chapter_number,
-                plot_point_focus,
-                plot_point_index,
-                hybrid_context_for_draft,
-                ignore_spans=patched_spans,
-            )
-            continuity_task = self.world_continuity_agent.check_consistency(
-                self.plot_outline,
-                self.character_profiles,
-                self.world_building,
-                current_text_to_process,
-                novel_chapter_number,
-                hybrid_context_for_draft,
-                ignore_spans=patched_spans,
-            )
-            (
-                (eval_result_obj, eval_usage),
-                (continuity_problems, continuity_usage),
-            ) = await asyncio.gather(eval_task, continuity_task)
-            # --- END PARALLEL EXECUTION ---
+            # --- DYNAMIC PARALLEL EXECUTION of Evaluation and Continuity Checks ---
+            tasks_to_run = []
+            task_names = []
+
+            if config.ENABLE_COMPREHENSIVE_EVALUATION:
+                tasks_to_run.append(
+                    self.evaluator_agent.evaluate_chapter_draft(
+                        self.plot_outline,
+                        self.character_profiles,
+                        self.world_building,
+                        current_text_to_process,
+                        novel_chapter_number,
+                        plot_point_focus,
+                        plot_point_index,
+                        hybrid_context_for_draft,
+                        ignore_spans=patched_spans,
+                    )
+                )
+                task_names.append("evaluation")
+
+            if config.ENABLE_WORLD_CONTINUITY_CHECK:
+                tasks_to_run.append(
+                    self.world_continuity_agent.check_consistency(
+                        self.plot_outline,
+                        self.character_profiles,
+                        self.world_building,
+                        current_text_to_process,
+                        novel_chapter_number,
+                        hybrid_context_for_draft,
+                        ignore_spans=patched_spans,
+                    )
+                )
+                task_names.append("continuity")
+
+            results = await asyncio.gather(*tasks_to_run)
+
+            # Unpack results
+            eval_result_obj = None
+            eval_usage = None
+            continuity_problems = []
+            continuity_usage = None
+
+            result_idx = 0
+            if "evaluation" in task_names:
+                eval_result_obj, eval_usage = results[result_idx]
+                result_idx += 1
+            if "continuity" in task_names:
+                continuity_problems, continuity_usage = results[result_idx]
+
+            # If the main evaluator was disabled, create a default "passed" evaluation object.
+            if eval_result_obj is None:
+                eval_result_obj = {
+                    "needs_revision": False,
+                    "reasons": [],
+                    "problems_found": [],
+                    "coherence_score": None,
+                    "consistency_issues": None,
+                    "plot_deviation_reason": None,
+                    "thematic_issues": None,
+                    "narrative_depth_issues": None,
+                }
+            # --- END DYNAMIC PARALLEL EXECUTION ---
 
             self._accumulate_tokens(
                 f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt}",
@@ -880,7 +938,7 @@ class NANA_Orchestrator:
                     evaluation_result,
                     hybrid_context_for_draft,
                     chapter_plan,
-                    is_from_flawed_source=is_from_flawed_source_for_kg, # Use the flag
+                    is_from_flawed_source=is_from_flawed_source_for_kg,  # Use the flag
                     already_patched_spans=patched_spans,
                 )
                 self._accumulate_tokens(
