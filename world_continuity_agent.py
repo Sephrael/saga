@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import config
 import utils  # MODIFIED: For spaCy functions
-from data_access import kg_queries
-from kg_maintainer.models import CharacterProfile, ProblemDetail, WorldItem
+from data_access import character_queries, kg_queries, world_queries
+from kg_maintainer.models import ProblemDetail
 from llm_interface import llm_service  # MODIFIED
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -79,8 +79,6 @@ class WorldContinuityAgent:
     async def check_consistency(
         self,
         plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str,
@@ -98,13 +96,17 @@ class WorldContinuityAgent:
         )
 
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
+        characters = await character_queries.get_character_profiles_from_db()
+        world_data = await world_queries.get_world_building_from_db()
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                character_profiles, chapter_number - 1
+                characters,
+                chapter_number - 1,
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            world_building, chapter_number - 1
+            world_data,
+            chapter_number - 1,
         )
 
         plot_points_summary_lines = (
