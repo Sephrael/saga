@@ -600,12 +600,20 @@ class NANA_Orchestrator:
         tasks_to_run = []
         task_names = []
 
+        character_names = list(self.character_profiles.keys())
+        world_item_ids_by_category: Dict[str, List[str]] = {}
+        for cat, items in self.world_building.items():
+            if isinstance(items, dict):
+                world_item_ids_by_category[cat] = [
+                    item.id for item in items.values() if hasattr(item, "id")
+                ]
+
         if config.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
                     self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
+                    character_names,
+                    world_item_ids_by_category,
                     current_text,
                     novel_chapter_number,
                     plot_point_focus,
