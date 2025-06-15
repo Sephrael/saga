@@ -668,6 +668,24 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
     return WorldItem.from_dict(category, item_name, item_detail)
 
 
+@alru_cache(maxsize=128)
+async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
+    """Return all world item IDs grouped by category."""
+    query = (
+        "MATCH (we:WorldElement:Entity) "
+        "WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE "
+        "RETURN we.category AS category, we.id AS id"
+    )
+    results = await neo4j_manager.execute_read_query(query)
+    mapping: Dict[str, List[str]] = {}
+    for record in results:
+        category = record.get("category")
+        item_id = record.get("id")
+        if category and item_id:
+            mapping.setdefault(category, []).append(item_id)
+    return mapping
+
+
 async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
     logger.info("Loading decomposed world building data from Neo4j...")
     world_data: Dict[str, Dict[str, WorldItem]] = {}

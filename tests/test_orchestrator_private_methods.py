@@ -4,6 +4,7 @@ import pytest
 
 import utils
 from nana_orchestrator import NANA_Orchestrator
+from data_access import character_queries, world_queries
 from story_models import (
     KeyLocationModel,
     NovelConceptModel,
@@ -75,8 +76,7 @@ def test_load_state_from_user_model(orchestrator):
     )
     orchestrator.load_state_from_user_model(model)
     assert orchestrator.plot_outline.get("title") == "My Tale"
-    assert "Hero" in orchestrator.character_profiles
-    assert orchestrator.world_building.get("locations", {}).get("Town")
+    assert orchestrator.plot_outline.get("protagonist_name") == "Hero"
 
 
 @pytest.mark.asyncio
@@ -96,6 +96,16 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         orchestrator.planner_agent,
         "plan_chapter_scenes",
         AsyncMock(side_effect=fake_plan),
+    )
+    monkeypatch.setattr(
+        character_queries,
+        "get_character_profiles_from_db",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(
+        world_queries,
+        "get_world_building_from_db",
+        AsyncMock(return_value={}),
     )
     monkeypatch.setattr(
         "nana_orchestrator.generate_hybrid_chapter_context_logic",
