@@ -1,4 +1,3 @@
-      
 # chapter_revision_logic.py
 """
 Handles the revision of chapter drafts based on evaluation feedback for the SAGA system.
@@ -12,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
-from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
@@ -21,6 +19,8 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
+from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
+from patch_validation_agent import PatchValidationAgent
 
 logger = logging.getLogger(__name__)
 utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this module is imported
@@ -115,6 +115,41 @@ def _get_context_window_for_patch_llm(
     suffix = "..." if context_end < len(original_doc_text) else ""
     snippet = original_doc_text[context_start:context_end]
     return f"{prefix}{snippet}{suffix}"
+
+
+async def _get_sentence_embeddings(
+    text: str,
+) -> List[Tuple[int, int, Any]]:
+    """Return a list of (start, end, embedding) for each sentence."""
+    segments = utils.get_text_segments(text, "sentence")
+    if not segments:
+        return []
+    tasks = [llm_service.async_get_embedding(seg[0]) for seg in segments]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    embeddings: List[Tuple[int, int, Any]] = []
+    for (seg_text, start, end), res in zip(segments, results):
+        if isinstance(res, Exception) or res is None:
+            continue
+        embeddings.append((start, end, res))
+    return embeddings
+
+
+async def _find_sentence_via_embeddings(
+    quote_text: str, embeddings: List[Tuple[int, int, Any]]
+) -> Optional[Tuple[int, int]]:
+    if not embeddings or not quote_text.strip():
+        return None
+    q_emb = await llm_service.async_get_embedding(quote_text)
+    if q_emb is None:
+        return None
+    best_sim = -1.0
+    best_span: Optional[Tuple[int, int]] = None
+    for start, end, emb in embeddings:
+        sim = utils.numpy_cosine_similarity(q_emb, emb)
+        if sim > best_sim:
+            best_sim = sim
+            best_span = (start, end)
+    return best_span
 
 
 async def _generate_single_patch_instruction_llm(
@@ -376,7 +411,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         "original_problem_quote_text": original_quote_text_from_problem,
         "target_char_start": target_start_for_patch,
         "target_char_end": target_end_for_patch,
-        "replace_with": replace_with_text_cleaned, # This can now be ""
+        "replace_with": replace_with_text_cleaned,  # This can now be ""
         "reason_for_change": f"Fixing '{problem['issue_category']}': {problem['problem_description']}",
     }
     return patch_instruction, usage_data
@@ -475,6 +510,74 @@ def _consolidate_overlapping_problems(
     return consolidated_problems
 
 
+def _group_problems_for_patch_generation(
+    problems: List[ProblemDetail],
+) -> List[Tuple[ProblemDetail, List[ProblemDetail]]]:
+    """Return consolidated problem with list of original problems."""
+    if not problems:
+        return []
+
+    span_problems = [
+        p
+        for p in problems
+        if p.get("sentence_char_start") is not None
+        and p.get("sentence_char_end") is not None
+    ]
+    general_problems = [
+        p
+        for p in problems
+        if p.get("sentence_char_start") is None or p.get("sentence_char_end") is None
+    ]
+
+    span_problems.sort(key=lambda p: p["sentence_char_start"])
+    merged_groups: List[List[ProblemDetail]] = []
+    if span_problems:
+        current_group = [span_problems[0]]
+        current_end = span_problems[0]["sentence_char_end"]
+        for prob in span_problems[1:]:
+            start = prob["sentence_char_start"]
+            end = prob["sentence_char_end"]
+            if start < current_end:
+                current_group.append(prob)
+                current_end = max(current_end, end)
+            else:
+                merged_groups.append(current_group)
+                current_group = [prob]
+                current_end = end
+        merged_groups.append(current_group)
+
+    result: List[Tuple[ProblemDetail, List[ProblemDetail]]] = []
+
+    for group in merged_groups:
+        first = group[0]
+        group_start = min(p["sentence_char_start"] for p in group)  # type: ignore
+        group_end = max(p["sentence_char_end"] for p in group)  # type: ignore
+        all_cats = sorted(list(set(p["issue_category"] for p in group)))
+        all_desc = "; ".join(
+            f"({p['issue_category']}) {p['problem_description']}" for p in group
+        )
+        all_fix = "; ".join(
+            f"({p['issue_category']}) {p['suggested_fix_focus']}" for p in group
+        )
+        rep_quote = first["quote_from_original_text"]
+        consolidated: ProblemDetail = {
+            "issue_category": ", ".join(all_cats),
+            "problem_description": f"Multiple issues in one segment: {all_desc}",
+            "quote_from_original_text": f"Representative quote: {rep_quote}",
+            "quote_char_start": first.get("quote_char_start"),
+            "quote_char_end": first.get("quote_char_end"),
+            "sentence_char_start": group_start,
+            "sentence_char_end": group_end,
+            "suggested_fix_focus": f"Holistically revise the segment to address all points: {all_fix}",
+        }
+        result.append((consolidated, group))
+
+    for p in general_problems:
+        result.append((p, [p]))
+
+    return result
+
+
 async def _generate_patch_instructions_logic(
     plot_outline: Dict[str, Any],
     original_text: str,
@@ -482,6 +585,7 @@ async def _generate_patch_instructions_logic(
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: Optional[List[SceneDetail]],
+    validator: PatchValidationAgent,
 ) -> Tuple[List[PatchInstruction], Optional[Dict[str, int]]]:
     patch_instructions: List[PatchInstruction] = []
     total_usage: Dict[str, int] = {
@@ -490,102 +594,63 @@ async def _generate_patch_instructions_logic(
         "total_tokens": 0,
     }
 
-    # Consolidate problems before generating patches
-    consolidated_problems = _consolidate_overlapping_problems(problems_to_fix)
+    grouped = _group_problems_for_patch_generation(problems_to_fix)
 
-    actionable_problems_for_patch_generation = []
-    for p_idx, p_item in enumerate(consolidated_problems):
-        is_specific_and_located = (
-            p_item["quote_from_original_text"] != "N/A - General Issue"
-            and p_item["quote_from_original_text"].strip()
-            and (
-                p_item.get("sentence_char_start") is not None
-                or p_item.get("quote_char_start") is not None
-            )
-        )
-        is_expansion_depth_issue_general = (
-            p_item["quote_from_original_text"] == "N/A - General Issue"
-            and "narrative_depth_and_length" in p_item["issue_category"]
-            and (
-                "short" in p_item["problem_description"].lower()
-                or "length" in p_item["problem_description"].lower()
-                or "expand" in p_item["suggested_fix_focus"].lower()
-                or "depth" in p_item["problem_description"].lower()
-            )
-        )
-        if is_specific_and_located or is_expansion_depth_issue_general:
-            actionable_problems_for_patch_generation.append(p_item)
-        else:
-            reason_skip = (
-                "not specific quote text OR not an expansion-type general issue"
-            )
-            if (
-                p_item["quote_from_original_text"] != "N/A - General Issue"
-                and p_item["quote_from_original_text"].strip()
-                and p_item.get("sentence_char_start") is None
-                and p_item.get("quote_char_start") is None
-            ):
-                reason_skip = (
-                    "specific quote text present, but no offsets found by spaCy utils"
-                )
-            logger.info(
-                f"Skipping patch generation for Ch {chapter_number} problem {p_idx + 1} ({reason_skip}): '{p_item['problem_description'][:60]}'"
-            )
-
-    problems_to_process = actionable_problems_for_patch_generation[
-        : config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE
-    ]
-    if len(consolidated_problems) > len(problems_to_process):
+    groups_to_process = grouped[: config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
+    if len(grouped) > len(groups_to_process):
         logger.warning(
-            f"Found {len(consolidated_problems)} unique patch targets for Ch {chapter_number}. "
-            f"Attempting to generate patches for the first {len(problems_to_process)} of these."
+            f"Found {len(grouped)} patch groups for Ch {chapter_number}. "
+            f"Processing only the first {len(groups_to_process)} groups."
         )
-    elif not problems_to_process:
-        logger.info(
-            f"No problems suitable for patch instruction generation in Ch {chapter_number}."
-        )
+    if not groups_to_process:
         return [], None
 
-    patch_generation_tasks = []
-    for problem in problems_to_process:
-        context_snippet_for_llm = _get_context_window_for_patch_llm(
-            original_text, problem, config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW
+    for group_idx, (group_problem, group_members) in enumerate(
+        groups_to_process, start=1
+    ):
+        context_snippet = _get_context_window_for_patch_llm(
+            original_text,
+            group_problem,
+            config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW,
         )
-        task = _generate_single_patch_instruction_llm(
-            plot_outline,
-            context_snippet_for_llm,
-            problem,
-            chapter_number,
-            hybrid_context_for_revision,
-            chapter_plan,
-        )
-        patch_generation_tasks.append(task)
 
-    if not patch_generation_tasks:
-        logger.info(
-            f"No patch generation tasks created for Ch {chapter_number}, though problems were identified."
-        )
-        return [], None
+        patch_instr: Optional[PatchInstruction] = None
+        usage_acc: Dict[str, int] = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
-    results = await asyncio.gather(*patch_generation_tasks, return_exceptions=True)
-    for i, res_or_exc in enumerate(results):
-        problem_ref = problems_to_process[i]
-        if isinstance(res_or_exc, Exception):
-            logger.error(
-                f"Error generating patch for Ch {chapter_number} problem '{problem_ref['problem_description'][:50].replace(chr(10), ' ')}': {res_or_exc}",
-                exc_info=res_or_exc,
+        for attempt in range(2):
+            patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
+                plot_outline,
+                context_snippet,
+                group_problem,
+                chapter_number,
+                hybrid_context_for_revision,
+                chapter_plan,
             )
-        elif res_or_exc is not None:
-            patch_instr, usage = res_or_exc
-            if patch_instr:
-                patch_instructions.append(patch_instr)
             if usage:
-                total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
-                total_usage["completion_tokens"] += usage.get("completion_tokens", 0)
-                total_usage["total_tokens"] += usage.get("total_tokens", 0)
+                for k, v in usage.items():
+                    usage_acc[k] += v
+            if not patch_instr_tmp:
+                continue
+            valid, val_usage = await validator.validate_patch(
+                context_snippet, patch_instr_tmp, group_members
+            )
+            if val_usage:
+                for k, v in val_usage.items():
+                    usage_acc[k] += v
+            if valid:
+                patch_instr = patch_instr_tmp
+                break
+        if patch_instr:
+            patch_instructions.append(patch_instr)
+            for k, v in usage_acc.items():
+                total_usage[k] += v
         else:
             logger.warning(
-                f"Patch generation returned None for Ch {chapter_number} problem: '{problem_ref['problem_description'][:50].replace(chr(10), ' ')}'."
+                f"Failed to generate valid patch for group {group_idx} in Ch {chapter_number}."
             )
 
     logger.info(
@@ -598,6 +663,7 @@ async def _apply_patches_to_text(
     original_text: str,
     patch_instructions: List[PatchInstruction],
     already_patched_spans: Optional[List[Tuple[int, int]]] | None = None,
+    sentence_embeddings: Optional[List[Tuple[int, int, Any]]] | None = None,
 ) -> Tuple[str, List[Tuple[int, int]]]:
     """
     Applies patch instructions to the original text and returns the new text and a
@@ -615,7 +681,7 @@ async def _apply_patches_to_text(
         # MODIFICATION START: Handle empty replace_with as a valid deletion instruction.
         # An empty or whitespace-only replace_with string is now a valid patch.
         replacement_text = patch.get("replace_with", "")
-        if replacement_text is None: # handle case where key is missing
+        if replacement_text is None:  # handle case where key is missing
             replacement_text = ""
         # MODIFICATION END
 
@@ -627,23 +693,30 @@ async def _apply_patches_to_text(
             quote_text = patch["original_problem_quote_text"]
             if quote_text != "N/A - General Issue" and quote_text.strip():
                 logger.info(
-                    f"Patch {patch_idx+1}: Missing direct offsets for '{quote_text[:50]}...'. Using semantic search."
+                    f"Patch {patch_idx + 1}: Missing direct offsets for '{quote_text[:50]}...'. Using semantic search."
                 )
                 method_used = "semantic search"
-                match = await utils.find_semantically_closest_segment(
-                    original_text, quote_text, "sentence" # MODIFIED: Changed to 'sentence' for more precision
-                )
-                if match:
-                    segment_start, segment_end, _ = match
+                if sentence_embeddings:
+                    found = await _find_sentence_via_embeddings(
+                        quote_text, sentence_embeddings
+                    )
+                    if found:
+                        segment_start, segment_end = found
+                if segment_start is None or segment_end is None:
+                    match = await utils.find_semantically_closest_segment(
+                        original_text, quote_text, "sentence"
+                    )
+                    if match:
+                        segment_start, segment_end, _ = match
             else:
                 logger.warning(
-                    f"Patch {patch_idx+1}: Cannot apply, no quote text for search and no offsets."
+                    f"Patch {patch_idx + 1}: Cannot apply, no quote text for search and no offsets."
                 )
                 continue
 
         if segment_start is None or segment_end is None:
             logger.warning(
-                f"Patch {patch_idx+1}: Failed to find target segment via {method_used}."
+                f"Patch {patch_idx + 1}: Failed to find target segment via {method_used}."
             )
             continue
 
@@ -658,14 +731,14 @@ async def _apply_patches_to_text(
 
         if is_overlapping:
             logger.warning(
-                f"Patch {patch_idx+1} for segment {segment_start}-{segment_end} overlaps with a previously patched area or another new patch. Skipping."
+                f"Patch {patch_idx + 1} for segment {segment_start}-{segment_end} overlaps with a previously patched area or another new patch. Skipping."
             )
             continue
 
         replacements.append((segment_start, segment_end, replacement_text))
         log_action = "DELETION" if not replacement_text.strip() else "REPLACEMENT"
         logger.info(
-            f"Patch {patch_idx+1}: Queued {log_action} for {segment_start}-{segment_end} via {method_used}."
+            f"Patch {patch_idx + 1}: Queued {log_action} for {segment_start}-{segment_end} via {method_used}."
         )
 
     if not replacements:
@@ -677,7 +750,12 @@ async def _apply_patches_to_text(
     all_ops: List[Dict[str, Any]] = []
     for start, end in already_patched_spans:
         all_ops.append(
-            {"type": "old", "start": start, "end": end, "text": original_text[start:end]}
+            {
+                "type": "old",
+                "start": start,
+                "end": end,
+                "text": original_text[start:end],
+            }
         )
     for start, end, text in replacements:
         all_ops.append({"type": "new", "start": start, "end": end, "text": text})
@@ -790,6 +868,8 @@ async def revise_chapter_draft_logic(
         logger.info(
             f"Attempting patch-based revision for Ch {chapter_number} with {len(problems_to_fix)} problem(s)."
         )
+        sentence_embeddings = await _get_sentence_embeddings(original_text)
+        validator = PatchValidationAgent()
         (
             patch_instructions,
             patch_usage,
@@ -800,6 +880,7 @@ async def revise_chapter_draft_logic(
             chapter_number,
             hybrid_context_for_revision,
             chapter_plan,
+            validator,
         )
         _add_usage(patch_usage)
         if patch_instructions:
@@ -807,7 +888,10 @@ async def revise_chapter_draft_logic(
                 patched_text,
                 all_spans_in_patched_text,
             ) = await _apply_patches_to_text(
-                original_text, patch_instructions, already_patched_spans
+                original_text,
+                patch_instructions,
+                already_patched_spans,
+                sentence_embeddings,
             )
             logger.info(
                 f"Patch process for Ch {chapter_number}: Generated {len(patch_instructions)} patch instructions and applied them. "
@@ -819,9 +903,9 @@ async def revise_chapter_draft_logic(
             )
 
     final_revised_text: Optional[str] = None
-    final_raw_llm_output: Optional[
-        str
-    ] = f"Chapter revised using {len(all_spans_in_patched_text) - len(already_patched_spans)} new patches."
+    final_raw_llm_output: Optional[str] = (
+        f"Chapter revised using {len(all_spans_in_patched_text) - len(already_patched_spans)} new patches."
+    )
     final_spans_for_next_cycle = all_spans_in_patched_text
 
     use_patched_text_as_final = False
@@ -830,9 +914,7 @@ async def revise_chapter_draft_logic(
 
     if use_patched_text_as_final:
         final_revised_text = patched_text
-        logger.info(
-            f"Ch {chapter_number}: Using patched text as the revised version."
-        )
+        logger.info(f"Ch {chapter_number}: Using patched text as the revised version.")
 
     # Decide if a full rewrite is still necessary
     if not use_patched_text_as_final and evaluation_result.get("needs_revision"):
@@ -989,9 +1071,7 @@ async def revise_chapter_draft_logic(
             raw_revised_llm_output_for_log
         )
         final_raw_llm_output = raw_revised_llm_output_for_log
-        final_spans_for_next_cycle = (
-            []
-        )  # A full rewrite resets the patched spans.
+        final_spans_for_next_cycle = []  # A full rewrite resets the patched spans.
 
         logger.info(
             f"Full rewrite for Ch {chapter_number} generated text of length {len(final_revised_text)}."
@@ -1021,5 +1101,3 @@ async def revise_chapter_draft_logic(
         final_raw_llm_output,
         final_spans_for_next_cycle,
     ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
-
-    

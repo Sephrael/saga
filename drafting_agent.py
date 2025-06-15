@@ -3,15 +3,25 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
-import utils
+from kg_maintainer.models import CharacterProfile, SceneDetail
 from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from prompt_renderer import render_prompt
-from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 
 logger = logging.getLogger(__name__)
 
 
 class DraftingAgent:
+    """Generate initial prose for a chapter using LLMs.
+
+    The agent supports two modes of operation:
+    1. **Whole chapter drafting** when no scene plan is provided.
+    2. **Scene-by-scene drafting** when supplied with a list of ``SceneDetail``
+       objects.
+
+    Both modes return the full draft text, the raw LLM output, and token usage
+    statistics for further processing by the orchestrator.
+    """
+
     def __init__(self, model_name: str = config.DRAFTING_MODEL):
         # We now only need a single, capable model for drafting.
         self.drafting_model = model_name
@@ -23,7 +33,6 @@ class DraftingAgent:
         self,
         plot_outline: Dict[str, Any],
         character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
         chapter_number: int,
         plot_point_focus: str,
         hybrid_context_for_draft: str,
@@ -31,9 +40,13 @@ class DraftingAgent:
     ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, int]]]:
         """
         Generates the initial draft for a chapter.
-        If a chapter_plan is provided, it drafts scene-by-scene.
-        If chapter_plan is None, it drafts the entire chapter from the plot_point_focus.
-        Returns: (draft_text, raw_llm_output, usage_data)
+
+        If ``chapter_plan`` is provided, each scene is drafted sequentially and
+        concatenated. When ``chapter_plan`` is ``None`` the entire chapter is
+        drafted in a single LLM call using the provided ``plot_point_focus``.
+
+        Returns:
+            Tuple of the draft text, the raw LLM output, and token usage data.
         """
         if not chapter_plan:
             # --- WHOLE CHAPTER DRAFTING LOGIC (NO SCENE PLAN) ---
@@ -72,7 +85,11 @@ class DraftingAgent:
                 logger.error(
                     f"Drafting failed for Chapter {chapter_number} (whole chapter mode): LLM returned empty text."
                 )
-                return None, "LLM returned empty text in whole chapter drafting mode.", usage_data
+                return (
+                    None,
+                    "LLM returned empty text in whole chapter drafting mode.",
+                    usage_data,
+                )
 
             logger.info(
                 f"DraftingAgent: Successfully generated draft for Chapter {chapter_number} (whole chapter mode). Length: {len(draft_text)} characters."

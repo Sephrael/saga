@@ -17,10 +17,11 @@ SAGA is an autonomous, agentic creative-writing system designed to generate enti
 SAGA, with its NANA engine, is an ambitious project designed to autonomously craft entire novels. It transcends simple text generation by employing a collaborative team of specialized AI agents:
 
 *   **`PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression.
-*   **`DraftingAgent`:** Weaves the initial prose for chapters, guided by the `PlannerAgent`'s blueprints and rich contextual information.
+*   **`DraftingAgent`:** Weaves the initial prose for chapters, guided by the `PlannerAgent`'s blueprints and rich contextual information. It uses two Jinja templates: `draft_chapter_from_plot_point.j2` for single-pass chapter drafting and `draft_scene.j2` when generating chapters scene by scene.
 *   **`ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality.
 *   **`WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories within the narrative.
 *   **`ChapterRevisionLogic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.
+*   **`PatchValidationAgent`:** Verifies generated patch instructions to ensure they resolve the issues before being applied.
 *   **`KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, pre-populates the graph with initial story data, and exposes an `extract_and_merge_knowledge` method to parse new chapters and persist updates.
 *   **`kg_maintainer` utilities:** Provide dataclass models and helper functions for parsing, merging, and generating Cypher statements used by `KGMaintainerAgent`.
 
@@ -56,7 +57,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **Load Existing State (if any):** Attempts to load plot outline, character profiles, world-building, and chapter count from Neo4j.
     *   **Initial Story Generation (if needed):**
         *   If `user_story_elements.md` is provided and contains content, it's parsed by `MarkdownStoryParser` to bootstrap the plot, characters, and world.
-        *   Otherwise, or if key elements are marked `[Fill-in]`, `InitialSetupLogic` uses LLMs to generate a plot outline, initial character profiles, and core world-building elements. This can be influenced by "Unhinged Mode" or default configurations.
+        *   Otherwise, or if key elements are marked `[Fill-in]`, `run_genesis_phase` fills in the plot outline, character profiles, and world-building details via targeted LLM calls. This can be influenced by "Unhinged Mode" or default configurations.
     *   **KG Pre-population:** The `KGMaintainerAgent` populates the Neo4j graph with this foundational story data.
 
 2.  **Chapter Generation Loop (Iterates for `CHAPTERS_PER_RUN`):**
@@ -75,6 +76,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **(D) Revision (if `needs_revision` is true):**
         *   `ChapterRevisionLogic` attempts to fix identified issues.
         *   If `ENABLE_PATCH_BASED_REVISION` is true, it generates and applies targeted text patches for specific problems.
+            See `docs/step5_redesign.md` for a proposed improvement of this phase.
         *   If patching is insufficient or disabled, or problems are extensive, a full chapter rewrite may be performed.
         *   The de-duplication and evaluation steps are repeated on the revised text.
     *   **(E) Finalization & Knowledge Update:**

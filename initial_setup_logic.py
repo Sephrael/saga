@@ -1,18 +1,20 @@
 # initial_setup_logic.py
 import asyncio
 import json
-import logging
+import structlog
 from typing import Any, Coroutine, Dict, List, Optional, Tuple
 
 import config
 import utils
 from kg_maintainer.models import CharacterProfile, WorldItem
+from kg_maintainer_agent import KGMaintainerAgent
 from yaml_parser import load_yaml_file
-from story_models import UserStoryInputModel
+from story_models import UserStoryInputModel, user_story_to_objects
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
+from pydantic import ValidationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: Dict[str, str] = {
     "overview": "_overview_",
@@ -455,3 +457,68 @@ async def bootstrap_world(
     world_building["is_default"] = False
     world_building["source"] = "bootstrapped"
     return world_building, usage_data if usage_data["total_tokens"] > 0 else None
+
+
+async def run_genesis_phase() -> Tuple[
+    Dict[str, Any],
+    Dict[str, CharacterProfile],
+    Dict[str, Dict[str, WorldItem]],
+    Dict[str, int],
+]:
+    """Execute Phase 1 of SAGA's pipeline."""
+
+    def _add_usage(total: Dict[str, int], usage: Optional[Dict[str, int]]) -> None:
+        if not usage:
+            return
+        for key, val in usage.items():
+            total[key] = total.get(key, 0) + val
+
+    user_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+    plot_outline: Dict[str, Any]
+    character_profiles: Dict[str, CharacterProfile]
+    world_building: Dict[str, Dict[str, WorldItem]]
+
+    if user_data:
+        try:
+            model = UserStoryInputModel.model_validate(user_data)
+            (
+                plot_outline,
+                character_profiles,
+                world_building,
+            ) = user_story_to_objects(model)
+            plot_outline["source"] = "user_supplied_yaml"
+            world_building["source"] = "user_supplied_yaml"
+            logger.info("Loaded user story elements from YAML file.")
+        except ValidationError as exc:  # pragma: no cover - fallback path
+            logger.error("User YAML validation failed: %s", exc)
+            user_data = None
+
+    if not user_data:
+        logger.info("No valid user YAML found. Using default placeholders.")
+        plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
+        character_profiles = create_default_characters(plot_outline["protagonist_name"])
+        world_building = create_default_world()
+
+    plot_outline, plot_usage = await bootstrap_plot_outline(plot_outline)
+    character_profiles, char_usage = await bootstrap_characters(
+        character_profiles, plot_outline
+    )
+    world_building, world_usage = await bootstrap_world(world_building, plot_outline)
+
+    usage_totals: Dict[str, int] = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    _add_usage(usage_totals, plot_usage)
+    _add_usage(usage_totals, char_usage)
+    _add_usage(usage_totals, world_usage)
+
+    kg_agent = KGMaintainerAgent()
+    await kg_agent.persist_profiles(
+        character_profiles, config.KG_PREPOPULATION_CHAPTER_NUM
+    )
+    await kg_agent.persist_world(world_building, config.KG_PREPOPULATION_CHAPTER_NUM)
+    logger.info("Knowledge graph pre-population complete.")
+
+    return plot_outline, character_profiles, world_building, usage_totals

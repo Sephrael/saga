@@ -18,27 +18,21 @@ from data_access import (
     world_queries,
 )
 from drafting_agent import DraftingAgent
-from initial_setup_logic import (
-    bootstrap_characters,
-    bootstrap_plot_outline,
-    bootstrap_world,
-    create_default_characters,
-    create_default_plot,
-    create_default_world,
-)
+from text_deduplicator import TextDeduplicator
+from initial_setup_logic import run_genesis_phase
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
+    ProblemDetail,
     SceneDetail,
     WorldItem,
 )
 from kg_maintainer_agent import KGMaintainerAgent
+from finalize_agent import FinalizeAgent
 from llm_interface import llm_service
 from planner_agent import PlannerAgent
-from pydantic import ValidationError
 from story_models import UserStoryInputModel, user_story_to_objects
 from world_continuity_agent import WorldContinuityAgent
-from yaml_parser import load_yaml_file
 
 try:
     from rich.console import Group
@@ -100,6 +94,7 @@ class NANA_Orchestrator:
         self.evaluator_agent = ComprehensiveEvaluatorAgent()
         self.world_continuity_agent = WorldContinuityAgent()
         self.kg_maintainer_agent = KGMaintainerAgent()
+        self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
 
         self.plot_outline: Dict[str, Any] = {}
         self.character_profiles: Dict[str, CharacterProfile] = {}
@@ -379,54 +374,19 @@ class NANA_Orchestrator:
     async def perform_initial_setup(self):
         self._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
-        logger.info("\n--- NANA: Initializing Plot, Characters, and World ---")
-
-        user_model_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
-        if user_model_data:
-            try:
-                validated_model = UserStoryInputModel.model_validate(user_model_data)
-                (
-                    self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
-                ) = user_story_to_objects(validated_model)
-                self.plot_outline["source"] = "user_supplied_yaml"
-                self.world_building["source"] = "user_supplied_yaml"
-                logger.info(
-                    "Successfully loaded and processed user-supplied YAML data."
-                )
-            except ValidationError as e:
-                logger.error(
-                    f"Error validating user YAML data: {e}. Falling back to defaults."
-                )
-                user_model_data = None
-
-        if not user_model_data:
-            logger.info(
-                "No valid user YAML found. Creating default state for bootstrapping."
-            )
-            self.plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
-            self.character_profiles = create_default_characters(
-                self.plot_outline["protagonist_name"]
-            )
-            self.world_building = create_default_world()
-
-        self.plot_outline, plot_usage = await bootstrap_plot_outline(self.plot_outline)
-        self._accumulate_tokens("Bootstrap-Plot", plot_usage)
-
-        self.character_profiles, char_usage = await bootstrap_characters(
-            self.character_profiles, self.plot_outline
-        )
-        self._accumulate_tokens("Bootstrap-Characters", char_usage)
-
-        self.world_building, world_usage = await bootstrap_world(
-            self.world_building, self.plot_outline
-        )
-        self._accumulate_tokens("Bootstrap-World", world_usage)
+        (
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
+            usage,
+        ) = await run_genesis_phase()
+        self._accumulate_tokens("Genesis-Phase", usage)
 
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(
-            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). Title: '{self.plot_outline.get('title', 'N/A')}'. Plot Points: {len(self.plot_outline.get('plot_points', []))}"
+            f"   Plot Outline and Characters initialized/loaded (source: {plot_source}). "
+            f"Title: '{self.plot_outline.get('title', 'N/A')}'. "
+            f"Plot Points: {len(self.plot_outline.get('plot_points', []))}"
         )
         world_source = self.world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
@@ -571,15 +531,13 @@ class NANA_Orchestrator:
             )
             return text_to_dedup, 0
         try:
-            (
-                deduplicated_text,
-                chars_removed,
-            ) = await utils.deduplicate_text_segments(
-                original_text=text_to_dedup,
-                segment_level="sentence",
+            deduper = TextDeduplicator(
                 similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
                 use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
                 min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+            )
+            deduplicated_text, chars_removed = await deduper.deduplicate(
+                text_to_dedup, segment_level="sentence"
             )
             if chars_removed > 0:
                 method = (
@@ -602,11 +560,138 @@ class NANA_Orchestrator:
             )
             return text_to_dedup, 0
 
+    async def _run_evaluation_cycle(
+        self,
+        novel_chapter_number: int,
+        attempt: int,
+        current_text: str,
+        plot_point_focus: str,
+        plot_point_index: int,
+        hybrid_context_for_draft: str,
+        patched_spans: List[Tuple[int, int]],
+    ) -> Tuple[
+        EvaluationResult,
+        List[ProblemDetail],
+        Optional[Dict[str, int]],
+        Optional[Dict[str, int]],
+    ]:
+        self._update_rich_display(
+            step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
+        )
+
+        tasks_to_run = []
+        task_names = []
+
+        if config.ENABLE_COMPREHENSIVE_EVALUATION:
+            tasks_to_run.append(
+                self.evaluator_agent.evaluate_chapter_draft(
+                    self.plot_outline,
+                    self.character_profiles,
+                    self.world_building,
+                    current_text,
+                    novel_chapter_number,
+                    plot_point_focus,
+                    plot_point_index,
+                    hybrid_context_for_draft,
+                    ignore_spans=patched_spans,
+                )
+            )
+            task_names.append("evaluation")
+
+        if config.ENABLE_WORLD_CONTINUITY_CHECK:
+            tasks_to_run.append(
+                self.world_continuity_agent.check_consistency(
+                    self.plot_outline,
+                    self.character_profiles,
+                    self.world_building,
+                    current_text,
+                    novel_chapter_number,
+                    hybrid_context_for_draft,
+                    ignore_spans=patched_spans,
+                )
+            )
+            task_names.append("continuity")
+
+        results = await asyncio.gather(*tasks_to_run)
+
+        eval_result_obj = None
+        eval_usage = None
+        continuity_problems: List[ProblemDetail] = []
+        continuity_usage = None
+
+        result_idx = 0
+        if "evaluation" in task_names:
+            eval_result_obj, eval_usage = results[result_idx]
+            result_idx += 1
+        if "continuity" in task_names:
+            continuity_problems, continuity_usage = results[result_idx]
+
+        if eval_result_obj is None:
+            eval_result_obj = {
+                "needs_revision": False,
+                "reasons": [],
+                "problems_found": [],
+                "coherence_score": None,
+                "consistency_issues": None,
+                "plot_deviation_reason": None,
+                "thematic_issues": None,
+                "narrative_depth_issues": None,
+            }
+
+        return eval_result_obj, continuity_problems, eval_usage, continuity_usage
+
+    async def _perform_revisions(
+        self,
+        novel_chapter_number: int,
+        attempt: int,
+        current_text: str,
+        evaluation_result: EvaluationResult,
+        hybrid_context_for_draft: str,
+        chapter_plan: Optional[List[SceneDetail]],
+        patched_spans: List[Tuple[int, int]],
+        is_from_flawed_source_for_kg: bool,
+    ) -> Tuple[
+        Optional[str], Optional[str], List[Tuple[int, int]], Optional[Dict[str, int]]
+    ]:
+        if attempt >= config.MAX_REVISION_CYCLES_PER_CHAPTER:
+            logger.error(
+                f"NANA: Ch {novel_chapter_number} - Max revision attempts ({config.MAX_REVISION_CYCLES_PER_CHAPTER}) reached."
+            )
+            return current_text, None, patched_spans, None
+
+        revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
+            self.plot_outline,
+            self.character_profiles,
+            self.world_building,
+            current_text,
+            novel_chapter_number,
+            evaluation_result,
+            hybrid_context_for_draft,
+            chapter_plan,
+            is_from_flawed_source=is_from_flawed_source_for_kg,
+            already_patched_spans=patched_spans,
+        )
+
+        if (
+            revision_tuple_result
+            and revision_tuple_result[0]
+            and len(revision_tuple_result[0]) > 50
+        ):
+            new_text, rev_raw_output, new_spans = revision_tuple_result
+            patched_spans = new_spans
+            return new_text, rev_raw_output, patched_spans, revision_usage
+
+        logger.error(
+            f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text."
+        )
+        return current_text, None, patched_spans, revision_usage
+
     async def _prepare_chapter_prerequisites(
         self, novel_chapter_number: int
     ) -> Tuple[Optional[str], int, Optional[List[SceneDetail]], Optional[str]]:
+        """Gather planning and context needed before drafting a chapter."""
         self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Preparing Prerequisites (Parallel)"
+            step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
         )
 
         plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(
@@ -619,8 +704,8 @@ class NANA_Orchestrator:
             return None, -1, None, None
 
         self._update_novel_props_cache()
-        # --- PARALLEL EXECUTION of Planning and Context Generation ---
-        planning_task = self.planner_agent.plan_chapter_scenes(
+
+        chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
             self.character_profiles,
             self.world_building,
@@ -628,22 +713,15 @@ class NANA_Orchestrator:
             plot_point_focus,
             plot_point_index,
         )
-        context_task = generate_hybrid_chapter_context_logic(
-            self, novel_chapter_number, None
-        )  # Pass None for plan initially
-
-        (
-            (chapter_plan_result, plan_usage),
-            hybrid_context_for_draft,
-        ) = await asyncio.gather(planning_task, context_task)
-        # --- END PARALLEL EXECUTION ---
-
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
+
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
 
-        # If context generation could benefit from the plan, it could be re-run here,
-        # but for now, the parallel execution is a significant win.
-        # We can pass the generated plan to the drafting agent directly.
+        hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
+            self, novel_chapter_number, chapter_plan
+        )
+
+        # Context generation already used the plan, so rerunning is unnecessary.
 
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
@@ -684,7 +762,6 @@ class NANA_Orchestrator:
         ) = await self.drafting_agent.draft_chapter(
             self.plot_outline,
             self.character_profiles,
-            self.world_building,
             novel_chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
@@ -795,76 +872,20 @@ class NANA_Orchestrator:
                     f"NANA: Ch {novel_chapter_number} - Text became None before processing cycle {attempt}. Aborting chapter."
                 )
                 return None, None, True
-
-            logger.info(
-                f"NANA: Ch {novel_chapter_number} - Evaluation Cycle, Attempt {attempt} (Parallel)"
+            (
+                eval_result_obj,
+                continuity_problems,
+                eval_usage,
+                continuity_usage,
+            ) = await self._run_evaluation_cycle(
+                novel_chapter_number,
+                attempt,
+                current_text_to_process,
+                plot_point_focus,
+                plot_point_index,
+                hybrid_context_for_draft,
+                patched_spans,
             )
-            self._update_rich_display(
-                step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
-            )
-
-            # --- DYNAMIC PARALLEL EXECUTION of Evaluation and Continuity Checks ---
-            tasks_to_run = []
-            task_names = []
-
-            if config.ENABLE_COMPREHENSIVE_EVALUATION:
-                tasks_to_run.append(
-                    self.evaluator_agent.evaluate_chapter_draft(
-                        self.plot_outline,
-                        self.character_profiles,
-                        self.world_building,
-                        current_text_to_process,
-                        novel_chapter_number,
-                        plot_point_focus,
-                        plot_point_index,
-                        hybrid_context_for_draft,
-                        ignore_spans=patched_spans,
-                    )
-                )
-                task_names.append("evaluation")
-
-            if config.ENABLE_WORLD_CONTINUITY_CHECK:
-                tasks_to_run.append(
-                    self.world_continuity_agent.check_consistency(
-                        self.plot_outline,
-                        self.character_profiles,
-                        self.world_building,
-                        current_text_to_process,
-                        novel_chapter_number,
-                        hybrid_context_for_draft,
-                        ignore_spans=patched_spans,
-                    )
-                )
-                task_names.append("continuity")
-
-            results = await asyncio.gather(*tasks_to_run)
-
-            # Unpack results
-            eval_result_obj = None
-            eval_usage = None
-            continuity_problems = []
-            continuity_usage = None
-
-            result_idx = 0
-            if "evaluation" in task_names:
-                eval_result_obj, eval_usage = results[result_idx]
-                result_idx += 1
-            if "continuity" in task_names:
-                continuity_problems, continuity_usage = results[result_idx]
-
-            # If the main evaluator was disabled, create a default "passed" evaluation object.
-            if eval_result_obj is None:
-                eval_result_obj = {
-                    "needs_revision": False,
-                    "reasons": [],
-                    "problems_found": [],
-                    "coherence_score": None,
-                    "consistency_issues": None,
-                    "plot_deviation_reason": None,
-                    "thematic_issues": None,
-                    "narrative_depth_issues": None,
-                }
-            # --- END DYNAMIC PARALLEL EXECUTION ---
 
             self._accumulate_tokens(
                 f"Ch{novel_chapter_number}-Evaluation-Attempt{attempt}",
@@ -914,46 +935,29 @@ class NANA_Orchestrator:
                 logger.warning(
                     f"NANA: Ch {novel_chapter_number} draft (Attempt {attempt}) needs revision. Reasons: {'; '.join(evaluation_result.get('reasons', []))}"
                 )
-                if revisions_made >= config.MAX_REVISION_CYCLES_PER_CHAPTER:
-                    logger.error(
-                        f"NANA: Ch {novel_chapter_number} - Max revision attempts ({config.MAX_REVISION_CYCLES_PER_CHAPTER}) reached. Proceeding with current draft, marked as flawed."
-                    )
-                    self._update_rich_display(
-                        step=f"Ch {novel_chapter_number} - Max Revisions Reached (Flawed)"
-                    )
-                    break
-
                 self._update_rich_display(
                     step=f"Ch {novel_chapter_number} - Revision Attempt {attempt}"
                 )
                 (
-                    revision_tuple_result,
+                    new_text,
+                    rev_raw_output,
+                    patched_spans,
                     revision_usage,
-                ) = await revise_chapter_draft_logic(
-                    self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
-                    current_text_to_process,
+                ) = await self._perform_revisions(
                     novel_chapter_number,
+                    attempt,
+                    current_text_to_process,
                     evaluation_result,
                     hybrid_context_for_draft,
                     chapter_plan,
-                    is_from_flawed_source=is_from_flawed_source_for_kg,  # Use the flag
-                    already_patched_spans=patched_spans,
+                    patched_spans,
+                    is_from_flawed_source_for_kg,
                 )
                 self._accumulate_tokens(
                     f"Ch{novel_chapter_number}-Revision-Attempt{attempt}",
                     revision_usage,
                 )
-
-                if (
-                    revision_tuple_result
-                    and revision_tuple_result[0]
-                    and len(revision_tuple_result[0]) > 50
-                ):
-                    new_text, rev_raw_output, new_spans = revision_tuple_result
-                    # 'new_spans' now contains ALL patched spans (old and new) correctly remapped relative to the new_text.
-                    patched_spans = new_spans
+                if new_text and new_text != current_text_to_process:
                     new_embedding, prev_embedding = await asyncio.gather(
                         llm_service.async_get_embedding(new_text),
                         llm_service.async_get_embedding(current_text_to_process),
@@ -968,17 +972,11 @@ class NANA_Orchestrator:
                             )
                             current_text_to_process = new_text
                             current_raw_llm_output = (
-                                rev_raw_output
-                                if rev_raw_output
-                                else current_raw_llm_output
+                                rev_raw_output or current_raw_llm_output
                             )
                             break
                     current_text_to_process = new_text
-                    current_raw_llm_output = (
-                        rev_raw_output if rev_raw_output else current_raw_llm_output
-                    )
-                    # A post-patch de-duplication could be added here if patching itself introduces loops,
-                    # but for now, we assume the main looping is from the initial draft.
+                    current_raw_llm_output = rev_raw_output or current_raw_llm_output
                     logger.info(
                         f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text_to_process)}. Re-evaluating."
                     )
@@ -996,12 +994,26 @@ class NANA_Orchestrator:
                         step=f"Ch {novel_chapter_number} - Revision Failed (Flawed)"
                     )
                     break
-
         if current_text_to_process is None:
             logger.critical(
                 f"NANA: Ch {novel_chapter_number} - current_text_to_process is None after revision loop. Aborting chapter."
             )
             return None, None, True
+
+        dedup_text_after_rev, removed_after_rev = await self.perform_deduplication(
+            current_text_to_process, novel_chapter_number
+        )
+        if removed_after_rev > 0:
+            logger.info(
+                f"NANA: Ch {novel_chapter_number} - De-duplication after revisions removed {removed_after_rev} characters."
+            )
+            current_text_to_process = dedup_text_after_rev
+            is_from_flawed_source_for_kg = True
+            await self._save_debug_output(
+                novel_chapter_number,
+                "deduplicated_text_after_revision",
+                current_text_to_process,
+            )
 
         if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
             logger.warning(
@@ -1022,44 +1034,32 @@ class NANA_Orchestrator:
         final_raw_llm_output: Optional[str],
         is_from_flawed_source_for_kg: bool,
     ) -> Optional[str]:
-        self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Finalization (Parallel)"
-        )
+        self._update_rich_display(step=f"Ch {novel_chapter_number} - Finalization")
 
-        # --- PARALLEL EXECUTION of Summary, Embedding, and KG Extraction ---
-        summary_task = self.kg_maintainer_agent.summarize_chapter(
-            final_text_to_process, novel_chapter_number
-        )
-        embedding_task = llm_service.async_get_embedding(final_text_to_process)
-        kg_extraction_task = self.kg_maintainer_agent.extract_and_merge_knowledge(
+        result = await self.finalize_agent.finalize_chapter(
             self.plot_outline,
             self.character_profiles,
             self.world_building,
             novel_chapter_number,
             final_text_to_process,
+            final_raw_llm_output,
             is_from_flawed_source_for_kg,
         )
 
-        (
-            (chapter_summary, summary_usage),
-            final_embedding,
-            kg_merge_usage,
-        ) = await asyncio.gather(summary_task, embedding_task, kg_extraction_task)
-        # --- END PARALLEL EXECUTION ---
-
         self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-Summarization", summary_usage
+            f"Ch{novel_chapter_number}-Summarization", result.get("summary_usage")
         )
         self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-KGExtractionMerge", kg_merge_usage
+            f"Ch{novel_chapter_number}-KGExtractionMerge", result.get("kg_usage")
         )
         await self._save_debug_output(
-            novel_chapter_number, "final_summary", chapter_summary
+            novel_chapter_number, "final_summary", result.get("summary")
         )
 
-        if final_embedding is None:
+        if result.get("embedding") is None:
             logger.error(
-                f"NANA CRITICAL: Failed to generate embedding for final text of Chapter {novel_chapter_number}. Text saved to file system only."
+                "NANA CRITICAL: Failed to generate embedding for final text of Chapter %s. Text saved to file system only.",
+                novel_chapter_number,
             )
             await self._save_chapter_text_and_log(
                 novel_chapter_number,
@@ -1071,28 +1071,11 @@ class NANA_Orchestrator:
             )
             return None
 
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Saving to DB")
-        await chapter_queries.save_chapter_data_to_db(
-            novel_chapter_number,
-            final_text_to_process,
-            final_raw_llm_output or "N/A",
-            chapter_summary,
-            final_embedding,
-            is_from_flawed_source_for_kg,
-        )
         await self._save_chapter_text_and_log(
             novel_chapter_number, final_text_to_process, final_raw_llm_output
         )
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
-
-        # The KG merge already happened in memory, now just persist the final objects
-        await self.kg_maintainer_agent.persist_profiles(
-            self.character_profiles, novel_chapter_number
-        )
-        await self.kg_maintainer_agent.persist_world(
-            self.world_building, novel_chapter_number
-        )
 
         return final_text_to_process
 
@@ -1328,8 +1311,7 @@ class NANA_Orchestrator:
                     return
                 self._update_novel_props_cache()
 
-            await self._prepopulate_kg_if_needed()
-            self._update_novel_props_cache()
+            # KG pre-population handled within run_genesis_phase
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
 
