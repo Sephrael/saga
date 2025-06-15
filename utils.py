@@ -37,6 +37,15 @@ def _normalize_for_id(text: str) -> str:
     return text
 
 
+def normalize_trait_name(trait: str) -> str:
+    """Return a canonical representation of a trait name."""
+    if not isinstance(trait, str):
+        trait = str(trait)
+    cleaned = re.sub(r"[^a-z0-9 ]", "", trait.strip().lower())
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned
+
+
 class SpaCyModelManager:
     """Lazily loads and stores the spaCy model used across the project."""
 
