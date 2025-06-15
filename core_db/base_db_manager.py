@@ -1,14 +1,31 @@
 # core_db/base_db_manager.py
 import logging
-from typing import Optional, List, Dict, Any, Tuple, Union
-import numpy as np
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from neo4j import AsyncGraphDatabase, AsyncManagedTransaction, AsyncDriver  # type: ignore
+import numpy as np
+from neo4j import (  # type: ignore
+    AsyncDriver,
+    AsyncGraphDatabase,
+    AsyncManagedTransaction,
+)
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 
 logger = logging.getLogger(__name__)
+
+# Relationship types used across the application. Defining them explicitly
+# avoids Neo4j warnings when queries reference types that have not yet been
+# created.
+RELATIONSHIP_TYPES: List[str] = [
+    "CONTAINS_ELEMENT",
+    "HAS_GOAL",
+    "HAS_RULE",
+    "HAS_KEY_ELEMENT",
+    "HAS_TRAIT_ASPECT",
+    "ELABORATED_IN_CHAPTER",
+    "DYNAMIC_REL",
+]
 
 
 class Neo4jManagerSingleton:
@@ -162,7 +179,7 @@ class Neo4jManagerSingleton:
 
     async def create_db_schema(self):
         self.logger.info(
-            "Creating/verifying Neo4j indexes and constraints (batch execution)..."
+            "Creating/verifying Neo4j schema elements (batch execution)..."
         )
 
         # Existing indexes and constraints are not explicitly dropped. The
@@ -197,6 +214,18 @@ class Neo4jManagerSingleton:
             "CREATE INDEX entity_is_provisional IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
         ]
 
+        # Ensure relationship type tokens exist to avoid Neo4j warnings when
+        # matching on relationship types that have not been used yet. Creating
+        # and immediately deleting a dummy relationship is sufficient to create
+        # the token.
+        relationship_type_queries = [
+            (
+                f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
+                f"(b:__RelTypePlaceholder) WITH a,b DELETE a,b"
+            )
+            for rel_type in RELATIONSHIP_TYPES
+        ]
+
         vector_index_query = f"""
         CREATE VECTOR INDEX {config.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
         FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.{config.NEO4J_VECTOR_PROPERTY_NAME})
@@ -206,28 +235,28 @@ class Neo4jManagerSingleton:
         }}}}
         """
 
-        all_schema_ops_queries = (
+        schema_ops_queries = (
             core_constraints_queries + index_queries + [vector_index_query]
         )
 
-        schema_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
-            (query, {}) for query in all_schema_ops_queries
+        schema_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in schema_ops_queries
         ]
 
         try:
-            await self.execute_cypher_batch(schema_statements_with_params)
+            await self.execute_cypher_batch(schema_ops_with_params)
             self.logger.info(
-                f"Successfully executed batch of {len(schema_statements_with_params)} schema operations."
+                f"Successfully executed batch of {len(schema_ops_with_params)} schema operations."
             )
         except Exception as e:
             self.logger.error(
-                f"Error during batch schema operation execution: {e}. Some schema elements might not be created/verified.",
+                f"Error during schema operation batch execution: {e}. Some schema elements might not be created/verified.",
                 exc_info=True,
             )
             self.logger.warning(
                 "Attempting to apply schema operations individually as a fallback."
             )
-            for query_text in all_schema_ops_queries:
+            for query_text in schema_ops_queries:
                 try:
                     await self.execute_write_query(query_text)
                     self.logger.info(
@@ -238,8 +267,36 @@ class Neo4jManagerSingleton:
                         f"Fallback: Failed to apply schema operation '{query_text[:100]}...': {individual_e}"
                     )
 
+        reltype_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in relationship_type_queries
+        ]
+
+        try:
+            await self.execute_cypher_batch(reltype_ops_with_params)
+            self.logger.info(
+                f"Successfully initialized {len(reltype_ops_with_params)} relationship types."
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Error initializing relationship types: {e}.",
+                exc_info=True,
+            )
+            self.logger.warning(
+                "Attempting to initialize relationship types individually as a fallback."
+            )
+            for query_text in relationship_type_queries:
+                try:
+                    await self.execute_write_query(query_text)
+                    self.logger.info(
+                        f"Fallback: Successfully initialized relationship type: '{query_text[:100]}...'"
+                    )
+                except Exception as individual_e:
+                    self.logger.warning(
+                        f"Fallback: Failed to initialize relationship type '{query_text[:100]}...': {individual_e}"
+                    )
+
         self.logger.info(
-            "Neo4j schema (indexes, constraints, vector index) verification process complete."
+            "Neo4j schema (indexes, constraints, relationship types, vector index) verification process complete."
         )
 
     def embedding_to_list(
