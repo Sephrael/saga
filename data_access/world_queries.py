@@ -609,7 +609,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
 @alru_cache(maxsize=128)
 async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
-    """Retrieve a single ``WorldItem`` from Neo4j by its ID."""
+    """Retrieve a single ``WorldItem`` from Neo4j by its ID or fall back to name."""
     logger.info("Loading world item '%s' from Neo4j...", item_id)
 
     query = (
@@ -618,6 +618,11 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
         " RETURN we"
     )
     results = await neo4j_manager.execute_read_query(query, {"id": item_id})
+    if not results or not results[0].get("we"):
+        alt_id = resolve_world_name(item_id)
+        if alt_id and alt_id != item_id:
+            results = await neo4j_manager.execute_read_query(query, {"id": alt_id})
+
     if not results or not results[0].get("we"):
         logger.info("No world item found for id '%s'.", item_id)
         return None

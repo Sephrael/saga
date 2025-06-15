@@ -8,6 +8,7 @@ from async_lru import alru_cache  # type: ignore
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
+import utils
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -17,6 +18,17 @@ from kg_constants import (
 from kg_maintainer.models import CharacterProfile
 
 from .kg_queries import normalize_relationship_type
+
+# Mapping from normalized character names to canonical display names
+CHAR_NAME_TO_CANONICAL: Dict[str, str] = {}
+
+
+def resolve_character_name(name: str) -> str:
+    """Return canonical character name for a display variant."""
+    if not name:
+        return name
+    return CHAR_NAME_TO_CANONICAL.get(utils._normalize_for_id(name), name)
+
 
 logger = structlog.get_logger(__name__)
 
@@ -243,6 +255,8 @@ async def sync_characters(
             len(profiles),
             chapter_number,
         )
+        for profile in profiles.values():
+            CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(profile.name)] = profile.name
         return True
     except Exception as exc:  # pragma: no cover - log and return failure
         logger.error(
@@ -521,6 +535,8 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
         logger.info(
             f"Successfully synchronized {len(all_input_char_names)} character profiles to Neo4j."
         )
+        for name in all_input_char_names:
+            CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(name)] = name
         return True
     except Exception as e:
         logger.error(f"Error synchronizing character profiles: {e}", exc_info=True)
@@ -530,16 +546,17 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
 @alru_cache(maxsize=128)
 async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]:
     """Retrieve a single ``CharacterProfile`` from Neo4j by character name."""
-    logger.info("Loading character profile '%s' from Neo4j...", name)
+    canonical_name = resolve_character_name(name)
+    logger.info("Loading character profile '%s' from Neo4j...", canonical_name)
 
     query = (
         "MATCH (c:Character:Entity {name: $name})"
         " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
         " RETURN c"
     )
-    results = await neo4j_manager.execute_read_query(query, {"name": name})
+    results = await neo4j_manager.execute_read_query(query, {"name": canonical_name})
     if not results or not results[0].get("c"):
-        logger.info("No character profile found for '%s'.", name)
+        logger.info("No character profile found for '%s'.", canonical_name)
         return None
 
     char_node = results[0]["c"]
@@ -647,6 +664,8 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
         if not char_name:
             continue
 
+        CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
+
         profile = dict(char_node)
         profile.pop("name", None)
         profile.pop("created_ts", None)
@@ -727,6 +746,7 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
 async def get_character_info_for_snippet_from_db(
     char_name: str, chapter_limit: int
 ) -> Optional[Dict[str, Any]]:
+    canonical_name = resolve_character_name(char_name)
     query = """
     MATCH (c:Character:Entity {name: $char_name_param})
     WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE
@@ -781,7 +801,7 @@ async def get_character_info_for_snippet_from_db(
            most_current_dev_event,
            is_provisional_flag AS is_provisional_overall
     """
-    params = {"char_name_param": char_name, "chapter_limit_param": chapter_limit}
+    params = {"char_name_param": canonical_name, "chapter_limit_param": chapter_limit}
     try:
         result = await neo4j_manager.execute_read_query(query, params)
     except ServiceUnavailable as e:
