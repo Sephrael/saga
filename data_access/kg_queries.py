@@ -27,6 +27,38 @@ def normalize_relationship_type(rel: str) -> str:
     return rel_norm.upper()
 
 
+async def normalize_existing_relationship_types() -> None:
+    """Normalize all stored relationship types to canonical form."""
+    query = "MATCH ()-[r:DYNAMIC_REL]->() RETURN DISTINCT r.type AS t"
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Error reading existing relationship types: %s", exc)
+        return
+
+    statements: List[Tuple[str, Dict[str, Any]]] = []
+    for record in results:
+        current = record.get("t")
+        if not current:
+            continue
+        normalized = normalize_relationship_type(str(current))
+        if normalized != current:
+            statements.append(
+                (
+                    "MATCH ()-[r:DYNAMIC_REL {type: $old}]->() SET r.type = $new",
+                    {"old": current, "new": normalized},
+                )
+            )
+    if statements:
+        try:
+            await neo4j_manager.execute_cypher_batch(statements)
+            logger.info("Normalized %d relationship type variations", len(statements))
+        except Exception as exc:  # pragma: no cover - log but continue
+            logger.error(
+                "Failed to update some relationship types: %s", exc, exc_info=True
+            )
+
+
 def _get_cypher_labels(entity_type: Optional[str]) -> str:
     """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
 

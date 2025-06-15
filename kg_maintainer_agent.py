@@ -681,6 +681,7 @@ class KGMaintainerAgent:
         ]
         try:
             await neo4j_manager.execute_cypher_batch(statements)
+            await kg_queries.normalize_existing_relationship_types()
         except Exception as exc:  # pragma: no cover - narrow DB errors
             logger.error("KG Healer: Schema healing failed: %s", exc, exc_info=True)
 

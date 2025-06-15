@@ -24,6 +24,7 @@ from .kg_queries import (
     add_kg_triples_batch_to_db,
     get_most_recent_value_from_db,
     get_novel_info_property_from_db,
+    normalize_existing_relationship_types,
     query_kg_from_db,
 )
 from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
@@ -63,6 +64,7 @@ __all__ = [
     "get_all_past_embeddings_from_db",
     "add_kg_triples_batch_to_db",
     "query_kg_from_db",
+    "normalize_existing_relationship_types",
     "get_most_recent_value_from_db",
     "get_novel_info_property_from_db",
 ]
