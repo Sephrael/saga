@@ -1,14 +1,31 @@
 # core_db/base_db_manager.py
 import logging
-from typing import Optional, List, Dict, Any, Tuple, Union
-import numpy as np
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from neo4j import AsyncGraphDatabase, AsyncManagedTransaction, AsyncDriver  # type: ignore
+import numpy as np
+from neo4j import (  # type: ignore
+    AsyncDriver,
+    AsyncGraphDatabase,
+    AsyncManagedTransaction,
+)
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 
 logger = logging.getLogger(__name__)
+
+# Relationship types used across the application. Defining them explicitly
+# avoids Neo4j warnings when queries reference types that have not yet been
+# created.
+RELATIONSHIP_TYPES: List[str] = [
+    "CONTAINS_ELEMENT",
+    "HAS_GOAL",
+    "HAS_RULE",
+    "HAS_KEY_ELEMENT",
+    "HAS_TRAIT_ASPECT",
+    "ELABORATED_IN_CHAPTER",
+    "DYNAMIC_REL",
+]
 
 
 class Neo4jManagerSingleton:
@@ -162,7 +179,7 @@ class Neo4jManagerSingleton:
 
     async def create_db_schema(self):
         self.logger.info(
-            "Creating/verifying Neo4j indexes and constraints (batch execution)..."
+            "Creating/verifying Neo4j schema elements (batch execution)..."
         )
 
         # Existing indexes and constraints are not explicitly dropped. The
@@ -197,6 +214,11 @@ class Neo4jManagerSingleton:
             "CREATE INDEX entity_is_provisional IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
         ]
 
+        relationship_type_queries = [
+            f"CREATE RELATIONSHIP TYPE {rel_type} IF NOT EXISTS"
+            for rel_type in RELATIONSHIP_TYPES
+        ]
+
         vector_index_query = f"""
         CREATE VECTOR INDEX {config.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
         FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.{config.NEO4J_VECTOR_PROPERTY_NAME})
@@ -207,7 +229,10 @@ class Neo4jManagerSingleton:
         """
 
         all_schema_ops_queries = (
-            core_constraints_queries + index_queries + [vector_index_query]
+            core_constraints_queries
+            + index_queries
+            + relationship_type_queries
+            + [vector_index_query]
         )
 
         schema_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
@@ -239,7 +264,7 @@ class Neo4jManagerSingleton:
                     )
 
         self.logger.info(
-            "Neo4j schema (indexes, constraints, vector index) verification process complete."
+            "Neo4j schema (indexes, constraints, relationship types, vector index) verification process complete."
         )
 
     def embedding_to_list(
