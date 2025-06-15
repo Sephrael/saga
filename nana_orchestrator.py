@@ -620,8 +620,6 @@ class NANA_Orchestrator:
             tasks_to_run.append(
                 self.world_continuity_agent.check_consistency(
                     self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
                     current_text,
                     novel_chapter_number,
                     hybrid_context_for_draft,
