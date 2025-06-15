@@ -4,6 +4,9 @@ import pytest
 import utils
 from chapter_revision_logic import _apply_patches_to_text
 from llm_interface import llm_service
+import config
+from patch_validation_agent import PatchValidationAgent
+import chapter_revision_logic
 
 
 @pytest.mark.asyncio
@@ -188,3 +191,72 @@ async def test_duplicate_patch_skipped(monkeypatch):
     result, _ = await _apply_patches_to_text(original, patches, None, None)
     # Only the first patch should be applied because the second overlaps exactly
     assert result == "Hi world!"
+
+
+@pytest.mark.asyncio
+async def test_patch_validation_toggle(monkeypatch):
+    config.settings.AGENT_ENABLE_PATCH_VALIDATION = False
+    config.AGENT_ENABLE_PATCH_VALIDATION = False
+
+    called = False
+
+    async def fake_validate(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return True, None
+
+    monkeypatch.setattr(PatchValidationAgent, "validate_patch", fake_validate)
+
+    async def fake_generate(*_args, **_kwargs):
+        return (
+            {
+                "original_problem_quote_text": "Hello",
+                "target_char_start": 0,
+                "target_char_end": 5,
+                "replace_with": "Hi",
+                "reason_for_change": "greet",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "quote_char_start": 0,
+                "quote_char_end": 5,
+                "issue_category": "cat",
+                "problem_description": "desc",
+                "suggested_fix_focus": "fix",
+            },
+            None,
+        )
+
+    monkeypatch.setattr(
+        chapter_revision_logic,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+
+    problems = [
+        {
+            "issue_category": "cat",
+            "problem_description": "desc",
+            "quote_from_original_text": "Hello",
+            "sentence_char_start": 0,
+            "sentence_char_end": 5,
+            "suggested_fix_focus": "fix",
+        }
+    ]
+
+    validator = PatchValidationAgent()
+    result, _ = await chapter_revision_logic._generate_patch_instructions_logic(
+        {},
+        "Hello world",
+        problems,
+        1,
+        "",
+        None,
+        validator,
+    )
+
+    assert result
+    assert not called
+
+    config.settings.AGENT_ENABLE_PATCH_VALIDATION = True
+    config.AGENT_ENABLE_PATCH_VALIDATION = True

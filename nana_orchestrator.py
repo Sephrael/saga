@@ -110,7 +110,10 @@ class NANA_Orchestrator:
         self.status_text_current_step: Text = Text("Current Step: Initializing...")
         self.status_text_tokens_generated: Text = Text("Tokens Generated (this run): 0")
         self.status_text_elapsed_time: Text = Text("Elapsed Time: 0s")
+        self.status_text_requests_per_minute: Text = Text("Requests/Min: 0.0")
         self.run_start_time: float = 0.0
+        self._stop_rich_update_event: asyncio.Event = asyncio.Event()
+        self._auto_refresh_task: Optional[asyncio.Task] = None
 
         if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
             self.rich_status_group = Group(
@@ -118,6 +121,7 @@ class NANA_Orchestrator:
                 self.status_text_current_chapter,
                 self.status_text_current_step,
                 self.status_text_tokens_generated,
+                self.status_text_requests_per_minute,
                 self.status_text_elapsed_time,
             )
             self.rich_live = Live(
@@ -138,6 +142,12 @@ class NANA_Orchestrator:
             )
         utils.load_spacy_model_if_needed()
         logger.info("NANA Orchestrator initialized.")
+
+    async def _auto_refresh_rich_display(self) -> None:
+        """Periodically refresh the Rich display."""
+        while not self._stop_rich_update_event.is_set():
+            self._update_rich_display()
+            await asyncio.sleep(1)
 
     def _update_rich_display(
         self, chapter_num: Optional[int] = None, step: Optional[str] = None
@@ -161,6 +171,14 @@ class NANA_Orchestrator:
             f"Tokens Generated (this run): {self.total_tokens_generated_this_run:,}"  # type: ignore
         )
         elapsed_seconds = time.time() - self.run_start_time
+        requests_per_minute = (
+            llm_service.request_count / (elapsed_seconds / 60)
+            if elapsed_seconds > 0
+            else 0.0
+        )
+        self.status_text_requests_per_minute.plain = (
+            f"Requests/Min: {requests_per_minute:.2f}"  # type: ignore
+        )
         self.status_text_elapsed_time.plain = (
             f"Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(elapsed_seconds))}"  # type: ignore
         )
@@ -1278,6 +1296,10 @@ class NANA_Orchestrator:
         self.run_start_time = time.time()
         if self.rich_live:
             self.rich_live.start()
+            self._stop_rich_update_event.clear()
+            self._auto_refresh_task = asyncio.create_task(
+                self._auto_refresh_rich_display()
+            )
         try:
             await neo4j_manager.connect()
             await neo4j_manager.create_db_schema()
@@ -1458,6 +1480,10 @@ class NANA_Orchestrator:
             if self.rich_live and self.rich_live.is_started:  # type: ignore
                 self._update_rich_display(step="Critical Error in Main Loop")
         finally:
+            self._stop_rich_update_event.set()
+            if self._auto_refresh_task:
+                await self._auto_refresh_task
+                self._auto_refresh_task = None
             if self.rich_live and self.rich_live.is_started:  # type: ignore
                 await asyncio.sleep(0.1)
                 self.rich_live.stop()

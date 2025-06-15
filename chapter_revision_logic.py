@@ -635,6 +635,9 @@ async def _generate_patch_instructions_logic(
                     usage_acc[k] += v
             if not patch_instr_tmp:
                 continue
+            if not config.AGENT_ENABLE_PATCH_VALIDATION:
+                patch_instr = patch_instr_tmp
+                break
             valid, val_usage = await validator.validate_patch(
                 context_snippet, patch_instr_tmp, group_members
             )
@@ -869,7 +872,17 @@ async def revise_chapter_draft_logic(
             f"Attempting patch-based revision for Ch {chapter_number} with {len(problems_to_fix)} problem(s)."
         )
         sentence_embeddings = await _get_sentence_embeddings(original_text)
-        validator = PatchValidationAgent()
+        if config.AGENT_ENABLE_PATCH_VALIDATION:
+            validator: PatchValidationAgent | Any = PatchValidationAgent()
+        else:
+
+            class _BypassValidator:
+                async def validate_patch(
+                    self, *_args: Any, **_kwargs: Any
+                ) -> tuple[bool, None]:
+                    return True, None
+
+            validator = _BypassValidator()
         (
             patch_instructions,
             patch_usage,
