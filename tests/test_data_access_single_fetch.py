@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from data_access import character_queries, world_queries
+import utils
 from kg_constants import KG_NODE_CREATED_CHAPTER
 
 
@@ -88,5 +89,36 @@ async def test_get_world_item_by_id(monkeypatch):
     assert item.category == "places"
     assert item.properties["goals"] == ["Thrive"]
     assert item.properties["elaboration_in_chapter_2"] == "history"
+
+    world_queries.get_world_item_by_id.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_get_world_item_by_id_fallback(monkeypatch):
+    async def fake_read(query, params=None):
+        if params and params.get("id") == "places_city":
+            return [
+                {
+                    "we": {
+                        "id": "places_city",
+                        "name": "City",
+                        "category": "places",
+                        KG_NODE_CREATED_CHAPTER: 1,
+                    }
+                }
+            ]
+        return []
+
+    world_queries.WORLD_NAME_TO_ID.clear()
+    world_queries.WORLD_NAME_TO_ID[utils._normalize_for_id("City")] = "places_city"
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_read_query",
+        AsyncMock(side_effect=fake_read),
+    )
+
+    item = await world_queries.get_world_item_by_id("City")
+    assert item
+    assert item.id == "places_city"
 
     world_queries.get_world_item_by_id.cache_clear()

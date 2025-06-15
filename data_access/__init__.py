@@ -13,6 +13,7 @@ from .chapter_queries import (
 from .character_queries import (
     get_character_info_for_snippet_from_db,
     get_character_profile_by_name,
+    resolve_character_name,
     get_character_profiles_from_db,
     sync_characters,
 )
@@ -23,6 +24,7 @@ from .kg_queries import (
     add_kg_triples_batch_to_db,
     get_most_recent_value_from_db,
     get_novel_info_property_from_db,
+    normalize_existing_relationship_types,
     query_kg_from_db,
 )
 from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
@@ -44,6 +46,7 @@ __all__ = [
     "sync_characters_full_state_from_object_to_db",
     "sync_characters",
     "get_character_profile_by_name",
+    "resolve_character_name",
     "get_character_profiles_from_db",
     "get_character_info_for_snippet_from_db",
     "sync_world_full_state_from_object_to_db",
@@ -61,6 +64,7 @@ __all__ = [
     "get_all_past_embeddings_from_db",
     "add_kg_triples_batch_to_db",
     "query_kg_from_db",
+    "normalize_existing_relationship_types",
     "get_most_recent_value_from_db",
     "get_novel_info_property_from_db",
 ]
