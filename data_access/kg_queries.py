@@ -1,8 +1,8 @@
+      
 # data_access/kg_queries.py
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
-
-import structlog
 
 import config
 from core_db.base_db_manager import neo4j_manager
@@ -11,20 +11,7 @@ from kg_constants import (
     KG_REL_CHAPTER_ADDED,
 )
 
-logger = structlog.get_logger(__name__)
-
-
-def _normalize_label(label: str) -> str:
-    """Return a sanitized label string with first letter capitalized."""
-    cleaned = re.sub(r"[^a-zA-Z0-9]", "", label.strip().casefold())
-    return cleaned.capitalize() if cleaned else ""
-
-
-def normalize_relationship_type(rel: str) -> str:
-    """Normalize relationship types to uppercase snake case."""
-    rel_norm = re.sub(r"[^a-z0-9]+", "_", rel.strip().casefold())
-    rel_norm = re.sub(r"_+", "_", rel_norm).strip("_")
-    return rel_norm.upper()
+logger = logging.getLogger(__name__)
 
 
 def _get_cypher_labels(entity_type: Optional[str]) -> str:
@@ -34,8 +21,13 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     specific_labels_parts = []
 
     if entity_type and entity_type.strip():
+        # Use original type for semantic checks (like "Person") before sanitization for label syntax
         original_type_capitalized = entity_type.strip().capitalize()
-        sanitized_specific_type = _normalize_label(entity_type)
+
+        # Sanitize for Cypher label (alphanumeric)
+        sanitized_specific_type = "".join(
+            c for c in original_type_capitalized if c.isalnum()
+        )
 
         if sanitized_specific_type and sanitized_specific_type != "Entity":
             # Add the sanitized specific type label unless it's "Character" (which is handled next)
@@ -104,7 +96,7 @@ async def add_kg_triples_batch_to_db(
         subject_type = subject_info.get(
             "type"
         )  # This is a string like "Character", "WorldElement", etc.
-        predicate_clean = normalize_relationship_type(str(predicate_str))
+        predicate_clean = str(predicate_str).strip().upper().replace(" ", "_")
 
         if not all([subject_name, predicate_clean]):
             logger.warning(
@@ -230,7 +222,7 @@ async def query_kg_from_db(
         parameters["subject_param"] = subject.strip()
     if predicate is not None:
         conditions.append("r.type = $predicate_param")
-        parameters["predicate_param"] = normalize_relationship_type(predicate)
+        parameters["predicate_param"] = predicate.strip().upper().replace(" ", "_")
     if obj_val is not None:
         obj_val_stripped = obj_val.strip()
         conditions.append(
@@ -579,3 +571,5 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
                 exc_info=True,
             )
         return False
+
+    

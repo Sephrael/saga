@@ -1,7 +1,7 @@
 # data_access/character_queries.py
+import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import structlog
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
@@ -13,9 +13,7 @@ from kg_constants import (
 )
 from kg_maintainer.models import CharacterProfile
 
-from .kg_queries import normalize_relationship_type
-
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def generate_character_node_cypher(
@@ -159,8 +157,10 @@ def generate_character_node_cypher(
                     if rel_detail.isupper() and " " not in rel_detail:
                         rel_type_str = rel_detail
                 elif isinstance(rel_detail, dict):
-                    rel_type_str = normalize_relationship_type(
+                    rel_type_str = (
                         str(rel_detail.get("type", rel_type_str))
+                        .upper()
+                        .replace(" ", "_")
                     )
                     for k_rel, v_rel in rel_detail.items():
                         if isinstance(v_rel, (str, int, float, bool)):
@@ -464,8 +464,10 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     if rel_detail.isupper() and " " not in rel_detail:
                         rel_type_str = rel_detail
                 elif isinstance(rel_detail, dict):
-                    rel_type_str = normalize_relationship_type(
+                    rel_type_str = (
                         str(rel_detail.get("type", rel_type_str))
+                        .upper()
+                        .replace(" ", "_")
                     )
                     for k_rel, v_rel in rel_detail.items():
                         if (
