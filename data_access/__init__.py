@@ -28,6 +28,8 @@ from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
 from .world_queries import (
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
+    get_world_item_by_name,
+    resolve_world_name,
     sync_world_items,
 )
 from .world_queries import (
@@ -45,6 +47,8 @@ __all__ = [
     "sync_world_items",
     "get_world_building_from_db",
     "get_world_elements_for_snippet_from_db",
+    "resolve_world_name",
+    "get_world_item_by_name",
     "load_chapter_count_from_db",
     "save_chapter_data_to_db",
     "get_chapter_data_from_db",
