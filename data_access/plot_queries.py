@@ -1,10 +1,12 @@
 # data_access/plot_queries.py
-import logging
-from typing import Dict, Any, List, Tuple, Set
+from typing import Any, Dict, List, Set, Tuple
+
+import structlog
+
 import config
 from core_db.base_db_manager import neo4j_manager
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:

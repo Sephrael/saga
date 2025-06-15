@@ -1,4 +1,5 @@
 # kg_maintainer_agent.py
+import asyncio
 import json
 import logging
 import re
@@ -22,7 +23,6 @@ from parsing_utils import (
     parse_rdf_triples_with_rdflib,
 )  # Will be modified to custom parser
 from prompt_renderer import render_prompt
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -426,9 +426,12 @@ class KGMaintainerAgent:
 
         # 2. Consistency Checks
         await self._run_consistency_checks()
-        
+
         # 3. Entity Resolution
         await self._run_entity_resolution()
+
+        # 4. Schema Conformity
+        await self.heal_schema()
 
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
@@ -635,7 +638,7 @@ class KGMaintainerAgent:
                     # Heuristic to decide which node to keep
                     degree1 = context1.get("degree", 0)
                     degree2 = context2.get("degree", 0)
-                    
+
                     # Prefer node with more relationships
                     if degree1 > degree2:
                         target_id, source_id = id1, id2
@@ -643,12 +646,16 @@ class KGMaintainerAgent:
                         target_id, source_id = id2, id1
                     else:
                         # Tie-breaker: prefer the one with a more detailed description
-                        desc1_len = len(context1.get("properties", {}).get("description", ""))
-                        desc2_len = len(context2.get("properties", {}).get("description", ""))
+                        desc1_len = len(
+                            context1.get("properties", {}).get("description", "")
+                        )
+                        desc2_len = len(
+                            context2.get("properties", {}).get("description", "")
+                        )
                         if desc1_len >= desc2_len:
-                             target_id, source_id = id1, id2
+                            target_id, source_id = id1, id2
                         else:
-                             target_id, source_id = id2, id1
+                            target_id, source_id = id2, id1
 
                     await kg_queries.merge_entities(target_id, source_id)
                 else:
@@ -661,6 +668,21 @@ class KGMaintainerAgent:
                 logger.error(
                     f"Failed to parse entity resolution response from LLM for pair ({id1}, {id2}): {e}. Response: {llm_response}"
                 )
+
+    async def heal_schema(self) -> None:
+        """Ensure all nodes and relationships follow the expected schema."""
+        logger.info("KG Healer: Checking base schema conformity...")
+        statements = [
+            ("MATCH (n) WHERE NOT n:Entity SET n:Entity", {}),
+            (
+                "MATCH ()-[r:DYNAMIC_REL]-() WHERE r.type IS NULL SET r.type = 'UNKNOWN'",
+                {},
+            ),
+        ]
+        try:
+            await neo4j_manager.execute_cypher_batch(statements)
+        except Exception as exc:  # pragma: no cover - narrow DB errors
+            logger.error("KG Healer: Schema healing failed: %s", exc, exc_info=True)
 
 
 __all__ = ["KGMaintainerAgent"]
