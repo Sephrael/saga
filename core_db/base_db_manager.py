@@ -214,8 +214,15 @@ class Neo4jManagerSingleton:
             "CREATE INDEX entity_is_provisional IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
         ]
 
+        # Ensure relationship type tokens exist to avoid Neo4j warnings when
+        # matching on relationship types that have not been used yet. Creating
+        # and immediately deleting a dummy relationship is sufficient to create
+        # the token.
         relationship_type_queries = [
-            f"CREATE RELATIONSHIP TYPE {rel_type} IF NOT EXISTS"
+            (
+                f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
+                f"(b:__RelTypePlaceholder) WITH a,b DELETE a,b"
+            )
             for rel_type in RELATIONSHIP_TYPES
         ]
 
