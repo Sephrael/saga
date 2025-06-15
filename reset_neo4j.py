@@ -6,10 +6,12 @@ from typing import Any, Dict, List  # Added for type hints
 
 import config  # To get default URI, user, pass if not provided via args
 from core_db.base_db_manager import Neo4jManagerSingleton  # Use the singleton
-import logging # Added logging
+import logging  # Added logging
 
 # Configure a basic logger for this script
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -54,19 +56,22 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         retry_delay = 5  # seconds
         for attempt in range(max_retries):
             try:
-                logger.info(f"Connecting to Neo4j database at {effective_uri} (Attempt {attempt + 1}/{max_retries})...")
+                logger.info(
+                    f"Connecting to Neo4j database at {effective_uri} (Attempt {attempt + 1}/{max_retries})..."
+                )
                 await neo4j_manager_instance.connect()
                 logger.info("Successfully connected to Neo4j.")
                 break  # Exit loop on successful connection
             except Exception as e:
                 if attempt < max_retries - 1:
-                    logger.warning(f"Connection failed: {e}. Retrying in {retry_delay} seconds...")
+                    logger.warning(
+                        f"Connection failed: {e}. Retrying in {retry_delay} seconds..."
+                    )
                     await asyncio.sleep(retry_delay)
                 else:
                     logger.error("Could not connect to Neo4j after multiple retries.")
                     raise  # Re-raise the last exception if all retries fail
         # --- END: Added Connection Retry Logic ---
-
 
         async with neo4j_manager_instance.driver.session(
             database=config.NEO4J_DATABASE
@@ -117,7 +122,9 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             else:
                 for constraint_name in constraints_to_drop:
                     try:
-                        logger.info(f"   Attempting to drop constraint: {constraint_name}")
+                        logger.info(
+                            f"   Attempting to drop constraint: {constraint_name}"
+                        )
                         tx = await session.begin_transaction()
                         await tx.run(f"DROP CONSTRAINT {constraint_name} IF EXISTS")
                         await tx.commit()
