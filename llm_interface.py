@@ -191,8 +191,10 @@ class LLMService:
         self._client = httpx.AsyncClient(timeout=timeout)
         # Add a semaphore to limit concurrent requests
         self._semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_LLM_CALLS)
-        logger.info(f"LLMService initialized with a concurrency limit of {config.MAX_CONCURRENT_LLM_CALLS}.")
-
+        self.request_count = 0
+        logger.info(
+            f"LLMService initialized with a concurrency limit of {config.MAX_CONCURRENT_LLM_CALLS}."
+        )
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client."""
@@ -245,6 +247,7 @@ class LLMService:
             for attempt in range(config.LLM_RETRY_ATTEMPTS):
                 api_response: Optional[httpx.Response] = None
                 try:
+                    self.request_count += 1
                     api_response = await self._client.post(
                         f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload
                     )
@@ -465,6 +468,7 @@ class LLMService:
                             stream_usage_data: Optional[Dict[str, int]] = None
 
                             try:
+                                self.request_count += 1
                                 async with self._client.stream(
                                     "POST",
                                     f"{config.OPENAI_API_BASE}/chat/completions",
@@ -486,22 +490,26 @@ class LLMService:
                                                 if data_json_str == "[DONE]":
                                                     break
                                                 try:
-                                                    chunk_data = json.loads(data_json_str)
+                                                    chunk_data = json.loads(
+                                                        data_json_str
+                                                    )
                                                     if chunk_data.get("choices"):
                                                         delta = chunk_data["choices"][
                                                             0
                                                         ].get("delta", {})
-                                                        content_piece = delta.get("content")
+                                                        content_piece = delta.get(
+                                                            "content"
+                                                        )
                                                         if content_piece:
-                                                            accumulated_stream_content += (
+                                                            accumulated_stream_content += content_piece
+                                                            tmp_f_write.write(
                                                                 content_piece
                                                             )
-                                                            tmp_f_write.write(content_piece)
 
                                                         if (
-                                                            chunk_data["choices"][0].get(
-                                                                "finish_reason"
-                                                            )
+                                                            chunk_data["choices"][
+                                                                0
+                                                            ].get("finish_reason")
                                                             is not None
                                                         ):
                                                             potential_usage = (
@@ -509,15 +517,17 @@ class LLMService:
                                                             )
                                                             if (
                                                                 not potential_usage
-                                                                and chunk_data.get("x_groq")
+                                                                and chunk_data.get(
+                                                                    "x_groq"
+                                                                )
                                                                 and chunk_data[
                                                                     "x_groq"
                                                                 ].get("usage")
                                                             ):
                                                                 potential_usage = (
-                                                                    chunk_data["x_groq"][
-                                                                        "usage"
-                                                                    ]
+                                                                    chunk_data[
+                                                                        "x_groq"
+                                                                    ]["usage"]
                                                                 )
                                                             if (
                                                                 potential_usage
@@ -575,6 +585,7 @@ class LLMService:
                                         )
                         else:
                             payload["stream"] = False
+                            self.request_count += 1
                             api_response_obj = await self._client.post(
                                 f"{config.OPENAI_API_BASE}/chat/completions",
                                 json=payload,
@@ -624,7 +635,10 @@ class LLMService:
                         logger.warning(
                             f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt + 1}): {error_message_detail}"
                         )
-                        if e_status.response and 400 <= e_status.response.status_code < 500:
+                        if (
+                            e_status.response
+                            and 400 <= e_status.response.status_code < 500
+                        ):
                             if e_status.response.status_code == 429:
                                 logger.warning(
                                     f"Async LLM ('{current_model_to_try}' Attempt {retry_attempt + 1}): Rate limit error (429). Will retry after delay."
@@ -708,9 +722,13 @@ class LLMService:
 
                 if (
                     attempt_num_overall == 0
-                    and isinstance(last_exception_for_current_model, httpx.HTTPStatusError)
+                    and isinstance(
+                        last_exception_for_current_model, httpx.HTTPStatusError
+                    )
                     and last_exception_for_current_model.response
-                    and 400 <= last_exception_for_current_model.response.status_code < 500
+                    and 400
+                    <= last_exception_for_current_model.response.status_code
+                    < 500
                     and last_exception_for_current_model.response.status_code != 429
                 ):
                     logger.error(
