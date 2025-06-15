@@ -613,6 +613,18 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
     return CharacterProfile.from_dict(name, profile)
 
 
+@alru_cache(maxsize=128)
+async def get_all_character_names() -> List[str]:
+    """Return a list of all character names from Neo4j."""
+    query = (
+        "MATCH (c:Character:Entity) "
+        "WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE "
+        "RETURN c.name AS name ORDER BY c.name"
+    )
+    results = await neo4j_manager.execute_read_query(query)
+    return [record["name"] for record in results if record.get("name")]
+
+
 async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
     logger.info("Loading decomposed character profiles from Neo4j...")
     profiles_data: Dict[str, CharacterProfile] = {}

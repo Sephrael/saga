@@ -221,7 +221,7 @@ class Neo4jManagerSingleton:
         relationship_type_queries = [
             (
                 f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
-                f"(b:__RelTypePlaceholder) WITH a,b DELETE a,b"
+                f"(b:__RelTypePlaceholder) DETACH DELETE a,b"
             )
             for rel_type in RELATIONSHIP_TYPES
         ]
