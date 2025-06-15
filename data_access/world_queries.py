@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import structlog
 
+from async_lru import alru_cache  # type: ignore
+
 import config
 import utils
 from core_db.base_db_manager import neo4j_manager
@@ -603,6 +605,112 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"Error synchronizing world building data: {e}", exc_info=True)
         return False
+
+
+@alru_cache(maxsize=128)
+async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
+    """Retrieve a single ``WorldItem`` from Neo4j by its ID."""
+    logger.info("Loading world item '%s' from Neo4j...", item_id)
+
+    query = (
+        "MATCH (we:WorldElement:Entity {id: $id})"
+        " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
+        " RETURN we"
+    )
+    results = await neo4j_manager.execute_read_query(query, {"id": item_id})
+    if not results or not results[0].get("we"):
+        logger.info("No world item found for id '%s'.", item_id)
+        return None
+
+    we_node = results[0]["we"]
+    category = we_node.get("category")
+    item_name = we_node.get("name")
+    if not category or not item_name:
+        logger.warning("WorldElement missing category or name for id '%s'.", item_id)
+        return None
+
+    item_detail: Dict[str, Any] = dict(we_node)
+    item_detail.pop("created_ts", None)
+    item_detail.pop("updated_ts", None)
+
+    created_chapter_num = item_detail.pop(
+        KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM
+    )
+    item_detail["created_chapter"] = int(created_chapter_num)
+    item_detail[f"added_in_chapter_{created_chapter_num}"] = True
+
+    if item_detail.pop(KG_IS_PROVISIONAL, False):
+        item_detail["is_provisional"] = True
+        item_detail[f"source_quality_chapter_{created_chapter_num}"] = (
+            "provisional_from_unrevised_draft"
+        )
+    else:
+        item_detail["is_provisional"] = False
+
+    list_prop_map = {
+        "goals": "HAS_GOAL",
+        "rules": "HAS_RULE",
+        "key_elements": "HAS_KEY_ELEMENT",
+        "traits": "HAS_TRAIT_ASPECT",
+    }
+    for list_prop_key, rel_name_internal in list_prop_map.items():
+        list_values_query = f"""
+        MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:{rel_name_internal}]->(v:ValueNode:Entity {{type: $value_node_type_param}})
+        RETURN v.value AS item_value
+        ORDER BY v.value ASC
+        """
+        list_val_res = await neo4j_manager.execute_read_query(
+            list_values_query,
+            {"we_id_param": item_id, "value_node_type_param": list_prop_key},
+        )
+        item_detail[list_prop_key] = sorted(
+            [
+                res_item["item_value"]
+                for res_item in list_val_res
+                if res_item and res_item.get("item_value") is not None
+            ]
+        )
+
+    elab_query = f"""
+    MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+    RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS is_provisional
+    ORDER BY elab.chapter_updated ASC
+    """
+    elab_results = await neo4j_manager.execute_read_query(
+        elab_query, {"we_id_param": item_id}
+    )
+    if elab_results:
+        for elab_rec in elab_results:
+            chapter_val = elab_rec.get("chapter")
+            summary_val = elab_rec.get("summary")
+            if chapter_val is not None and summary_val is not None:
+                elab_key = f"elaboration_in_chapter_{chapter_val}"
+                item_detail[elab_key] = summary_val
+                if elab_rec.get(KG_IS_PROVISIONAL):
+                    item_detail[f"source_quality_chapter_{chapter_val}"] = (
+                        "provisional_from_unrevised_draft"
+                    )
+
+    item_detail["id"] = item_id
+    return WorldItem.from_dict(category, item_name, item_detail)
+
+
+@alru_cache(maxsize=128)
+async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
+    """Return all world item IDs grouped by category."""
+    query = (
+        "MATCH (we:WorldElement:Entity) "
+        "WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE "
+        "RETURN we.category AS category, we.id AS id"
+    )
+    results = await neo4j_manager.execute_read_query(query)
+    mapping: Dict[str, List[str]] = {}
+    for record in results:
+        category = record.get("category")
+        item_id = record.get("id")
+        if category and item_id:
+            mapping.setdefault(category, []).append(item_id)
+    return mapping
 
 
 async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:

@@ -6,12 +6,7 @@ import config
 from llm_interface import llm_service  # MODIFIED
 from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
-from kg_maintainer.models import (
-    CharacterProfile,
-    EvaluationResult,
-    ProblemDetail,
-    WorldItem,
-)
+from kg_maintainer.models import EvaluationResult, ProblemDetail
 from data_access import chapter_queries
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -151,8 +146,8 @@ class ComprehensiveEvaluatorAgent:
     async def _perform_llm_comprehensive_evaluation(
         self,
         plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        character_names: List[str],
+        world_item_ids_by_category: Dict[str, List[str]],
         draft_text: str,
         chapter_number: int,
         plot_point_focus: Optional[str],
@@ -181,11 +176,13 @@ class ComprehensiveEvaluatorAgent:
 
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
-                character_profiles, chapter_number - 1
+                character_names,
+                chapter_number - 1,
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            world_building, chapter_number - 1
+            world_item_ids_by_category,
+            chapter_number - 1,
         )
         kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(
             plot_outline, chapter_number, None
@@ -355,8 +352,8 @@ class ComprehensiveEvaluatorAgent:
     async def evaluate_chapter_draft(
         self,
         plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        character_names: List[str],
+        world_item_ids_by_category: Dict[str, List[str]],
         draft_text: str,
         chapter_number: int,
         plot_point_focus: Optional[str],
@@ -454,8 +451,8 @@ class ComprehensiveEvaluatorAgent:
             llm_usage,
         ) = await self._perform_llm_comprehensive_evaluation(
             plot_outline,
-            character_profiles,
-            world_building,
+            character_names,
+            world_item_ids_by_category,
             processed_text,
             chapter_number,
             plot_point_focus,

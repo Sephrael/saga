@@ -2,6 +2,9 @@
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import structlog
+
+from async_lru import alru_cache  # type: ignore
+
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
@@ -522,6 +525,103 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
     except Exception as e:
         logger.error(f"Error synchronizing character profiles: {e}", exc_info=True)
         return False
+
+
+@alru_cache(maxsize=128)
+async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]:
+    """Retrieve a single ``CharacterProfile`` from Neo4j by character name."""
+    logger.info("Loading character profile '%s' from Neo4j...", name)
+
+    query = (
+        "MATCH (c:Character:Entity {name: $name})"
+        " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
+        " RETURN c"
+    )
+    results = await neo4j_manager.execute_read_query(query, {"name": name})
+    if not results or not results[0].get("c"):
+        logger.info("No character profile found for '%s'.", name)
+        return None
+
+    char_node = results[0]["c"]
+    profile: Dict[str, Any] = dict(char_node)
+    profile.pop("name", None)
+    profile.pop("created_ts", None)
+    profile.pop("updated_ts", None)
+
+    traits_query = (
+        "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait:Entity)"
+        " RETURN t.name AS trait_name"
+    )
+    trait_results = await neo4j_manager.execute_read_query(
+        traits_query, {"char_name": name}
+    )
+    profile["traits"] = sorted(
+        [tr["trait_name"] for tr in trait_results if tr and tr.get("trait_name")]
+    )
+
+    rels_query = """
+        MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Entity)
+        WHERE r.source_profile_managed = TRUE
+        RETURN target.name AS target_name, properties(r) AS rel_props
+    """
+    rel_results = await neo4j_manager.execute_read_query(
+        rels_query, {"char_name": name}
+    )
+    relationships: Dict[str, Any] = {}
+    if rel_results:
+        for rel_rec in rel_results:
+            target_name = rel_rec.get("target_name")
+            rel_props_full = rel_rec.get("rel_props", {})
+            rel_props_cleaned = {
+                k: v
+                for k, v in rel_props_full.items()
+                if k
+                not in [
+                    "created_ts",
+                    "updated_ts",
+                    "source_profile_managed",
+                    "chapter_added",
+                ]
+            }
+            if "type" in rel_props_full:
+                rel_props_cleaned["type"] = rel_props_full["type"]
+            if "chapter_added" in rel_props_full:
+                rel_props_cleaned["chapter_added"] = rel_props_full["chapter_added"]
+            if target_name:
+                relationships[target_name] = rel_props_cleaned
+    profile["relationships"] = relationships
+
+    dev_query = (
+        "MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)\n"
+        f"RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id\n"
+        "ORDER BY dev.chapter_updated ASC"
+    )
+    dev_results = await neo4j_manager.execute_read_query(dev_query, {"char_name": name})
+    if dev_results:
+        for dev_rec in dev_results:
+            chapter_num = dev_rec.get("chapter")
+            summary = dev_rec.get("summary")
+            if chapter_num is not None and summary is not None:
+                dev_key = f"development_in_chapter_{chapter_num}"
+                profile[dev_key] = summary
+                if dev_rec.get(KG_IS_PROVISIONAL):
+                    profile[f"source_quality_chapter_{chapter_num}"] = (
+                        "provisional_from_unrevised_draft"
+                    )
+
+    return CharacterProfile.from_dict(name, profile)
+
+
+@alru_cache(maxsize=128)
+async def get_all_character_names() -> List[str]:
+    """Return a list of all character names from Neo4j."""
+    query = (
+        "MATCH (c:Character:Entity) "
+        "WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE "
+        "RETURN c.name AS name ORDER BY c.name"
+    )
+    results = await neo4j_manager.execute_read_query(query)
+    return [record["name"] for record in results if record.get("name")]
 
 
 async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
