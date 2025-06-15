@@ -235,31 +235,28 @@ class Neo4jManagerSingleton:
         }}}}
         """
 
-        all_schema_ops_queries = (
-            core_constraints_queries
-            + index_queries
-            + relationship_type_queries
-            + [vector_index_query]
+        schema_ops_queries = (
+            core_constraints_queries + index_queries + [vector_index_query]
         )
 
-        schema_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
-            (query, {}) for query in all_schema_ops_queries
+        schema_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in schema_ops_queries
         ]
 
         try:
-            await self.execute_cypher_batch(schema_statements_with_params)
+            await self.execute_cypher_batch(schema_ops_with_params)
             self.logger.info(
-                f"Successfully executed batch of {len(schema_statements_with_params)} schema operations."
+                f"Successfully executed batch of {len(schema_ops_with_params)} schema operations."
             )
         except Exception as e:
             self.logger.error(
-                f"Error during batch schema operation execution: {e}. Some schema elements might not be created/verified.",
+                f"Error during schema operation batch execution: {e}. Some schema elements might not be created/verified.",
                 exc_info=True,
             )
             self.logger.warning(
                 "Attempting to apply schema operations individually as a fallback."
             )
-            for query_text in all_schema_ops_queries:
+            for query_text in schema_ops_queries:
                 try:
                     await self.execute_write_query(query_text)
                     self.logger.info(
@@ -268,6 +265,34 @@ class Neo4jManagerSingleton:
                 except Exception as individual_e:
                     self.logger.warning(
                         f"Fallback: Failed to apply schema operation '{query_text[:100]}...': {individual_e}"
+                    )
+
+        reltype_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in relationship_type_queries
+        ]
+
+        try:
+            await self.execute_cypher_batch(reltype_ops_with_params)
+            self.logger.info(
+                f"Successfully initialized {len(reltype_ops_with_params)} relationship types."
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Error initializing relationship types: {e}.",
+                exc_info=True,
+            )
+            self.logger.warning(
+                "Attempting to initialize relationship types individually as a fallback."
+            )
+            for query_text in relationship_type_queries:
+                try:
+                    await self.execute_write_query(query_text)
+                    self.logger.info(
+                        f"Fallback: Successfully initialized relationship type: '{query_text[:100]}...'"
+                    )
+                except Exception as individual_e:
+                    self.logger.warning(
+                        f"Fallback: Failed to initialize relationship type '{query_text[:100]}...': {individual_e}"
                     )
 
         self.logger.info(
