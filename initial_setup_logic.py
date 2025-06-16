@@ -154,16 +154,16 @@ def create_default_characters(protagonist_name: str) -> Dict[str, CharacterProfi
 
 def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
     """Creates a default world-building structure."""
-    world_data: Dict[str, Dict[str, WorldItem]] = {
+    world_data: Dict[str, Dict[str, WorldItem]] = { # type: ignore
         "_overview_": {
             "_overview_": WorldItem.from_dict(
                 "_overview_",
                 "_overview_",
-                {"description": config.CONFIGURED_SETTING_DESCRIPTION},
+                {"description": config.CONFIGURED_SETTING_DESCRIPTION, "source": "default_overview"},
             )
         },
-        "is_default": True,
-        "source": "default_fallback",
+        "is_default": True, # type: ignore
+        "source": "default_fallback", # type: ignore
     }
 
     standard_categories = [
@@ -180,7 +180,7 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
             config.FILL_IN: WorldItem.from_dict(
                 cat_key,
                 config.FILL_IN,
-                {"description": config.FILL_IN},
+                {"description": config.FILL_IN, "source": "default_placeholder"},
             )
         }
 
@@ -296,8 +296,9 @@ async def bootstrap_plot_outline(
         elif value:
             plot_outline[field] = value
 
-    plot_outline["is_default"] = False
-    plot_outline["source"] = "bootstrapped"
+    if usage_data["total_tokens"] > 0:
+        plot_outline["is_default"] = False
+        plot_outline["source"] = "bootstrapped"
     return plot_outline, usage_data if usage_data["total_tokens"] > 0 else None
 
 
@@ -363,12 +364,19 @@ async def bootstrap_characters(
             if field == "description":
                 character_profiles[name].description = value
             elif field == "traits":
-                character_profiles[name].traits = value
+                character_profiles[name].traits = value # type: ignore
             elif field == "status":
                 character_profiles[name].status = value
-            else:
+            else: # motivation
                 character_profiles[name].updates[field] = value
-        character_profiles[name].updates["source"] = "bootstrapped"
+            character_profiles[name].updates["source"] = "bootstrapped"
+
+
+    if usage_data["total_tokens"] > 0:
+        # Mark all affected profiles, not just the last one.
+        # This is slightly different from plot, as char profiles are dicts.
+        # The "source" update inside the loop handles individual profiles.
+        pass
 
     return character_profiles, usage_data if usage_data["total_tokens"] > 0 else None
 
@@ -376,87 +384,153 @@ async def bootstrap_characters(
 async def bootstrap_world(
     world_building: Dict[str, Any], plot_outline: Dict[str, Any]
 ) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
-    """Fills in missing pieces of world building."""
-    tasks: Dict[Tuple, Coroutine] = {}
-    usage_data: Dict[str, int] = {
+    """Fills in missing pieces of world building in a multi-stage process."""
+    overall_usage_data: Dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
     }
 
-    # Handle overview separately
+    def _accumulate_usage(item_usage: Optional[Dict[str, int]]) -> None:
+        if item_usage:
+            for key, val in item_usage.items():
+                overall_usage_data[key] = overall_usage_data.get(key, 0) + val
+
+    # Stage 0: Bootstrap _overview_ Description
     if "_overview_" in world_building and "_overview_" in world_building["_overview_"]:
-        overview_item = world_building["_overview_"]["_overview_"]
-        if isinstance(overview_item, WorldItem) and utils._is_fill_in(
-            overview_item.properties.get("description")
+        overview_item_obj = world_building["_overview_"]["_overview_"]
+        if isinstance(overview_item_obj, WorldItem) and utils._is_fill_in(
+            overview_item_obj.properties.get("description")
         ):
-            tasks[("_overview_", "_overview_", "description")] = _bootstrap_field(
+            logger.info("Bootstrapping _overview_ description.")
+            desc_value, desc_usage = await _bootstrap_field(
                 "description",
-                {"world_item": overview_item.to_dict(), "plot_outline": plot_outline},
+                {"world_item": overview_item_obj.to_dict(), "plot_outline": plot_outline, "target_category": "_overview_"},
                 "bootstrapper/fill_world_item_field.j2",
             )
+            _accumulate_usage(desc_usage)
+            if desc_value and isinstance(desc_value, str) and not utils._is_fill_in(desc_value):
+                overview_item_obj.properties["description"] = desc_value
+                current_source = overview_item_obj.properties.get("source", "")
+                if isinstance(current_source, str):
+                    overview_item_obj.properties["source"] = f"{current_source}_descr_bootstrapped" if current_source else "descr_bootstrapped"
+                else: # If source is not a string (e.g. list, or None), overwrite or handle as per desired logic
+                    overview_item_obj.properties["source"] = "descr_bootstrapped"
 
-    for category, items in world_building.items():
-        if not isinstance(items, dict) or category == "_overview_":
+    # Stage 1: Bootstrap Names for [Fill-in] Items
+    name_bootstrap_tasks: Dict[Tuple[str, str], Coroutine] = {}
+    for category, items_dict in world_building.items():
+        if not isinstance(items_dict, dict) or category == "_overview_":
             continue
-        for name, item in items.items():
-            if not isinstance(item, WorldItem):
-                continue
-
-            if utils._is_fill_in(name):
-                # This is a placeholder item that needs a name
-                context = {"world_item": item.to_dict(), "plot_outline": plot_outline}
-                tasks[(category, name, "name")] = _bootstrap_field(
-                    "name", context, "bootstrapper/fill_world_item_field.j2"
+        for item_name, item_obj in items_dict.items():
+            if isinstance(item_obj, WorldItem) and utils._is_fill_in(item_obj.name): # item_obj.name is the key `item_name`
+                logger.info(f"Identified item for name bootstrapping in category '{category}': Current name '{item_name}'")
+                task_key = (category, item_name) # item_name is config.FILL_IN here
+                context_data = {"world_item": item_obj.to_dict(), "plot_outline": plot_outline, "target_category": category}
+                name_bootstrap_tasks[task_key] = _bootstrap_field(
+                    "name", context_data, "bootstrapper/fill_world_item_field.j2"
                 )
 
-            for prop_name, prop_value in item.properties.items():
+    if name_bootstrap_tasks:
+        logger.info(f"Found {len(name_bootstrap_tasks)} items requiring name bootstrapping.")
+        name_results_list = await asyncio.gather(*name_bootstrap_tasks.values())
+        name_task_keys = list(name_bootstrap_tasks.keys())
+
+        new_items_to_add_stage1: Dict[str, Dict[str, WorldItem]] = {}
+        items_to_remove_stage1: Dict[str, List[str]] = {}
+
+        for i, (new_name_value, name_usage) in enumerate(name_results_list):
+            _accumulate_usage(name_usage)
+            original_category, original_fill_in_name = name_task_keys[i]
+
+            if new_name_value and isinstance(new_name_value, str) and not utils._is_fill_in(new_name_value) and new_name_value != config.FILL_IN:
+                original_item_obj = world_building[original_category][original_fill_in_name]
+
+                # Check for name collision in the same category before adding
+                if new_name_value in world_building[original_category] or \
+                   new_name_value in new_items_to_add_stage1.get(original_category, {}):
+                    logger.warning(
+                        f"Name bootstrap for '{original_category}/{original_fill_in_name}' resulted in a duplicate name '{new_name_value}'. Skipping this item."
+                    )
+                    continue
+
+                logger.info(f"Successfully bootstrapped name for '{original_category}/{original_fill_in_name}': New name is '{new_name_value}'")
+                new_item_renamed = WorldItem.from_dict(original_category, new_name_value, original_item_obj.properties)
+                new_item_renamed.properties["source"] = "bootstrapped_name" # Overwrite or append as needed
+
+                new_items_to_add_stage1.setdefault(original_category, {})[new_name_value] = new_item_renamed
+                items_to_remove_stage1.setdefault(original_category, []).append(original_fill_in_name)
+            else:
+                logger.warning(
+                    f"Name bootstrapping failed for item in category '{original_category}' (original key: '{original_fill_in_name}'). Received: '{new_name_value}'. Item will retain placeholder name."
+                )
+
+        # Apply changes from Stage 1 to world_building
+        for cat, names_to_remove in items_to_remove_stage1.items():
+            for name_key in names_to_remove:
+                if name_key in world_building[cat]:
+                    del world_building[cat][name_key]
+        for cat, new_items_map in new_items_to_add_stage1.items():
+            if cat not in world_building:
+                world_building[cat] = {}
+            world_building[cat].update(new_items_map)
+        logger.info("Finished applying name changes from Stage 1 to world_building structure.")
+
+    # Stage 2: Bootstrap Properties for All Items (excluding _overview_ top-level)
+    property_bootstrap_tasks: Dict[Tuple[str, str, str], Coroutine] = {}
+    for category, items_dict in world_building.items():
+        if not isinstance(items_dict, dict) or category == "_overview_":
+            continue
+        for item_name, item_obj in items_dict.items():
+            if not isinstance(item_obj, WorldItem) or utils._is_fill_in(item_name): # Skip items that still have placeholder name
+                continue
+            for prop_name, prop_value in item_obj.properties.items():
                 if utils._is_fill_in(prop_value):
-                    context = {
-                        "world_item": item.to_dict(),
-                        "plot_outline": plot_outline,
-                    }
-                    tasks[(category, name, prop_name)] = _bootstrap_field(
-                        prop_name, context, "bootstrapper/fill_world_item_field.j2"
+                    logger.info(f"Identified property '{prop_name}' for bootstrapping in item '{category}/{item_name}'.")
+                    task_key = (category, item_name, prop_name)
+                    context_data = {"world_item": item_obj.to_dict(), "plot_outline": plot_outline, "target_category": category}
+                    property_bootstrap_tasks[task_key] = _bootstrap_field(
+                        prop_name, context_data, "bootstrapper/fill_world_item_field.j2"
                     )
 
-    if not tasks:
-        return world_building, None
+    if property_bootstrap_tasks:
+        logger.info(f"Found {len(property_bootstrap_tasks)} properties requiring bootstrapping.")
+        property_results_list = await asyncio.gather(*property_bootstrap_tasks.values())
+        property_task_keys = list(property_bootstrap_tasks.keys())
 
-    results = await asyncio.gather(*tasks.values())
-    task_keys = list(tasks.keys())
+        for i, (prop_fill_value, prop_usage) in enumerate(property_results_list):
+            _accumulate_usage(prop_usage)
+            category, item_name, prop_name_filled = property_task_keys[i]
 
-    new_items_to_add: Dict[str, Dict[str, WorldItem]] = {}
-    items_to_remove: Dict[str, List[str]] = {}
+            target_item = world_building.get(category, {}).get(item_name)
+            if not target_item:
+                logger.warning(f"Item {category}/{item_name} not found while trying to update property {prop_name_filled}. Skipping.")
+                continue
 
-    for i, (value, usage) in enumerate(results):
-        category, name, prop_name = task_keys[i]
-        if usage:
-            for k, v in usage.items():
-                usage_data[k] = usage_data.get(k, 0) + v
-        if value:
-            if prop_name == "name":
-                # This was a placeholder item, we're giving it a real name
-                original_item = world_building[category][name]
-                new_item = WorldItem.from_dict(
-                    category, value, original_item.properties
-                )
-                new_items_to_add.setdefault(category, {})[value] = new_item
-                items_to_remove.setdefault(category, []).append(name)
+            if prop_fill_value is not None and not (isinstance(prop_fill_value, str) and utils._is_fill_in(prop_fill_value)):
+                logger.info(f"Successfully bootstrapped property '{prop_name_filled}' for item '{category}/{item_name}'.")
+                target_item.properties[prop_name_filled] = prop_fill_value
+
+                current_source = target_item.properties.get("source", "")
+                if isinstance(current_source, str):
+                    append_source = f"_prop_{prop_name_filled}_bootstrapped"
+                    if append_source not in current_source: # Avoid duplicate appends if run multiple times
+                         target_item.properties["source"] = f"{current_source}{append_source}" if current_source else append_source.lstrip('_')
+                else:
+                    target_item.properties["source"] = f"prop_{prop_name_filled}_bootstrapped"
             else:
-                world_building[category][name].properties[prop_name] = value
-                world_building[category][name].properties["source"] = "bootstrapped"
+                logger.warning(f"Property bootstrapping for '{prop_name_filled}' in '{category}/{item_name}' resulted in empty or FILL_IN value.")
 
-    # Post-processing for renamed items
-    for category, names in items_to_remove.items():
-        for name in names:
-            del world_building[category][name]
-    for category, items in new_items_to_add.items():
-        world_building[category].update(items)
+    if overall_usage_data["total_tokens"] > 0:
+        world_building["is_default"] = False # type: ignore
+        current_top_source = world_building.get("source", "")
+        if isinstance(current_top_source, str):
+             world_building["source"] = f"{current_top_source}_bootstrapped_items" if current_top_source and "default" not in current_top_source else "bootstrapped_items" # type: ignore
+        else:
+            world_building["source"] = "bootstrapped_items" # type: ignore
+        logger.info("World building bootstrapping complete. Marking as not default and source as bootstrapped.")
 
-    world_building["is_default"] = False
-    world_building["source"] = "bootstrapped"
-    return world_building, usage_data if usage_data["total_tokens"] > 0 else None
+    return world_building, overall_usage_data if overall_usage_data["total_tokens"] > 0 else None
 
 
 async def run_genesis_phase() -> Tuple[
@@ -476,7 +550,7 @@ async def run_genesis_phase() -> Tuple[
     user_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
     plot_outline: Dict[str, Any]
     character_profiles: Dict[str, CharacterProfile]
-    world_building: Dict[str, Dict[str, WorldItem]]
+    world_building: Dict[str, Dict[str, WorldItem]] # Adjusted type hint for world_building items
 
     if user_data:
         try:
@@ -484,16 +558,32 @@ async def run_genesis_phase() -> Tuple[
             (
                 plot_outline,
                 character_profiles,
-                world_building,
+                world_building_untyped, # Keep original name from model parsing
             ) = user_story_to_objects(model)
+
+            # Ensure world_building is correctly typed after parsing
+            world_building = {}
+            for k, v in world_building_untyped.items():
+                if k in ["is_default", "source"]: # Handle top-level metadata
+                    world_building[k] = v # type: ignore
+                elif isinstance(v, dict):
+                    world_building[k] = {
+                        item_k: (item_v if isinstance(item_v, WorldItem) else WorldItem.from_dict(k, item_k, item_v if isinstance(item_v, dict) else {}))
+                        for item_k, item_v in v.items()
+                    }
+                else: # Should not happen with current model, but good for robustness
+                    world_building[k] = v # type: ignore
+
+
             plot_outline["source"] = "user_supplied_yaml"
-            world_building["source"] = "user_supplied_yaml"
+            if "source" not in world_building : # type: ignore
+                 world_building["source"] = "user_supplied_yaml" # type: ignore
             logger.info("Loaded user story elements from YAML file.")
         except ValidationError as exc:  # pragma: no cover - fallback path
             logger.error("User YAML validation failed: %s", exc)
-            user_data = None
+            user_data = None # type: ignore
 
-    if not user_data:
+    if not user_data: # type: ignore
         logger.info("No valid user YAML found. Using default placeholders.")
         plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
         character_profiles = create_default_characters(plot_outline["protagonist_name"])
@@ -503,7 +593,13 @@ async def run_genesis_phase() -> Tuple[
     character_profiles, char_usage = await bootstrap_characters(
         character_profiles, plot_outline
     )
-    world_building, world_usage = await bootstrap_world(world_building, plot_outline)
+    # Ensure world_building is passed correctly, it's Dict[str, Any] due to is_default/source flags
+    world_building_typed_for_bootstrap: Dict[str, Any] = world_building
+    world_building_typed_for_bootstrap, world_usage = await bootstrap_world(world_building_typed_for_bootstrap, plot_outline)
+
+    # After bootstrapping, ensure the main world_building variable reflects changes
+    world_building = world_building_typed_for_bootstrap
+
 
     usage_totals: Dict[str, int] = {
         "prompt_tokens": 0,
@@ -515,10 +611,20 @@ async def run_genesis_phase() -> Tuple[
     _add_usage(usage_totals, world_usage)
 
     kg_agent = KGMaintainerAgent()
+    # Ensure world_building is correctly typed for persist_world
+    # It expects Dict[str, Dict[str, WorldItem]] but our world_building also has is_default/source
+    world_items_for_kg: Dict[str, Dict[str, WorldItem]] = {
+        k: v for k, v in world_building.items() if k not in ["is_default", "source"] and isinstance(v, dict)
+    }
+
     await kg_agent.persist_profiles(
         character_profiles, config.KG_PREPOPULATION_CHAPTER_NUM
     )
-    await kg_agent.persist_world(world_building, config.KG_PREPOPULATION_CHAPTER_NUM)
+    await kg_agent.persist_world(world_items_for_kg, config.KG_PREPOPULATION_CHAPTER_NUM) # type: ignore
     logger.info("Knowledge graph pre-population complete.")
 
+    # Final return needs Dict[str, Dict[str, WorldItem]] for world_building
+    # So, we return the filtered version, or adjust downstream expectations.
+    # For now, returning the version with metadata, caller might need adjustment or this function's return type.
+    # Let's assume the caller can handle the Dict[str, Any] which contains WorldItem dicts + metadata.
     return plot_outline, character_profiles, world_building, usage_totals
