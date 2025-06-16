@@ -158,20 +158,22 @@ class KGMaintainerAgent:
         self,
         profiles_to_persist: Dict[str, models.CharacterProfile],
         chapter_number_for_delta: int,
+        full_sync: bool = False,
     ) -> None:
         """Persist character profiles to Neo4j."""
         await character_queries.sync_characters(
-            profiles_to_persist, chapter_number_for_delta
+            profiles_to_persist, chapter_number_for_delta, full_sync=full_sync
         )
 
     async def persist_world(
         self,
         world_items_to_persist: Dict[str, Dict[str, models.WorldItem]],
         chapter_number_for_delta: int,
+        full_sync: bool = False,
     ) -> None:
         """Persist world elements to Neo4j."""
         await world_queries.sync_world_items(
-            world_items_to_persist, chapter_number_for_delta
+            world_items_to_persist, chapter_number_for_delta, full_sync=full_sync
         )
 
     async def summarize_chapter(

@@ -6,6 +6,7 @@ from typing import Any, Coroutine, Dict, List, Optional, Tuple
 
 import config
 import utils
+from data_access import plot_queries  # Import plot_queries
 from kg_maintainer.models import CharacterProfile, WorldItem
 from kg_maintainer_agent import KGMaintainerAgent
 from yaml_parser import load_yaml_file
@@ -550,7 +551,7 @@ async def run_genesis_phase() -> Tuple[
     user_data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
     plot_outline: Dict[str, Any]
     character_profiles: Dict[str, CharacterProfile]
-    world_building: Dict[str, Dict[str, WorldItem]] # Adjusted type hint for world_building items
+    world_building: Dict[str, Any]
 
     if user_data:
         try:
@@ -558,32 +559,17 @@ async def run_genesis_phase() -> Tuple[
             (
                 plot_outline,
                 character_profiles,
-                world_building_untyped, # Keep original name from model parsing
+                world_building_items,
             ) = user_story_to_objects(model)
-
-            # Ensure world_building is correctly typed after parsing
-            world_building = {}
-            for k, v in world_building_untyped.items():
-                if k in ["is_default", "source"]: # Handle top-level metadata
-                    world_building[k] = v # type: ignore
-                elif isinstance(v, dict):
-                    world_building[k] = {
-                        item_k: (item_v if isinstance(item_v, WorldItem) else WorldItem.from_dict(k, item_k, item_v if isinstance(item_v, dict) else {}))
-                        for item_k, item_v in v.items()
-                    }
-                else: # Should not happen with current model, but good for robustness
-                    world_building[k] = v # type: ignore
-
-
+            world_building = world_building_items
             plot_outline["source"] = "user_supplied_yaml"
-            if "source" not in world_building : # type: ignore
-                 world_building["source"] = "user_supplied_yaml" # type: ignore
+            world_building["source"] = "user_supplied_yaml"
             logger.info("Loaded user story elements from YAML file.")
-        except ValidationError as exc:  # pragma: no cover - fallback path
+        except ValidationError as exc:
             logger.error("User YAML validation failed: %s", exc)
-            user_data = None # type: ignore
+            user_data = None
 
-    if not user_data: # type: ignore
+    if not user_data:
         logger.info("No valid user YAML found. Using default placeholders.")
         plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
         character_profiles = create_default_characters(plot_outline["protagonist_name"])
@@ -593,13 +579,9 @@ async def run_genesis_phase() -> Tuple[
     character_profiles, char_usage = await bootstrap_characters(
         character_profiles, plot_outline
     )
-    # Ensure world_building is passed correctly, it's Dict[str, Any] due to is_default/source flags
-    world_building_typed_for_bootstrap: Dict[str, Any] = world_building
-    world_building_typed_for_bootstrap, world_usage = await bootstrap_world(world_building_typed_for_bootstrap, plot_outline)
-
-    # After bootstrapping, ensure the main world_building variable reflects changes
-    world_building = world_building_typed_for_bootstrap
-
+    world_building, world_usage = await bootstrap_world(
+        world_building, plot_outline
+    )
 
     usage_totals: Dict[str, int] = {
         "prompt_tokens": 0,
@@ -610,21 +592,26 @@ async def run_genesis_phase() -> Tuple[
     _add_usage(usage_totals, char_usage)
     _add_usage(usage_totals, world_usage)
 
+    # *** PRIMARY FIX & ENHANCEMENT AREA ***
+    # 1. Persist the plot outline to the database. This creates NovelInfo and PlotPoint nodes.
+    await plot_queries.save_plot_outline_to_db(plot_outline)
+    logger.info("Persisted bootstrapped plot outline to Neo4j.")
+
     kg_agent = KGMaintainerAgent()
-    # Ensure world_building is correctly typed for persist_world
-    # It expects Dict[str, Dict[str, WorldItem]] but our world_building also has is_default/source
+
+    # 2. Filter the world_building dictionary to be of the correct type for persistence and return.
     world_items_for_kg: Dict[str, Dict[str, WorldItem]] = {
         k: v for k, v in world_building.items() if k not in ["is_default", "source"] and isinstance(v, dict)
     }
 
+    # 3. Call persistence methods with full_sync=True for a clean initial state.
     await kg_agent.persist_profiles(
-        character_profiles, config.KG_PREPOPULATION_CHAPTER_NUM
+        character_profiles, config.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
     )
-    await kg_agent.persist_world(world_items_for_kg, config.KG_PREPOPULATION_CHAPTER_NUM) # type: ignore
-    logger.info("Knowledge graph pre-population complete.")
+    await kg_agent.persist_world(
+        world_items_for_kg, config.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
+    )
+    logger.info("Knowledge graph pre-population complete (full sync).")
 
-    # Final return needs Dict[str, Dict[str, WorldItem]] for world_building
-    # So, we return the filtered version, or adjust downstream expectations.
-    # For now, returning the version with metadata, caller might need adjustment or this function's return type.
-    # Let's assume the caller can handle the Dict[str, Any] which contains WorldItem dicts + metadata.
-    return plot_outline, character_profiles, world_building, usage_totals
+    # 4. Return the clean world dictionary, without the internal metadata flags.
+    return plot_outline, character_profiles, world_items_for_kg, usage_totals
