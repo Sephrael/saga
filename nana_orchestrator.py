@@ -1209,6 +1209,8 @@ class NANA_Orchestrator:
                     self._update_rich_display(step="Initial Setup Failed - Halting")
                     return
                 self._update_novel_props_cache()
+                await plot_queries.save_plot_outline_to_db(self.plot_outline) # <-- ADD THIS LINE
+                logger.info("NANA: Successfully persisted bootstrapped plot outline to Neo4j.") # Optional: Add a log message
 
             # KG pre-population handled within run_genesis_phase
 
