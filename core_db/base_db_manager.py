@@ -25,6 +25,12 @@ RELATIONSHIP_TYPES: List[str] = [
     "HAS_TRAIT_ASPECT",
     "ELABORATED_IN_CHAPTER",
     "DYNAMIC_REL",
+    "HAS_WORLD_META",
+    "HAS_CHARACTER",
+    "HAS_TRAIT",
+    "DEVELOPED_IN_CHAPTER",
+    "HAS_PLOT_POINT",
+    "NEXT_PLOT_POINT",
 ]
 
 
@@ -193,11 +199,13 @@ class Neo4jManagerSingleton:
         # missing schema elements without affecting those already present.
 
         core_constraints_queries = [
+            # Base Entity constraint
+            "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
+            # Specific Entity Type constraints
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
             f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
             "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
             "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
-            # "CREATE CONSTRAINT worldElement_name_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.name IS UNIQUE", # REMOVED - id is sufficient unique key
             "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
             "CREATE CONSTRAINT trait_name_unique IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE",
             "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
@@ -207,17 +215,21 @@ class Neo4jManagerSingleton:
         ]
 
         index_queries = [
+            # General property indexes for faster lookups
+            "CREATE INDEX entity_name_property_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
+            "CREATE INDEX entity_is_provisional_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
+            "CREATE INDEX entity_is_deleted_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_deleted)",
+            # Specific property indexes
             "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
             "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
             "CREATE INDEX worldElaborationEvent_chapter_updated IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
-            "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
-            "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
             "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
-            # Add index on WorldElement.name as it's still queried often, just not unique globally
             "CREATE INDEX worldElement_name_property_idx IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
             f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
+            # Relationship property indexes
+            "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
+            "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
             "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
-            "CREATE INDEX entity_is_provisional IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
         ]
 
         # Ensure relationship type tokens exist to avoid Neo4j warnings when
@@ -226,7 +238,7 @@ class Neo4jManagerSingleton:
         # the token.
         relationship_type_queries = [
             (
-                f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
+                f"MERGE (a:__RelTypePlaceholder)-[:{rel_type}]->"
                 f"(b:__RelTypePlaceholder) DETACH DELETE a,b"
             )
             for rel_type in RELATIONSHIP_TYPES

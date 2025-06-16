@@ -202,9 +202,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         return True
 
     except Exception as e:
-        # --- START: Fixed the print statement ---
         logger.error(f"❌ Error resetting database: {e}", exc_info=True)
-        # --- END: Fixed the print statement ---
         return False
 
     finally:

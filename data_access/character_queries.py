@@ -134,7 +134,7 @@ def generate_character_node_cypher(
         dev_event_summary = profile.updates[dev_event_key]
         if isinstance(dev_event_summary, str) and dev_event_summary.strip():
             dev_event_id = (
-                f"dev_{profile.name}_ch{chapter_number_for_delta}_"
+                f"dev_{utils._normalize_for_id(profile.name)}_ch{chapter_number_for_delta}_"
                 f"{hash(dev_event_summary)}"
             )
             dev_event_props = {
@@ -197,14 +197,12 @@ def generate_character_node_cypher(
                         MATCH (c1:Character:Entity {name: $source_name})
                         MERGE (c2:Entity {name: $target_name})
                             ON CREATE SET
+                                c2:Entity,
                                 c2.description = (
                                     'Auto-created via relationship from '
                                     + $source_name
                                 ),
                                 c2.created_ts = timestamp()
-                        // CORRECTED: Removed "SET c2:Character" and "ON MATCH SET c2:Character"
-                        // Now, it only creates a generic :Entity stub, which the Healer agent can enrich later.
-                        // This prevents wrongly labeling a location like "Slums" as a "Character".
 
                         MERGE (
                             c1
@@ -326,10 +324,10 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 """
             MERGE (c:Character:Entity {name: $char_name_val})
             ON CREATE SET
-                c += $props,
+                c = $props,
                 c.created_ts = timestamp()
             ON MATCH SET
-                c += $props,
+                c = $props,
                 c.updated_ts = timestamp()
             """,
                 {"char_name_val": char_name, "props": char_direct_props},
@@ -403,10 +401,13 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 and value_str.strip()
             ):
                 try:
-                    chap_num_int = int(key.split("_")[-1])
+                    chap_num_int_str = key.split("_")[-1]
+                    chap_num_int = int(chap_num_int_str) if chap_num_int_str.isdigit() else -1
+                    if chap_num_int == -1: continue
+
                     dev_event_summary = value_str.strip()
                     dev_event_id = (
-                        f"dev_{char_name}_ch{chap_num_int}_{hash(dev_event_summary)}"
+                        f"dev_{utils._normalize_for_id(char_name)}_ch{chap_num_int}_{hash(dev_event_summary)}"
                     )
 
                     dev_event_props = {
@@ -430,7 +431,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                             {"char_name_val": char_name, "props": dev_event_props},
                         )
                     )
-                except ValueError:
+                except (ValueError, IndexError):
                     logger.warning(
                         f"Could not parse chapter number from dev key: {key} for char {char_name}"
                     )
@@ -442,8 +443,6 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 str(k).strip() for k in profile_defined_rels.keys() if str(k).strip()
             }
 
-        # Corrected DYNAMIC_REL deletion: Only delete profile-managed relationships
-        # whose targets are no longer in the current profile's relationship list.
         statements.append(
             (
                 """
@@ -451,7 +450,6 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
             WHERE r.source_profile_managed = TRUE AND NOT c2.name IN $target_chars_list
             DELETE r
             """,
-                # CORRECTED: Changed `c2:Character:Entity` to `c2:Entity` to catch relationships to non-character entities.
                 {
                     "char_name_val": char_name,
                     "target_chars_list": list(target_chars_in_profile_rels),
@@ -466,7 +464,6 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     continue
 
                 rel_type_str = "RELATED_TO"
-                # Ensure rel_cypher_props is re-initialized for each relationship
                 rel_cypher_props = {
                     "source_profile_managed": True,
                     "confidence": 1.0,
@@ -476,7 +473,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
                     try:
                         chapter_added_val = int(rel_detail["chapter_added"])
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
                 rel_cypher_props["chapter_added"] = chapter_added_val
 
@@ -493,7 +490,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                             isinstance(v_rel, (str, int, float, bool))
                             and k_rel != "type"
                             and k_rel != "chapter_added"
-                        ):  # chapter_added handled above
+                        ):
                             rel_cypher_props[k_rel] = v_rel
 
                 rel_cypher_props[KG_IS_PROVISIONAL] = (
@@ -506,12 +503,11 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                         """
                     MATCH (s:Character:Entity {name: $subject_param})
                     MERGE (o:Entity {name: $object_param})
+                        ON CREATE SET o.description = 'Auto-created via relationship from ' + $subject_param, o.created_ts = timestamp()
                     MERGE (s)-[r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_val }]->(o)
                     ON CREATE SET r = $props_param, r.created_ts = timestamp()
                     ON MATCH SET  r += $props_param, r.updated_ts = timestamp()
                     """,
-                        # CORRECTED: Changed `MATCH (o:Character...)` to `MERGE (o:Entity...)` to handle any entity type.
-                        # Also changed `r = $props_param` on MATCH to `r += $props_param` to be non-destructive.
                         {
                             "subject_param": char_name,
                             "object_param": target_char_name,
@@ -688,7 +684,6 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
         WHERE r.source_profile_managed = TRUE
         RETURN target.name AS target_name, properties(r) AS rel_props
         """
-        # CORRECTED: `target:Character:Entity` changed to `target:Entity` to fetch all relationship types.
         rel_results = await neo4j_manager.execute_read_query(
             rels_query, {"char_name": char_name}
         )
@@ -708,10 +703,8 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
                         "chapter_added",
                     ]
                 }
-                # Restore type if it was part of the key props for merge
                 if "type" in rel_props_full:
                     rel_props_cleaned["type"] = rel_props_full["type"]
-                # Restore chapter_added from the rel_props_full if it was there
                 if "chapter_added" in rel_props_full:
                     rel_props_cleaned["chapter_added"] = rel_props_full["chapter_added"]
 
@@ -756,7 +749,8 @@ async def get_character_info_for_snippet_from_db(
     WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE
 
     // Subquery to get the most recent non-provisional development event
-    CALL (c) {
+    CALL {
+        WITH c
         OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
         WHERE dev.chapter_updated <= $chapter_limit_param
           AND (dev.is_provisional IS NULL OR dev.is_provisional = FALSE)
@@ -766,7 +760,8 @@ async def get_character_info_for_snippet_from_db(
     }
 
     // Subquery to get the most recent provisional development event
-    CALL (c) {
+    CALL {
+        WITH c
         OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
         WHERE dev.chapter_updated <= $chapter_limit_param
           AND dev.is_provisional = TRUE
@@ -776,7 +771,8 @@ async def get_character_info_for_snippet_from_db(
     }
 
     // Subquery to check for the existence of any provisional data related to the character
-    CALL (c) {
+    CALL {
+        WITH c
         RETURN (
             c.is_provisional = TRUE OR
             EXISTS {
