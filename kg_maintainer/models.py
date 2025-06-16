@@ -17,7 +17,6 @@ class SceneDetail(TypedDict, total=False):
     A detailed plan for a single scene in a chapter.
     This is the contract between the PlannerAgent and DraftingAgent.
     """
-
     scene_number: int
     summary: str
     characters_involved: List[str]
@@ -28,17 +27,12 @@ class SceneDetail(TypedDict, total=False):
     # NEW: Directorial fields for controlling narrative texture and variety.
     scene_type: str  # e.g., 'ACTION', 'DIALOGUE', 'INTROSPECTION', 'REVELATION', 'ATMOSPHERE_BUILDING', 'TRANSITION'
     pacing: str  # e.g., 'SLOW', 'MEDIUM', 'FAST', 'URGENT'
-    character_arc_focus: Optional[
-        str
-    ]  # e.g., "Isabelle confronts her past trauma, moving from fear to defiance."
-    relationship_development: Optional[
-        str
-    ]  # e.g., "The trust between Isabelle and Lysander is tested by a new revelation."
+    character_arc_focus: Optional[str]  # e.g., "Isabelle confronts her past trauma, moving from fear to defiance."
+    relationship_development: Optional[str]  # e.g., "The trust between Isabelle and Lysander is tested by a new revelation."
 
 
 class ProblemDetail(TypedDict, total=False):
     """Detailed information about a specific problem found during evaluation."""
-
     issue_category: str
     problem_description: str
     quote_from_original_text: str
@@ -51,7 +45,6 @@ class ProblemDetail(TypedDict, total=False):
 
 class EvaluationResult(TypedDict, total=False):
     """Structured result from the evaluator agent."""
-
     needs_revision: bool
     reasons: List[str]
     problems_found: List[ProblemDetail]
@@ -64,7 +57,6 @@ class EvaluationResult(TypedDict, total=False):
 
 class PatchInstruction(TypedDict, total=False):
     """Instruction for applying a single patch to the chapter text."""
-
     original_problem_quote_text: str
     target_char_start: Optional[int]
     target_char_end: Optional[int]
@@ -74,7 +66,6 @@ class PatchInstruction(TypedDict, total=False):
 
 class AgentStateData(TypedDict):
     """Legacy type hint for core state objects."""
-
     plot_outline: dict
     character_profiles: dict
     world_building: dict
@@ -82,7 +73,6 @@ class AgentStateData(TypedDict):
 
 class CharacterProfile(BaseModel):
     """Structured information about a character, using Pydantic for validation."""
-
     name: str
     description: str = ""
     traits: List[str] = Field(default_factory=list)
@@ -101,9 +91,9 @@ class CharacterProfile(BaseModel):
         updates_data = {k: v for k, v in data.items() if k not in known_fields}
 
         # Combine the explicitly defined 'updates' dict with any extra fields
-        if "updates" in profile_data:
-            updates_data.update(profile_data["updates"])
-        profile_data["updates"] = updates_data
+        if 'updates' in profile_data:
+            updates_data.update(profile_data['updates'])
+        profile_data['updates'] = updates_data
 
         return cls(name=name, **profile_data)
 
@@ -111,7 +101,7 @@ class CharacterProfile(BaseModel):
         """Converts the CharacterProfile to a dictionary for serialization."""
         data = self.model_dump(exclude={"name"})
         # Flatten the 'updates' dict into the main dict for compatibility with old format
-        updates_data = data.pop("updates", {})
+        updates_data = data.pop('updates', {})
         data.update(updates_data)
         return data
 
@@ -134,7 +124,6 @@ class CharacterProfile(BaseModel):
 
 class WorldItem(BaseModel):
     """Structured information about a world element, using Pydantic for validation."""
-
     id: str  # Canonical ID derived from normalized category and name
     category: str  # Display/canonical category
     name: str  # Display/canonical name
@@ -163,16 +152,8 @@ class WorldItem(BaseModel):
         is_provisional = bool(data.get(KG_IS_PROVISIONAL, False))
 
         props = {
-            k: v
-            for k, v in data.items()
-            if k
-            not in {
-                "id",
-                "category",
-                "name",
-                KG_NODE_CREATED_CHAPTER,
-                KG_IS_PROVISIONAL,
-            }
+            k: v for k, v in data.items()
+            if k not in {"id", "category", "name", KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL}
         }
 
         return cls(
@@ -189,7 +170,7 @@ class WorldItem(BaseModel):
         # Pydantic's model_dump is the modern way to do this.
         data = self.model_dump(exclude={"id", "category", "name"})
         # For compatibility with any old code expecting properties at the top level
-        properties_data = data.pop("properties", {})
+        properties_data = data.pop('properties', {})
         data.update(properties_data)
         return data
 

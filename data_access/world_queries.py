@@ -1,8 +1,7 @@
 # data_access/world_queries.py
 import json
-from typing import Any, Dict, List, Optional, Set, Tuple
-
-import structlog
+import logging
+from typing import Any, Dict, List, Set, Tuple
 
 from async_lru import alru_cache  # type: ignore
 
@@ -16,33 +15,7 @@ from kg_constants import (
 )
 from kg_maintainer.models import WorldItem
 
-logger = structlog.get_logger(__name__)
-
-# Mapping from normalized world item names to canonical IDs
-WORLD_NAME_TO_ID: Dict[str, str] = {}
-
-
-def resolve_world_name(name: str) -> Optional[str]:
-    """Return canonical world item ID for a display name if known."""
-    if not name:
-        return None
-    return WORLD_NAME_TO_ID.get(utils._normalize_for_id(name))
-
-
-def get_world_item_by_name(
-    world_data: Dict[str, Dict[str, WorldItem]], name: str
-) -> Optional[WorldItem]:
-    """Retrieve a WorldItem from cached data using a fuzzy name lookup."""
-    item_id = resolve_world_name(name)
-    if not item_id:
-        return None
-    for items in world_data.values():
-        if not isinstance(items, dict):
-            continue
-        for item in items.values():
-            if isinstance(item, WorldItem) and item.id == item_id:
-                return item
-    return None
+logger = logging.getLogger(__name__)
 
 
 def generate_world_element_node_cypher(
@@ -721,7 +694,6 @@ async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
 async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
     logger.info("Loading decomposed world building data from Neo4j...")
     world_data: Dict[str, Dict[str, WorldItem]] = {}
-    WORLD_NAME_TO_ID.clear()
     wc_id_param = config.MAIN_WORLD_CONTAINER_NODE_ID
 
     # Load WorldContainer (_overview_)
@@ -849,9 +821,11 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
                         )
 
         item_detail["id"] = we_id  # Add the canonical ID from the DB
-        world_item = WorldItem.from_dict(category, item_name, item_detail)
-        world_data.setdefault(category, {})[item_name] = world_item
-        WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = world_item.id
+        world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
+            category,
+            item_name,
+            item_detail,
+        )
 
     logger.info(
         f"Successfully loaded and recomposed world building data ({len(we_results)} elements) from Neo4j."
