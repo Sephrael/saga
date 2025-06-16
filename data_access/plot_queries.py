@@ -9,6 +9,22 @@ from core_db.base_db_manager import neo4j_manager
 logger = structlog.get_logger(__name__)
 
 
+async def ensure_novel_info() -> None:
+    """Create the NovelInfo node if it does not exist."""
+    novel_id = config.MAIN_NOVEL_INFO_NODE_ID
+    query = "MATCH (n:NovelInfo:Entity {id: $id}) RETURN n"
+    result = await neo4j_manager.execute_read_query(query, {"id": novel_id})
+    if not result or not result[0] or not result[0].get("n"):
+        await neo4j_manager.execute_write_query(
+            """
+            MERGE (n:NovelInfo:Entity {id: $id})
+                ON CREATE SET n.title = $title, n.created_ts = timestamp()
+            """,
+            {"id": novel_id, "title": config.DEFAULT_PLOT_OUTLINE_TITLE},
+        )
+        logger.info("Created NovelInfo node with id '%s'", novel_id)
+
+
 async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
     logger.info("Synchronizing plot outline to Neo4j (non-destructive)...")
     if not plot_data:

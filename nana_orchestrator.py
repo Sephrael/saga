@@ -238,6 +238,7 @@ class NANA_Orchestrator:
         self._update_rich_display(step="Initializing Orchestrator")
         self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
+        await plot_queries.ensure_novel_info()
         result = await plot_queries.get_plot_outline_from_db()
         if isinstance(result, Exception):
             logger.error(

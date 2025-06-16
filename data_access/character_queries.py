@@ -21,6 +21,7 @@ from .kg_queries import normalize_relationship_type
 
 # Mapping from normalized character names to canonical display names
 CHAR_NAME_TO_CANONICAL: Dict[str, str] = {}
+TRAIT_NAME_TO_CANONICAL: Dict[str, str] = {}
 
 
 def resolve_character_name(name: str) -> str:
@@ -109,21 +110,23 @@ def generate_character_node_cypher(
     if profile.traits:
         for trait_name in profile.traits:
             if isinstance(trait_name, str) and trait_name.strip():
-                statements.append(
-                    (
-                        """
-                        MATCH (c:Character:Entity {name: $name})
-                        MERGE (t:Entity {name: $trait_name})
-                            ON CREATE SET t:Trait, t.created_ts = timestamp()
-                            ON MATCH SET t:Trait
-                        MERGE (c)-[:HAS_TRAIT]->(t)
-                        """,
-                        {
-                            "name": profile.name,
-                            "trait_name": trait_name.strip(),
-                        },
+                canonical = utils.normalize_trait_name(trait_name)
+                if canonical:
+                    TRAIT_NAME_TO_CANONICAL[canonical] = trait_name
+                    statements.append(
+                        (
+                            """
+                            MATCH (c:Character:Entity {name: $name})
+                            MERGE (t:Trait:Entity {name: $trait_name})
+                                ON CREATE SET t.created_ts = timestamp()
+                            MERGE (c)-[:HAS_TRAIT]->(t)
+                            """,
+                            {
+                                "name": profile.name,
+                                "trait_name": canonical,
+                            },
+                        )
                     )
-                )
 
     # Process and link development events for the current chapter.
     dev_event_key = f"development_in_chapter_{chapter_number_for_delta}"
@@ -345,10 +348,12 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
         )
 
         current_profile_traits: Set[str] = {
-            str(t).strip()
+            utils.normalize_trait_name(str(t))
             for t in profile_dict.get("traits", [])
-            if isinstance(t, str) and str(t).strip()
+            if isinstance(t, str) and utils.normalize_trait_name(str(t))
         }
+        for trait in current_profile_traits:
+            TRAIT_NAME_TO_CANONICAL[trait] = trait  # canonical mapping to itself
 
         statements.append(
             (
@@ -370,9 +375,8 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     """
                 MATCH (c:Character:Entity {name: $char_name_val})
                 UNWIND $current_traits_list AS trait_name_val
-                MERGE (t:Entity {name: trait_name_val})
-                    ON CREATE SET t:Trait, t.created_ts = timestamp()
-                    ON MATCH SET t:Trait
+                MERGE (t:Trait:Entity {name: trait_name_val})
+                    ON CREATE SET t.created_ts = timestamp()
                 MERGE (c)-[:HAS_TRAIT]->(t)
                 """,
                     {

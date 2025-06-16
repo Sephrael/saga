@@ -138,7 +138,6 @@ class PlannerAgent:
                         # For optional fields, this will be None.
                         processed_scene_dict[key_internal_name] = None
 
-
             scenes_data.append(processed_scene_dict)  # type: ignore
 
         if not scenes_data:

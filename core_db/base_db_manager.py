@@ -177,7 +177,13 @@ class Neo4jManagerSingleton:
                         )
                 raise
 
-    async def create_db_schema(self):
+    async def create_db_schema(self) -> None:
+        """Create and verify Neo4j indexes and constraints.
+
+        The method issues idempotent `CREATE ... IF NOT EXISTS` statements for
+        all core indexes, constraints, and relationship type tokens. Any batch
+        failures fall back to executing operations individually.
+        """
         self.logger.info(
             "Creating/verifying Neo4j schema elements (batch execution)..."
         )
