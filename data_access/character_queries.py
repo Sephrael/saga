@@ -324,10 +324,10 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 """
             MERGE (c:Character:Entity {name: $char_name_val})
             ON CREATE SET
-                c = $props,
+                c += $props,
                 c.created_ts = timestamp()
             ON MATCH SET
-                c = $props,
+                c += $props,
                 c.updated_ts = timestamp()
             """,
                 {"char_name_val": char_name, "props": char_direct_props},
@@ -749,8 +749,7 @@ async def get_character_info_for_snippet_from_db(
     WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE
 
     // Subquery to get the most recent non-provisional development event
-    CALL {
-        WITH c
+    CALL (c) {
         OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
         WHERE dev.chapter_updated <= $chapter_limit_param
           AND (dev.is_provisional IS NULL OR dev.is_provisional = FALSE)
@@ -760,8 +759,7 @@ async def get_character_info_for_snippet_from_db(
     }
 
     // Subquery to get the most recent provisional development event
-    CALL {
-        WITH c
+    CALL (c) {
         OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
         WHERE dev.chapter_updated <= $chapter_limit_param
           AND dev.is_provisional = TRUE
@@ -771,8 +769,7 @@ async def get_character_info_for_snippet_from_db(
     }
 
     // Subquery to check for the existence of any provisional data related to the character
-    CALL {
-        WITH c
+    CALL (c) {
         RETURN (
             c.is_provisional = TRUE OR
             EXISTS {

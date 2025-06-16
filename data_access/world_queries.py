@@ -102,11 +102,11 @@ def generate_world_element_node_cypher(
             MERGE (we:Entity {id: $id})
             ON CREATE SET
                 we:WorldElement,
-                we = $props,
+                we += $props,
                 we.created_ts = timestamp()
             ON MATCH SET
                 we:WorldElement,
-                we = $props,
+                we += $props,
                 we.updated_ts = timestamp()
             """,
             {"id": item.id, "props": node_props},
