@@ -619,8 +619,6 @@ class NANA_Orchestrator:
             self, novel_chapter_number, chapter_plan
         )
 
-        # Context generation already used the plan, so rerunning is unnecessary.
-
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
                 f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only."
@@ -1490,3 +1488,4 @@ if __name__ == "__main__":
                 logger.warning(
                     f"Could not explicitly close driver from main (event loop might be closed or other issue): {e}"
                 )
+                

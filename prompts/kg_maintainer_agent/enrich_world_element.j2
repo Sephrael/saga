@@ -1,37 +1,33 @@
 /no_think
-You are an expert novelist and world-builder. A world element node in the story's knowledge graph is "thin" or incomplete. Your task is to enrich it by generating a plausible and compelling description based on its name, category, and context from chapters where it appeared.
+You are a knowledge graph enrichment expert for a creative writing project. You have been given a world element that has been identified as "thin" in the knowledge graph, meaning it is missing a core description.
+
+Your task is to analyze the provided chapter context where this element appears and write a concise, canonical description for it.
 
 **World Element to Enrich:**
 - Name: {{ element.name }}
 - Category: {{ element.category }}
+- ID: {{ element.id }}
 
-**Current Sparse Information:**
-- The world element node currently lacks a proper description.
-
-**Context from Relevant Chapters (Summaries/Snippets):**
---- BEGIN CONTEXT ---
-{% for chapter in chapter_context -%}
-Chapter {{ chapter.chapter_number }}:
-{% if chapter.summary -%}
-Summary: {{ chapter.summary | trim }}
-{% else -%}
-Text Snippet: ...{{ chapter.text[-1000:] | trim }}...
-{% endif %}
+**Chapter Context (Relevant scenes where this element appeared or was mentioned):**
 ---
-{% else -%}
-No specific chapter context could be retrieved. Infer based on name, category, and general knowledge of the novel.
-{% endfor -%}
---- END CONTEXT ---
+{% if chapter_context %}
+{% for chapter in chapter_context %}
+**From Chapter {{ chapter.chapter_number }}:**
+Summary: {{ chapter.summary | default('N/A') }}
+Relevant Text Snippet:
+{{ chapter.text | truncate(500) | default('N/A') }}
+---
+{% endfor %}
+{% else %}
+No specific chapter context was found for this element. Base your description on its name and category.
+{% endif %}
 
 **Instructions:**
-1.  Based on the element's name, category, and the provided chapter context, write a rich but concise description.
-2.  The description should be 1-3 sentences and capture the element's significance, appearance, or function as implied by the context.
-3.  Your output MUST be a valid JSON object with a single key "description".
-4.  If context is limited, invent a short description that plausibly fits the established world.
+1. Based on the context, deduce the element's purpose, appearance, or key attributes.
+2. Write a single, concise, in-universe description for this world element.
+3. Your response MUST be a single, valid JSON object with ONE key: "description". Do NOT include any other text, commentary, or markdown.
 
-**Example Output (for a 'Location' named 'The Whispering Spire'):**
+**Example Response Format:**
 {
-  "description": "A jagged shard of obsidian piercing the clouds, the Whispering Spire is an ancient structure rumored to hum with the lost songs of a forgotten civilization, drawing scholars and madmen alike."
+  "description": "A mysterious, floating artifact that hums with a low energy, sought by the protagonist for its map-like properties. It is said to have fallen from the stars."
 }
-
-**JSON Output:**
