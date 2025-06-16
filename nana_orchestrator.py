@@ -1,3 +1,4 @@
+# nana_orchestrator.py
 import asyncio
 import logging
 import logging.handlers
@@ -1181,6 +1182,10 @@ class NANA_Orchestrator:
             await neo4j_manager.connect()
             await neo4j_manager.create_db_schema()
             logger.info("NANA: Neo4j connection and schema verified.")
+
+            await self.kg_maintainer_agent.load_schema_from_db()
+            logger.info("NANA: KG schema loaded into maintainer agent.")
+
             await self.async_init_orchestrator()
 
             plot_points_exist = (
@@ -1209,8 +1214,6 @@ class NANA_Orchestrator:
                     self._update_rich_display(step="Initial Setup Failed - Halting")
                     return
                 self._update_novel_props_cache()
-                await plot_queries.save_plot_outline_to_db(self.plot_outline) # <-- ADD THIS LINE
-                logger.info("NANA: Successfully persisted bootstrapped plot outline to Neo4j.") # Optional: Add a log message
 
             # KG pre-population handled within run_genesis_phase
 
@@ -1490,4 +1493,3 @@ if __name__ == "__main__":
                 logger.warning(
                     f"Could not explicitly close driver from main (event loop might be closed or other issue): {e}"
                 )
-                

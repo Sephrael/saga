@@ -21,7 +21,7 @@ from kg_maintainer import merge, models, parsing
 from llm_interface import llm_service
 from parsing_utils import (
     parse_rdf_triples_with_rdflib,
-)  # Will be modified to custom parser
+)
 from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
@@ -111,10 +111,19 @@ class KGMaintainerAgent:
 
     def __init__(self, model_name: str = config.KNOWLEDGE_UPDATE_MODEL):
         self.model_name = model_name
+        self.node_labels: List[str] = []
+        self.relationship_types: List[str] = []
         logger.info(
             "KGMaintainerAgent initialized with model for extraction: %s",
             self.model_name,
         )
+
+    async def load_schema_from_db(self):
+        """Loads and caches the defined KG schema from the database."""
+        self.node_labels = await kg_queries.get_defined_node_labels()
+        self.relationship_types = await kg_queries.get_defined_relationship_types()
+        logger.info(f"Loaded {len(self.node_labels)} node labels and {len(self.relationship_types)} relationship types from DB.")
+
 
     def parse_character_updates(
         self, text: str, chapter_number: int
@@ -220,6 +229,8 @@ class KGMaintainerAgent:
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "novel_genre": plot_outline.get("genre", "Unknown"),
                 "chapter_text": chapter_text,
+                "available_node_labels": self.node_labels,
+                "available_relationship_types": self.relationship_types,
             },
         )
 
