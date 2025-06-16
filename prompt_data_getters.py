@@ -486,39 +486,49 @@ def _add_provisional_notes_and_filter_developments(
 
 
 async def _get_character_profiles_dict_with_notes(
-    character_profiles: Dict[str, CharacterProfile],
+    character_names: List[str],
     up_to_chapter_inclusive: Optional[int],
 ) -> Dict[str, Any]:
     logger.debug(
-        f"Internal: Getting character profiles dict with notes up to chapter {up_to_chapter_inclusive}."
+        "Internal: Getting character profiles dict with notes up to chapter %s.",
+        up_to_chapter_inclusive,
     )
     processed_profiles: Dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
 
-    character_profiles_data = character_profiles
-
-    if not character_profiles_data:
-        logger.warning("Character_profiles dictionary is empty.")
+    if not character_names:
+        logger.warning("Character name list is empty.")
         return {}
-    for char_name, profile_original in character_profiles_data.items():
-        if not isinstance(profile_original, dict):
-            if hasattr(profile_original, "to_dict"):
-                profile_dict = profile_original.to_dict()
-            else:
-                logger.warning(
-                    f"Character profile for '{char_name}' is not a dict. Skipping."
-                )
-                continue
-        else:
-            profile_dict = profile_original
+
+    for char_name in character_names:
+        try:
+            profile_obj = await character_queries.get_character_profile_by_name(
+                char_name
+            )
+        except Exception as exc:
+            logger.error(
+                "Error fetching character '%s' from Neo4j: %s",
+                char_name,
+                exc,
+            )
+            continue
+
+        if not profile_obj:
+            logger.warning("Character '%s' not found in Neo4j.", char_name)
+            continue
+
+        profile_dict = profile_obj.to_dict()
         processed_profiles[char_name] = _add_provisional_notes_and_filter_developments(
-            profile_dict, filter_chapter, is_character=True
+            profile_dict,
+            filter_chapter,
+            is_character=True,
         )
+
     return processed_profiles
 
 
 async def get_filtered_character_profiles_for_prompt_plain_text(
-    character_profiles: Dict[str, CharacterProfile],
+    character_names: List[str],
     up_to_chapter_inclusive: Optional[int] = None,
 ) -> str:
     logger.info(
@@ -531,7 +541,8 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
     )
 
     profiles_dict_with_notes = await _get_character_profiles_dict_with_notes(
-        character_profiles, filter_chapter_for_profiles
+        character_names,
+        filter_chapter_for_profiles,
     )
     if not profiles_dict_with_notes:
         return "No character profiles available."
@@ -554,65 +565,57 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
 
 
 async def _get_world_data_dict_with_notes(
-    world_building: Dict[str, Dict[str, WorldItem]],
+    world_item_ids_by_category: Dict[str, List[str]],
     up_to_chapter_inclusive: Optional[int],
 ) -> Dict[str, Any]:
     logger.debug(
-        f"Internal: Getting world data dict with notes up to chapter {up_to_chapter_inclusive}."
+        "Internal: Getting world data dict with notes up to chapter %s.",
+        up_to_chapter_inclusive,
     )
     processed_world_data: Dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
-    world_building_data = world_building
 
-    if not world_building_data:
-        logger.warning("World_building dictionary is empty.")
+    if not world_item_ids_by_category:
+        logger.warning("World item ID mapping is empty.")
         return {}
-    for category_name, category_items_original in world_building_data.items():
-        if not isinstance(category_items_original, dict) and category_name not in [
-            "is_default",
-            "source",
-            "user_supplied_data",
-        ]:
-            if hasattr(category_items_original, "to_dict"):
-                category_items_original = category_items_original.to_dict()
-            else:
-                logger.warning(
-                    f"World category '{category_name}' content is not a dict (type: {type(category_items_original)}). Skipping formatting."
-                )
-                processed_world_data[category_name] = {}
-                continue
-        if category_name in ["is_default", "source", "user_supplied_data"]:
-            processed_world_data[category_name] = category_items_original
-            continue
 
+    for category_name, item_id_list in world_item_ids_by_category.items():
         processed_category: Dict[str, Any] = {}
-        if category_name == "_overview_":
-            processed_category = _add_provisional_notes_and_filter_developments(
-                category_items_original, filter_chapter, is_character=False
-            )
-        else:
-            for item_name, item_data_original in category_items_original.items():
-                if not isinstance(item_data_original, dict):
-                    if hasattr(item_data_original, "to_dict"):
-                        item_dict = item_data_original.to_dict()
-                    else:
-                        logger.warning(
-                            f"World item '{item_name}' in category '{category_name}' is not a dict. Skipping."
-                        )
-                        continue
-                else:
-                    item_dict = item_data_original
-                processed_category[item_name] = (
-                    _add_provisional_notes_and_filter_developments(
-                        item_dict, filter_chapter, is_character=False
-                    )
+
+        for item_id in item_id_list:
+            try:
+                item_obj = await world_queries.get_world_item_by_id(item_id)
+            except Exception as exc:
+                logger.error(
+                    "Error fetching world item '%s' from Neo4j: %s",
+                    item_id,
+                    exc,
                 )
+                continue
+
+            if not item_obj:
+                logger.warning(
+                    "World item id '%s' not found in Neo4j.",
+                    item_id,
+                )
+                continue
+
+            item_dict = item_obj.to_dict()
+            processed_category[item_obj.name] = (
+                _add_provisional_notes_and_filter_developments(
+                    item_dict,
+                    filter_chapter,
+                    is_character=False,
+                )
+            )
+
         processed_world_data[category_name] = processed_category
+
     return processed_world_data
 
 
 async def get_filtered_world_data_for_prompt_plain_text(
-    world_building: Dict[str, Dict[str, WorldItem]],
+    world_item_ids_by_category: Dict[str, List[str]],
     up_to_chapter_inclusive: Optional[int] = None,
 ) -> str:
     logger.info(
@@ -625,7 +628,8 @@ async def get_filtered_world_data_for_prompt_plain_text(
     )
 
     world_data_dict_with_notes = await _get_world_data_dict_with_notes(
-        world_building, filter_chapter_for_world
+        world_item_ids_by_category,
+        filter_chapter_for_world,
     )
     if not world_data_dict_with_notes:
         return "No world-building data available."

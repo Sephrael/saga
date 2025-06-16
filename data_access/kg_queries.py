@@ -4,6 +4,9 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+import structlog
+from async_lru import alru_cache
+
 import config
 from core_db.base_db_manager import neo4j_manager
 from kg_constants import (
@@ -12,6 +15,38 @@ from kg_constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def normalize_existing_relationship_types() -> None:
+    """Normalize all stored relationship types to canonical form."""
+    query = "MATCH ()-[r:DYNAMIC_REL]->() RETURN DISTINCT r.type AS t"
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Error reading existing relationship types: %s", exc)
+        return
+
+    statements: List[Tuple[str, Dict[str, Any]]] = []
+    for record in results:
+        current = record.get("t")
+        if not current:
+            continue
+        normalized = normalize_relationship_type(str(current))
+        if normalized != current:
+            statements.append(
+                (
+                    "MATCH ()-[r:DYNAMIC_REL {type: $old}]->() SET r.type = $new",
+                    {"old": current, "new": normalized},
+                )
+            )
+    if statements:
+        try:
+            await neo4j_manager.execute_cypher_batch(statements)
+            logger.info("Normalized %d relationship type variations", len(statements))
+        except Exception as exc:  # pragma: no cover - log but continue
+            logger.error(
+                "Failed to update some relationship types: %s", exc, exc_info=True
+            )
 
 
 def _get_cypher_labels(entity_type: Optional[str]) -> str:
@@ -135,13 +170,13 @@ async def add_kg_triples_batch_to_db(
 
             query = f"""
             MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
+                ON CREATE SET s.created_ts = timestamp()
             MERGE (o:Entity:ValueNode {{value: $object_literal_value_param, type: $value_node_type_param}})
                 ON CREATE SET o.created_ts = timestamp()
 
             MERGE (s)-[r:DYNAMIC_REL]->(o)
-            SET r = $rel_props_param,
-                r.created_at = COALESCE(r.created_at, timestamp()),
-                r.last_updated = timestamp()
+                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
+                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
             """
             statements_with_params.append((query, params))
 
@@ -165,13 +200,13 @@ async def add_kg_triples_batch_to_db(
 
             query = f"""
             MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
-            MERGE (o{object_labels_cypher} {{name: $object_name_param}}) 
-                ON CREATE SET o.created_ts = timestamp() // Set timestamp if object node is newly created
-            
+                ON CREATE SET s.created_ts = timestamp()
+            MERGE (o{object_labels_cypher} {{name: $object_name_param}})
+                ON CREATE SET o.created_ts = timestamp()
+
             MERGE (s)-[r:DYNAMIC_REL]->(o)
-            SET r = $rel_props_param,
-                r.created_at = COALESCE(r.created_at, timestamp()),
-                r.last_updated = timestamp()
+                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
+                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
             """
             statements_with_params.append((query, params))
         else:
@@ -244,12 +279,12 @@ async def query_kg_from_db(
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
     return_clause = f"""
-    RETURN s.name AS subject, 
-           r.type AS predicate, 
+    RETURN s.name AS subject,
+           r.type AS predicate,
            CASE WHEN o:ValueNode THEN o.value ELSE o.name END AS object,
            CASE WHEN o:ValueNode THEN 'Literal' ELSE labels(o)[0] END AS object_type, // Primary label or 'Literal'
-           r.{KG_REL_CHAPTER_ADDED} AS {KG_REL_CHAPTER_ADDED}, 
-           r.confidence AS confidence, 
+           r.{KG_REL_CHAPTER_ADDED} AS {KG_REL_CHAPTER_ADDED},
+           r.confidence AS confidence,
            r.{KG_IS_PROVISIONAL} AS {KG_IS_PROVISIONAL}
     """
     order_clause = f" ORDER BY r.{KG_REL_CHAPTER_ADDED} DESC, r.confidence DESC"
@@ -359,7 +394,6 @@ async def get_chapter_context_for_entity(
     )
     params = {"id_param": entity_id} if entity_id else {"name_param": entity_name}
 
-    # CORRECTED QUERY
     query = f"""
     {match_clause}
 
@@ -434,7 +468,7 @@ async def find_post_mortem_activity() -> List[Dict[str, Any]]:
     """
     query = """
     MATCH (c:Character)-[death_rel:DYNAMIC_REL {type: 'IS_DEAD'}]->()
-    WHERE death_rel.is_provisional = false
+    WHERE death_rel.is_provisional = false OR death_rel.is_provisional IS NULL
     WITH c, death_rel.chapter_added AS death_chapter
 
     MATCH (c)-[activity_rel:DYNAMIC_REL]->()
@@ -465,20 +499,14 @@ async def find_candidate_duplicate_entities(
     Finds pairs of entities with similar names using APOC's Levenshtein distance.
     This requires the APOC plugin to be installed in Neo4j.
     """
-    # This query now uses `apoc.coll.max` which is the correct scalar function
-    # for finding the max value within a single row's context.
     query = """
     MATCH (e1:Entity), (e2:Entity)
     WHERE id(e1) < id(e2)
       AND e1.name IS NOT NULL AND e2.name IS NOT NULL
       AND NOT e1:ValueNode AND NOT e2:ValueNode
     WITH e1, e2, apoc.text.distance(e1.name, e2.name) AS distance
-    
-    // CORRECTED LINE: Use apoc.coll.max on a list of the two sizes.
     WITH e1, e2, distance, apoc.coll.max([size(e1.name), size(e2.name)]) as max_len
-
-    // Calculate similarity using the new max_len variable
-    WHERE (1 - (distance / toFloat(max_len))) >= $threshold
+    WHERE max_len > 0 AND (1 - (distance / toFloat(max_len))) >= $threshold
     
     RETURN
       e1.id AS id1, e1.name AS name1, labels(e1) AS labels1,
@@ -572,4 +600,25 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
             )
         return False
 
-    
+@alru_cache(maxsize=1)
+async def get_defined_node_labels() -> List[str]:
+    """Queries the database for all defined node labels and caches the result."""
+    try:
+        results = await neo4j_manager.execute_read_query("CALL db.labels() YIELD label")
+        # Filter out internal labels
+        return [r['label'] for r in results if r.get('label') and not r['label'].startswith('_')]
+    except Exception as e:
+        logger.error("Failed to query defined node labels from Neo4j.", exc_info=True)
+        # Fallback to constants if DB query fails
+        return list(config.NODE_LABELS)
+
+@alru_cache(maxsize=1)
+async def get_defined_relationship_types() -> List[str]:
+    """Queries the database for all defined relationship types and caches the result."""
+    try:
+        results = await neo4j_manager.execute_read_query("CALL db.relationshipTypes() YIELD relationshipType")
+        return [r['relationshipType'] for r in results if r.get('relationshipType')]
+    except Exception as e:
+        logger.error("Failed to query defined relationship types from Neo4j.", exc_info=True)
+        # Fallback to constants if DB query fails
+        return list(config.RELATIONSHIP_TYPES)

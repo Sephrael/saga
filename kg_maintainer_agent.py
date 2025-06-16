@@ -20,7 +20,7 @@ from kg_maintainer import merge, models, parsing
 from llm_interface import llm_service
 from parsing_utils import (
     parse_rdf_triples_with_rdflib,
-)  # Will be modified to custom parser
+)
 from prompt_renderer import render_prompt
 import asyncio
 
@@ -111,10 +111,19 @@ class KGMaintainerAgent:
 
     def __init__(self, model_name: str = config.KNOWLEDGE_UPDATE_MODEL):
         self.model_name = model_name
+        self.node_labels: List[str] = []
+        self.relationship_types: List[str] = []
         logger.info(
             "KGMaintainerAgent initialized with model for extraction: %s",
             self.model_name,
         )
+
+    async def load_schema_from_db(self):
+        """Loads and caches the defined KG schema from the database."""
+        self.node_labels = await kg_queries.get_defined_node_labels()
+        self.relationship_types = await kg_queries.get_defined_relationship_types()
+        logger.info(f"Loaded {len(self.node_labels)} node labels and {len(self.relationship_types)} relationship types from DB.")
+
 
     def parse_character_updates(
         self, text: str, chapter_number: int
@@ -149,20 +158,22 @@ class KGMaintainerAgent:
         self,
         profiles_to_persist: Dict[str, models.CharacterProfile],
         chapter_number_for_delta: int,
+        full_sync: bool = False,
     ) -> None:
         """Persist character profiles to Neo4j."""
         await character_queries.sync_characters(
-            profiles_to_persist, chapter_number_for_delta
+            profiles_to_persist, chapter_number_for_delta, full_sync=full_sync
         )
 
     async def persist_world(
         self,
         world_items_to_persist: Dict[str, Dict[str, models.WorldItem]],
         chapter_number_for_delta: int,
+        full_sync: bool = False,
     ) -> None:
         """Persist world elements to Neo4j."""
         await world_queries.sync_world_items(
-            world_items_to_persist, chapter_number_for_delta
+            world_items_to_persist, chapter_number_for_delta, full_sync=full_sync
         )
 
     async def summarize_chapter(
@@ -220,6 +231,8 @@ class KGMaintainerAgent:
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "novel_genre": plot_outline.get("genre", "Unknown"),
                 "chapter_text": chapter_text,
+                "available_node_labels": self.node_labels,
+                "available_relationship_types": self.relationship_types,
             },
         )
 
@@ -662,5 +675,20 @@ class KGMaintainerAgent:
                     f"Failed to parse entity resolution response from LLM for pair ({id1}, {id2}): {e}. Response: {llm_response}"
                 )
 
+    async def heal_schema(self) -> None:
+        """Ensure all nodes and relationships follow the expected schema."""
+        logger.info("KG Healer: Checking base schema conformity...")
+        statements = [
+            ("MATCH (n) WHERE NOT n:Entity SET n:Entity", {}),
+            (
+                "MATCH ()-[r:DYNAMIC_REL]-() WHERE r.type IS NULL SET r.type = 'UNKNOWN'",
+                {},
+            ),
+        ]
+        try:
+            await neo4j_manager.execute_cypher_batch(statements)
+            await kg_queries.normalize_existing_relationship_types()
+        except Exception as exc:  # pragma: no cover - narrow DB errors
+            logger.error("KG Healer: Schema healing failed: %s", exc, exc_info=True)
 
 __all__ = ["KGMaintainerAgent"]

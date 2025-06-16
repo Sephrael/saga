@@ -17,7 +17,6 @@ async def test_draft_chapter_whole_chapter(monkeypatch):
     plot_outline = {"title": "Test", "genre": "F"}
     draft, raw, usage = await agent.draft_chapter(
         plot_outline,
-        {},
         1,
         "focus",
         "context",
@@ -49,7 +48,6 @@ async def test_draft_chapter_scene_mode(monkeypatch):
 
     draft, raw, usage = await agent.draft_chapter(
         {"title": "Test", "genre": "F"},
-        {},
         2,
         "focus",
         "context",

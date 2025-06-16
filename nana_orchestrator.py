@@ -1,3 +1,4 @@
+# nana_orchestrator.py
 import asyncio
 import logging
 import logging.handlers
@@ -97,8 +98,6 @@ class NANA_Orchestrator:
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
 
         self.plot_outline: Dict[str, Any] = {}
-        self.character_profiles: Dict[str, CharacterProfile] = {}
-        self.world_building: Dict[str, Dict[str, WorldItem]] = {}
         self.chapter_count: int = 0
         self.novel_props_cache: Dict[str, Any] = {}
         self.total_tokens_generated_this_run: int = 0
@@ -211,25 +210,10 @@ class NANA_Orchestrator:
 
     def load_state_from_user_model(self, model: UserStoryInputModel) -> None:
         """Populate orchestrator state from a user-provided model."""
-        plot_outline, characters, world_items = user_story_to_objects(model)
+        plot_outline, _, _ = user_story_to_objects(model)
         self.plot_outline = plot_outline
-        self.character_profiles = characters
-        self.world_building = world_items
 
     def _update_novel_props_cache(self):
-        wb_cache = {}
-        if isinstance(self.world_building, dict):
-            for cat, items in self.world_building.items():
-                if isinstance(items, dict):
-                    wb_cache[cat] = {
-                        nm: item.to_dict()
-                        for nm, item in items.items()
-                        if hasattr(item, "to_dict")
-                    }
-                else:
-                    # copy string values like 'source' or other metadata directly
-                    wb_cache[cat] = items
-
         self.novel_props_cache = {
             "title": self.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE),
             "genre": self.plot_outline.get("genre", config.CONFIGURED_GENRE),
@@ -246,12 +230,6 @@ class NANA_Orchestrator:
             "tone": self.plot_outline.get("tone", "N/A"),
             "pacing": self.plot_outline.get("pacing", "N/A"),
             "plot_points": self.plot_outline.get("plot_points", []),
-            "character_profiles": {
-                name: profile.to_dict()
-                for name, profile in self.character_profiles.items()
-                if hasattr(profile, "to_dict")
-            },
-            "world_building": wb_cache,
             "plot_outline_full": self.plot_outline,
         }
         self._update_rich_display()
@@ -261,58 +239,17 @@ class NANA_Orchestrator:
         self._update_rich_display(step="Initializing Orchestrator")
         self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
-        load_tasks = {
-            "plot": plot_queries.get_plot_outline_from_db(),
-            "chars": character_queries.get_character_profiles_from_db(),
-            "world": world_queries.get_world_building_from_db(),
-        }
-        results = await asyncio.gather(*load_tasks.values(), return_exceptions=True)
-        loaded_data = dict(zip(load_tasks.keys(), results))
-        for key, value in loaded_data.items():
-            if isinstance(value, Exception):
-                logger.error(
-                    f"Error loading {key} during orchestrator init: {value}",
-                    exc_info=value,
-                )
-                if key == "plot":
-                    self.plot_outline = {}
-                elif key == "chars":
-                    self.character_profiles = {}
-                elif key == "world":
-                    self.world_building = {}
-            else:
-                if key == "plot":
-                    self.plot_outline = value if isinstance(value, dict) else {}
-                elif key == "chars":
-                    if isinstance(value, dict):
-                        self.character_profiles = {
-                            name: (
-                                val
-                                if isinstance(val, CharacterProfile)
-                                else CharacterProfile.from_dict(name, val)
-                            )
-                            for name, val in value.items()
-                        }
-                    else:
-                        self.character_profiles = {}
-                elif key == "world":
-                    if isinstance(value, dict):
-                        rebuilt: Dict[str, Dict[str, WorldItem]] = {}
-                        for cat, items in value.items():
-                            if isinstance(items, dict):
-                                rebuilt[cat] = {
-                                    nm: (
-                                        it
-                                        if isinstance(it, WorldItem)
-                                        else WorldItem.from_dict(cat, nm, it)
-                                    )
-                                    for nm, it in items.items()
-                                }
-                            else:
-                                rebuilt[cat] = items
-                        self.world_building = rebuilt
-                    else:
-                        self.world_building = {}
+        await plot_queries.ensure_novel_info()
+        result = await plot_queries.get_plot_outline_from_db()
+        if isinstance(result, Exception):
+            logger.error(
+                "Error loading plot outline during orchestrator init: %s",
+                result,
+                exc_info=result,
+            )
+            self.plot_outline = {}
+        else:
+            self.plot_outline = result if isinstance(result, dict) else {}
 
         if not self.plot_outline.get("plot_points"):
             logger.warning(
@@ -327,75 +264,13 @@ class NANA_Orchestrator:
         logger.info("NANA Orchestrator async_init_orchestrator complete.")
         self._update_rich_display(step="Orchestrator Initialized")
 
-    async def _save_core_novel_state_to_neo4j(self):
-        logger.info(
-            "NANA: Saving core novel state (plot, characters, world) to Neo4j sequentially..."
-        )
-
-        char_profile_dicts = {
-            name: profile.to_dict() for name, profile in self.character_profiles.items()
-        }
-
-        world_building_dicts = {}
-        for cat, items in self.world_building.items():
-            if isinstance(items, dict):
-                world_building_dicts[cat] = {
-                    name: item.to_dict() for name, item in items.items()
-                }
-            else:
-                world_building_dicts[cat] = items
-
-        save_operations = [
-            (
-                "plot_outline",
-                plot_queries.save_plot_outline_to_db,
-                self.plot_outline,
-            ),
-            (
-                "character_profiles",
-                character_queries.sync_full_state_from_object_to_db,
-                char_profile_dicts,
-            ),
-            (
-                "world_building",
-                world_queries.sync_full_state_from_object_to_db,
-                world_building_dicts,
-            ),
-        ]
-
-        success_count = 0
-        all_succeeded = True
-
-        for name, save_func, data_to_save in save_operations:
-            try:
-                logger.info(f"Attempting to save {name}...")
-                result = await save_func(data_to_save)
-                if result is True:
-                    success_count += 1
-                    logger.info(f"Successfully saved {name} to Neo4j.")
-                else:
-                    all_succeeded = False
-                    logger.warning(
-                        f"Save operation for {name} returned an unexpected value: {result}"
-                    )
-            except Exception as e:
-                all_succeeded = False
-                logger.error(f"Failed to save {name} to Neo4j: {e}", exc_info=True)
-
-        if all_succeeded:
-            logger.info("All core state objects saved to Neo4j successfully.")
-        else:
-            logger.warning(
-                f"Only {success_count}/{len(save_operations)} core state objects saved successfully."
-            )
-
     async def perform_initial_setup(self):
         self._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
         (
             self.plot_outline,
-            self.character_profiles,
-            self.world_building,
+            character_profiles,
+            world_building,
             usage,
         ) = await run_genesis_phase()
         self._accumulate_tokens("Genesis-Phase", usage)
@@ -406,12 +281,11 @@ class NANA_Orchestrator:
             f"Title: '{self.plot_outline.get('title', 'N/A')}'. "
             f"Plot Points: {len(self.plot_outline.get('plot_points', []))}"
         )
-        world_source = self.world_building.get("source", "unknown")
+        world_source = world_building.get("source", "unknown")
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
         self._update_rich_display(step="Genesis State Bootstrapped")
 
         self._update_novel_props_cache()
-        await self._save_core_novel_state_to_neo4j()
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
         self._update_rich_display(step="Initial State Saved")
 
@@ -426,8 +300,12 @@ class NANA_Orchestrator:
             f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---"
         )
 
-        profile_objs: Dict[str, CharacterProfile] = self.character_profiles
-        world_objs: Dict[str, Dict[str, WorldItem]] = self.world_building
+        profile_objs: Dict[
+            str, CharacterProfile
+        ] = await character_queries.get_character_profiles_from_db()
+        world_objs: Dict[
+            str, Dict[str, WorldItem]
+        ] = await world_queries.get_world_building_from_db()
 
         await self.kg_maintainer_agent.persist_profiles(
             profile_objs, config.KG_PREPOPULATION_CHAPTER_NUM
@@ -600,12 +478,17 @@ class NANA_Orchestrator:
         tasks_to_run = []
         task_names = []
 
+        character_names = await character_queries.get_all_character_names()
+        world_item_ids_by_category = (
+            await world_queries.get_all_world_item_ids_by_category()
+        )
+
         if config.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
                     self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
+                    character_names,
+                    world_item_ids_by_category,
                     current_text,
                     novel_chapter_number,
                     plot_point_focus,
@@ -620,8 +503,6 @@ class NANA_Orchestrator:
             tasks_to_run.append(
                 self.world_continuity_agent.check_consistency(
                     self.plot_outline,
-                    self.character_profiles,
-                    self.world_building,
                     current_text,
                     novel_chapter_number,
                     hybrid_context_for_draft,
@@ -679,8 +560,8 @@ class NANA_Orchestrator:
 
         revision_tuple_result, revision_usage = await revise_chapter_draft_logic(
             self.plot_outline,
-            self.character_profiles,
-            self.world_building,
+            await character_queries.get_character_profiles_from_db(),
+            await world_queries.get_world_building_from_db(),
             current_text,
             novel_chapter_number,
             evaluation_result,
@@ -725,8 +606,8 @@ class NANA_Orchestrator:
 
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
-            self.character_profiles,
-            self.world_building,
+            await character_queries.get_character_profiles_from_db(),
+            await world_queries.get_world_building_from_db(),
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
@@ -738,8 +619,6 @@ class NANA_Orchestrator:
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
             self, novel_chapter_number, chapter_plan
         )
-
-        # Context generation already used the plan, so rerunning is unnecessary.
 
         if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
@@ -779,7 +658,6 @@ class NANA_Orchestrator:
             draft_usage,
         ) = await self.drafting_agent.draft_chapter(
             self.plot_outline,
-            self.character_profiles,
             novel_chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
@@ -1056,8 +934,8 @@ class NANA_Orchestrator:
 
         result = await self.finalize_agent.finalize_chapter(
             self.plot_outline,
-            self.character_profiles,
-            self.world_building,
+            await character_queries.get_character_profiles_from_db(),
+            await world_queries.get_world_building_from_db(),
             novel_chapter_number,
             final_text_to_process,
             final_raw_llm_output,
@@ -1304,6 +1182,10 @@ class NANA_Orchestrator:
             await neo4j_manager.connect()
             await neo4j_manager.create_db_schema()
             logger.info("NANA: Neo4j connection and schema verified.")
+
+            await self.kg_maintainer_agent.load_schema_from_db()
+            logger.info("NANA: KG schema loaded into maintainer agent.")
+
             await self.async_init_orchestrator()
 
             plot_points_exist = (

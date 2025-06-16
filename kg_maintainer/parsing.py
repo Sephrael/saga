@@ -3,6 +3,8 @@ import json  # Added json
 import logging  # Added logging
 from typing import Any, Dict, List  # Added Any, List
 
+import utils
+
 from .models import CharacterProfile, WorldItem
 
 logger = logging.getLogger(__name__)
@@ -141,6 +143,15 @@ def parse_unified_character_updates(
         processed_char_attributes = _normalize_attributes(
             char_attributes_llm, CHAR_UPDATE_KEY_MAP, CHAR_UPDATE_LIST_INTERNAL_KEYS
         )
+
+        # Canonicalize trait names for consistency
+        traits_val = processed_char_attributes.get("traits", [])
+        if isinstance(traits_val, list):
+            processed_char_attributes["traits"] = [
+                utils.normalize_trait_name(t)
+                for t in traits_val
+                if isinstance(t, str) and utils.normalize_trait_name(t)
+            ]
 
         # Handle relationships if they need structuring from list to dict
         # Assuming LLM provides relationships as a list of strings

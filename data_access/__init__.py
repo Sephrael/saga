@@ -12,6 +12,8 @@ from .chapter_queries import (
 )
 from .character_queries import (
     get_character_info_for_snippet_from_db,
+    get_character_profile_by_name,
+    resolve_character_name,
     get_character_profiles_from_db,
     sync_characters,
 )
@@ -22,12 +24,16 @@ from .kg_queries import (
     add_kg_triples_batch_to_db,
     get_most_recent_value_from_db,
     get_novel_info_property_from_db,
+    normalize_existing_relationship_types,
     query_kg_from_db,
 )
 from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
 from .world_queries import (
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
+    get_world_item_by_name,
+    resolve_world_name,
+    get_world_item_by_id,
     sync_world_items,
 )
 from .world_queries import (
@@ -39,12 +45,17 @@ __all__ = [
     "get_plot_outline_from_db",
     "sync_characters_full_state_from_object_to_db",
     "sync_characters",
+    "get_character_profile_by_name",
+    "resolve_character_name",
     "get_character_profiles_from_db",
     "get_character_info_for_snippet_from_db",
     "sync_world_full_state_from_object_to_db",
     "sync_world_items",
     "get_world_building_from_db",
     "get_world_elements_for_snippet_from_db",
+    "resolve_world_name",
+    "get_world_item_by_name",
+    "get_world_item_by_id",
     "load_chapter_count_from_db",
     "save_chapter_data_to_db",
     "get_chapter_data_from_db",
@@ -53,6 +64,7 @@ __all__ = [
     "get_all_past_embeddings_from_db",
     "add_kg_triples_batch_to_db",
     "query_kg_from_db",
+    "normalize_existing_relationship_types",
     "get_most_recent_value_from_db",
     "get_novel_info_property_from_db",
 ]

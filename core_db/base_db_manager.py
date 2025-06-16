@@ -1,12 +1,17 @@
 # core_db/base_db_manager.py
 import logging
-from typing import Optional, List, Dict, Any, Tuple, Union
-import numpy as np
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from neo4j import AsyncGraphDatabase, AsyncManagedTransaction, AsyncDriver  # type: ignore
+import numpy as np
+from neo4j import (  # type: ignore
+    AsyncDriver,
+    AsyncGraphDatabase,
+    AsyncManagedTransaction,
+)
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
+from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -160,21 +165,23 @@ class Neo4jManagerSingleton:
                         )
                 raise
 
-    async def create_db_schema(self):
+    async def create_db_schema(self) -> None:
+        """Create and verify Neo4j indexes and constraints.
+
+        The method issues idempotent `CREATE ... IF NOT EXISTS` statements for
+        all core indexes, constraints, and relationship type tokens. Any batch
+        failures fall back to executing operations individually.
+        """
         self.logger.info(
-            "Creating/verifying Neo4j indexes and constraints (batch execution)..."
+            "Creating/verifying Neo4j schema elements (batch execution)..."
         )
 
-        # Existing indexes and constraints are not explicitly dropped. The
-        # following `CREATE ... IF NOT EXISTS` statements will safely create any
-        # missing schema elements without affecting those already present.
-
         core_constraints_queries = [
+            "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
             f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
             "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
             "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
-            # "CREATE CONSTRAINT worldElement_name_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.name IS UNIQUE", # REMOVED - id is sufficient unique key
             "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
             "CREATE CONSTRAINT trait_name_unique IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE",
             "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
@@ -184,17 +191,32 @@ class Neo4jManagerSingleton:
         ]
 
         index_queries = [
+            "CREATE INDEX entity_name_property_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
+            "CREATE INDEX entity_is_provisional_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
+            "CREATE INDEX entity_is_deleted_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_deleted)",
             "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
             "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
             "CREATE INDEX worldElaborationEvent_chapter_updated IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
             "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
             "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
+            "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
             "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
-            # Add index on WorldElement.name as it's still queried often, just not unique globally
             "CREATE INDEX worldElement_name_property_idx IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
             f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
-            "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
-            "CREATE INDEX entity_is_provisional IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
+        ]
+
+        # Ensure schema tokens exist to avoid Neo4j warnings when
+        # matching on types that have not been used yet. Creating
+        # and immediately deleting a dummy node/relationship is sufficient.
+        relationship_type_queries = [
+            (
+                f"MERGE (a:__RelTypePlaceholder)-[:{rel_type}]->"
+                f"(b:__RelTypePlaceholder) DETACH DELETE a,b"
+            )
+            for rel_type in RELATIONSHIP_TYPES
+        ]
+        node_label_queries = [
+            f"MERGE (a:`{label}`) DETACH DELETE a" for label in NODE_LABELS
         ]
 
         vector_index_query = f"""
@@ -206,28 +228,32 @@ class Neo4jManagerSingleton:
         }}}}
         """
 
-        all_schema_ops_queries = (
-            core_constraints_queries + index_queries + [vector_index_query]
+        schema_ops_queries = (
+            core_constraints_queries
+            + index_queries
+            + [vector_index_query]
+            + relationship_type_queries
+            + node_label_queries
         )
 
-        schema_statements_with_params: List[Tuple[str, Dict[str, Any]]] = [
-            (query, {}) for query in all_schema_ops_queries
+        schema_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
+            (query, {}) for query in schema_ops_queries
         ]
 
         try:
-            await self.execute_cypher_batch(schema_statements_with_params)
+            await self.execute_cypher_batch(schema_ops_with_params)
             self.logger.info(
-                f"Successfully executed batch of {len(schema_statements_with_params)} schema operations."
+                f"Successfully executed batch of {len(schema_ops_with_params)} schema operations (constraints, indexes, and type tokens)."
             )
         except Exception as e:
             self.logger.error(
-                f"Error during batch schema operation execution: {e}. Some schema elements might not be created/verified.",
+                f"Error during schema operation batch execution: {e}. Some schema elements might not be created/verified.",
                 exc_info=True,
             )
             self.logger.warning(
                 "Attempting to apply schema operations individually as a fallback."
             )
-            for query_text in all_schema_ops_queries:
+            for query_text in schema_ops_queries:
                 try:
                     await self.execute_write_query(query_text)
                     self.logger.info(
@@ -239,7 +265,7 @@ class Neo4jManagerSingleton:
                     )
 
         self.logger.info(
-            "Neo4j schema (indexes, constraints, vector index) verification process complete."
+            "Neo4j schema (indexes, constraints, labels, relationship types, vector index) verification process complete."
         )
 
     def embedding_to_list(

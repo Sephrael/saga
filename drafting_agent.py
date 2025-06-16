@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
-from kg_maintainer.models import CharacterProfile, SceneDetail
+from kg_maintainer.models import SceneDetail
 from llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from prompt_renderer import render_prompt
 
@@ -32,7 +32,6 @@ class DraftingAgent:
     async def draft_chapter(
         self,
         plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
         chapter_number: int,
         plot_point_focus: str,
         hybrid_context_for_draft: str,
