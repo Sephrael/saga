@@ -4,7 +4,7 @@ import config
 from initialization.data_loader import (
     load_user_supplied_model as _load_user_supplied_data,
 )
-from story_models import (
+from models.user_input_models import (
     NovelConceptModel,
     ProtagonistModel,
     UserStoryInputModel,

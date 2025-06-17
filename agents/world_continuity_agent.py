@@ -6,15 +6,15 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import config
 import utils  # MODIFIED: For spaCy functions
+from core.llm_interface import llm_service  # MODIFIED
 from data_access import character_queries, kg_queries, world_queries
 from kg_maintainer.models import ProblemDetail
-from llm_interface import llm_service  # MODIFIED
+from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
 )
 from prompt_renderer import render_prompt
-from problem_parser import parse_problem_list
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Tuple
 import json
 import logging
+from typing import Any, Dict, List, Tuple
 
 import config
 from kg_constants import (

@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import numpy as np
 
 import config
-from llm_interface import count_tokens, llm_service
+from core.llm_interface import count_tokens, llm_service
+
 from .helpers import _is_fill_in
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
 from .text_processing import (

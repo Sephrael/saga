@@ -1,9 +1,10 @@
 import json
-import structlog
 from typing import Any, Dict, Optional, Tuple
 
+import structlog
+
 import config
-from llm_interface import llm_service
+from core.llm_interface import llm_service
 from prompt_renderer import render_prompt
 
 logger = structlog.get_logger(__name__)

@@ -3,18 +3,17 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
-from llm_interface import llm_service  # MODIFIED
-from prompt_renderer import render_prompt
 import utils  # MODIFIED: For spaCy functions
-from kg_maintainer.models import EvaluationResult, ProblemDetail
+from core.llm_interface import llm_service  # MODIFIED
 from data_access import chapter_queries
+from kg_maintainer.models import EvaluationResult, ProblemDetail
+from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
     get_reliable_kg_facts_for_drafting_prompt,
 )
-
-from problem_parser import parse_problem_list
+from prompt_renderer import render_prompt
 
 logger = logging.getLogger(__name__)
 

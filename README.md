@@ -16,14 +16,15 @@ SAGA is an autonomous, agentic creative-writing system designed to generate enti
 
 SAGA, with its NANA engine, is an ambitious project designed to autonomously craft entire novels. It transcends simple text generation by employing a collaborative team of specialized AI agents:
 
-*   **`PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression.
-*   **`DraftingAgent`:** Weaves the initial prose for chapters, guided by the `PlannerAgent`'s blueprints and rich contextual information. It uses two Jinja templates: `draft_chapter_from_plot_point.j2` for single-pass chapter drafting and `draft_scene.j2` when generating chapters scene by scene.
-*   **`ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality.
-*   **`WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories within the narrative.
-*   **`ChapterRevisionLogic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.
-*   **`PatchValidationAgent`:** Verifies generated patch instructions to ensure they resolve the issues before being applied.
-*   **`KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, pre-populates the graph with initial story data, and exposes an `extract_and_merge_knowledge` method to parse new chapters and persist updates.
+*   **`agents.PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression.
+*   **`agents.DraftingAgent`:** Weaves the initial prose for chapters, guided by the planner's blueprints and rich contextual information. It uses two Jinja templates: `draft_chapter_from_plot_point.j2` for single-pass chapter drafting and `draft_scene.j2` when generating chapters scene by scene.
+*   **`agents.ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality.
+*   **`agents.WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories within the narrative.
+*   **`processing.revision_logic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.
+*   **`agents.PatchValidationAgent`:** Verifies generated patch instructions to ensure they resolve the issues before being applied.
+*   **`agents.KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, pre-populates the graph with initial story data, and exposes an `extract_and_merge_knowledge` method to parse new chapters and persist updates.
 *   **`kg_maintainer` utilities:** Provide dataclass models and helper functions for parsing, merging, and generating Cypher statements used by `KGMaintainerAgent`.
+*   **Core utilities:** Shared database and LLM helpers reside in the `core` package.
 
 SAGA constructs a dynamic, interconnected understanding of the story's world, characters, and plot. This evolving knowledge, stored and queried from a Neo4j graph database, enables the system to maintain greater consistency, depth, and narrative cohesion as the story unfolds over many chapters.
 
@@ -74,14 +75,14 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   The `ComprehensiveEvaluatorAgent` assesses the draft against multiple criteria (plot, theme, depth, consistency using character/world profiles and previous context).
         *   The `WorldContinuityAgent` performs a focused consistency check using the KG and world-building data.
     *   **(D) Revision (if `needs_revision` is true):**
-        *   `ChapterRevisionLogic` attempts to fix identified issues.
+        *   `processing.revision_logic` attempts to fix identified issues.
         *   If `ENABLE_PATCH_BASED_REVISION` is true, it generates and applies targeted text patches for specific problems.
             See `docs/step5_redesign.md` for a proposed improvement of this phase.
         *   If patching is insufficient or disabled, or problems are extensive, a full chapter rewrite may be performed.
         *   The de-duplication and evaluation steps are repeated on the revised text.
     *   **(E) Finalization & Knowledge Update:**
         *   The `KGMaintainerAgent` summarizes the final approved chapter text.
-        *   An embedding is generated for the final chapter text (via `llm_interface`).
+        *   An embedding is generated for the final chapter text (via `core.llm_interface`).
         *   The chapter data (text, summary, embedding, provisional status) is saved to Neo4j by `chapter_queries`.
         *   The `KGMaintainerAgent` extracts new knowledge (character updates, world-building changes, new KG triples) from the final chapter text. This involves parsing LLM output and merging changes into the in-memory `novel_props_cache` and then persisting these updates to Neo4j via `character_queries`, `world_queries`, and `kg_queries`.
     *   The orchestrator's main state dictionaries (`plot_outline`, `character_profiles`, `world_building`) are updated to reflect changes merged by the `KGMaintainerAgent`.
