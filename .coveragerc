@@ -16,8 +16,4 @@ omit =
     reset_neo4j.py
     core/db_manager.py
     utils/__init__.py
-    utils/similarity.py
-    parsing_utils.py
-    processing/problem_parser.py
     models/kg_models.py
-    models/user_input_models.py
