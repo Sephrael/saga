@@ -122,8 +122,9 @@ class KGMaintainerAgent:
         """Loads and caches the defined KG schema from the database."""
         self.node_labels = await kg_queries.get_defined_node_labels()
         self.relationship_types = await kg_queries.get_defined_relationship_types()
-        logger.info(f"Loaded {len(self.node_labels)} node labels and {len(self.relationship_types)} relationship types from DB.")
-
+        logger.info(
+            f"Loaded {len(self.node_labels)} node labels and {len(self.relationship_types)} relationship types from DB."
+        )
 
     def parse_character_updates(
         self, text: str, chapter_number: int
@@ -439,7 +440,7 @@ class KGMaintainerAgent:
 
         # 2. Consistency Checks
         await self._run_consistency_checks()
-        
+
         # 3. Entity Resolution
         await self._run_entity_resolution()
 
@@ -648,7 +649,7 @@ class KGMaintainerAgent:
                     # Heuristic to decide which node to keep
                     degree1 = context1.get("degree", 0)
                     degree2 = context2.get("degree", 0)
-                    
+
                     # Prefer node with more relationships
                     if degree1 > degree2:
                         target_id, source_id = id1, id2
@@ -656,12 +657,16 @@ class KGMaintainerAgent:
                         target_id, source_id = id2, id1
                     else:
                         # Tie-breaker: prefer the one with a more detailed description
-                        desc1_len = len(context1.get("properties", {}).get("description", ""))
-                        desc2_len = len(context2.get("properties", {}).get("description", ""))
+                        desc1_len = len(
+                            context1.get("properties", {}).get("description", "")
+                        )
+                        desc2_len = len(
+                            context2.get("properties", {}).get("description", "")
+                        )
                         if desc1_len >= desc2_len:
-                             target_id, source_id = id1, id2
+                            target_id, source_id = id1, id2
                         else:
-                             target_id, source_id = id2, id1
+                            target_id, source_id = id2, id1
 
                     await kg_queries.merge_entities(target_id, source_id)
                 else:
@@ -690,5 +695,6 @@ class KGMaintainerAgent:
             await kg_queries.normalize_existing_relationship_types()
         except Exception as exc:  # pragma: no cover - narrow DB errors
             logger.error("KG Healer: Schema healing failed: %s", exc, exc_info=True)
+
 
 __all__ = ["KGMaintainerAgent"]

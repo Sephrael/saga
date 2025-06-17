@@ -1,7 +1,9 @@
 import yaml
 
 import config
-from initial_setup_logic import _load_user_supplied_data
+from initialization.data_loader import (
+    load_user_supplied_model as _load_user_supplied_data,
+)
 from story_models import (
     NovelConceptModel,
     ProtagonistModel,
