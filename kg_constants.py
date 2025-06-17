@@ -27,7 +27,7 @@ NODE_LABELS = {
     # Add other entity types as they become concepts, e.g., "Item", "Organization", "Concept"
     "Location",
     "Faction",
-    "System", # e.g. Magic System
+    "System",  # e.g. Magic System
     "Lore",
     "History",
 }
@@ -42,7 +42,6 @@ RELATIONSHIP_TYPES = {
     "HAS_CHARACTER",
     "HAS_WORLD_META",
     "CONTAINS_ELEMENT",
-
     # Character-related Relationships
     "HAS_TRAIT",
     "DEVELOPED_IN_CHAPTER",
@@ -60,14 +59,12 @@ RELATIONSHIP_TYPES = {
     "IS_DEAD",
     "IS_REMEMBERED_AS",
     "WAS_FRIEND_OF",
-
     # WorldElement-related Relationships
     "HAS_GOAL",
     "HAS_RULE",
     "HAS_KEY_ELEMENT",
     "HAS_TRAIT_ASPECT",
     "ELABORATED_IN_CHAPTER",
-
     # Generic & Dynamic Relationships
     "IS_A",
     "PART_OF",
@@ -77,5 +74,5 @@ RELATIONSHIP_TYPES = {
     "HAS_ABILITY",
     "OWNS",
     "RELATED_TO",  # Generic fallback
-    "DYNAMIC_REL", # For KG triples where the relationship type is in a property
+    "DYNAMIC_REL",  # For KG triples where the relationship type is in a property
 }
