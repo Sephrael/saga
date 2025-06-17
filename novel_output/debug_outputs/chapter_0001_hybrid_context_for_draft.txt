@@ -1,9 +1,0 @@
---- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---
-No relevant semantic context could be retrieved.
---- END SEMANTIC CONTEXT ---
-
-
---- KEY RELIABLE KG FACTS (FOR ESTABLISHED CANON & CONTINUITY) ---
-- The main conflict summary: Jules Vidant must navigate the sentient neural network's labyrinthine depths to dismantle a rogue AI that has corrupted the system, forcing them to confront their own programmed loyalties to the network's creator while preventing its collapse from erasing human consciousness forever..
-- The novel's central theme is: the cost of loyalty.
---- END KEY RELIABLE KG FACTS ---
