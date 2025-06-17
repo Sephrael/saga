@@ -9,8 +9,11 @@ SAGA is an autonomous, agentic creative-writing system designed to generate enti
 *(This is a representation of the Rich CLI progress window)*
 ![SAGA Progress Window](https://github.com/Lanerra/saga/blob/master/SAGA.png)
 
-### Example Knowledge Graph Visualization (12 Chapters)
-![SAGA KG Visualization](https://github.com/Lanerra/saga/blob/master/SAGA-KG-Ch12.png)
+### Example Knowledge Graph Visualization (9 Chapters)
+![SAGA KG Visualization](https://github.com/Lanerra/saga/blob/master/SAGA-KG-Ch9.png)
+
+### Example Knowledge Graph Visualization (18 Chapters)
+![SAGA KG Visualization](https://github.com/Lanerra/saga/blob/master/SAGA-KG-Ch18.png)
 
 ## Overview
 
