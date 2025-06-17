@@ -168,7 +168,7 @@ SAGA uses Neo4j for its knowledge graph. A `docker-compose.yml` file is provided
         docker-compose logs -f neo4j
         ```
 
-The first time SAGA runs (`python nana_orchestrator.py`), it will automatically attempt to create necessary constraints and indexes in Neo4j, including the vector index for chapter embeddings.
+The first time SAGA runs (`python main.py`), it will automatically attempt to create necessary constraints and indexes in Neo4j, including the vector index for chapter embeddings.
 
 ### 5. (Optional) Provide Initial Story Elements
 
@@ -185,7 +185,7 @@ For "Unhinged Mode" (which generates highly randomized initial story elements if
 Once Neo4j is running and your configuration is set:
 
 ```bash
-python nana_orchestrator.py
+python main.py
 ```
 
 *   **First Run:** SAGA will perform initial setup (plot, world, characters based on `user_story_elements.md` or generation) and pre-populate the Neo4j knowledge graph.
@@ -211,7 +211,7 @@ To start SAGA from a completely fresh state (e.g., new story, after testing):
 
 **⚠️ WARNING: This will delete ALL data in the Neo4j database targeted by your configuration.**
 
-1.  Ensure SAGA (`nana_orchestrator.py`) is not running.
+1.  Ensure SAGA (`main.py`) is not running.
 2.  Stop the Neo4j Docker container if you intend to also remove its volume:
     ```bash
     docker-compose down -v # The -v flag removes the data volume
@@ -227,7 +227,7 @@ To start SAGA from a completely fresh state (e.g., new story, after testing):
     ```
     You can specify Neo4j connection details with `--uri`, `--user`, and `--password` if they differ from your `config.py` / `.env` settings.
 
-After resetting (and ensuring Neo4j is running), the next execution of `python nana_orchestrator.py` will re-initialize the story and KG.
+After resetting (and ensuring Neo4j is running), the next execution of `python main.py` will re-initialize the story and KG.
 
 ## License
 

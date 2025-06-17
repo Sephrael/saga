@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import utils
-from nana_orchestrator import NANA_Orchestrator
+from orchestration.nana_orchestrator import NANA_Orchestrator
 from data_access import character_queries, world_queries
 from story_models import (
     KeyLocationModel,
@@ -108,7 +108,7 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         AsyncMock(return_value={}),
     )
     monkeypatch.setattr(
-        "nana_orchestrator.generate_hybrid_chapter_context_logic",
+        "orchestration.nana_orchestrator.generate_hybrid_chapter_context_logic",
         AsyncMock(side_effect=fake_context),
     )
 
