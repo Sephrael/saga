@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Tuple
+
 import structlog
 
 import config

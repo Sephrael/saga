@@ -1,14 +1,14 @@
-import pytest
-from unittest.mock import patch, AsyncMock
 import json
+from unittest.mock import AsyncMock, patch
 
+import pytest
+
+import config
 from initialization.bootstrappers.world_bootstrapper import (
-    generate_world_building_logic,
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
+    generate_world_building_logic,
 )
-import config
-
 
 pytestmark = pytest.mark.xfail(
     reason="generate_world_building_logic interface updated",

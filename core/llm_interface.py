@@ -21,22 +21,23 @@ Copyright 2025 Dennis Lewis
 """
 
 # Standard library imports
-import functools
-import logging
-import json
-import re
 import asyncio
-import tempfile
+import functools
+import json
+import logging
 import os
+import re
+import tempfile
+
+# Type hints
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import httpx
 
 # Third-party imports
 import numpy as np
-import httpx
-from async_lru import alru_cache
 import tiktoken
-
-# Type hints
-from typing import List, Optional, Dict, Any, Union, Tuple
+from async_lru import alru_cache
 
 # Local imports
 import config

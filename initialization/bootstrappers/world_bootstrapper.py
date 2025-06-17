@@ -1,10 +1,12 @@
 import asyncio
 from typing import Any, Coroutine, Dict, List, Optional, Tuple
+
 import structlog
 
 import config
 import utils
 from kg_maintainer.models import WorldItem
+
 from .common import bootstrap_field
 
 logger = structlog.get_logger(__name__)

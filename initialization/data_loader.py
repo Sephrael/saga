@@ -1,9 +1,10 @@
-import structlog
 from typing import Any, Dict, Optional, Tuple
+
+import structlog
 
 import config
 from kg_maintainer.models import CharacterProfile, WorldItem
-from story_models import UserStoryInputModel, user_story_to_objects
+from models.user_input_models import UserStoryInputModel, user_story_to_objects
 from yaml_parser import load_yaml_file
 
 logger = structlog.get_logger(__name__)

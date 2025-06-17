@@ -5,7 +5,7 @@ import time
 from typing import Any, Dict, Optional
 
 import config
-from llm_interface import llm_service
+from core.llm_interface import llm_service
 
 try:
     from rich.console import Group

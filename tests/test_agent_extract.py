@@ -1,8 +1,9 @@
 import asyncio
+
 import pytest
 
+from agents.kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile
-from kg_maintainer_agent import KGMaintainerAgent
 
 
 class DummyLLM:
@@ -57,7 +58,7 @@ async def test_summarize_chapter_json(monkeypatch):
         return '{"summary": "Short"}', {"prompt_tokens": 1}
 
     monkeypatch.setattr(
-        "kg_maintainer_agent.llm_service.async_call_llm",
+        "agents.kg_maintainer_agent.llm_service.async_call_llm",
         _fake_llm,
     )
 

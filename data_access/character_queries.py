@@ -2,20 +2,18 @@
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import structlog
-
 from async_lru import alru_cache  # type: ignore
-
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 import utils
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
 
 from .cypher_builders.character_cypher import (
-    generate_character_node_cypher,
     TRAIT_NAME_TO_CANONICAL,
+    generate_character_node_cypher,
 )
 
 # Mapping from normalized character names to canonical display names

@@ -1,9 +1,11 @@
 # data_access/chapter_queries.py
 import logging
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
+
 import config
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
 
 logger = logging.getLogger(__name__)
 

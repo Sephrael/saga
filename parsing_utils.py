@@ -1,6 +1,7 @@
 # utils/parsing_utils.py
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 # from rdflib import Graph, URIRef, Literal, BNode # No longer needed for triples
 # from rdflib.namespace import RDF, RDFS # No longer needed for triples
 

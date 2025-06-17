@@ -4,9 +4,9 @@ from typing import Dict
 import numpy as np
 import pytest
 
-from finalize_agent import FinalizeAgent
+from agents.finalize_agent import FinalizeAgent
+from agents.kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile, WorldItem
-from kg_maintainer_agent import KGMaintainerAgent
 
 
 class DummyKGAgent(KGMaintainerAgent):
@@ -34,7 +34,9 @@ async def test_finalize_chapter_success(monkeypatch):
     save_mock.set_result(None)
 
     monkeypatch.setattr(kg_agent, "summarize_chapter", fake_summary)
-    monkeypatch.setattr("llm_interface.llm_service.async_get_embedding", fake_embedding)
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_get_embedding", fake_embedding
+    )
     monkeypatch.setattr(kg_agent, "_llm_extract_updates", fake_extract)
     monkeypatch.setattr(kg_agent, "persist_profiles", lambda *a, **k: save_mock)
     monkeypatch.setattr(kg_agent, "persist_world", lambda *a, **k: save_mock)
@@ -72,7 +74,9 @@ async def test_finalize_chapter_validation_failure(monkeypatch):
     save_mock.set_result(None)
 
     monkeypatch.setattr(kg_agent, "summarize_chapter", fake_summary)
-    monkeypatch.setattr("llm_interface.llm_service.async_get_embedding", fake_embedding)
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_get_embedding", fake_embedding
+    )
     monkeypatch.setattr(kg_agent, "_llm_extract_updates", fake_extract)
     profiles_called: Dict[str, CharacterProfile] = {}
     world_called: Dict[str, Dict[str, WorldItem]] = {}

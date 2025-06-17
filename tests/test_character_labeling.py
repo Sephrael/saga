@@ -1,6 +1,11 @@
-import pytest
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from core.db_manager import (
+    Neo4jManagerSingleton,
+)  # Needed for type hinting if neo4j_manager is mocked
 
 # Assuming data_access.kg_queries is the path. Adjust if necessary based on project structure.
 from data_access.kg_queries import (
@@ -8,10 +13,7 @@ from data_access.kg_queries import (
     add_kg_triples_batch_to_db,
     query_kg_from_db,
 )
-from core_db.base_db_manager import (
-    Neo4jManagerSingleton,
-)  # Needed for type hinting if neo4j_manager is mocked
-from kg_constants import KG_REL_CHAPTER_ADDED, KG_IS_PROVISIONAL
+from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
 
 
 # Test cases for _get_cypher_labels

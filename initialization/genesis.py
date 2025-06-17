@@ -1,18 +1,19 @@
 from typing import Any, Dict, Tuple
+
 import structlog
 
 import config
-from kg_maintainer.models import CharacterProfile, WorldItem
-from kg_maintainer_agent import KGMaintainerAgent
+from agents.kg_maintainer_agent import KGMaintainerAgent
 from data_access import plot_queries
+from kg_maintainer.models import CharacterProfile, WorldItem
 
-from .data_loader import load_user_supplied_model, convert_model_to_objects
-from .bootstrappers.plot_bootstrapper import create_default_plot, bootstrap_plot_outline
 from .bootstrappers.character_bootstrapper import (
-    create_default_characters,
     bootstrap_characters,
+    create_default_characters,
 )
-from .bootstrappers.world_bootstrapper import create_default_world, bootstrap_world
+from .bootstrappers.plot_bootstrapper import bootstrap_plot_outline, create_default_plot
+from .bootstrappers.world_bootstrapper import bootstrap_world, create_default_world
+from .data_loader import convert_model_to_objects, load_user_supplied_model
 
 logger = structlog.get_logger(__name__)
 

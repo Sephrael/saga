@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from async_lru import alru_cache
 
 import config
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_REL_CHAPTER_ADDED,

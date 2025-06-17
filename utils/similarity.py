@@ -4,7 +4,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from llm_interface import llm_service
+from core.llm_interface import llm_service
+
 from .text_processing import get_text_segments
 
 logger = logging.getLogger(__name__)

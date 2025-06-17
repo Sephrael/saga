@@ -1,12 +1,12 @@
 # reset_neo4j.py
 import argparse
 import asyncio  # Required to call async methods
+import logging  # Added logging
 import time
 from typing import Any, Dict, List  # Added for type hints
 
 import config  # To get default URI, user, pass if not provided via args
-from core_db.base_db_manager import Neo4jManagerSingleton  # Use the singleton
-import logging  # Added logging
+from core.db_manager import Neo4jManagerSingleton  # Use the singleton
 
 # Configure a basic logger for this script
 logging.basicConfig(

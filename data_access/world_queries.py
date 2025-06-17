@@ -1,12 +1,12 @@
 # data_access/world_queries.py
 import logging
-from typing import Any, Dict, List, Set, Tuple, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from async_lru import alru_cache  # type: ignore
 
 import config
 import utils
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CHAPTER_UPDATED,
