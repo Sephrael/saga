@@ -1,10 +1,8 @@
-      
 # data_access/kg_queries.py
 import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-import structlog
 from async_lru import alru_cache
 
 import config
@@ -15,6 +13,13 @@ from kg_constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_relationship_type(rel_type: str) -> str:
+    """Return a canonical representation of a relationship type."""
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", rel_type.strip())
+    cleaned = re.sub(r"_+", "_", cleaned)
+    return cleaned.upper()
 
 
 async def normalize_existing_relationship_types() -> None:
@@ -600,25 +605,35 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
             )
         return False
 
+
 @alru_cache(maxsize=1)
 async def get_defined_node_labels() -> List[str]:
     """Queries the database for all defined node labels and caches the result."""
     try:
         results = await neo4j_manager.execute_read_query("CALL db.labels() YIELD label")
         # Filter out internal labels
-        return [r['label'] for r in results if r.get('label') and not r['label'].startswith('_')]
-    except Exception as e:
+        return [
+            r["label"]
+            for r in results
+            if r.get("label") and not r["label"].startswith("_")
+        ]
+    except Exception:
         logger.error("Failed to query defined node labels from Neo4j.", exc_info=True)
         # Fallback to constants if DB query fails
         return list(config.NODE_LABELS)
+
 
 @alru_cache(maxsize=1)
 async def get_defined_relationship_types() -> List[str]:
     """Queries the database for all defined relationship types and caches the result."""
     try:
-        results = await neo4j_manager.execute_read_query("CALL db.relationshipTypes() YIELD relationshipType")
-        return [r['relationshipType'] for r in results if r.get('relationshipType')]
-    except Exception as e:
-        logger.error("Failed to query defined relationship types from Neo4j.", exc_info=True)
+        results = await neo4j_manager.execute_read_query(
+            "CALL db.relationshipTypes() YIELD relationshipType"
+        )
+        return [r["relationshipType"] for r in results if r.get("relationshipType")]
+    except Exception:
+        logger.error(
+            "Failed to query defined relationship types from Neo4j.", exc_info=True
+        )
         # Fallback to constants if DB query fails
         return list(config.RELATIONSHIP_TYPES)

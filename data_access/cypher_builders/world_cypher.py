@@ -3,10 +3,8 @@ import json
 import logging
 
 import config
-import utils
 from kg_constants import (
     KG_IS_PROVISIONAL,
-    KG_NODE_CHAPTER_UPDATED,
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem

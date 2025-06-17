@@ -18,6 +18,32 @@ from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
 logger = logging.getLogger(__name__)
 
+# Mapping from normalized world item names to canonical IDs
+WORLD_NAME_TO_ID: Dict[str, str] = {}
+
+
+def resolve_world_name(name: str) -> Optional[str]:
+    """Return canonical world item ID for a display name if known."""
+    if not name:
+        return None
+    return WORLD_NAME_TO_ID.get(utils._normalize_for_id(name))
+
+
+def get_world_item_by_name(
+    world_data: Dict[str, Dict[str, WorldItem]], name: str
+) -> Optional[WorldItem]:
+    """Retrieve a WorldItem from cached data using a fuzzy name lookup."""
+    item_id = resolve_world_name(name)
+    if not item_id:
+        return None
+    for items in world_data.values():
+        if not isinstance(items, dict):
+            continue
+        for item in items.values():
+            if isinstance(item, WorldItem) and item.id == item_id:
+                return item
+    return None
+
 
 async def sync_world_items(
     world_items: Dict[str, Dict[str, WorldItem]],

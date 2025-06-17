@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional, Tuple
 import config
 from llm_interface import llm_service
 from prompt_renderer import render_prompt
-import utils
 
 logger = structlog.get_logger(__name__)
 

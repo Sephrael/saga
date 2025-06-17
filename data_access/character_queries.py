@@ -10,11 +10,7 @@ from neo4j.exceptions import ServiceUnavailable  # type: ignore
 import config
 import utils
 from core_db.base_db_manager import neo4j_manager
-from kg_constants import (
-    KG_IS_PROVISIONAL,
-    KG_NODE_CHAPTER_UPDATED,
-    KG_REL_CHAPTER_ADDED,
-)
+from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
 
 from .cypher_builders.character_cypher import (

@@ -7,6 +7,7 @@ from initialization.bootstrappers.world_bootstrapper import (
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
 )
+import config
 
 
 pytestmark = pytest.mark.xfail(

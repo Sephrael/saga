@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from .nana_orchestrator import NANA_Orchestrator
+if TYPE_CHECKING:  # pragma: no cover - type hint import
+    from .nana_orchestrator import NANA_Orchestrator
 
 
 async def run_chapter_pipeline(
