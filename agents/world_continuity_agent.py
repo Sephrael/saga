@@ -146,6 +146,7 @@ class WorldContinuityAgent:
     " (e.g., memory loss, testing her)."
   }
 ]
+**Ignore the narrative details in this example. It shows the required format only.**
 """
         prompt = render_prompt(
             "world_continuity_agent/consistency_check.j2",
