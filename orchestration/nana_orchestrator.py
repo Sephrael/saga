@@ -8,21 +8,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 import utils
-from chapter_revision_logic import revise_chapter_draft_logic
-from comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
-from context_generation_logic import generate_hybrid_chapter_context_logic
-from core_db.base_db_manager import neo4j_manager
+from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
+from agents.drafting_agent import DraftingAgent
+from agents.finalize_agent import FinalizeAgent
+from agents.kg_maintainer_agent import KGMaintainerAgent
+from agents.planner_agent import PlannerAgent
+from agents.world_continuity_agent import WorldContinuityAgent
+from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import (
     chapter_queries,
     character_queries,
     plot_queries,
     world_queries,
 )
-from orchestration.token_tracker import TokenTracker
-from orchestration.chapter_flow import run_chapter_pipeline
-from ui.rich_display import RichDisplayManager
-from drafting_agent import DraftingAgent
-from text_deduplicator import TextDeduplicator
 from initialization.genesis import run_genesis_phase
 from kg_maintainer.models import (
     CharacterProfile,
@@ -31,12 +30,13 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
-from kg_maintainer_agent import KGMaintainerAgent
-from finalize_agent import FinalizeAgent
-from llm_interface import llm_service
-from planner_agent import PlannerAgent
-from story_models import UserStoryInputModel, user_story_to_objects
-from world_continuity_agent import WorldContinuityAgent
+from models.user_input_models import UserStoryInputModel, user_story_to_objects
+from orchestration.chapter_flow import run_chapter_pipeline
+from orchestration.token_tracker import TokenTracker
+from processing.context_generator import generate_hybrid_chapter_context_logic
+from processing.revision_logic import revise_chapter_draft_logic
+from processing.text_deduplicator import TextDeduplicator
+from ui.rich_display import RichDisplayManager
 
 try:
     from rich.logging import RichHandler

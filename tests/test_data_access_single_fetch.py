@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock
 
-from data_access import character_queries, world_queries
+import pytest
+
 import utils
+from data_access import character_queries, world_queries
 from kg_constants import KG_NODE_CREATED_CHAPTER
 
 

@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
-import utils
-from chapter_revision_logic import _apply_patches_to_text
-from llm_interface import llm_service
 import config
-from patch_validation_agent import PatchValidationAgent
-import chapter_revision_logic
+import processing.revision_logic as chapter_revision_logic
+import utils
+from agents.patch_validation_agent import PatchValidationAgent
+from core.llm_interface import llm_service
+from processing.revision_logic import _apply_patches_to_text
 
 
 @pytest.mark.asyncio

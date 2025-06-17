@@ -11,8 +11,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 import config
-from llm_interface import llm_service
 import utils
+from core.llm_interface import llm_service
 
 logger = logging.getLogger(__name__)
 

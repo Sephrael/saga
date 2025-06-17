@@ -3,15 +3,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 import utils
-from orchestration.nana_orchestrator import NANA_Orchestrator
 from data_access import character_queries, world_queries
-from story_models import (
+from models.user_input_models import (
     KeyLocationModel,
     NovelConceptModel,
     ProtagonistModel,
     SettingModel,
     UserStoryInputModel,
 )
+from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 @pytest.fixture

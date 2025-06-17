@@ -1,4 +1,5 @@
 # kg_maintainer_agent.py
+import asyncio
 import json
 import logging
 import re
@@ -8,7 +9,8 @@ from async_lru import alru_cache  # type: ignore
 from jinja2 import Template
 
 import config
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import (
     character_queries,
     kg_queries,
@@ -17,12 +19,10 @@ from data_access import (
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
-from llm_interface import llm_service
 from parsing_utils import (
     parse_rdf_triples_with_rdflib,
 )
 from prompt_renderer import render_prompt
-import asyncio
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 import pytest
 
-from comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
-from world_continuity_agent import WorldContinuityAgent
+from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
+from agents.world_continuity_agent import WorldContinuityAgent
 
 
 @pytest.mark.asyncio

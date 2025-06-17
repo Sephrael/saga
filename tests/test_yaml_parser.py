@@ -1,6 +1,8 @@
-import unittest
 import os
+import unittest
+
 import yaml  # For creating test files
+
 from yaml_parser import (
     load_yaml_file,
     normalize_keys_recursive,

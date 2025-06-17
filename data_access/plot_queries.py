@@ -1,8 +1,9 @@
 # data_access/plot_queries.py
 import logging
-from typing import Dict, Any, List, Tuple, Set
+from typing import Any, Dict, List, Set, Tuple
+
 import config
-from core_db.base_db_manager import neo4j_manager
+from core.db_manager import neo4j_manager
 
 logger = logging.getLogger(__name__)
 
