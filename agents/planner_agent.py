@@ -290,6 +290,7 @@ class PlannerAgent:
     "relationship_development": "An antagonistic relationship with Thane and the Crimson Hand is established."
   }
 ]
+**Ignore the narrative details in this example. It shows the required format only.**
 """
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
