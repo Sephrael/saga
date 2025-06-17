@@ -1,0 +1,18 @@
+[run]
+omit =
+    prompt_data_getters.py
+    orchestration/nana_orchestrator.py
+    processing/revision_logic.py
+    processing/context_generator.py
+    core/llm_interface.py
+    processing/text_deduplicator.py
+    data_access/*
+    initialization/*
+    agents/*
+    ui/*
+    main.py
+    nana_orchestrator.py
+    reset_neo4j.py
+    core/db_manager.py
+    utils/__init__.py
+    models/kg_models.py

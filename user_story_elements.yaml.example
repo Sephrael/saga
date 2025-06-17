@@ -1,38 +1,35 @@
 # SAGA Story Elements File (YAML Example)
 # This file outlines the core elements of the story.
-# It's recommended to use lowercase_with_underscores for keys if you want them
-# to match the output of the previous Markdown parser without needing normalization.
-# Otherwise, the load_yaml_file function can normalize them.
 
 novel_concept:
-  title: "Saga" # Quotes optional for simple strings, good for strings with special chars
-  genre: "technothriller"
-  setting: "a massive neural network physically manifested as an explorable landscape"
+  title: "[Fill-in]" # Quotes optional for simple strings, good for strings with special chars
+  genre: "hard sci-fi"
+  setting: "a frontier town on the edge of unexplored alien wilderness"
   logline: "[Fill-in]"
-  theme: "the cost of loyalty"
+  theme: "the limits of human knowledge"
 
 protagonist:
   name: "Jules Vidant"
   description: "[Fill-in]"
   traits:
-    - "Clever"
-    - "Resourceful"
-    - "Inventive"
-    - "Witty"
+    - "clever"
+    - "resourceful"
+    - "inventive"
+    - "witty"
   motivation: "[Fill-in]"
 
 antagonist:
   name: "Tula Veridian"
   description: "[Fill-in]"
   traits:
-    - "Resourceful"
-    - "Intimidating"
-    - "Intelligent"
-    - "Crafty"
+    - "resourceful"
+    - "intimidating"
+    - "intelligent"
+    - "crafty"
   motivation: "[Fill-in]"
 
 setting:
-  primary_setting_overview: "a massive neural network physically manifested as an explorable landscape"
+  primary_setting_overview: "a frontier town on the edge of unexplored alien wilderness"
   key_locations:
     - name: "[Fill-in]"
       description: "[Fill-in]"
