@@ -2,7 +2,6 @@
 omit =
     prompt_data_getters.py
     orchestration/nana_orchestrator.py
-    orchestration/chapter_flow.py
     processing/revision_logic.py
     processing/context_generator.py
     core/llm_interface.py
