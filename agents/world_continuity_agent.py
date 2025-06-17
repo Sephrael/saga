@@ -97,7 +97,9 @@ class WorldContinuityAgent:
 
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
         characters = await character_queries.get_character_profiles_from_db()
-        world_data = await world_queries.get_world_building_from_db()
+        world_item_ids_by_category = (
+            await world_queries.get_all_world_item_ids_by_category()
+        )
         char_profiles_plain_text = (
             await get_filtered_character_profiles_for_prompt_plain_text(
                 characters,
@@ -105,7 +107,7 @@ class WorldContinuityAgent:
             )
         )
         world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            world_data,
+            world_item_ids_by_category,
             chapter_number - 1,
         )
 
