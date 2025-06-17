@@ -2,14 +2,12 @@ import pytest
 from unittest.mock import patch, AsyncMock
 import json
 
-# Assuming initial_setup_logic.py is in the parent directory or PYTHONPATH is set up
-# For this environment, it's in the root.
-from initial_setup_logic import (
+from initialization.bootstrappers.world_bootstrapper import (
     generate_world_building_logic,
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
 )
-import config  # For config.FILL_IN and other config values if needed
+
 
 pytestmark = pytest.mark.xfail(
     reason="generate_world_building_logic interface updated",
@@ -68,7 +66,7 @@ async def test_valid_json_output_from_llm(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ) as mocked_llm_call:
         wb, _ = await generate_world_building_logic(
@@ -121,7 +119,7 @@ async def test_invalid_json_output_decode_error(agent_instance):
     initial_setting_desc = agent_instance.plot_outline["setting"]
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -163,7 +161,7 @@ async def test_llm_provides_string_for_expected_list(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -198,7 +196,7 @@ async def test_llm_provides_integer_for_expected_list(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -236,7 +234,7 @@ async def test_llm_output_missing_category(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -280,7 +278,7 @@ async def test_llm_output_empty_list_for_list_field(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -357,7 +355,7 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
     )
 
     with patch(
-        "initial_setup_logic.llm_service.async_call_llm",
+        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -471,14 +469,14 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     # Create a combined list for patching, ensuring no duplicates and preserving originals
     mock_list_keys_content = list(set(original_list_keys + test_specific_list_keys))
 
-    # Patch the global list within the 'initial_setup_logic' module for the duration of this test
+    # Patch the global list within the 'world_bootstrapper' module for the duration of this test
     with (
         patch(
-            "initial_setup_logic.llm_service.async_call_llm",
+            "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
             AsyncMock(return_value=mock_llm_return),
         ),
         patch(
-            "initial_setup_logic.WORLD_DETAIL_LIST_INTERNAL_KEYS",
+            "initialization.bootstrappers.world_bootstrapper.WORLD_DETAIL_LIST_INTERNAL_KEYS",
             mock_list_keys_content,
         ),
     ):

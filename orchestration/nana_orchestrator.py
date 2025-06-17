@@ -23,7 +23,7 @@ from orchestration.chapter_flow import run_chapter_pipeline
 from ui.rich_display import RichDisplayManager
 from drafting_agent import DraftingAgent
 from text_deduplicator import TextDeduplicator
-from initial_setup_logic import run_genesis_phase
+from initialization.genesis import run_genesis_phase
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
