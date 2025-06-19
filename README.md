@@ -177,7 +177,7 @@ The first time SAGA runs (`python main.py`), it will automatically attempt to cr
 ### 5. (Optional) Provide Initial Story Elements
 
 To guide SAGA with your own story ideas, create a `user_story_elements.yaml` file in the project's root directory.
-You can use `user_story_elements.yaml.example` as a template.
+You can use `user_story_elements.yaml.example` as a template. The YAML can be simple or include nested fields like the `characters` section with supporting characters.
 Use the `[Fill-in]` placeholder for any elements you want SAGA to generate. If this file is not present or empty, SAGA will generate these elements based on its configuration.
 
 ### 6. (Optional) Configure "Unhinged Mode" Data
@@ -196,7 +196,7 @@ python main.py
 *   **Subsequent Runs:** It will load the existing state from Neo4j and continue generating chapters from where it left off.
 *   The number of chapters generated per run is controlled by `CHAPTERS_PER_RUN` in `config.py`.
 
-Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`).
+Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`). This directory is ignored by Git to keep generated data out of version control.
 
 **Performance Example:**
 Using a local setup with the following GGUF models:

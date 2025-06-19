@@ -8,6 +8,7 @@ from .agent_models import (
 )
 from .kg_models import CharacterProfile, WorldItem
 from .user_input_models import (
+    CharacterGroupModel,
     KeyLocationModel,
     NovelConceptModel,
     PlotElementsModel,
@@ -31,6 +32,7 @@ __all__ = [
     "KeyLocationModel",
     "SettingModel",
     "PlotElementsModel",
+    "CharacterGroupModel",
     "UserStoryInputModel",
     "user_story_to_objects",
 ]

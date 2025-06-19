@@ -279,6 +279,7 @@ IF THE PROBLEM WAS:
 THEN YOUR 'replace_with' TEXT MIGHT BE (just the text, no other explanation):
 A chill traced Elara's spine, not from the crypt's cold, but from the translucent figure coalescing before her. Her breath hitched, a silent scream trapped in her throat as the ghostly visage turned its empty sockets towards her. Every instinct screamed to flee, but her feet felt rooted to the stone floor, a terrifying paralysis gripping her.
 --- End of Example ---
+**Ignore the narrative details in this example. It shows the required format only.**
 """
 
     prompt_lines = []
