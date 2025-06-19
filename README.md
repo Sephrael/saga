@@ -177,7 +177,7 @@ The first time SAGA runs (`python main.py`), it will automatically attempt to cr
 ### 5. (Optional) Provide Initial Story Elements
 
 To guide SAGA with your own story ideas, create a `user_story_elements.yaml` file in the project's root directory.
-You can use `user_story_elements.yaml.example` as a template.
+You can use `user_story_elements.yaml.example` as a template. The YAML can be simple or include nested fields like the `characters` section with supporting characters.
 Use the `[Fill-in]` placeholder for any elements you want SAGA to generate. If this file is not present or empty, SAGA will generate these elements based on its configuration.
 
 ### 6. (Optional) Configure "Unhinged Mode" Data
