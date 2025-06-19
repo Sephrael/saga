@@ -196,7 +196,7 @@ python main.py
 *   **Subsequent Runs:** It will load the existing state from Neo4j and continue generating chapters from where it left off.
 *   The number of chapters generated per run is controlled by `CHAPTERS_PER_RUN` in `config.py`.
 
-Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`).
+Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`). This directory is ignored by Git to keep generated data out of version control.
 
 **Performance Example:**
 Using a local setup with the following GGUF models:
