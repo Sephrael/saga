@@ -11,7 +11,6 @@ omit =
     agents/*
     ui/*
     main.py
-    nana_orchestrator.py
     reset_neo4j.py
     core/db_manager.py
     utils/__init__.py
