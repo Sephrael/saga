@@ -34,7 +34,16 @@ class ProtagonistModel(BaseModel):
     description: Optional[str] = None
     traits: List[str] = []
     motivation: Optional[str] = None
+    role: Optional[str] = None
     relationships: Dict[str, RelationshipModel] = {}
+
+
+class CharacterGroupModel(BaseModel):
+    """Container for characters provided in the YAML."""
+
+    protagonist: Optional[ProtagonistModel] = None
+    antagonist: Optional[ProtagonistModel] = None
+    supporting_characters: List[ProtagonistModel] = []
 
 
 class KeyLocationModel(BaseModel):
@@ -69,6 +78,7 @@ class UserStoryInputModel(BaseModel):
     novel_concept: Optional[NovelConceptModel] = None
     protagonist: Optional[ProtagonistModel] = None
     antagonist: Optional[ProtagonistModel] = None
+    characters: Optional[CharacterGroupModel] = None
     plot_elements: Optional[PlotElementsModel] = None
     setting: Optional[SettingModel] = None
     world_details: Optional[Dict[str, Any]] = None
@@ -76,6 +86,7 @@ class UserStoryInputModel(BaseModel):
     conflict: Optional[Dict[str, Any]] = None
     style_and_tone: Optional[Dict[str, Any]] = None
     world_specifics: Optional[Dict[str, Any]] = None
+    symbolism: Optional[List[Dict[str, str]]] = None
 
 
 def user_story_to_objects(
@@ -95,6 +106,8 @@ def user_story_to_objects(
             plot_outline["setting"] = model.novel_concept.setting
 
     main_char_model = model.protagonist
+    if not main_char_model and model.characters:
+        main_char_model = model.characters.protagonist
     if main_char_model:
         plot_outline["protagonist_name"] = main_char_model.name
 
@@ -106,11 +119,13 @@ def user_story_to_objects(
             for rel_key, rel in main_char_model.relationships.items()
         }
         cp.status = "As described"
-        cp.updates["role"] = "protagonist"
+        cp.updates["role"] = main_char_model.role or "protagonist"
         cp.updates["motivation"] = main_char_model.motivation or ""
         characters[cp.name] = cp
 
     antagonist_model = model.antagonist
+    if not antagonist_model and model.characters:
+        antagonist_model = model.characters.antagonist
     if antagonist_model:
         ant_cp = CharacterProfile(name=antagonist_model.name)
         ant_cp.description = antagonist_model.description or ""
@@ -120,7 +135,7 @@ def user_story_to_objects(
             for rel_key, rel in antagonist_model.relationships.items()
         }
         ant_cp.status = "As described"
-        ant_cp.updates["role"] = "antagonist"
+        ant_cp.updates["role"] = antagonist_model.role or "antagonist"
         characters[ant_cp.name] = ant_cp
 
     if model.other_key_characters:
@@ -129,6 +144,14 @@ def user_story_to_objects(
             cp.description = info.description or ""
             cp.traits = info.traits
             cp.updates["role"] = "other_key_character"
+            characters[cp.name] = cp
+
+    if model.characters and model.characters.supporting_characters:
+        for info in model.characters.supporting_characters:
+            cp = CharacterProfile(name=info.name)
+            cp.description = info.description or ""
+            cp.traits = info.traits
+            cp.updates["role"] = info.role or "supporting_character"
             characters[cp.name] = cp
 
     if model.plot_elements:

@@ -5,6 +5,7 @@ from initialization.data_loader import (
     load_user_supplied_model as _load_user_supplied_data,
 )
 from models.user_input_models import (
+    CharacterGroupModel,
     NovelConceptModel,
     ProtagonistModel,
     UserStoryInputModel,
@@ -41,4 +42,19 @@ def test_user_story_to_objects():
     plot, characters, world_items = user_story_to_objects(model)
     assert plot["title"] == "My Tale"
     assert "Hero" in characters
+    assert world_items == []
+
+
+def test_user_story_to_objects_nested_characters():
+    model = UserStoryInputModel(
+        characters=CharacterGroupModel(
+            protagonist=ProtagonistModel(name="Saga"),
+            antagonist=ProtagonistModel(name="Collective"),
+            supporting_characters=[ProtagonistModel(name="Dr. Larkin", role="mentor")],
+        ),
+    )
+    plot, characters, world_items = user_story_to_objects(model)
+    assert plot.get("protagonist_name") == "Saga"
+    assert "Saga" in characters
+    assert characters["Dr. Larkin"].updates["role"] == "mentor"
     assert world_items == []

@@ -1,32 +1,32 @@
 # SAGA Story Elements File (YAML Example)
-# This file outlines the core elements of the story.
+# Illustrates both basic and detailed fields.
 
 novel_concept:
-  title: "[Fill-in]" # Quotes optional for simple strings, good for strings with special chars
+  title: "[Fill-in]"
   genre: "hard sci-fi"
   setting: "a frontier town on the edge of unexplored alien wilderness"
   logline: "[Fill-in]"
   theme: "the limits of human knowledge"
 
-protagonist:
-  name: "Jules Vidant"
-  description: "[Fill-in]"
-  traits:
-    - "clever"
-    - "resourceful"
-    - "inventive"
-    - "witty"
-  motivation: "[Fill-in]"
-
-antagonist:
-  name: "Tula Veridian"
-  description: "[Fill-in]"
-  traits:
-    - "resourceful"
-    - "intimidating"
-    - "intelligent"
-    - "crafty"
-  motivation: "[Fill-in]"
+characters:
+  protagonist:
+    name: "Jules Vidant"
+    description: "[Fill-in]"
+    traits:
+      - "clever"
+      - "resourceful"
+    motivation: "[Fill-in]"
+  antagonist:
+    name: "Tula Veridian"
+    description: "[Fill-in]"
+    traits:
+      - "intimidating"
+      - "crafty"
+    motivation: "[Fill-in]"
+  supporting_characters:
+    - name: "Dr. Larkin"
+      description: "[Fill-in]"
+      role: "mentor"
 
 setting:
   primary_setting_overview: "a frontier town on the edge of unexplored alien wilderness"
@@ -34,35 +34,19 @@ setting:
     - name: "[Fill-in]"
       description: "[Fill-in]"
       atmosphere: "[Fill-in]"
-    - name: "[Fill-in]"
-      description: "[Fill-in]"
-      atmosphere: "[Fill-in]"
-    - name: "[Fill-in]"
-      description: "[Fill-in]"
-      atmosphere: "[Fill-in]"
 
 plot_elements:
   inciting_incident: "[Fill-in]"
-  plot_points: # List of major turning points or events
-    - "[Fill-in]"
-    - "[Fill-in]"
-    - "[Fill-in]"
+  plot_points:
     - "[Fill-in]"
   central_conflict: "[Fill-in]"
   stakes: "[Fill-in]"
 
 style_and_tone:
-  narrative_style: "First-person (Jules's perspective) OR Third-person limited"
+  narrative_style: "First-person (Jules's perspective)"
   tone: "[Fill-in]"
-  pacing: "Generally fast-paced during action, slower during investigative and reflective moments."
+  pacing: "Generally fast-paced during action"
 
-# Optional: For more complex world-building elements if not covered by KG
-# world_specifics:
-#   magic_system_or_technology:
-#     name: "Temporal Displacement Units (TDUs)"
-#     rules:
-#       - "Require significant energy, prone to temporal drift if not calibrated."
-#       - "Extended use can cause 'chronal sickness'."
-#     limitations:
-#       - "Cannot easily change 'fixed points' in time."
-#       - "Travel to 'erased' timelines is extremely hazardous."
+symbolism:
+  - symbol: "The Golden Record"
+    meaning: "[Fill-in]"
