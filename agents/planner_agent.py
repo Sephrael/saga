@@ -240,6 +240,7 @@ class PlannerAgent:
         future_plot_context_str = "".join(future_plot_context_parts)
 
         few_shot_scene_plan_example_str = """
+**Ignore the narrative details in this example. It shows the required format only.**
 [
   {
     "scene_number": 1,
@@ -290,7 +291,6 @@ class PlannerAgent:
     "relationship_development": "An antagonistic relationship with Thane and the Crimson Hand is established."
   }
 ]
-**Ignore the narrative details in this example. It shows the required format only.**
 """
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
