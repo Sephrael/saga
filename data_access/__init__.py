@@ -67,4 +67,7 @@ __all__ = [
     "normalize_existing_relationship_types",
     "get_most_recent_value_from_db",
     "get_novel_info_property_from_db",
+    "fetch_unresolved_dynamic_relationships",
+    "update_dynamic_relationship_type",
+    "get_shortest_path_length_between_entities",
 ]
