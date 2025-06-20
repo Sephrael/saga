@@ -637,3 +637,46 @@ async def get_defined_relationship_types() -> List[str]:
         )
         # Fallback to constants if DB query fails
         return list(config.RELATIONSHIP_TYPES)
+
+
+async def promote_dynamic_relationships() -> int:
+    """Convert dynamic relationships to defined relationship types."""
+    valid_types = await get_defined_relationship_types()
+    query = """
+    MATCH (s)-[r:DYNAMIC_REL]->(o)
+    WHERE r.type IN $valid_types
+    WITH s, r, o
+    CALL apoc.create.relationship(
+        s,
+        r.type,
+        apoc.map.removeKey(properties(r), 'type'),
+        o
+    ) YIELD rel
+    DELETE r
+    RETURN count(rel) AS promoted
+    """
+    try:
+        results = await neo4j_manager.execute_write_query(
+            query, {"valid_types": valid_types}
+        )
+        return results[0].get("promoted", 0) if results else 0
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to promote dynamic relationships: %s", exc, exc_info=True)
+        return 0
+
+
+async def deduplicate_relationships() -> int:
+    """Merge duplicate relationships of the same type between nodes."""
+    query = """
+    MATCH (s)-[r]->(o)
+    WITH s, type(r) AS t, o, collect(r) AS rels, count(r) AS cnt
+    WHERE cnt > 1
+    CALL apoc.refactor.mergeRelationships(rels, {properties: 'combine'}) YIELD rel
+    RETURN sum(cnt - 1) AS removed
+    """
+    try:
+        results = await neo4j_manager.execute_write_query(query)
+        return results[0].get("removed", 0) if results else 0
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to deduplicate relationships: %s", exc, exc_info=True)
+        return 0
