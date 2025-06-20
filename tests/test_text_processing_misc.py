@@ -4,6 +4,7 @@ from utils import text_processing
 def test_normalize_for_id():
     assert text_processing._normalize_for_id(" Hello World! ") == "hello_world"
     assert text_processing._normalize_for_id(123) == "123"
+    assert text_processing._normalize_for_id("The Wilderness") == "wilderness"
 
 
 def test_normalize_trait_name():
