@@ -444,9 +444,6 @@ class KGMaintainerAgent:
         # 3. Entity Resolution
         await self._run_entity_resolution()
 
-        # 4. Dynamic Relationship Type Resolution
-        await self._resolve_dynamic_relationships()
-
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
     async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
@@ -681,54 +678,6 @@ class KGMaintainerAgent:
             except (json.JSONDecodeError, TypeError) as e:
                 logger.error(
                     f"Failed to parse entity resolution response from LLM for pair ({id1}, {id2}): {e}. Response: {llm_response}"
-                )
-
-    async def _resolve_dynamic_relationships(self) -> None:
-        """Resolve generic DYNAMIC_REL types into clearer predicates."""
-        logger.info("KG Healer: Resolving dynamic relationship types...")
-        candidates = await kg_queries.get_dynamic_rels_for_resolution()
-
-        if not candidates:
-            logger.info("KG Healer: No dynamic relationships require resolution.")
-            return
-
-        template = Template(
-            render_prompt(
-                "kg_maintainer_agent/resolve_dynamic_rel.j2",
-                {},
-            )
-        )
-
-        for cand in candidates:
-            prompt = template.render(
-                subject=cand.get("subject_name"),
-                object=cand.get("object_name"),
-                current_type=cand.get("current_type"),
-            )
-            llm_resp, _ = await llm_service.async_call_llm(
-                model_name=config.SMALL_MODEL,
-                prompt=prompt,
-                temperature=0.3,
-                max_tokens=16,
-                allow_fallback=True,
-                auto_clean_response=True,
-            )
-            try:
-                data = json.loads(llm_resp)
-                new_type = data.get("resolved_type")
-                if new_type and isinstance(new_type, str):
-                    normalized = kg_queries.normalize_relationship_type(new_type)
-                    await kg_queries.update_dynamic_rel_type(cand["rel_id"], normalized)
-                    logger.info(
-                        "Updated relationship %s -> %s from %s to %s",
-                        cand.get("subject_name"),
-                        cand.get("object_name"),
-                        cand.get("current_type"),
-                        normalized,
-                    )
-            except json.JSONDecodeError:
-                logger.error(
-                    "Failed to parse dynamic relation resolution response: %s", llm_resp
                 )
 
     async def heal_schema(self) -> None:
