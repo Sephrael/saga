@@ -18,6 +18,8 @@ def _normalize_for_id(text: str) -> str:
     if not isinstance(text, str):
         text = str(text)
     text = text.strip().lower()
+    # Remove common leading articles to avoid ID duplicates
+    text = re.sub(r"^(the|a|an)\s+", "", text)
     text = re.sub(r"['\"()]", "", text)
     text = re.sub(r"\s+", "_", text)
     text = re.sub(r"[^a-z0-9_]", "", text)
