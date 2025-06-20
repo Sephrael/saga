@@ -105,6 +105,21 @@ Respond in JSON format only, with no other text, commentary, or markdown. Your e
 }
 """
 
+# Prompt template for dynamic relationship resolution
+DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """/no_think
+You analyze a relationship from the novel's knowledge graph and provide a
+single, canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
+relationship between the subject and object.
+
+Subject: {{ subject }} ({{ subject_labels }})
+Object: {{ object }} ({{ object_labels }})
+Existing Type: {{ type }}
+Subject Description: {{ subject_desc }}
+Object Description: {{ object_desc }}
+
+Respond with only the predicate string, no extra words.
+"""
+
 
 class KGMaintainerAgent:
     """High level interface for KG parsing and persistence."""
@@ -444,7 +459,10 @@ class KGMaintainerAgent:
         # 3. Entity Resolution
         await self._run_entity_resolution()
 
-        # 4. Relationship Healing
+        # 4. Resolve dynamic relationship types using LLM guidance
+        await self._resolve_dynamic_relationships()
+
+        # 5. Relationship Healing
         promoted = await kg_queries.promote_dynamic_relationships()
         if promoted:
             logger.info("KG Healer: Promoted %d dynamic relationships.", promoted)
@@ -686,6 +704,40 @@ class KGMaintainerAgent:
             except (json.JSONDecodeError, TypeError) as e:
                 logger.error(
                     f"Failed to parse entity resolution response from LLM for pair ({id1}, {id2}): {e}. Response: {llm_response}"
+                )
+
+    async def _resolve_dynamic_relationships(self) -> None:
+        """Resolve generic DYNAMIC_REL types using a lightweight LLM."""
+        logger.info("KG Healer: Resolving dynamic relationship types via LLM...")
+        dyn_rels = await kg_queries.fetch_unresolved_dynamic_relationships()
+        if not dyn_rels:
+            logger.info("KG Healer: No unresolved dynamic relationships found.")
+            return
+        jinja_template = Template(DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE)
+        for rel in dyn_rels:
+            prompt = jinja_template.render(rel)
+            new_type_raw, _ = await llm_service.async_call_llm(
+                model_name=config.SMALL_MODEL,
+                prompt=prompt,
+                temperature=config.Temperatures.KG_EXTRACTION,
+                max_tokens=10,
+                auto_clean_response=True,
+            )
+            new_type = kg_queries.normalize_relationship_type(new_type_raw)
+            if new_type and new_type != "UNKNOWN":
+                await kg_queries.update_dynamic_relationship_type(
+                    rel["rel_id"], new_type
+                )
+                logger.info(
+                    "KG Healer: Updated relationship %s -> %s",
+                    rel["rel_id"],
+                    new_type,
+                )
+            else:
+                logger.info(
+                    "KG Healer: LLM could not refine relationship %s (response: %s)",
+                    rel["rel_id"],
+                    new_type_raw,
                 )
 
     async def heal_schema(self) -> None:

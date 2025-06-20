@@ -800,6 +800,19 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         f"KG fact gathering for Ch {chapter_number} draft: Chars of interest: {characters_of_interest}, KG chapter limit: {kg_chapter_limit}"
     )
 
+    if protagonist_name and characters_of_interest:
+        pruned: Set[str] = set()
+        for c in characters_of_interest:
+            if c == protagonist_name:
+                pruned.add(c)
+                continue
+            path_len = await kg_queries.get_shortest_path_length_between_entities(
+                protagonist_name, c
+            )
+            if path_len is not None and path_len <= 3:
+                pruned.add(c)
+        characters_of_interest = pruned
+
     for desc_key in ["theme", "central_conflict"]:
         if len(facts_for_prompt_list) >= max_total_facts:
             break

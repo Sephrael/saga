@@ -683,3 +683,61 @@ async def deduplicate_relationships() -> int:
     except Exception as exc:  # pragma: no cover - narrow DB errors
         logger.error("Failed to deduplicate relationships: %s", exc, exc_info=True)
         return 0
+
+
+async def fetch_unresolved_dynamic_relationships(
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Fetch dynamic relationships lacking a specific type."""
+    query = """
+    MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
+    WHERE r.type IS NULL OR r.type = 'UNKNOWN'
+    RETURN id(r) AS rel_id,
+           s.name AS subject,
+           labels(s) AS subject_labels,
+           coalesce(s.description, '') AS subject_desc,
+           o.name AS object,
+           labels(o) AS object_labels,
+           coalesce(o.description, '') AS object_desc,
+           coalesce(r.type, 'UNKNOWN') AS type
+    LIMIT $limit
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query, {"limit": limit})
+        return [dict(record) for record in results] if results else []
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Failed to fetch unresolved dynamic relationships: %s", exc, exc_info=True
+        )
+        return []
+
+
+async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
+    """Update a dynamic relationship's type."""
+    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE id(r) = $id SET r.type = $type"
+    try:
+        await neo4j_manager.execute_write_query(query, {"id": rel_id, "type": new_type})
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Failed to update dynamic relationship %s: %s", rel_id, exc, exc_info=True
+        )
+
+
+async def get_shortest_path_length_between_entities(
+    name1: str, name2: str, max_depth: int = 4
+) -> Optional[int]:
+    """Return the shortest path length between two entities if it exists."""
+    query = """
+    MATCH (a:Entity {name: $name1}), (b:Entity {name: $name2})
+    MATCH p = shortestPath((a)-[*..$max_depth]-(b))
+    RETURN length(p) AS len
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(
+            query, {"name1": name1, "name2": name2, "max_depth": max_depth}
+        )
+        if results:
+            return results[0].get("len")
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to compute shortest path length: %s", exc, exc_info=True)
+    return None
