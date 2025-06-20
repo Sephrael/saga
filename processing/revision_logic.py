@@ -495,7 +495,7 @@ def _consolidate_overlapping_problems(
         consolidated_problem: ProblemDetail = {
             "issue_category": ", ".join(all_categories),
             "problem_description": f"Multiple issues in one segment: {all_descriptions}",
-            "quote_from_original_text": f"Representative quote: {representative_quote}",
+            "quote_from_original_text": representative_quote,
             "quote_char_start": first_problem.get("quote_char_start"),
             "quote_char_end": first_problem.get("quote_char_end"),
             "sentence_char_start": group_start_offset,
@@ -564,7 +564,7 @@ def _group_problems_for_patch_generation(
         consolidated: ProblemDetail = {
             "issue_category": ", ".join(all_cats),
             "problem_description": f"Multiple issues in one segment: {all_desc}",
-            "quote_from_original_text": f"Representative quote: {rep_quote}",
+            "quote_from_original_text": rep_quote,
             "quote_char_start": first.get("quote_char_start"),
             "quote_char_end": first.get("quote_char_end"),
             "sentence_char_start": group_start,
