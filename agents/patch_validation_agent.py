@@ -38,7 +38,7 @@ class PatchValidationAgent:
             model_name=self.model_name,
             prompt=prompt,
             temperature=config.Temperatures.EVALUATION,
-            max_tokens=64,
+            max_tokens=1024,
             allow_fallback=True,
             stream_to_disk=False,
             frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION,
