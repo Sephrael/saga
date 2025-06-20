@@ -51,6 +51,13 @@ async def sync_world_items(
     full_sync: bool = False,
 ) -> bool:
     """Persist world element data to Neo4j."""
+    WORLD_NAME_TO_ID.clear()
+    for cat, items in world_items.items():
+        if not isinstance(items, dict):
+            continue
+        for item in items.values():
+            if isinstance(item, WorldItem):
+                WORLD_NAME_TO_ID[utils._normalize_for_id(item.name)] = item.id
     if full_sync:
         world_dict = {
             cat: {name: item.to_dict() for name, item in items.items()}
@@ -565,6 +572,8 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
     world_data: Dict[str, Dict[str, WorldItem]] = {}
     wc_id_param = config.MAIN_WORLD_CONTAINER_NODE_ID
 
+    WORLD_NAME_TO_ID.clear()
+
     # Load WorldContainer (_overview_)
     overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc"
     overview_res_list = await neo4j_manager.execute_read_query(
@@ -583,6 +592,9 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
             "_overview_",
             "_overview_",
             overview_data,
+        )
+        WORLD_NAME_TO_ID[utils._normalize_for_id("_overview_")] = (
+            utils._normalize_for_id("_overview_")
         )
 
     # Load WorldElements and their details
@@ -695,6 +707,7 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
             item_name,
             item_detail,
         )
+        WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
 
     logger.info(
         f"Successfully loaded and recomposed world building data ({len(we_results)} elements) from Neo4j."
