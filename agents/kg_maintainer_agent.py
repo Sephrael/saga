@@ -14,6 +14,7 @@ from core.llm_interface import llm_service
 from data_access import (
     character_queries,
     kg_queries,
+    plot_queries,
     world_queries,
 )
 
@@ -191,6 +192,10 @@ class KGMaintainerAgent:
         await world_queries.sync_world_items(
             world_items_to_persist, chapter_number_for_delta, full_sync=full_sync
         )
+
+    async def add_plot_point(self, description: str, prev_plot_point_id: str) -> str:
+        """Persist a new plot point and link it in sequence."""
+        return await plot_queries.append_plot_point(description, prev_plot_point_id)
 
     async def summarize_chapter(
         self, chapter_text: Optional[str], chapter_number: int

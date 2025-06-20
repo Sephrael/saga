@@ -39,6 +39,7 @@ async def test_dynamic_chapter_adjustment(monkeypatch):
     monkeypatch.setattr(orch, "async_init_orchestrator", AsyncMock())
     monkeypatch.setattr(orch, "perform_initial_setup", AsyncMock(return_value=True))
     monkeypatch.setattr(orch.kg_maintainer_agent, "heal_and_enrich_kg", AsyncMock())
+    monkeypatch.setattr(orch, "refresh_plot_outline", AsyncMock())
     monkeypatch.setattr(
         chapter_queries, "load_chapter_count_from_db", AsyncMock(return_value=3)
     )

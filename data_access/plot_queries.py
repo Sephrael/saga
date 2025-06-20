@@ -238,3 +238,53 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
         f"Successfully loaded plot outline for novel '{novel_id}'. Plot points: {len(plot_data.get('plot_points', []))}"
     )
     return plot_data
+
+
+async def append_plot_point(description: str, prev_plot_point_id: str) -> str:
+    """Append a new PlotPoint node linked to NovelInfo and previous PlotPoint."""
+    novel_id = config.MAIN_NOVEL_INFO_NODE_ID
+    # Determine next sequence number
+    query = (
+        "MATCH (:NovelInfo:Entity {id: $novel_id})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity) "
+        "RETURN coalesce(max(pp.sequence), 0) AS max_seq"
+    )
+    result = await neo4j_manager.execute_read_query(query, {"novel_id": novel_id})
+    max_seq = result[0].get("max_seq") if result else 0
+    next_seq = (max_seq or 0) + 1
+    pp_id = f"pp_{novel_id}_{next_seq}"
+
+    statements = [
+        (
+            """
+        MERGE (pp:Entity {id: $pp_id})
+        ON CREATE SET pp:PlotPoint, pp.description = $desc, pp.sequence = $seq, pp.status = 'pending', pp.created_ts = timestamp()
+        ON MATCH SET  pp:PlotPoint, pp.description = $desc, pp.sequence = $seq, pp.updated_ts = timestamp()
+        """,
+            {"pp_id": pp_id, "desc": description, "seq": next_seq},
+        ),
+        (
+            """
+        MATCH (ni:NovelInfo:Entity {id: $novel_id})
+        MATCH (pp:PlotPoint:Entity {id: $pp_id})
+        MERGE (ni)-[:HAS_PLOT_POINT]->(pp)
+        """,
+            {"novel_id": novel_id, "pp_id": pp_id},
+        ),
+    ]
+
+    if prev_plot_point_id:
+        statements.append(
+            (
+                """
+            MATCH (prev:PlotPoint:Entity {id: $prev_id})
+            MATCH (curr:PlotPoint:Entity {id: $pp_id})
+            OPTIONAL MATCH (prev)-[r:NEXT_PLOT_POINT]->(:PlotPoint)
+            DELETE r
+            MERGE (prev)-[:NEXT_PLOT_POINT]->(curr)
+            """,
+                {"prev_id": prev_plot_point_id, "pp_id": pp_id},
+            )
+        )
+
+    await neo4j_manager.execute_cypher_batch(statements)
+    return pp_id
