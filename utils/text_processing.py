@@ -91,6 +91,15 @@ def _normalize_text_for_matching(text: str) -> str:
     return text
 
 
+def _token_similarity(a: str, b: str) -> float:
+    """Return Jaccard similarity between token sets of ``a`` and ``b``."""
+    tokens_a = set(_normalize_text_for_matching(a).split())
+    tokens_b = set(_normalize_text_for_matching(b).split())
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+
+
 async def find_quote_and_sentence_offsets_with_spacy(
     doc_text: str, quote_text_from_llm: str
 ) -> Optional[Tuple[int, int, int, int]]:
@@ -184,6 +193,29 @@ async def find_quote_and_sentence_offsets_with_spacy(
                     sent.start_char,
                     sent.end_char,
                 )
+
+    # Token similarity fallback before expensive semantic search
+    best_sent = None
+    best_sim = 0.0
+    for sent in spacy_doc.sents:
+        sim = _token_similarity(cleaned_llm_quote_for_direct_search, sent.text)
+        if sim > best_sim:
+            best_sim = sim
+            best_sent = sent
+    if best_sent and best_sim >= 0.45:
+        logger.info(
+            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
+            cleaned_llm_quote_for_direct_search[:30],
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sim,
+        )
+        return (
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sent.start_char,
+            best_sent.end_char,
+        )
 
     logger.warning(
         "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",
