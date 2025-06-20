@@ -62,7 +62,7 @@ async def _llm_summarize_full_chapter_text(
 
 
 # Prompt template for entity resolution, embedded to avoid new file dependency
-ENTITY_RESOLUTION_PROMPT_TEMPLATE = """
+ENTITY_RESOLUTION_PROMPT_TEMPLATE = """/no_think
 You are an expert knowledge graph analyst for a creative writing project. Your task is to determine if two entities from the narrative's knowledge graph are referring to the same canonical thing based on their names, properties, and relationships.
 
 **Entity 1 Details:**
