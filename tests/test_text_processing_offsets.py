@@ -37,3 +37,23 @@ async def test_find_quote_offsets_direct(monkeypatch):
         "Hello world", "world"
     )
     assert result == (6, 11, 0, len("Hello world"))
+
+
+@pytest.mark.asyncio
+async def test_find_quote_offsets_fuzzy_punctuation(monkeypatch):
+    monkeypatch.setattr(text_processing.spacy_manager, "_nlp", DummyNLP())
+    monkeypatch.setattr(text_processing.spacy_manager, "load", lambda: None)
+    result = await text_processing.find_quote_and_sentence_offsets_with_spacy(
+        "Hello world.", "Hello world!"
+    )
+    assert result == (0, 11, 0, len("Hello world."))
+
+
+@pytest.mark.asyncio
+async def test_find_quote_offsets_fuzzy_extra_word(monkeypatch):
+    monkeypatch.setattr(text_processing.spacy_manager, "_nlp", DummyNLP())
+    monkeypatch.setattr(text_processing.spacy_manager, "load", lambda: None)
+    result = await text_processing.find_quote_and_sentence_offsets_with_spacy(
+        "Hello world.", "Hello world again"
+    )
+    assert result == (0, 12, 0, len("Hello world."))

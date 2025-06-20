@@ -3,6 +3,7 @@ import re
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 import spacy
+from rapidfuzz.fuzz import partial_ratio_alignment
 
 import config
 
@@ -158,6 +159,31 @@ async def find_quote_and_sentence_offsets_with_spacy(
             )
 
         current_pos = match_end
+
+    alignment = partial_ratio_alignment(cleaned_llm_quote_for_direct_search, doc_text)
+    if alignment.score >= 85.0:
+        match_start = alignment.dest_start
+        match_end = alignment.dest_end
+        for sent in spacy_doc.sents:
+            if (
+                sent.start_char <= match_start < sent.end_char
+                and sent.start_char < match_end <= sent.end_char
+            ):
+                logger.info(
+                    "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
+                    cleaned_llm_quote_for_direct_search[:30],
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                    alignment.score,
+                )
+                return (
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                )
 
     logger.warning(
         "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",
