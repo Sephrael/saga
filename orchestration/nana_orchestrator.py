@@ -1261,6 +1261,14 @@ class NANA_Orchestrator:
                 summaries.append(str(result["summary"]))
                 plot_outline["plot_points"].append(result["summary"])
 
+            if idx % config.KG_HEALING_INTERVAL == 0:
+                logger.info(
+                    f"--- NANA: Triggering KG Healing/Enrichment after Ingestion Chunk {idx} ---"
+                )
+                self._update_rich_display(step=f"Ch {idx} - KG Maintenance")
+                await self.kg_maintainer_agent.heal_and_enrich_kg()
+                await self.refresh_plot_outline()
+
         await self.kg_maintainer_agent.heal_and_enrich_kg()
         combined_summary = "\n".join(summaries)
         continuation, _ = await self.planner_agent.plan_continuation(combined_summary)
