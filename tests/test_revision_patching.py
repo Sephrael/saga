@@ -260,3 +260,36 @@ async def test_patch_validation_toggle(monkeypatch):
 
     config.settings.AGENT_ENABLE_PATCH_VALIDATION = True
     config.AGENT_ENABLE_PATCH_VALIDATION = True
+
+
+@pytest.mark.asyncio
+async def test_deduplicate_problems():
+    problems = [
+        {
+            "issue_category": "cat",
+            "problem_description": "a",
+            "quote_from_original_text": "q",
+            "sentence_char_start": 0,
+            "sentence_char_end": 10,
+            "suggested_fix_focus": "f1",
+        },
+        {
+            "issue_category": "cat2",
+            "problem_description": "b",
+            "quote_from_original_text": "q",
+            "sentence_char_start": 0,
+            "sentence_char_end": 10,
+            "suggested_fix_focus": "f2",
+        },
+        {
+            "issue_category": "cat3",
+            "problem_description": "c",
+            "quote_from_original_text": "r",
+            "sentence_char_start": 20,
+            "sentence_char_end": 30,
+            "suggested_fix_focus": "f3",
+        },
+    ]
+
+    result = chapter_revision_logic._deduplicate_problems(problems)
+    assert len(result) == 2
