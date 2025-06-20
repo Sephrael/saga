@@ -511,6 +511,29 @@ def _consolidate_overlapping_problems(
     return consolidated_problems
 
 
+def _deduplicate_problems(problems: List[ProblemDetail]) -> List[ProblemDetail]:
+    """Remove exact duplicates based on span and quote text."""
+    unique: List[ProblemDetail] = []
+    seen: set[tuple[Optional[int], Optional[int], str]] = set()
+    for prob in problems:
+        key = (
+            prob.get("sentence_char_start"),
+            prob.get("sentence_char_end"),
+            prob.get("quote_from_original_text", ""),
+        )
+        if key in seen:
+            logger.info(
+                "Deduplicating problem at span %s-%s with quote '%s'.",
+                prob.get("sentence_char_start"),
+                prob.get("sentence_char_end"),
+                prob.get("quote_from_original_text", "")[:30],
+            )
+            continue
+        seen.add(key)
+        unique.append(prob)
+    return unique
+
+
 def _group_problems_for_patch_generation(
     problems: List[ProblemDetail],
 ) -> List[Tuple[ProblemDetail, List[ProblemDetail]]]:
@@ -622,7 +645,7 @@ async def _generate_patch_instructions_logic(
             "total_tokens": 0,
         }
 
-        for attempt in range(2):
+        for attempt in range(config.PATCH_GENERATION_ATTEMPTS):
             patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
                 plot_outline,
                 context_snippet,
@@ -842,6 +865,9 @@ async def revise_chapter_draft_logic(
         return None, None
 
     problems_to_fix: List[ProblemDetail] = evaluation_result.get("problems_found", [])
+    problems_to_fix = _deduplicate_problems(
+        _consolidate_overlapping_problems(problems_to_fix)
+    )
     if not problems_to_fix and evaluation_result.get("needs_revision"):
         logger.warning(
             f"Revision for ch {chapter_number} explicitly requested, but no specific problems were itemized. This might lead to a full rewrite attempt if general reasons exist."
