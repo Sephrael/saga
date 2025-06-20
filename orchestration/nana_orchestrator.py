@@ -118,6 +118,15 @@ class NANA_Orchestrator:
         }
         self._update_rich_display()
 
+    async def refresh_plot_outline(self) -> None:
+        """Reload plot outline from the database."""
+        result = await plot_queries.get_plot_outline_from_db()
+        if isinstance(result, dict):
+            self.plot_outline = result
+            self._update_novel_props_cache()
+        else:
+            logger.error("Failed to refresh plot outline from DB: %s", result)
+
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
         self._update_rich_display(step="Initializing Orchestrator")
@@ -1159,6 +1168,7 @@ class NANA_Orchestrator:
                                     step=f"Ch {current_novel_chapter_number} - KG Maintenance"
                                 )
                                 await self.kg_maintainer_agent.heal_and_enrich_kg()
+                                await self.refresh_plot_outline()
                                 logger.info(
                                     "--- NANA: KG Healing/Enrichment cycle complete. ---"
                                 )

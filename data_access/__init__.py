@@ -27,7 +27,11 @@ from .kg_queries import (
     normalize_existing_relationship_types,
     query_kg_from_db,
 )
-from .plot_queries import get_plot_outline_from_db, save_plot_outline_to_db
+from .plot_queries import (
+    get_plot_outline_from_db,
+    save_plot_outline_to_db,
+    append_plot_point,
+)
 from .world_queries import (
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
@@ -43,6 +47,7 @@ from .world_queries import (
 __all__ = [
     "save_plot_outline_to_db",
     "get_plot_outline_from_db",
+    "append_plot_point",
     "sync_characters_full_state_from_object_to_db",
     "sync_characters",
     "get_character_profile_by_name",
