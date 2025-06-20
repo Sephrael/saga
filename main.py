@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import logging
 
@@ -9,9 +10,16 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     setup_logging_nana()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ingest", default=None, help="Path to text file to ingest")
+    args = parser.parse_args()
+
     orchestrator = NANA_Orchestrator()
     try:
-        asyncio.run(orchestrator.run_novel_generation_loop())
+        if args.ingest:
+            asyncio.run(orchestrator.run_ingestion_process(args.ingest))
+        else:
+            asyncio.run(orchestrator.run_novel_generation_loop())
     except KeyboardInterrupt:
         logger.info(
             "NANA Orchestrator shutting down gracefully due to KeyboardInterrupt..."

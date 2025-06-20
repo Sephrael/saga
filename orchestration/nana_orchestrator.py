@@ -37,6 +37,7 @@ from processing.context_generator import generate_hybrid_chapter_context_logic
 from processing.revision_logic import revise_chapter_draft_logic
 from processing.text_deduplicator import TextDeduplicator
 from ui.rich_display import RichDisplayManager
+from utils.ingestion_utils import split_text_into_chapters
 
 try:
     from rich.logging import RichHandler
@@ -1223,6 +1224,54 @@ class NANA_Orchestrator:
             await self.display.stop()
             await neo4j_manager.close()
             logger.info("NANA: Neo4j driver successfully closed on application exit.")
+
+    async def run_ingestion_process(self, text_file: str) -> None:
+        """Ingest existing text and populate the knowledge graph."""
+        logger.info("--- NANA: Starting Ingestion Process ---")
+
+        if not self._validate_critical_configs():
+            await self.display.stop()
+            return
+
+        self.display.start()
+        self.run_start_time = time.time()
+        await neo4j_manager.connect()
+        await neo4j_manager.create_db_schema()
+        await self.kg_maintainer_agent.load_schema_from_db()
+
+        with open(text_file, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+
+        chunks = split_text_into_chapters(raw_text)
+        plot_outline = {"title": "Ingested Narrative", "plot_points": []}
+        character_profiles: Dict[str, CharacterProfile] = {}
+        world_building: Dict[str, Dict[str, WorldItem]] = {}
+        summaries: List[str] = []
+
+        for idx, chunk in enumerate(chunks, 1):
+            self._update_rich_display(chapter_num=idx, step="Ingesting Text")
+            result = await self.finalize_agent.ingest_and_finalize_chunk(
+                plot_outline,
+                character_profiles,
+                world_building,
+                idx,
+                chunk,
+            )
+            if result.get("summary"):
+                summaries.append(str(result["summary"]))
+                plot_outline["plot_points"].append(result["summary"])
+
+        await self.kg_maintainer_agent.heal_and_enrich_kg()
+        combined_summary = "\n".join(summaries)
+        continuation, _ = await self.planner_agent.plan_continuation(combined_summary)
+        if continuation:
+            plot_outline["plot_points"].extend(continuation)
+        self.plot_outline = plot_outline
+        self.chapter_count = len(chunks)
+        await plot_queries.save_plot_outline_to_db(plot_outline)
+        await self.display.stop()
+        await neo4j_manager.close()
+        logger.info("NANA: Ingestion process completed.")
 
 
 def setup_logging_nana():

@@ -224,3 +224,22 @@ class FinalizeAgent:
             "summary_usage": summary_usage,
             "kg_usage": kg_usage,
         }
+
+    async def ingest_and_finalize_chunk(
+        self,
+        plot_outline: Dict[str, Any],
+        character_profiles: Dict[str, CharacterProfile],
+        world_building: Dict[str, Dict[str, WorldItem]],
+        chunk_number: int,
+        chunk_text: str,
+    ) -> FinalizationResult:
+        """Finalize an ingested text chunk using the regular pipeline."""
+        return await self.finalize_chapter(
+            plot_outline,
+            character_profiles,
+            world_building,
+            chunk_number,
+            chunk_text,
+            raw_llm_output=None,
+            from_flawed_draft=False,
+        )
