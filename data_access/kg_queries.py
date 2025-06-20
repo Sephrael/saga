@@ -10,9 +10,19 @@ from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_REL_CHAPTER_ADDED,
+    NODE_LABELS,
 )
 
 logger = logging.getLogger(__name__)
+
+# Lookup table for canonical node labels to ensure consistent casing
+_CANONICAL_NODE_LABEL_MAP: Dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
+
+
+def _to_pascal_case(text: str) -> str:
+    """Convert underscore or space separated text to PascalCase."""
+    parts = re.split(r"[_\s]+", text.strip())
+    return "".join(part[:1].upper() + part[1:] for part in parts if part)
 
 
 def normalize_relationship_type(rel_type: str) -> str:
@@ -58,29 +68,22 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
 
     entity_label_suffix = ":Entity"  # All nodes get this
-    specific_labels_parts = []
+    specific_labels_parts: List[str] = []
 
     if entity_type and entity_type.strip():
-        # Use original type for semantic checks (like "Person") before sanitization for label syntax
-        original_type_capitalized = entity_type.strip().capitalize()
+        cleaned = re.sub(r"[^a-zA-Z0-9_\s]+", "", entity_type)
+        normalized_key = re.sub(r"[_\s]+", "", cleaned).lower()
 
-        # Sanitize for Cypher label (alphanumeric)
-        sanitized_specific_type = "".join(
-            c for c in original_type_capitalized if c.isalnum()
-        )
+        canonical = _CANONICAL_NODE_LABEL_MAP.get(normalized_key)
+        if canonical is None:
+            pascal = _to_pascal_case(cleaned)
+            canonical = _CANONICAL_NODE_LABEL_MAP.get(pascal.lower(), pascal)
 
-        if sanitized_specific_type and sanitized_specific_type != "Entity":
-            # Add the sanitized specific type label unless it's "Character" (which is handled next)
-            if sanitized_specific_type != "Character":
-                specific_labels_parts.append(f":{sanitized_specific_type}")
+        if canonical and canonical != "Entity":
+            if canonical != "Character":
+                specific_labels_parts.append(f":{canonical}")
 
-            # Add :Character label if the original type was "Person" OR
-            # if the sanitized type is "Character" itself.
-            if (
-                original_type_capitalized == "Person"
-                or sanitized_specific_type == "Character"
-            ):
-                # Add :Character if not already added (e.g. if original was "Character")
+            if cleaned.strip().lower() == "person" or canonical == "Character":
                 if ":Character" not in specific_labels_parts:
                     specific_labels_parts.append(":Character")
 

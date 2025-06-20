@@ -38,12 +38,12 @@ from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
         ("  Item ", ":Item:Entity"),  # Test stripping whitespace
         (
             "Complex_Type",
-            ":Complextype:Entity",
-        ),  # Test with underscore (becomes Complextype due to capitalize() then isalnum())
+            ":ComplexType:Entity",
+        ),  # Test with underscore converted to PascalCase
         (
             "Invalid!@#Type",
-            ":Invalidtype:Entity",
-        ),  # Test sanitization (becomes Invalidtype due to capitalize() then isalnum())
+            ":InvalidType:Entity",
+        ),  # Test sanitization preserving camel case
         ("Entity", ":Entity"),  # Explicit "Entity" type
         ("", ":Entity"),  # Empty type
         (None, ":Entity"),  # None type
