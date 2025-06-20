@@ -800,6 +800,18 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         f"KG fact gathering for Ch {chapter_number} draft: Chars of interest: {characters_of_interest}, KG chapter limit: {kg_chapter_limit}"
     )
 
+    # Add shortest path facts from protagonist to other key characters
+    if protagonist_name:
+        for other in [c for c in characters_of_interest if c != protagonist_name][:2]:
+            path_triples = await kg_queries.get_shortest_path_triples_between_entities(
+                protagonist_name, other
+            )
+            if path_triples:
+                path_desc = path_triples[0]["subject"]
+                for t in path_triples:
+                    path_desc += f" -{t['predicate']}-> {t['object']}"
+                facts_for_prompt_list.append(f"- Path {path_desc}.")
+
     for desc_key in ["theme", "central_conflict"]:
         if len(facts_for_prompt_list) >= max_total_facts:
             break

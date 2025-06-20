@@ -637,3 +637,61 @@ async def get_defined_relationship_types() -> List[str]:
         )
         # Fallback to constants if DB query fails
         return list(config.RELATIONSHIP_TYPES)
+
+
+async def get_dynamic_rels_for_resolution(limit: int = 50) -> List[Dict[str, Any]]:
+    """Return DYNAMIC_REL edges with nonstandard types for LLM resolution."""
+    query = """
+    MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
+    WHERE r.type IS NOT NULL AND NOT r.type IN $known
+    RETURN id(r) AS rel_id,
+           s.name AS subject_name,
+           o.name AS object_name,
+           r.type AS current_type
+    LIMIT $lim
+    """
+    params = {"known": list(config.RELATIONSHIP_TYPES), "lim": limit}
+    try:
+        results = await neo4j_manager.execute_read_query(query, params)
+        return [dict(record) for record in results] if results else []
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to fetch dynamic rels: %s", exc, exc_info=True)
+        return []
+
+
+async def update_dynamic_rel_type(rel_id: int, new_type: str) -> None:
+    """Update the ``type`` property of a DYNAMIC_REL edge."""
+    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE id(r) = $rid SET r.type = $t"
+    try:
+        await neo4j_manager.execute_write_query(query, {"rid": rel_id, "t": new_type})
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to update rel %s to %s: %s", rel_id, new_type, exc)
+
+
+async def get_shortest_path_triples_between_entities(
+    source_name: str, target_name: str, max_depth: int = 4
+) -> List[Dict[str, str]]:
+    """Return triples along the shortest path between two entities."""
+    query = f"""
+    MATCH (s:Entity {{name: $src}}), (t:Entity {{name: $tgt}})
+    MATCH p=shortestPath((s)-[:DYNAMIC_REL*..{max_depth}]-(t))
+    WITH relationships(p) AS rels
+    UNWIND rels AS r
+    RETURN startNode(r).name AS subject,
+           r.type AS predicate,
+           endNode(r).name AS object
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(
+            query, {"src": source_name, "tgt": target_name}
+        )
+        return [dict(r) for r in results] if results else []
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Failed shortest path query between '%s' and '%s': %s",
+            source_name,
+            target_name,
+            exc,
+            exc_info=True,
+        )
+        return []
