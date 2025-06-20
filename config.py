@@ -171,7 +171,7 @@ class SagaSettings(BaseSettings):
     # Generation Parameters
     MAX_CONTEXT_TOKENS: int = 40960
     MAX_GENERATION_TOKENS: int = 16384
-    CONTEXT_CHAPTER_COUNT: int = 3
+    CONTEXT_CHAPTER_COUNT: int = 5
     CHAPTERS_PER_RUN: int = 3
     KG_HEALING_INTERVAL: int = 2
     TARGET_PLOT_POINTS_INITIAL_GENERATION: int = 18
