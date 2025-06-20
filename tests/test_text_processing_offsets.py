@@ -57,3 +57,32 @@ async def test_find_quote_offsets_fuzzy_extra_word(monkeypatch):
         "Hello world.", "Hello world again"
     )
     assert result == (0, 12, 0, len("Hello world."))
+
+
+@pytest.mark.asyncio
+async def test_find_quote_offsets_token_similarity(monkeypatch):
+    monkeypatch.setattr(text_processing.spacy_manager, "_nlp", DummyNLP())
+    monkeypatch.setattr(text_processing.spacy_manager, "load", lambda: None)
+
+    # Force partial_ratio_alignment to fail
+    class DummyAlign:
+        def __init__(self):
+            self.score = 0.0
+            self.dest_start = 0
+            self.dest_end = 0
+
+    monkeypatch.setattr(
+        text_processing,
+        "partial_ratio_alignment",
+        lambda *_args, **_kwargs: DummyAlign(),
+    )
+    result = await text_processing.find_quote_and_sentence_offsets_with_spacy(
+        "The quick brown fox jumps over the lazy dog.",
+        "Fast brown fox jumps over sleepy dog.",
+    )
+    assert result == (
+        0,
+        len("The quick brown fox jumps over the lazy dog."),
+        0,
+        len("The quick brown fox jumps over the lazy dog."),
+    )

@@ -22,7 +22,7 @@ class PatchValidationAgent:
         patch: PatchInstruction,
         problems: List[ProblemDetail],
     ) -> Tuple[bool, Optional[Dict[str, int]]]:
-        """Return True if patch addresses all problems according to the LLM."""
+        """Return True if patch addresses all problems adequately."""
 
         issues_list = "\n".join(f"- {p['problem_description']}" for p in problems)
         prompt = render_prompt(
@@ -46,8 +46,13 @@ class PatchValidationAgent:
             auto_clean_response=True,
         )
 
-        verdict_line = response_text.splitlines()[0].strip().lower()
-        is_pass = verdict_line.startswith("pass")
+        first_line = response_text.splitlines()[0].strip().lower()
+        score = 0
+        for token in first_line.split():
+            if token.isdigit():
+                score = int(token)
+                break
+        is_pass = score >= config.PATCH_VALIDATION_THRESHOLD
         if not is_pass:
-            logger.info("Patch validation failed: %s", verdict_line)
+            logger.info("Patch validation score %d below threshold", score)
         return is_pass, usage

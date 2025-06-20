@@ -5,8 +5,8 @@ from typing import Any, Dict, Optional, TypedDict
 
 import numpy as np
 import structlog
-from agents.kg_maintainer_agent import KGMaintainerAgent
 
+from agents.kg_maintainer_agent import KGMaintainerAgent
 from core.llm_interface import llm_service
 from data_access import chapter_queries, kg_queries
 from kg_maintainer.models import CharacterProfile, WorldItem
