@@ -43,7 +43,7 @@ SAGA constructs a dynamic, interconnected understanding of the story's world, ch
     *   Leverages text embeddings (via Ollama) and Neo4j vector similarity search to construct semantically relevant context from previous chapters, ensuring narrative flow and tone.
     *   Integrates key factual data extracted from the Knowledge Graph to ground the LLM in established canon.
 *   **Iterative Drafting, Evaluation, & Revision Cycle:** Chapters undergo a rigorous process of drafting, multi-faceted evaluation, and intelligent revision (patch-based or full rewrite) to enhance quality and coherence.
-*   **Dynamic Knowledge Graph Updates & Healing:** The system "learns" from generated content. The `KGMaintainerAgent` extracts new information (character updates, world-building changes, KG triples) from final chapter text and performs periodic maintenance to resolve duplicate entities and enrich "thin" nodes.
+*   **Dynamic Knowledge Graph Updates & Healing:** The system "learns" from generated content. The `KGMaintainerAgent` extracts new information (character updates, world-building changes, KG triples) from final chapter text and performs periodic maintenance to resolve duplicate entities, promote dynamic relationships, deduplicate them, and enrich "thin" nodes.
 *   **Provisional Data Handling:** Explicitly tracks and manages the provisional status of data derived from unrevised or flawed drafts, ensuring a distinction between canonical and tentative information in the knowledge graph.
 *   **Flexible Configuration (`config.py` & `.env`):**
     *   Extensive options for LLM endpoints, model selection per task, API keys, Neo4j connection details, generation parameters, and more, managed by Pydantic.

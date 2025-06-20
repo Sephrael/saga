@@ -444,6 +444,14 @@ class KGMaintainerAgent:
         # 3. Entity Resolution
         await self._run_entity_resolution()
 
+        # 4. Relationship Healing
+        promoted = await kg_queries.promote_dynamic_relationships()
+        if promoted:
+            logger.info("KG Healer: Promoted %d dynamic relationships.", promoted)
+        removed = await kg_queries.deduplicate_relationships()
+        if removed:
+            logger.info("KG Healer: Deduplicated %d relationships.", removed)
+
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
     async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
