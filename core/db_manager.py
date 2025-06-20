@@ -210,13 +210,13 @@ class Neo4jManagerSingleton:
         # and immediately deleting a dummy node/relationship is sufficient.
         relationship_type_queries = [
             (
-                f"MERGE (a:__RelTypePlaceholder)-[:{rel_type}]->"
-                f"(b:__RelTypePlaceholder) DETACH DELETE a,b"
+                f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
+                f"(b:__RelTypePlaceholder) WITH a,b DETACH DELETE a,b"
             )
             for rel_type in RELATIONSHIP_TYPES
         ]
         node_label_queries = [
-            f"MERGE (a:`{label}`) DETACH DELETE a" for label in NODE_LABELS
+            f"CREATE (a:`{label}`) WITH a DELETE a" for label in NODE_LABELS
         ]
 
         vector_index_query = f"""
