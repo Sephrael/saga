@@ -43,7 +43,7 @@ SAGA constructs a dynamic, interconnected understanding of the story's world, ch
     *   Leverages text embeddings (via Ollama) and Neo4j vector similarity search to construct semantically relevant context from previous chapters, ensuring narrative flow and tone.
     *   Integrates key factual data extracted from the Knowledge Graph to ground the LLM in established canon.
 *   **Iterative Drafting, Evaluation, & Revision Cycle:** Chapters undergo a rigorous process of drafting, multi-faceted evaluation, and intelligent revision (patch-based or full rewrite) to enhance quality and coherence.
-*   **Dynamic Knowledge Graph Updates & Healing:** The system "learns" from generated content. The `KGMaintainerAgent` extracts new information (character updates, world-building changes, KG triples) from final chapter text and performs periodic maintenance to resolve duplicate entities and enrich "thin" nodes.
+*   **Dynamic Knowledge Graph Updates & Healing:** The system "learns" from generated content. The `KGMaintainerAgent` extracts new information (character updates, world-building changes, KG triples) from final chapter text and performs periodic maintenance to resolve duplicate entities, promote dynamic relationships, deduplicate them, and enrich "thin" nodes. Entity names are normalized before ID creation, stripping leading articles ("the", "a", "an") so that "The Wilderness" and "Wilderness" refer to the same node.
 *   **Provisional Data Handling:** Explicitly tracks and manages the provisional status of data derived from unrevised or flawed drafts, ensuring a distinction between canonical and tentative information in the knowledge graph.
 *   **Flexible Configuration (`config.py` & `.env`):**
     *   Extensive options for LLM endpoints, model selection per task, API keys, Neo4j connection details, generation parameters, and more, managed by Pydantic.
@@ -64,7 +64,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   Otherwise, or if key elements are marked `[Fill-in]`, the `bootstrapper` modules fill in the plot outline, character profiles, and world-building details via targeted LLM calls.
     *   **KG Pre-population:** The `KGMaintainerAgent` performs a full sync of this foundational story data to the Neo4j graph.
 
-2.  **Chapter Generation Loop (Iterates for `CHAPTERS_PER_RUN`):**
+2.  **Chapter Generation Loop (up to `CHAPTERS_PER_RUN` chapters):**
     *   **(A) Prerequisites (`orchestration.chapter_flow`):**
         *   Retrieves the current **Plot Point Focus** for the chapter.
         *   **Planning (if enabled):** The `PlannerAgent` creates a detailed scene-by-scene plan.
@@ -194,7 +194,7 @@ python main.py
 
 *   **First Run:** SAGA will perform initial setup (plot, world, characters based on `user_story_elements.yaml` or generation) and pre-populate the Neo4j knowledge graph.
 *   **Subsequent Runs:** It will load the existing state from Neo4j and continue generating chapters from where it left off.
-*   The number of chapters generated per run is controlled by `CHAPTERS_PER_RUN` in `config.py`.
+*   The orchestrator recalculates pending plot points before each chapter and continues until none remain or `CHAPTERS_PER_RUN` chapters have been written.
 
 Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`). This directory is ignored by Git to keep generated data out of version control.
 

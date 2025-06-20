@@ -44,6 +44,15 @@ import config
 
 logger = logging.getLogger(__name__)
 
+
+# Token parameter handling
+def _completion_token_param(api_base: str) -> str:
+    """Return the token count parameter expected by the provider."""
+    if "api.openai.com" in api_base or "api.anthropic.com" in api_base:
+        return "max_completion_tokens"
+    return "max_tokens"
+
+
 # --- Tokenizer Cache and Utility Functions (Module Level) ---
 _tokenizer_cache: Dict[str, tiktoken.Encoding] = {}
 
@@ -427,12 +436,13 @@ class LLMService:
                     prompt_token_count = count_tokens(prompt, current_model_to_try)
                     current_usage_data = None
 
+                token_param_name = _completion_token_param(config.OPENAI_API_BASE)
                 payload: Dict[str, Any] = {
                     "model": current_model_to_try,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": effective_temperature,
                     "top_p": config.LLM_TOP_P,
-                    "max_tokens": effective_max_output_tokens,
+                    token_param_name: effective_max_output_tokens,
                 }
 
                 if frequency_penalty is not None:

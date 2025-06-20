@@ -1,7 +1,7 @@
 from kg_maintainer.parsing import (
-    _normalize_attributes,
     CHAR_UPDATE_KEY_MAP,
     CHAR_UPDATE_LIST_INTERNAL_KEYS,
+    _normalize_attributes,
 )
 
 

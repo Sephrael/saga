@@ -3,6 +3,7 @@ import re
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 import spacy
+from rapidfuzz.fuzz import partial_ratio_alignment
 
 import config
 
@@ -17,6 +18,8 @@ def _normalize_for_id(text: str) -> str:
     if not isinstance(text, str):
         text = str(text)
     text = text.strip().lower()
+    # Remove common leading articles to avoid ID duplicates
+    text = re.sub(r"^(the|a|an)\s+", "", text)
     text = re.sub(r"['\"()]", "", text)
     text = re.sub(r"\s+", "_", text)
     text = re.sub(r"[^a-z0-9_]", "", text)
@@ -90,6 +93,15 @@ def _normalize_text_for_matching(text: str) -> str:
     return text
 
 
+def _token_similarity(a: str, b: str) -> float:
+    """Return Jaccard similarity between token sets of ``a`` and ``b``."""
+    tokens_a = set(_normalize_text_for_matching(a).split())
+    tokens_b = set(_normalize_text_for_matching(b).split())
+    if not tokens_a or not tokens_b:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+
+
 async def find_quote_and_sentence_offsets_with_spacy(
     doc_text: str, quote_text_from_llm: str
 ) -> Optional[Tuple[int, int, int, int]]:
@@ -158,6 +170,54 @@ async def find_quote_and_sentence_offsets_with_spacy(
             )
 
         current_pos = match_end
+
+    alignment = partial_ratio_alignment(cleaned_llm_quote_for_direct_search, doc_text)
+    if alignment.score >= 85.0:
+        match_start = alignment.dest_start
+        match_end = alignment.dest_end
+        for sent in spacy_doc.sents:
+            if (
+                sent.start_char <= match_start < sent.end_char
+                and sent.start_char < match_end <= sent.end_char
+            ):
+                logger.info(
+                    "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
+                    cleaned_llm_quote_for_direct_search[:30],
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                    alignment.score,
+                )
+                return (
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                )
+
+    # Token similarity fallback before expensive semantic search
+    best_sent = None
+    best_sim = 0.0
+    for sent in spacy_doc.sents:
+        sim = _token_similarity(cleaned_llm_quote_for_direct_search, sent.text)
+        if sim > best_sim:
+            best_sim = sim
+            best_sent = sent
+    if best_sent and best_sim >= 0.45:
+        logger.info(
+            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
+            cleaned_llm_quote_for_direct_search[:30],
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sim,
+        )
+        return (
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sent.start_char,
+            best_sent.end_char,
+        )
 
     logger.warning(
         "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",

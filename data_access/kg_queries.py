@@ -10,9 +10,19 @@ from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_REL_CHAPTER_ADDED,
+    NODE_LABELS,
 )
 
 logger = logging.getLogger(__name__)
+
+# Lookup table for canonical node labels to ensure consistent casing
+_CANONICAL_NODE_LABEL_MAP: Dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
+
+
+def _to_pascal_case(text: str) -> str:
+    """Convert underscore or space separated text to PascalCase."""
+    parts = re.split(r"[_\s]+", text.strip())
+    return "".join(part[:1].upper() + part[1:] for part in parts if part)
 
 
 def normalize_relationship_type(rel_type: str) -> str:
@@ -58,29 +68,22 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
 
     entity_label_suffix = ":Entity"  # All nodes get this
-    specific_labels_parts = []
+    specific_labels_parts: List[str] = []
 
     if entity_type and entity_type.strip():
-        # Use original type for semantic checks (like "Person") before sanitization for label syntax
-        original_type_capitalized = entity_type.strip().capitalize()
+        cleaned = re.sub(r"[^a-zA-Z0-9_\s]+", "", entity_type)
+        normalized_key = re.sub(r"[_\s]+", "", cleaned).lower()
 
-        # Sanitize for Cypher label (alphanumeric)
-        sanitized_specific_type = "".join(
-            c for c in original_type_capitalized if c.isalnum()
-        )
+        canonical = _CANONICAL_NODE_LABEL_MAP.get(normalized_key)
+        if canonical is None:
+            pascal = _to_pascal_case(cleaned)
+            canonical = _CANONICAL_NODE_LABEL_MAP.get(pascal.lower(), pascal)
 
-        if sanitized_specific_type and sanitized_specific_type != "Entity":
-            # Add the sanitized specific type label unless it's "Character" (which is handled next)
-            if sanitized_specific_type != "Character":
-                specific_labels_parts.append(f":{sanitized_specific_type}")
+        if canonical and canonical != "Entity":
+            if canonical != "Character":
+                specific_labels_parts.append(f":{canonical}")
 
-            # Add :Character label if the original type was "Person" OR
-            # if the sanitized type is "Character" itself.
-            if (
-                original_type_capitalized == "Person"
-                or sanitized_specific_type == "Character"
-            ):
-                # Add :Character if not already added (e.g. if original was "Character")
+            if cleaned.strip().lower() == "person" or canonical == "Character":
                 if ":Character" not in specific_labels_parts:
                     specific_labels_parts.append(":Character")
 
@@ -637,3 +640,104 @@ async def get_defined_relationship_types() -> List[str]:
         )
         # Fallback to constants if DB query fails
         return list(config.RELATIONSHIP_TYPES)
+
+
+async def promote_dynamic_relationships() -> int:
+    """Convert dynamic relationships to defined relationship types."""
+    valid_types = await get_defined_relationship_types()
+    query = """
+    MATCH (s)-[r:DYNAMIC_REL]->(o)
+    WHERE r.type IN $valid_types
+    WITH s, r, o
+    CALL apoc.create.relationship(
+        s,
+        r.type,
+        apoc.map.removeKey(properties(r), 'type'),
+        o
+    ) YIELD rel
+    DELETE r
+    RETURN count(rel) AS promoted
+    """
+    try:
+        results = await neo4j_manager.execute_write_query(
+            query, {"valid_types": valid_types}
+        )
+        return results[0].get("promoted", 0) if results else 0
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to promote dynamic relationships: %s", exc, exc_info=True)
+        return 0
+
+
+async def deduplicate_relationships() -> int:
+    """Merge duplicate relationships of the same type between nodes."""
+    query = """
+    MATCH (s)-[r]->(o)
+    WITH s, type(r) AS t, o, collect(r) AS rels, count(r) AS cnt
+    WHERE cnt > 1
+    CALL apoc.refactor.mergeRelationships(rels, {properties: 'combine'}) YIELD rel
+    RETURN sum(cnt - 1) AS removed
+    """
+    try:
+        results = await neo4j_manager.execute_write_query(query)
+        return results[0].get("removed", 0) if results else 0
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to deduplicate relationships: %s", exc, exc_info=True)
+        return 0
+
+
+async def fetch_unresolved_dynamic_relationships(
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Fetch dynamic relationships lacking a specific type."""
+    query = """
+    MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
+    WHERE r.type IS NULL OR r.type = 'UNKNOWN'
+    RETURN id(r) AS rel_id,
+           s.name AS subject,
+           labels(s) AS subject_labels,
+           coalesce(s.description, '') AS subject_desc,
+           o.name AS object,
+           labels(o) AS object_labels,
+           coalesce(o.description, '') AS object_desc,
+           coalesce(r.type, 'UNKNOWN') AS type
+    LIMIT $limit
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(query, {"limit": limit})
+        return [dict(record) for record in results] if results else []
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Failed to fetch unresolved dynamic relationships: %s", exc, exc_info=True
+        )
+        return []
+
+
+async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
+    """Update a dynamic relationship's type."""
+    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE id(r) = $id SET r.type = $type"
+    try:
+        await neo4j_manager.execute_write_query(query, {"id": rel_id, "type": new_type})
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Failed to update dynamic relationship %s: %s", rel_id, exc, exc_info=True
+        )
+
+
+async def get_shortest_path_length_between_entities(
+    name1: str, name2: str, max_depth: int = 4
+) -> Optional[int]:
+    """Return the shortest path length between two entities if it exists."""
+    query = """
+    MATCH (a:Entity {name: $name1}), (b:Entity {name: $name2})
+    MATCH p = shortestPath((a)-[*..$max_depth]-(b))
+    RETURN length(p) AS len
+    """
+    try:
+        results = await neo4j_manager.execute_read_query(
+            query, {"name1": name1, "name2": name2, "max_depth": max_depth}
+        )
+        if results:
+            return results[0].get("len")
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error("Failed to compute shortest path length: %s", exc, exc_info=True)
+    return None

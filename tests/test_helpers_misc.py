@@ -1,5 +1,5 @@
-from utils.helpers import _is_fill_in
 import config
+from utils.helpers import _is_fill_in
 
 
 def test_is_fill_in_helper():

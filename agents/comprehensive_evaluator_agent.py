@@ -199,6 +199,7 @@ class ComprehensiveEvaluatorAgent:
 
         # This whole block will replace the existing few_shot_eval_example_str
         few_shot_eval_example_str = """
+**Ignore the narrative details in this example. It shows the required format only.**
 [
   {
     "issue_category": "CONSISTENCY",
@@ -225,7 +226,6 @@ class ComprehensiveEvaluatorAgent:
     "suggested_fix_focus": "Expand on John's internal thoughts and feelings upon discovering the Baron's betrayal. Show, don't just tell, the emotional weight of this moment. Describe the fight with more detail and tension."
   }
 ]
-**Ignore the narrative details in this example. It shows the required format only.**
 """
         # Note: The user/developer needs to update the actual LLM prompt to request JSON.
         # This tool only changes the agent's parsing logic and the example string.

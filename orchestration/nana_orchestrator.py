@@ -118,6 +118,15 @@ class NANA_Orchestrator:
         }
         self._update_rich_display()
 
+    async def refresh_plot_outline(self) -> None:
+        """Reload plot outline from the database."""
+        result = await plot_queries.get_plot_outline_from_db()
+        if isinstance(result, dict):
+            self.plot_outline = result
+            self._update_novel_props_cache()
+        else:
+            logger.error("Failed to refresh plot outline from DB: %s", result)
+
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
         self._update_rich_display(step="Initializing Orchestrator")
@@ -1046,8 +1055,6 @@ class NANA_Orchestrator:
 
             logger.info("\n--- NANA: Starting Novel Writing Process ---")
 
-            start_novel_chapter_to_write = self.chapter_count + 1
-
             plot_points_raw = self.plot_outline.get("plot_points", [])
             if isinstance(plot_points_raw, list):
                 plot_points_list = plot_points_raw
@@ -1066,9 +1073,8 @@ class NANA_Orchestrator:
                 ]
             )
 
-            plot_points_covered_count = self.chapter_count
             remaining_plot_points_to_address_in_novel = (
-                total_concrete_plot_points - plot_points_covered_count
+                total_concrete_plot_points - self.chapter_count
             )
 
             logger.info(
@@ -1090,22 +1096,46 @@ class NANA_Orchestrator:
                     step="All Plot Points Covered",
                 )
             else:
-                chapters_to_attempt_this_run = min(
-                    config.CHAPTERS_PER_RUN,
-                    remaining_plot_points_to_address_in_novel,
-                )
                 logger.info(
-                    f"NANA: Targeting up to {chapters_to_attempt_this_run} new chapter(s) in this run, starting with Novel Chapter {start_novel_chapter_to_write}."
+                    f"NANA: Starting dynamic chapter loop (max {config.CHAPTERS_PER_RUN} chapter(s) this run)."
                 )
 
                 chapters_successfully_written_this_run = 0
-                for k_th_chapter_this_run in range(chapters_to_attempt_this_run):
-                    current_novel_chapter_number = (
-                        start_novel_chapter_to_write + k_th_chapter_this_run
+                attempts_this_run = 0
+                while attempts_this_run < config.CHAPTERS_PER_RUN:
+                    plot_points_raw = self.plot_outline.get("plot_points", [])
+                    if isinstance(plot_points_raw, list):
+                        plot_points_list = plot_points_raw
+                    elif isinstance(plot_points_raw, dict):
+                        plot_points_list = list(plot_points_raw.values())
+                    elif plot_points_raw:
+                        plot_points_list = [plot_points_raw]
+                    else:
+                        plot_points_list = []
+
+                    total_concrete_plot_points = len(
+                        [
+                            pp
+                            for pp in plot_points_list
+                            if not utils._is_fill_in(pp)
+                            and isinstance(pp, str)
+                            and pp.strip()
+                        ]
+                    )
+                    remaining_plot_points_to_address_in_novel = (
+                        total_concrete_plot_points - self.chapter_count
                     )
 
+                    if remaining_plot_points_to_address_in_novel <= 0:
+                        logger.info(
+                            "NANA: No remaining plot points to cover. Ending run early."
+                        )
+                        break
+
+                    current_novel_chapter_number = self.chapter_count + 1
+
                     logger.info(
-                        f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} ({k_th_chapter_this_run + 1}/{chapters_to_attempt_this_run} in this run) ---"
+                        f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} (attempt {attempts_this_run + 1}/{config.CHAPTERS_PER_RUN}) ---"
                     )
                     self._update_rich_display(
                         chapter_num=current_novel_chapter_number,
@@ -1125,7 +1155,6 @@ class NANA_Orchestrator:
                                 f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}..."
                             )
 
-                            # --- HEALER/ENRICHER CALL ---
                             if (
                                 current_novel_chapter_number > 0
                                 and current_novel_chapter_number
@@ -1139,6 +1168,7 @@ class NANA_Orchestrator:
                                     step=f"Ch {current_novel_chapter_number} - KG Maintenance"
                                 )
                                 await self.kg_maintainer_agent.heal_and_enrich_kg()
+                                await self.refresh_plot_outline()
                                 logger.info(
                                     "--- NANA: KG Healing/Enrichment cycle complete. ---"
                                 )
@@ -1160,6 +1190,8 @@ class NANA_Orchestrator:
                             step=f"Critical Error Ch {current_novel_chapter_number} - Halting Run"
                         )
                         break
+
+                    attempts_this_run += 1
 
                 final_chapter_count_from_db = (
                     await chapter_queries.load_chapter_count_from_db()

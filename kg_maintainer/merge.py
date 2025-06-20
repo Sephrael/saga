@@ -1,3 +1,4 @@
+# kg_maintainer/merge.py
 """Helpers for merging parsed updates into existing knowledge graph state."""
 
 import logging

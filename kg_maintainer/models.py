@@ -1,3 +1,4 @@
+# kg_maintainer/models.py
 """Compatibility layer exposing data models from :mod:`models`."""
 
 from typing import TypedDict
