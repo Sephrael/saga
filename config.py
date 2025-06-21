@@ -201,6 +201,7 @@ class SagaSettings(BaseSettings):
     # Revision and Validation
     ENABLE_COMPREHENSIVE_EVALUATION: bool = True
     ENABLE_WORLD_CONTINUITY_CHECK: bool = True
+    ENABLE_SCENE_PLAN_VALIDATION: bool = True
     ENABLE_PATCH_BASED_REVISION: bool = True
     AGENT_ENABLE_PATCH_VALIDATION: bool = True
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 5

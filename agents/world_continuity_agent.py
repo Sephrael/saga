@@ -1,6 +1,7 @@
 # world_continuity_agent.py
 # from parsing_utils import split_text_into_blocks,
 # parse_key_value_block  # Removed
+import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -8,7 +9,7 @@ import config
 import utils  # MODIFIED: For spaCy functions
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import character_queries, kg_queries, world_queries
-from kg_maintainer.models import ProblemDetail
+from kg_maintainer.models import ProblemDetail, SceneDetail
 from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -192,6 +193,119 @@ class WorldContinuityAgent:
         logger.info(
             f"World/Continuity consistency check for Ch {chapter_number} found"
             f" {len(consistency_problems)} problems."
+        )
+        return consistency_problems, usage_data
+
+    async def check_scene_plan_consistency(
+        self,
+        plot_outline: Dict[str, Any],
+        scene_plan: List[SceneDetail],
+        chapter_number: int,
+    ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
+        """Validate a scene plan before drafting begins."""
+
+        if not scene_plan:
+            logger.warning(
+                "WorldContinuityAgent: Scene plan consistency check skipped for Ch %s: empty plan.",
+                chapter_number,
+            )
+            return [], None
+
+        protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
+        characters = await character_queries.get_character_profiles_from_db()
+        world_item_ids_by_category = (
+            await world_queries.get_all_world_item_ids_by_category()
+        )
+        char_profiles_plain_text = (
+            await get_filtered_character_profiles_for_prompt_plain_text(
+                characters,
+                chapter_number - 1,
+            )
+        )
+        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
+            world_item_ids_by_category,
+            chapter_number - 1,
+        )
+
+        plot_points_summary_lines = (
+            [
+                f"- PP {i + 1}: {pp[:100]}..."
+                for i, pp in enumerate(plot_outline.get("plot_points", []))
+            ]
+            if plot_outline.get("plot_points")
+            else ["  - Not available"]
+        )
+        plot_points_summary_str = "\n".join(plot_points_summary_lines)
+
+        few_shot_consistency_example_str = """
+**Ignore the narrative details in this example. It shows the required format only.**
+[
+  {
+    "issue_category": "consistency",
+    "problem_description": "The 'Sunstone' is described as glowing blue in this"
+    " chapter, but the world building notes explicitly state all Sunstones are"
+    " crimson red.",
+    "quote_from_original_text": "She admired the brilliant blue glow of the"
+    " Sunstone clutched in her hand.",
+    "suggested_fix_focus": "Change the Sunstone's color to 'crimson red' to"
+    " align with established world canon."
+  },
+  {
+    "issue_category": "consistency",
+    "problem_description": "Character Kael claims to have never met Elara before",
+    " but Previous Chapter Context (KG Fact) states \"Kael | mentored | Elara"
+    " (Ch: 3)\".",
+    "quote_from_original_text": "\"I do not believe we have crossed paths"
+    " before, young one,\" Kael said, peering at Elara.",
+    "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior"
+    " mentorship of Elara, or introduce a reason for his feigned ignorance"
+    " (e.g., memory loss, testing her)."
+  }
+]
+"""
+
+        prompt = render_prompt(
+            "world_continuity_agent/plan_consistency_check.j2",
+            {
+                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "novel_title": plot_outline.get("title", "Untitled Novel"),
+                "protagonist_name_str": protagonist_name_str,
+                "novel_genre": plot_outline.get("genre", "N/A"),
+                "novel_theme": plot_outline.get("theme", "N/A"),
+                "novel_protagonist": plot_outline.get("protagonist_name", "N/A"),
+                "protagonist_arc": plot_outline.get("character_arc", "N/A"),
+                "logline": plot_outline.get("logline", "N/A"),
+                "plot_points_summary_str": plot_points_summary_str,
+                "char_profiles_plain_text": char_profiles_plain_text,
+                "world_building_plain_text": world_building_plain_text,
+                "scene_plan_json": json.dumps(scene_plan, ensure_ascii=False, indent=2),
+                "few_shot_consistency_example_str": few_shot_consistency_example_str,
+            },
+        )
+
+        logger.info(
+            "Calling LLM (%s) for scene plan consistency check of chapter %s (expecting JSON)...",
+            self.model_name,
+            chapter_number,
+        )
+        cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=prompt,
+            temperature=config.Temperatures.CONSISTENCY_CHECK,
+            allow_fallback=True,
+            stream_to_disk=False,
+            auto_clean_response=True,
+        )
+
+        consistency_problems = await self._parse_llm_consistency_output(
+            cleaned_consistency_text, chapter_number, json.dumps(scene_plan)
+        )
+
+        logger.info(
+            "Scene plan consistency check for Ch %s found %s problems.",
+            chapter_number,
+            len(consistency_problems),
         )
         return consistency_problems, usage_data
 

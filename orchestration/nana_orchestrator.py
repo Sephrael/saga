@@ -544,6 +544,33 @@ class NANA_Orchestrator:
 
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
 
+        if (
+            config.ENABLE_SCENE_PLAN_VALIDATION
+            and chapter_plan is not None
+            and config.ENABLE_WORLD_CONTINUITY_CHECK
+        ):
+            (
+                plan_problems,
+                usage,
+            ) = await self.world_continuity_agent.check_scene_plan_consistency(
+                self.plot_outline,
+                chapter_plan,
+                novel_chapter_number,
+            )
+            self._accumulate_tokens(
+                f"Ch{novel_chapter_number}-PlanConsistency",
+                usage,
+            )
+            await self._save_debug_output(
+                novel_chapter_number,
+                "scene_plan_consistency_problems",
+                plan_problems,
+            )
+            if plan_problems:
+                logger.warning(
+                    f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
+                )
+
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
             self, novel_chapter_number, chapter_plan
         )
