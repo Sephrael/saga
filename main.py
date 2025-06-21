@@ -38,16 +38,14 @@ def main() -> None:
                 await neo4j_manager.close()
 
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running() and not loop.is_closed():
-                    asyncio.ensure_future(_close_driver_main())
-                elif not loop.is_running() and not loop.is_closed():
-                    loop.run_until_complete(_close_driver_main())
-                else:
-                    asyncio.run(_close_driver_main())
-            except RuntimeError as e:
+                loop = asyncio.get_running_loop()
+                if not loop.is_closed():
+                    loop.create_task(_close_driver_main())
+            except RuntimeError:
+                asyncio.run(_close_driver_main())
+            except Exception as e:
                 logger.warning(
-                    "Could not explicitly close driver from main (event loop might be closed or other issue): %s",
+                    "Could not explicitly close driver from main: %s",
                     e,
                 )
 

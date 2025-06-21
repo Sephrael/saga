@@ -278,7 +278,7 @@ class NANA_Orchestrator:
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: Optional[str]
     ):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None,
@@ -321,7 +321,7 @@ class NANA_Orchestrator:
         content_str = str(content) if not isinstance(content, str) else content
         if not content_str.strip():
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             safe_stage_desc = "".join(
                 c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
