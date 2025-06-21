@@ -722,7 +722,7 @@ class KGMaintainerAgent:
         for rel in dyn_rels:
             prompt = jinja_template.render(rel)
             new_type_raw, _ = await llm_service.async_call_llm(
-                model_name=config.SMALL_MODEL,
+                model_name=config.MEDIUM_MODEL,
                 prompt=prompt,
                 temperature=config.Temperatures.KG_EXTRACTION,
                 max_tokens=10,
