@@ -108,6 +108,11 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         AsyncMock(return_value={}),
     )
     monkeypatch.setattr(
+        orchestrator.world_continuity_agent,
+        "check_scene_plan_consistency",
+        AsyncMock(return_value=([], {})),
+    )
+    monkeypatch.setattr(
         "orchestration.nana_orchestrator.generate_hybrid_chapter_context_logic",
         AsyncMock(side_effect=fake_context),
     )
