@@ -37,6 +37,7 @@ from processing.context_generator import generate_hybrid_chapter_context_logic
 from processing.revision_logic import revise_chapter_draft_logic
 from processing.text_deduplicator import TextDeduplicator
 from ui.rich_display import RichDisplayManager
+from utils.ingestion_utils import split_text_into_chapters
 
 try:
     from rich.logging import RichHandler
@@ -91,6 +92,40 @@ class NANA_Orchestrator:
         self.token_tracker.add(operation_name, usage_data)
         self.total_tokens_generated_this_run = self.token_tracker.total
         self._update_rich_display()
+
+    async def _generate_plot_points_from_kg(self, count: int) -> None:
+        """Generate and persist additional plot points using the planner agent."""
+        if count <= 0:
+            return
+
+        summaries: List[str] = []
+        start = max(1, self.chapter_count - config.CONTEXT_CHAPTER_COUNT + 1)
+        for i in range(start, self.chapter_count + 1):
+            chap = await chapter_queries.get_chapter_data_from_db(i)
+            if chap and (chap.get("summary") or chap.get("text")):
+                summaries.append((chap.get("summary") or chap.get("text", "")).strip())
+
+        combined_summary = "\n".join(summaries)
+        if not combined_summary.strip():
+            logger.warning("No summaries available for continuation planning.")
+            return
+
+        new_points, usage = await self.planner_agent.plan_continuation(
+            combined_summary, count
+        )
+        self._accumulate_tokens("PlanContinuation", usage)
+        if not new_points:
+            logger.error("Failed to generate continuation plot points.")
+            return
+
+        for desc in new_points:
+            if await plot_queries.plot_point_exists(desc):
+                logger.info("Plot point already exists, skipping: %s", desc)
+                continue
+            prev_id = await plot_queries.get_last_plot_point_id()
+            await self.kg_maintainer_agent.add_plot_point(desc, prev_id or "")
+            self.plot_outline.setdefault("plot_points", []).append(desc)
+        self._update_novel_props_cache()
 
     def load_state_from_user_model(self, model: UserStoryInputModel) -> None:
         """Populate orchestrator state from a user-provided model."""
@@ -243,7 +278,7 @@ class NANA_Orchestrator:
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: Optional[str]
     ):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None,
@@ -286,7 +321,7 @@ class NANA_Orchestrator:
         content_str = str(content) if not isinstance(content, str) else content
         if not content_str.strip():
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             safe_stage_desc = "".join(
                 c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
@@ -508,6 +543,33 @@ class NANA_Orchestrator:
         self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
 
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
+
+        if (
+            config.ENABLE_SCENE_PLAN_VALIDATION
+            and chapter_plan is not None
+            and config.ENABLE_WORLD_CONTINUITY_CHECK
+        ):
+            (
+                plan_problems,
+                usage,
+            ) = await self.world_continuity_agent.check_scene_plan_consistency(
+                self.plot_outline,
+                chapter_plan,
+                novel_chapter_number,
+            )
+            self._accumulate_tokens(
+                f"Ch{novel_chapter_number}-PlanConsistency",
+                usage,
+            )
+            await self._save_debug_output(
+                novel_chapter_number,
+                "scene_plan_consistency_problems",
+                plan_problems,
+            )
+            if plan_problems:
+                logger.warning(
+                    f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
+                )
 
         hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
             self, novel_chapter_number, chapter_plan
@@ -1088,21 +1150,44 @@ class NANA_Orchestrator:
             )
 
             if remaining_plot_points_to_address_in_novel <= 0:
-                logger.info(
-                    f"NANA: All {total_concrete_plot_points} concrete plot points appear to be covered by existing {self.chapter_count} chapters. No new chapters to generate."
+                await self._generate_plot_points_from_kg(config.CHAPTERS_PER_RUN)
+                await self.refresh_plot_outline()
+
+            logger.info(
+                f"NANA: Starting dynamic chapter loop (max {config.CHAPTERS_PER_RUN} chapter(s) this run)."
+            )
+
+            chapters_successfully_written_this_run = 0
+            attempts_this_run = 0
+            while attempts_this_run < config.CHAPTERS_PER_RUN:
+                plot_points_raw = self.plot_outline.get("plot_points", [])
+                if isinstance(plot_points_raw, list):
+                    plot_points_list = plot_points_raw
+                elif isinstance(plot_points_raw, dict):
+                    plot_points_list = list(plot_points_raw.values())
+                elif plot_points_raw:
+                    plot_points_list = [plot_points_raw]
+                else:
+                    plot_points_list = []
+
+                total_concrete_plot_points = len(
+                    [
+                        pp
+                        for pp in plot_points_list
+                        if not utils._is_fill_in(pp)
+                        and isinstance(pp, str)
+                        and pp.strip()
+                    ]
                 )
-                self._update_rich_display(
-                    chapter_num=self.chapter_count,
-                    step="All Plot Points Covered",
-                )
-            else:
-                logger.info(
-                    f"NANA: Starting dynamic chapter loop (max {config.CHAPTERS_PER_RUN} chapter(s) this run)."
+                remaining_plot_points_to_address_in_novel = (
+                    total_concrete_plot_points - self.chapter_count
                 )
 
-                chapters_successfully_written_this_run = 0
-                attempts_this_run = 0
-                while attempts_this_run < config.CHAPTERS_PER_RUN:
+                if remaining_plot_points_to_address_in_novel <= 0:
+                    await self._generate_plot_points_from_kg(
+                        config.CHAPTERS_PER_RUN - attempts_this_run
+                    )
+                    await self.refresh_plot_outline()
                     plot_points_raw = self.plot_outline.get("plot_points", [])
                     if isinstance(plot_points_raw, list):
                         plot_points_list = plot_points_raw
@@ -1125,86 +1210,82 @@ class NANA_Orchestrator:
                     remaining_plot_points_to_address_in_novel = (
                         total_concrete_plot_points - self.chapter_count
                     )
-
                     if remaining_plot_points_to_address_in_novel <= 0:
                         logger.info(
-                            "NANA: No remaining plot points to cover. Ending run early."
+                            "NANA: No plot points available after generation. Ending run early."
                         )
                         break
 
-                    current_novel_chapter_number = self.chapter_count + 1
+                current_novel_chapter_number = self.chapter_count + 1
 
-                    logger.info(
-                        f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} (attempt {attempts_this_run + 1}/{config.CHAPTERS_PER_RUN}) ---"
-                    )
-                    self._update_rich_display(
-                        chapter_num=current_novel_chapter_number,
-                        step="Starting Chapter Loop",
-                    )
+                logger.info(
+                    f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} (attempt {attempts_this_run + 1}/{config.CHAPTERS_PER_RUN}) ---"
+                )
+                self._update_rich_display(
+                    chapter_num=current_novel_chapter_number,
+                    step="Starting Chapter Loop",
+                )
 
-                    try:
-                        chapter_text_result = await self.run_chapter_generation_process(
-                            current_novel_chapter_number
+                try:
+                    chapter_text_result = await self.run_chapter_generation_process(
+                        current_novel_chapter_number
+                    )
+                    if chapter_text_result:
+                        chapters_successfully_written_this_run += 1
+                        logger.info(
+                            f"NANA: Novel Chapter {current_novel_chapter_number}: Processed. Final text length: {len(chapter_text_result)} chars."
                         )
-                        if chapter_text_result:
-                            chapters_successfully_written_this_run += 1
-                            logger.info(
-                                f"NANA: Novel Chapter {current_novel_chapter_number}: Processed. Final text length: {len(chapter_text_result)} chars."
-                            )
-                            logger.info(
-                                f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}..."
-                            )
+                        logger.info(
+                            f"   Snippet: {chapter_text_result[:200].replace(chr(10), ' ')}..."
+                        )
 
-                            if (
-                                current_novel_chapter_number > 0
-                                and current_novel_chapter_number
-                                % config.KG_HEALING_INTERVAL
-                                == 0
-                            ):
-                                logger.info(
-                                    f"\n--- NANA: Triggering KG Healing/Enrichment after Chapter {current_novel_chapter_number} ---"
-                                )
-                                self._update_rich_display(
-                                    step=f"Ch {current_novel_chapter_number} - KG Maintenance"
-                                )
-                                await self.kg_maintainer_agent.heal_and_enrich_kg()
-                                await self.refresh_plot_outline()
-                                logger.info(
-                                    "--- NANA: KG Healing/Enrichment cycle complete. ---"
-                                )
-
-                        else:
-                            logger.error(
-                                f"NANA: Novel Chapter {current_novel_chapter_number}: Failed to generate or save. Halting run."
+                        if (
+                            current_novel_chapter_number > 0
+                            and current_novel_chapter_number
+                            % config.KG_HEALING_INTERVAL
+                            == 0
+                        ):
+                            logger.info(
+                                f"\n--- NANA: Triggering KG Healing/Enrichment after Chapter {current_novel_chapter_number} ---"
                             )
                             self._update_rich_display(
-                                step=f"Ch {current_novel_chapter_number} Failed - Halting Run"
+                                step=f"Ch {current_novel_chapter_number} - KG Maintenance"
                             )
-                            break
-                    except Exception as e:
-                        logger.critical(
-                            f"NANA: Critical unhandled error during Novel Chapter {current_novel_chapter_number} writing process: {e}",
-                            exc_info=True,
+                            await self.kg_maintainer_agent.heal_and_enrich_kg()
+                            await self.refresh_plot_outline()
+                            logger.info(
+                                "--- NANA: KG Healing/Enrichment cycle complete. ---"
+                            )
+                    else:
+                        logger.error(
+                            f"NANA: Novel Chapter {current_novel_chapter_number}: Failed to generate or save. Halting run."
                         )
                         self._update_rich_display(
-                            step=f"Critical Error Ch {current_novel_chapter_number} - Halting Run"
+                            step=f"Ch {current_novel_chapter_number} Failed - Halting Run"
                         )
                         break
+                except Exception as e:
+                    logger.critical(
+                        f"NANA: Critical unhandled error during Novel Chapter {current_novel_chapter_number} writing process: {e}",
+                        exc_info=True,
+                    )
+                    self._update_rich_display(
+                        step=f"Critical Error Ch {current_novel_chapter_number} - Halting Run"
+                    )
+                    break
 
-                    attempts_this_run += 1
+                attempts_this_run += 1
 
-                final_chapter_count_from_db = (
-                    await chapter_queries.load_chapter_count_from_db()
-                )
-                logger.info(
-                    "\n--- NANA: Novel writing process finished for this run ---"
-                )
-                logger.info(
-                    f"NANA: Successfully processed {chapters_successfully_written_this_run} chapter(s) in this run."
-                )
-                logger.info(
-                    f"NANA: Current total chapters in database after this run: {final_chapter_count_from_db}"
-                )
+            final_chapter_count_from_db = (
+                await chapter_queries.load_chapter_count_from_db()
+            )
+            logger.info("\n--- NANA: Novel writing process finished for this run ---")
+            logger.info(
+                f"NANA: Successfully processed {chapters_successfully_written_this_run} chapter(s) in this run."
+            )
+            logger.info(
+                f"NANA: Current total chapters in database after this run: {final_chapter_count_from_db}"
+            )
 
             logger.info(
                 f"NANA: Total LLM tokens generated this run: {self.total_tokens_generated_this_run}"
@@ -1223,6 +1304,66 @@ class NANA_Orchestrator:
             await self.display.stop()
             await neo4j_manager.close()
             logger.info("NANA: Neo4j driver successfully closed on application exit.")
+
+    async def run_ingestion_process(self, text_file: str) -> None:
+        """Ingest existing text and populate the knowledge graph."""
+        logger.info("--- NANA: Starting Ingestion Process ---")
+
+        if not self._validate_critical_configs():
+            await self.display.stop()
+            return
+
+        self.display.start()
+        self.run_start_time = time.time()
+        await neo4j_manager.connect()
+        await neo4j_manager.create_db_schema()
+        if neo4j_manager.driver is not None:
+            await plot_queries.ensure_novel_info()
+        else:
+            logger.warning("Neo4j driver not initialized. Skipping NovelInfo setup.")
+        await self.kg_maintainer_agent.load_schema_from_db()
+
+        with open(text_file, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+
+        chunks = split_text_into_chapters(raw_text)
+        plot_outline = {"title": "Ingested Narrative", "plot_points": []}
+        character_profiles: Dict[str, CharacterProfile] = {}
+        world_building: Dict[str, Dict[str, WorldItem]] = {}
+        summaries: List[str] = []
+
+        for idx, chunk in enumerate(chunks, 1):
+            self._update_rich_display(chapter_num=idx, step="Ingesting Text")
+            result = await self.finalize_agent.ingest_and_finalize_chunk(
+                plot_outline,
+                character_profiles,
+                world_building,
+                idx,
+                chunk,
+            )
+            if result.get("summary"):
+                summaries.append(str(result["summary"]))
+                plot_outline["plot_points"].append(result["summary"])
+
+            if idx % config.KG_HEALING_INTERVAL == 0:
+                logger.info(
+                    f"--- NANA: Triggering KG Healing/Enrichment after Ingestion Chunk {idx} ---"
+                )
+                self._update_rich_display(step=f"Ch {idx} - KG Maintenance")
+                await self.kg_maintainer_agent.heal_and_enrich_kg()
+                await self.refresh_plot_outline()
+
+        await self.kg_maintainer_agent.heal_and_enrich_kg()
+        combined_summary = "\n".join(summaries)
+        continuation, _ = await self.planner_agent.plan_continuation(combined_summary)
+        if continuation:
+            plot_outline["plot_points"].extend(continuation)
+        self.plot_outline = plot_outline
+        self.chapter_count = len(chunks)
+        await plot_queries.save_plot_outline_to_db(plot_outline)
+        await self.display.stop()
+        await neo4j_manager.close()
+        logger.info("NANA: Ingestion process completed.")
 
 
 def setup_logging_nana():

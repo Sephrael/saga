@@ -201,6 +201,7 @@ class SagaSettings(BaseSettings):
     # Revision and Validation
     ENABLE_COMPREHENSIVE_EVALUATION: bool = True
     ENABLE_WORLD_CONTINUITY_CHECK: bool = True
+    ENABLE_SCENE_PLAN_VALIDATION: bool = True
     ENABLE_PATCH_BASED_REVISION: bool = True
     AGENT_ENABLE_PATCH_VALIDATION: bool = True
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 5
@@ -237,15 +238,15 @@ class SagaSettings(BaseSettings):
 
     # Novel Configuration (Defaults / Placeholders)
     UNHINGED_PLOT_MODE: bool = False
-    CONFIGURED_GENRE: str = "occult mystery"
-    CONFIGURED_THEME: str = "the contrast between appearance and reality"
-    CONFIGURED_SETTING_DESCRIPTION: str = "a perpetual carnival that appears in different locations, collecting lost souls and broken dreams"
-    DEFAULT_PROTAGONIST_NAME: str = "Saga"
-    DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Saga"
+    CONFIGURED_GENRE: str = "grimdark science fiction"
+    CONFIGURED_THEME: str = "the hubris of humanity"
+    CONFIGURED_SETTING_DESCRIPTION: str = "a remote outpost on the surface of Jupiter's moon, Callisto"
+    DEFAULT_PROTAGONIST_NAME: str = "Ilya Lakatos"
+    DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Narrative"
 
-    MAIN_NOVEL_INFO_NODE_ID: str = "saga_main_novel_info"
-    MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "saga_main_characters_container"
-    MAIN_WORLD_CONTAINER_NODE_ID: str = "saga_main_world_container"
+    MAIN_NOVEL_INFO_NODE_ID: str = "main_novel_info"
+    MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "main_characters_container"
+    MAIN_WORLD_CONTAINER_NODE_ID: str = "main_world_container"
 
     @model_validator(mode="after")
     def set_dynamic_model_defaults(self) -> "SagaSettings":

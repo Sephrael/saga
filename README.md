@@ -207,6 +207,16 @@ Using a local setup with the following GGUF models:
 
 SAGA can generate a batch of **3 chapters** (each ~13,000+ tokens of narrative) in approximately **11 minutes**, involving significant processing for planning, context generation, evaluation, and knowledge graph updates.
 
+### Ingestion Mode
+
+To import existing text into the knowledge graph:
+
+```bash
+python main.py --ingest path/to/novel.txt
+```
+
+The text is split into pseudo-chapters and processed through the finalization pipeline. The knowledge graph heals every `KG_HEALING_INTERVAL` chapters during ingestion so later chapters see a deduplicated graph.
+
 ## Resetting the Database
 
 To start SAGA from a completely fresh state:

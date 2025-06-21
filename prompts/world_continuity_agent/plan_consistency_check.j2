@@ -1,11 +1,10 @@
 /no_think
 You are a World & Continuity Expert Editor for Chapter {{ chapter_number }} of the novel "{{ novel_title }}" (Protagonist: {{ protagonist_name_str }}).
-Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chapter Text** below. Focus on:
+Your SOLE TASK is to identify specific CONSISTENCY issues in the **Scene Plan** below. Focus on:
 - Contradictions with the Plot Outline summary.
 - Contradictions with Character Profiles (descriptions, established traits, known status, relationships).
 - Contradictions with World Building rules, descriptions, or established lore.
-- Contradictions or inconsistencies with the Previous Chapters Context (which includes semantic flow and Key Reliable KG Facts).
-- Internal inconsistencies of fact or established detail within THIS chapter's text.
+- Internal inconsistencies of fact or established detail within this plan.
 
 **Reference Information for CONSISTENCY Check (Summary Format):**
   **Plot Outline Summary:**
@@ -26,20 +25,16 @@ Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chap
   ```text
   {{ world_building_plain_text }}
   ```
-  **Previous Chapters Context (Includes Semantic Flow & Key Reliable KG Facts for Canon):**
-  --- PREVIOUS CONTEXT ---
-  {{ previous_chapters_context if previous_chapters_context.strip() else 'N/A (e.g., Chapter 1 or context retrieval failed).' }}
-  --- END PREVIOUS CONTEXT ---
 
-**Complete Chapter {{ chapter_number }} Text (to analyze for consistency):**
---- BEGIN COMPLETE CHAPTER TEXT ---
-{{ draft_text }}
---- END COMPLETE CHAPTER TEXT ---
+**Scene Plan to Analyze (JSON array):**
+```json
+{{ scene_plan_json }}
+```
 
 **Output Format (CRITICAL - JSON ONLY):**
 If consistency problems are found, output a JSON array of problem objects.
 Each object MUST have these keys: "issue_category" (fixed to "consistency"), "problem_description", "quote_from_original_text", "suggested_fix_focus".
-The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".
+The `quote_from_original_text` should be a relevant snippet from the plan. If general or no quote applies, use "N/A - General Issue".
 If NO consistency problems are found, output an empty JSON array `[]` or a JSON object like {"status": "No significant consistency problems found"}.
 If any part of the reference material is unclear or incomplete, note the uncertainty in your problem descriptions.
 
@@ -51,3 +46,4 @@ If any part of the reference material is unclear or incomplete, note the uncerta
 **Ignore the narrative details in this example. It shows the required format only.**
 
 Begin your JSON output now:
+

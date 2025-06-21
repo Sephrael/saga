@@ -371,3 +371,30 @@ class PlannerAgent:
                 f"Failed to parse a valid list of scenes for chapter {chapter_number}. Cleaned LLM output: '{cleaned_plan_text_from_llm[:500]}...'"
             )
             return None, usage_data
+
+    async def plan_continuation(
+        self, summary_text: str, num_points: int = 5
+    ) -> Tuple[Optional[List[str]], Optional[Dict[str, int]]]:
+        """Generate future plot points from a story summary."""
+        prompt = render_prompt(
+            "planner_agent/plan_continuation.j2",
+            {"summary": summary_text, "num_points": num_points},
+        )
+        cleaned, usage = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=prompt,
+            temperature=config.Temperatures.PLANNING,
+            max_tokens=config.MAX_PLANNING_TOKENS,
+            allow_fallback=True,
+            stream_to_disk=False,
+            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
+            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
+            auto_clean_response=True,
+        )
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                return [str(p) for p in parsed if str(p).strip()], usage
+        except json.JSONDecodeError:
+            logger.error("Failed to parse continuation plan JSON: %s", cleaned)
+        return None, usage

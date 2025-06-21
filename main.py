@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import logging
 
@@ -9,9 +10,16 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     setup_logging_nana()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ingest", default=None, help="Path to text file to ingest")
+    args = parser.parse_args()
+
     orchestrator = NANA_Orchestrator()
     try:
-        asyncio.run(orchestrator.run_novel_generation_loop())
+        if args.ingest:
+            asyncio.run(orchestrator.run_ingestion_process(args.ingest))
+        else:
+            asyncio.run(orchestrator.run_novel_generation_loop())
     except KeyboardInterrupt:
         logger.info(
             "NANA Orchestrator shutting down gracefully due to KeyboardInterrupt..."
@@ -30,16 +38,14 @@ def main() -> None:
                 await neo4j_manager.close()
 
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running() and not loop.is_closed():
-                    asyncio.ensure_future(_close_driver_main())
-                elif not loop.is_running() and not loop.is_closed():
-                    loop.run_until_complete(_close_driver_main())
-                else:
-                    asyncio.run(_close_driver_main())
-            except RuntimeError as e:
+                loop = asyncio.get_running_loop()
+                if not loop.is_closed():
+                    loop.create_task(_close_driver_main())
+            except RuntimeError:
+                asyncio.run(_close_driver_main())
+            except Exception as e:
                 logger.warning(
-                    "Could not explicitly close driver from main (event loop might be closed or other issue): %s",
+                    "Could not explicitly close driver from main: %s",
                     e,
                 )
 
