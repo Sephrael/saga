@@ -278,7 +278,7 @@ class NANA_Orchestrator:
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: Optional[str]
     ):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None,
@@ -321,7 +321,7 @@ class NANA_Orchestrator:
         content_str = str(content) if not isinstance(content, str) else content
         if not content_str.strip():
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             safe_stage_desc = "".join(
                 c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
@@ -1290,6 +1290,10 @@ class NANA_Orchestrator:
         self.run_start_time = time.time()
         await neo4j_manager.connect()
         await neo4j_manager.create_db_schema()
+        if neo4j_manager.driver is not None:
+            await plot_queries.ensure_novel_info()
+        else:
+            logger.warning("Neo4j driver not initialized. Skipping NovelInfo setup.")
         await self.kg_maintainer_agent.load_schema_from_db()
 
         with open(text_file, "r", encoding="utf-8") as f:

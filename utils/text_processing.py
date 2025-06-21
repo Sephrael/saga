@@ -72,7 +72,7 @@ spacy_manager = SpaCyModelManager()
 
 def _is_fill_in(value: Any) -> bool:
     """Return True if ``value`` is the fill-in placeholder."""
-    return isinstance(value, str) and value == config.FILL_IN
+    return isinstance(value, str) and value.strip() == config.FILL_IN
 
 
 def load_spacy_model_if_needed() -> None:
