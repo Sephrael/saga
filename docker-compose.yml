@@ -1,5 +1,5 @@
 services:
-  neo4j:
+  neo4j-apoc:
     # Best practice is to pin to a specific major version for stability.
     image: neo4j:5.26.8
     ports:
@@ -7,6 +7,13 @@ services:
       - "7687:7687"  # Bolt protocol
     environment:
       - NEO4J_AUTH=neo4j/saga_password
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+      # You must accept the license agreement to use APOC core procedures in Neo4j 5+.
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_PLUGINS=["apoc"]
     volumes:
       - ./neo4j/data:/data
       - ./neo4j/logs:/logs
