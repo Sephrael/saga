@@ -119,7 +119,11 @@ async def test_update_dynamic_relationship_type(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_shortest_path_length_between_entities(monkeypatch):
+    captured = {}
+
     async def fake_read(query, params=None):
+        captured["query"] = query
+        captured["params"] = params
         return [{"len": 2}]
 
     monkeypatch.setattr(
@@ -128,5 +132,11 @@ async def test_get_shortest_path_length_between_entities(monkeypatch):
         AsyncMock(side_effect=fake_read),
     )
 
-    length = await kg_queries.get_shortest_path_length_between_entities("Alice", "Bob")
+    length = await kg_queries.get_shortest_path_length_between_entities(
+        "Alice",
+        "Bob",
+        max_depth=3,
+    )
     assert length == 2
+    assert "[*..3]" in captured["query"]
+    assert captured["params"] == {"name1": "Alice", "name2": "Bob"}
