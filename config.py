@@ -240,7 +240,9 @@ class SagaSettings(BaseSettings):
     UNHINGED_PLOT_MODE: bool = False
     CONFIGURED_GENRE: str = "grimdark science fiction"
     CONFIGURED_THEME: str = "the hubris of humanity"
-    CONFIGURED_SETTING_DESCRIPTION: str = "a remote outpost on the surface of Jupiter's moon, Callisto"
+    CONFIGURED_SETTING_DESCRIPTION: str = (
+        "a remote outpost on the surface of Jupiter's moon, Callisto"
+    )
     DEFAULT_PROTAGONIST_NAME: str = "Ilya Lakatos"
     DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Narrative"
 

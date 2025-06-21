@@ -727,14 +727,17 @@ async def get_shortest_path_length_between_entities(
     name1: str, name2: str, max_depth: int = 4
 ) -> Optional[int]:
     """Return the shortest path length between two entities if it exists."""
-    query = """
-    MATCH (a:Entity {name: $name1}), (b:Entity {name: $name2})
-    MATCH p = shortestPath((a)-[*..$max_depth]-(b))
+    if max_depth <= 0:
+        return None
+
+    query = f"""
+    MATCH (a:Entity {{name: $name1}}), (b:Entity {{name: $name2}})
+    MATCH p = shortestPath((a)-[*..{max_depth}]-(b))
     RETURN length(p) AS len
     """
     try:
         results = await neo4j_manager.execute_read_query(
-            query, {"name1": name1, "name2": name2, "max_depth": max_depth}
+            query, {"name1": name1, "name2": name2}
         )
         if results:
             return results[0].get("len")
