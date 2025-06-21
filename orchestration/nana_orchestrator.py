@@ -1290,6 +1290,10 @@ class NANA_Orchestrator:
         self.run_start_time = time.time()
         await neo4j_manager.connect()
         await neo4j_manager.create_db_schema()
+        if neo4j_manager.driver is not None:
+            await plot_queries.ensure_novel_info()
+        else:
+            logger.warning("Neo4j driver not initialized. Skipping NovelInfo setup.")
         await self.kg_maintainer_agent.load_schema_from_db()
 
         with open(text_file, "r", encoding="utf-8") as f:
