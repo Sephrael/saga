@@ -4,7 +4,6 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache
-from rapidfuzz.fuzz import ratio
 
 import config
 from core.db_manager import neo4j_manager
@@ -504,41 +503,41 @@ async def find_post_mortem_activity() -> List[Dict[str, Any]]:
 async def find_candidate_duplicate_entities(
     similarity_threshold: float = 0.85, limit: int = 50
 ) -> List[Dict[str, Any]]:
-    """Return pairs of entities with similar names using RapidFuzz."""
-    query = """
-    MATCH (e:Entity)
-    WHERE e.name IS NOT NULL AND NOT e:ValueNode
-    RETURN e.id AS id, e.name AS name, labels(e) AS labels
     """
+    Finds pairs of entities with similar names using APOC's Levenshtein distance.
+    This requires the APOC plugin to be installed in Neo4j.
+    """
+    query = """
+    MATCH (e1:Entity), (e2:Entity)
+    WHERE id(e1) < id(e2)
+      AND e1.name IS NOT NULL AND e2.name IS NOT NULL
+      AND NOT e1:ValueNode AND NOT e2:ValueNode
+    WITH e1, e2, apoc.text.distance(e1.name, e2.name) AS distance
+    WITH e1, e2, distance, apoc.coll.max([size(e1.name), size(e2.name)]) as max_len
+    WHERE max_len > 0 AND (1 - (distance / toFloat(max_len))) >= $threshold
+    
+    RETURN
+      e1.id AS id1, e1.name AS name1, labels(e1) AS labels1,
+      e2.id AS id2, e2.name AS name2, labels(e2) AS labels2,
+      (1 - (distance / toFloat(max_len))) as similarity
+    ORDER BY similarity DESC
+    LIMIT $limit
+    """
+    params = {"threshold": similarity_threshold, "limit": limit}
     try:
-        entities = await neo4j_manager.execute_read_query(query)
+        results = await neo4j_manager.execute_read_query(query, params)
+        return results if results else []
     except Exception as e:
-        logger.error(
-            f"Error retrieving entities for duplicate detection: {e}", exc_info=True
-        )
+        if "apoc.text.distance" in str(e) or "apoc.coll.max" in str(e):
+            logger.error(
+                "A required APOC function was not found. "
+                "Please ensure the full APOC Extended plugin is installed."
+            )
+        else:
+            logger.error(
+                f"Error finding candidate duplicate entities: {e}", exc_info=True
+            )
         return []
-
-    pairs: List[Dict[str, Any]] = []
-    count = len(entities)
-    for i in range(count):
-        e1 = entities[i]
-        for e2 in entities[i + 1 :]:
-            score = ratio(e1["name"], e2["name"]) / 100.0
-            if score >= similarity_threshold:
-                pairs.append(
-                    {
-                        "id1": e1["id"],
-                        "name1": e1["name"],
-                        "labels1": e1["labels"],
-                        "id2": e2["id"],
-                        "name2": e2["name"],
-                        "labels2": e2["labels"],
-                        "similarity": score,
-                    }
-                )
-
-    pairs.sort(key=lambda p: p["similarity"], reverse=True)
-    return pairs[:limit]
 
 
 async def get_entity_context_for_resolution(
@@ -580,29 +579,16 @@ async def get_entity_context_for_resolution(
 
 async def merge_entities(target_id: str, source_id: str) -> bool:
     """
-    Merge one entity (source) into another (target) using pure Cypher.
-    The source node's properties and relationships are moved, then it is deleted.
+    Merges one entity (source) into another (target) using APOC procedures.
+    The source node will be deleted after its relationships are moved.
     """
     query = """
     MATCH (target:Entity {id: $target_id}), (source:Entity {id: $source_id})
-    WITH target, source
-    OPTIONAL MATCH (source)-[r]->(o)
-    FOREACH (_ IN CASE WHEN r IS NULL THEN [] ELSE [1] END |
-        MERGE (target)-[nr:DYNAMIC_REL]->(o)
-        SET nr.type = type(r)
-        SET nr += r
-        DELETE r
-    )
-    WITH target, source
-    OPTIONAL MATCH (s)-[r]->(source)
-    FOREACH (_ IN CASE WHEN r IS NULL THEN [] ELSE [1] END |
-        MERGE (s)-[nr:DYNAMIC_REL]->(target)
-        SET nr.type = type(r)
-        SET nr += r
-        DELETE r
-    )
-    SET target += properties(source)
-    DETACH DELETE source
+    CALL apoc.refactor.mergeNodes([source], target, {
+      properties: 'combine',
+      mergeRels: true
+    }) YIELD node
+    RETURN node
     """
     params = {"target_id": target_id, "source_id": source_id}
     try:
@@ -610,10 +596,16 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
         logger.info(f"Successfully merged node {source_id} into {target_id}.")
         return True
     except Exception as e:
-        logger.error(
-            f"Error merging entities ({source_id} -> {target_id}): {e}",
-            exc_info=True,
-        )
+        if "apoc.refactor.mergeNodes" in str(e):
+            logger.error(
+                "APOC Library not found or configured in Neo4j. "
+                "Cannot merge entities. Please install the APOC plugin."
+            )
+        else:
+            logger.error(
+                f"Error merging entities ({source_id} -> {target_id}): {e}",
+                exc_info=True,
+            )
         return False
 
 
@@ -653,18 +645,19 @@ async def get_defined_relationship_types() -> List[str]:
 async def promote_dynamic_relationships() -> int:
     """Convert dynamic relationships to defined relationship types."""
     valid_types = await get_defined_relationship_types()
-    case_clauses = [
-        f"FOREACH (_ IN CASE WHEN r.type = '{t}' THEN [1] ELSE [] END |"
-        f" MERGE (s)-[nr:{t}]->(o) SET nr += r )"
-        for t in valid_types
-    ]
-    query = (
-        "MATCH (s)-[r:DYNAMIC_REL]->(o) "
-        "WHERE r.type IN $valid_types "
-        "WITH s, r, o "
-        + " ".join(case_clauses)
-        + " DELETE r RETURN count(*) AS promoted"
-    )
+    query = """
+    MATCH (s)-[r:DYNAMIC_REL]->(o)
+    WHERE r.type IN $valid_types
+    WITH s, r, o
+    CALL apoc.create.relationship(
+        s,
+        r.type,
+        apoc.map.removeKey(properties(r), 'type'),
+        o
+    ) YIELD rel
+    DELETE r
+    RETURN count(rel) AS promoted
+    """
     try:
         results = await neo4j_manager.execute_write_query(
             query, {"valid_types": valid_types}
@@ -679,10 +672,9 @@ async def deduplicate_relationships() -> int:
     """Merge duplicate relationships of the same type between nodes."""
     query = """
     MATCH (s)-[r]->(o)
-    WITH s, type(r) AS t, o, collect(r) AS rels
-    WHERE size(rels) > 1
-    WITH rels[0] AS keep, rels[1..] AS dups, size(rels) AS cnt
-    FOREACH (r IN dups | SET keep += r DELETE r)
+    WITH s, type(r) AS t, o, collect(r) AS rels, count(r) AS cnt
+    WHERE cnt > 1
+    CALL apoc.refactor.mergeRelationships(rels, {properties: 'combine'}) YIELD rel
     RETURN sum(cnt - 1) AS removed
     """
     try:
