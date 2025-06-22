@@ -782,3 +782,76 @@ async def find_thin_world_elements_for_enrichment() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error finding thin world elements: {e}", exc_info=True)
         return []
+
+
+async def fix_missing_world_element_core_fields() -> int:
+    """Populate missing ``id``, ``name``, or ``category`` on WorldElements."""
+
+    query = """
+    MATCH (we:WorldElement)
+    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE)
+      AND (we.id IS NULL OR we.name IS NULL OR we.category IS NULL)
+    RETURN id(we) AS nid, we.id AS id, we.name AS name, we.category AS category
+    """
+
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Error fetching WorldElements missing core fields: %s",
+            exc,
+            exc_info=True,
+        )
+        return 0
+
+    if not results:
+        return 0
+
+    statements: List[Tuple[str, Dict[str, Any]]] = []
+
+    for rec in results:
+        neo_id = rec.get("nid")
+        if neo_id is None:
+            continue
+
+        w_id = rec.get("id")
+        name = rec.get("name")
+        category = rec.get("category")
+
+        props: Dict[str, Any] = {}
+
+        if not w_id and name and category:
+            props["id"] = (
+                f"{utils._normalize_for_id(category)}_{utils._normalize_for_id(name)}"
+            )
+
+        if not name and isinstance(w_id, str):
+            name_part = w_id.split("_", 1)[-1]
+            props["name"] = name_part.replace("_", " ").title()
+
+        if not category and isinstance(w_id, str):
+            props["category"] = w_id.split("_")[0]
+
+        if props:
+            statements.append(
+                (
+                    "MATCH (we:WorldElement) WHERE id(we) = $nid SET we += $props",
+                    {"nid": neo_id, "props": props},
+                )
+            )
+
+    if not statements:
+        return 0
+
+    try:
+        await neo4j_manager.execute_cypher_batch(statements)
+        logger.info("Filled missing core fields for %d WorldElements.", len(statements))
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Error updating WorldElements with missing core fields: %s",
+            exc,
+            exc_info=True,
+        )
+        return 0
+
+    return len(statements)
