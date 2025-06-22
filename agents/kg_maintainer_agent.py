@@ -439,6 +439,8 @@ class KGMaintainerAgent:
         """
         logger.info("KG Healer/Enricher: Starting maintenance cycle.")
 
+        await world_queries.fix_missing_world_element_core_fields()
+
         # 1. Enrichment (which includes healing orphans/stubs)
         enrichment_cypher = await self._find_and_enrich_thin_nodes()
 
