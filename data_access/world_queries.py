@@ -6,7 +6,6 @@ from async_lru import alru_cache  # type: ignore
 
 import config
 import utils
-from utils import kg_property_keys as kg_keys
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -14,6 +13,7 @@ from kg_constants import (
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem
+from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
@@ -572,6 +572,8 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
     logger.info("Loading decomposed world building data from Neo4j...")
     world_data: Dict[str, Dict[str, WorldItem]] = {}
     wc_id_param = config.MAIN_WORLD_CONTAINER_NODE_ID
+
+    await fix_missing_world_element_core_fields()
 
     WORLD_NAME_TO_ID.clear()
 

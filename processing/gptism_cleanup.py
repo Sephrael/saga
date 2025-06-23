@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 # The goal is not to eliminate these phrases entirely, but to provide SAGA
 # with a library of alternatives to prevent robotic repetition.
 GPT_ISM_PATTERNS: Dict[str, List[str]] = {
+    "as an ai language model": [
+        "from a broader perspective",
+        "considering the context",
+    ],
     # --- I. Transitional & Scene-Setting Phrases ---
     # These are often used to start paragraphs or set a mood.
     "in the silence that followed": [
@@ -41,7 +45,6 @@ GPT_ISM_PATTERNS: Dict[str, List[str]] = {
         "at the epicenter of the decay",
         "in the very core of the ruins",
     ],
-
     # --- II. Emotional & Internal State Descriptors ---
     # LLMs often describe emotions in an abstract or cliché way.
     "a sense of [emotion] washed over [character]": [
@@ -83,7 +86,6 @@ GPT_ISM_PATTERNS: Dict[str, List[str]] = {
         "an anomaly registered in its emotional subroutines",
         "its primary directive warred with an emergent protocol",
     ],
-
     # --- III. Character Actions & Movements ---
     # These are common physical actions that become repetitive.
     "[character] tilted their head": [
@@ -110,7 +112,6 @@ GPT_ISM_PATTERNS: Dict[str, List[str]] = {
         "[They] inclined their head in agreement",
         "[Character] conceded the point with a slight dip of their chin",
     ],
-
     # --- IV. Descriptive & Intensifying Phrases ("Fluff") ---
     # These phrases often weaken prose or state the obvious.
     "the world seemed to hold its breath": [
@@ -132,7 +133,6 @@ GPT_ISM_PATTERNS: Dict[str, List[str]] = {
         # Another filler phrase that weakens the statement it follows.
         "[Replacement suggestions: This phrase is often unnecessary. Consider deleting it to make the preceding statement stronger.]",
     ],
-
     # --- V. Concluding & Thematic Statements ---
     # LLMs have a tendency to explicitly summarize themes.
     "in the end, it was all about...": [

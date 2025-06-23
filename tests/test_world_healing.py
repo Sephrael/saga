@@ -44,3 +44,42 @@ async def test_fix_missing_world_element_core_fields(monkeypatch):
     )
     assert captured[1][1]["props"]["name"] == "Life Pod"
     assert captured[2][1]["props"]["category"] == "lore"
+
+
+@pytest.mark.asyncio
+async def test_get_world_building_runs_healer(monkeypatch):
+    sample_we = [
+        {
+            "we": {
+                "id": "places_city",
+                "name": "City",
+                "category": "places",
+                "created_ts": 1,
+                world_queries.KG_NODE_CREATED_CHAPTER: 1,
+            }
+        }
+    ]
+
+    async def fake_read(query, params=None):
+        if "RETURN wc" in query:
+            return [{"wc": {"overview_description": "desc"}}]
+        if "RETURN we" in query:
+            return sample_we
+        return []
+
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_read_query",
+        AsyncMock(side_effect=fake_read),
+    )
+
+    healer_called = AsyncMock(return_value=0)
+    monkeypatch.setattr(
+        world_queries,
+        "fix_missing_world_element_core_fields",
+        healer_called,
+    )
+
+    world_queries.WORLD_NAME_TO_ID.clear()
+    await world_queries.get_world_building_from_db()
+    healer_called.assert_awaited_once()
