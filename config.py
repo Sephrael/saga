@@ -261,7 +261,7 @@ class SagaSettings(BaseSettings):
         if self.MAIN_GENERATION_MODEL is None:
             self.MAIN_GENERATION_MODEL = self.NARRATOR_MODEL
         if self.KNOWLEDGE_UPDATE_MODEL is None:
-            self.KNOWLEDGE_UPDATE_MODEL = self.MEDIUM_MODEL
+            self.KNOWLEDGE_UPDATE_MODEL = self.SMALL_MODEL
         if self.INITIAL_SETUP_MODEL is None:
             self.INITIAL_SETUP_MODEL = self.MEDIUM_MODEL
         if self.PLANNING_MODEL is None:
