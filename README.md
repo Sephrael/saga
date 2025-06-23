@@ -75,6 +75,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   The `DraftingAgent` writes the initial draft, guided by the scene plan (if available), plot point focus, and hybrid context.
     *   **(C) De-duplication & Evaluation:**
         *   The draft undergoes de-duplication via `processing.text_deduplicator` to reduce repetitiveness.
+        *   If `ENABLE_GPTISM_CLEANUP` is true, `processing.gptism_cleanup` replaces common LLM-style phrases with alternative wording.
         *   The `ComprehensiveEvaluatorAgent` and `WorldContinuityAgent` run in parallel to assess the draft against multiple criteria.
     *   **(D) Revision (if `needs_revision` is true):**
         *   `processing.revision_logic` attempts to fix identified issues.
@@ -146,7 +147,8 @@ SMALL_MODEL="Qwen3-4B-Q4"    # Used for Summaries
 NARRATOR_MODEL="Qwen3-14B-Q4" # Used for Drafting and a full Revision
 
 # Other important settings in config.py (review defaults)
-# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL, etc.
+# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL,
+# ENABLE_GPTISM_CLEANUP, GPTISM_SIMILARITY_THRESHOLD, etc.
 ```
 
 Refer to `config.py` for a full list of configurable options and their defaults.
