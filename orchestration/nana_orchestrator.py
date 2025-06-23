@@ -425,9 +425,11 @@ class NANA_Orchestrator:
         plot_point_index: int,
         hybrid_context_for_draft: str,
         patched_spans: List[Tuple[int, int]],
+        run_kg_extraction: bool = False,
     ) -> Tuple[
         EvaluationResult,
         List[ProblemDetail],
+        Optional[Dict[str, int]],
         Optional[Dict[str, int]],
         Optional[Dict[str, int]],
     ]:
@@ -471,6 +473,23 @@ class NANA_Orchestrator:
             )
             task_names.append("continuity")
 
+        kg_usage: Optional[Dict[str, int]] = None
+        if run_kg_extraction:
+            char_profiles, world_building = await asyncio.gather(
+                character_queries.get_character_profiles_from_db(),
+                world_queries.get_world_building_from_db(),
+            )
+            tasks_to_run.append(
+                self.kg_maintainer_agent.extract_and_merge_knowledge(
+                    self.plot_outline,
+                    char_profiles,
+                    world_building,
+                    novel_chapter_number,
+                    current_text,
+                )
+            )
+            task_names.append("kg")
+
         results = await asyncio.gather(*tasks_to_run)
 
         eval_result_obj = None
@@ -484,7 +503,9 @@ class NANA_Orchestrator:
             result_idx += 1
         if "continuity" in task_names:
             continuity_problems, continuity_usage = results[result_idx]
-
+            result_idx += 1
+        if "kg" in task_names:
+            kg_usage = results[result_idx]
         if eval_result_obj is None:
             eval_result_obj = {
                 "needs_revision": False,
@@ -497,7 +518,13 @@ class NANA_Orchestrator:
                 "narrative_depth_issues": None,
             }
 
-        return eval_result_obj, continuity_problems, eval_usage, continuity_usage
+        return (
+            eval_result_obj,
+            continuity_problems,
+            eval_usage,
+            continuity_usage,
+            kg_usage,
+        )
 
     async def _perform_revisions(
         self,
@@ -766,6 +793,7 @@ class NANA_Orchestrator:
                 continuity_problems,
                 eval_usage,
                 continuity_usage,
+                kg_usage,
             ) = await self._run_evaluation_cycle(
                 novel_chapter_number,
                 attempt,
@@ -774,6 +802,7 @@ class NANA_Orchestrator:
                 plot_point_index,
                 hybrid_context_for_draft,
                 patched_spans,
+                run_kg_extraction=(attempt == 1),
             )
 
             self._accumulate_tokens(
@@ -784,6 +813,11 @@ class NANA_Orchestrator:
                 f"Ch{novel_chapter_number}-ContinuityCheck-Attempt{attempt}",
                 continuity_usage,
             )
+            if kg_usage is not None:
+                self._accumulate_tokens(
+                    f"Ch{novel_chapter_number}-KGExtraction-Attempt{attempt}",
+                    kg_usage,
+                )
 
             evaluation_result: EvaluationResult = eval_result_obj
             await self._save_debug_output(

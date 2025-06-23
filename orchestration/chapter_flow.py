@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
+import asyncio
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from .nana_orchestrator import NANA_Orchestrator
@@ -14,12 +15,11 @@ async def run_chapter_pipeline(
         chapter_num=novel_chapter_number, step="Starting Chapter"
     )
 
-    if not await orchestrator._validate_plot_outline(novel_chapter_number):
+    validate_task = orchestrator._validate_plot_outline(novel_chapter_number)
+    prereq_task = orchestrator._prepare_chapter_prerequisites(novel_chapter_number)
+    valid, prereq_result = await asyncio.gather(validate_task, prereq_task)
+    if not valid:
         return None
-
-    prereq_result = await orchestrator._prepare_chapter_prerequisites(
-        novel_chapter_number
-    )
     processed_prereqs = await orchestrator._process_prereq_result(
         novel_chapter_number, prereq_result
     )
