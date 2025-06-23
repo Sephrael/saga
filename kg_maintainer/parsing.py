@@ -4,6 +4,7 @@ import logging  # Added logging
 from typing import Any, Dict, List  # Added Any, List
 
 import utils
+from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 
@@ -191,7 +192,7 @@ def parse_unified_character_updates(
         else:  # Ensure it's always a dict
             processed_char_attributes["relationships"] = {}
 
-        dev_key_standard = f"development_in_chapter_{chapter_number}"
+        dev_key_standard = kg_keys.development_key(chapter_number)
         # If LLM includes this key (even with different casing/spacing), it will be normalized by _normalize_attributes
         # if dev_key_standard is in CHAR_UPDATE_KEY_MAP. For now, handle it explicitly.
         specific_dev_key_from_llm = next(
@@ -269,7 +270,7 @@ def parse_unified_world_updates(
         # The WorldItem model itself might normalize this for ID generation.
 
         category_dict_by_item_name: Dict[str, WorldItem] = {}
-        elaboration_key_standard = f"elaboration_in_chapter_{chapter_number}"
+        elaboration_key_standard = kg_keys.elaboration_key(chapter_number)
 
         if (
             category_name_llm.lower() == "overview"

@@ -6,6 +6,7 @@ from async_lru import alru_cache  # type: ignore
 
 import config
 import utils
+from utils import kg_property_keys as kg_keys
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -111,7 +112,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             "id": wc_id_param,  # Ensure ID is part of props for SET
             "overview_description": str(overview_details.get("description", "")),
             KG_IS_PROVISIONAL: overview_details.get(
-                f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
+                kg_keys.source_quality_key(config.KG_PREPOPULATION_CHAPTER_NUM)
             )
             == "provisional_from_unrevised_draft",
         }
@@ -156,7 +157,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
         ) in items_dict_value.items():  # Iterate through items in the category
             # Ensure item_name_str itself is not a reserved key
             if item_name_str.startswith(
-                ("_", "source_quality_chapter_", "category_updated_in_chapter_")
+                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
             ):
                 continue
 
@@ -220,7 +221,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
         for item_name_str, details_dict in items_category_dict.items():
             if not isinstance(details_dict, dict) or item_name_str.startswith(
-                ("_", "source_quality_chapter_", "category_updated_in_chapter_")
+                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
             ):
                 continue
 
@@ -259,8 +260,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
             # Provisional status: check specific source_quality_chapter_X, then KG_IS_PROVISIONAL, then 'is_provisional'
             is_prov = False
-            sq_key_for_created_chap = (
-                f"source_quality_chapter_{we_node_props[KG_NODE_CREATED_CHAPTER]}"
+            sq_key_for_created_chap = kg_keys.source_quality_key(
+                we_node_props[KG_NODE_CREATED_CHAPTER]
             )
             if (
                 details_dict.get(sq_key_for_created_chap)
@@ -283,9 +284,9 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                 if (
                     isinstance(v_detail, (str, int, float, bool))
                     and k_detail not in we_node_props
-                    and not k_detail.startswith("elaboration_in_chapter_")
-                    and not k_detail.startswith("added_in_chapter_")
-                    and not k_detail.startswith("source_quality_chapter_")
+                    and not k_detail.startswith(kg_keys.ELABORATION_PREFIX)
+                    and not k_detail.startswith(kg_keys.ADDED_PREFIX)
+                    and not k_detail.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
                     and k_detail
                     not in [
                         "goals",
@@ -384,7 +385,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             )
             for key_str, value_val in details_dict.items():
                 if (
-                    key_str.startswith("elaboration_in_chapter_")
+                    key_str.startswith(kg_keys.ELABORATION_PREFIX)
                     and isinstance(value_val, str)
                     and value_val.strip()
                 ):
@@ -405,7 +406,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                         )
 
                         elab_is_provisional = False
-                        sq_key_for_elab_chap = f"source_quality_chapter_{chap_num_val}"
+                        sq_key_for_elab_chap = kg_keys.source_quality_key(chap_num_val)
                         if (
                             details_dict.get(sq_key_for_elab_chap)
                             == "provisional_from_unrevised_draft"
@@ -491,11 +492,11 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
         KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM
     )
     item_detail["created_chapter"] = int(created_chapter_num)
-    item_detail[f"added_in_chapter_{created_chapter_num}"] = True
+    item_detail[kg_keys.added_key(created_chapter_num)] = True
 
     if item_detail.pop(KG_IS_PROVISIONAL, False):
         item_detail["is_provisional"] = True
-        item_detail[f"source_quality_chapter_{created_chapter_num}"] = (
+        item_detail[kg_keys.source_quality_key(created_chapter_num)] = (
             "provisional_from_unrevised_draft"
         )
     else:
@@ -538,10 +539,10 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
             chapter_val = elab_rec.get("chapter")
             summary_val = elab_rec.get("summary")
             if chapter_val is not None and summary_val is not None:
-                elab_key = f"elaboration_in_chapter_{chapter_val}"
+                elab_key = kg_keys.elaboration_key(chapter_val)
                 item_detail[elab_key] = summary_val
                 if elab_rec.get(KG_IS_PROVISIONAL):
-                    item_detail[f"source_quality_chapter_{chapter_val}"] = (
+                    item_detail[kg_keys.source_quality_key(chapter_val)] = (
                         "provisional_from_unrevised_draft"
                     )
 
@@ -586,7 +587,7 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         overview_data.pop("updated_ts", None)
         if overview_data.get(KG_IS_PROVISIONAL):
             overview_data[
-                f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
+                kg_keys.source_quality_key(config.KG_PREPOPULATION_CHAPTER_NUM)
             ] = "provisional_from_unrevised_draft"
         world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
             "_overview_",
@@ -647,11 +648,11 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         item_detail["created_chapter"] = int(
             created_chapter_num
         )  # Ensure it's int and under standard key
-        item_detail[f"added_in_chapter_{created_chapter_num}"] = True
+        item_detail[kg_keys.added_key(created_chapter_num)] = True
 
         if item_detail.pop(KG_IS_PROVISIONAL, False):
             item_detail["is_provisional"] = True  # Ensure under standard key
-            item_detail[f"source_quality_chapter_{created_chapter_num}"] = (
+            item_detail[kg_keys.source_quality_key(created_chapter_num)] = (
                 "provisional_from_unrevised_draft"
             )
         else:
@@ -694,10 +695,10 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
                 chapter_val = elab_rec.get("chapter")
                 summary_val = elab_rec.get("summary")
                 if chapter_val is not None and summary_val is not None:
-                    elab_key = f"elaboration_in_chapter_{chapter_val}"
+                    elab_key = kg_keys.elaboration_key(chapter_val)
                     item_detail[elab_key] = summary_val
                     if elab_rec.get(KG_IS_PROVISIONAL):
-                        item_detail[f"source_quality_chapter_{chapter_val}"] = (
+                        item_detail[kg_keys.source_quality_key(chapter_val)] = (
                             "provisional_from_unrevised_draft"
                         )
 

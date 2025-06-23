@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 import utils
+from utils import kg_property_keys as kg_keys
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CREATED_CHAPTER
 
 
@@ -44,7 +45,7 @@ class CharacterProfile(BaseModel):
         """Return development notes up to a chapter number."""
 
         notes: List[str] = []
-        prefix = "development_in_chapter_"
+        prefix = kg_keys.DEVELOPMENT_PREFIX
         for key, val in sorted(self.updates.items()):
             if not key.startswith(prefix):
                 continue
@@ -120,7 +121,7 @@ class WorldItem(BaseModel):
         """Return elaboration notes up to a chapter number."""
 
         notes: List[str] = []
-        prefix = "elaboration_in_chapter_"
+        prefix = kg_keys.ELABORATION_PREFIX
         for key, val in sorted(self.properties.items()):
             if not key.startswith(prefix):
                 continue
