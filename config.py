@@ -227,6 +227,10 @@ class SagaSettings(BaseSettings):
     DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
+    # GPT-ism Cleanup Configuration
+    ENABLE_GPTISM_CLEANUP: bool = True
+    GPTISM_SIMILARITY_THRESHOLD: float = 85.0
+
     # Logging & UI
     LOG_LEVEL_STR: str = Field("INFO", alias="LOG_LEVEL")
     LOG_FORMAT: str = (
