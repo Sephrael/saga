@@ -4,6 +4,7 @@ import structlog
 
 import config
 import utils
+from utils import kg_property_keys as kg_keys
 from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
 from kg_maintainer.models import CharacterProfile
 
@@ -25,8 +26,8 @@ def generate_character_node_cypher(
         for k, v in props_from_profile.items()
         if isinstance(v, (str, int, float, bool))
         and k not in ["name", "traits", "relationships"]
-        and not k.startswith("development_in_chapter_")
-        and not k.startswith("source_quality_chapter_")
+        and not k.startswith(kg_keys.DEVELOPMENT_PREFIX)
+        and not k.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
     }
 
     # Add any updates from the profile's 'updates' field.
@@ -34,15 +35,15 @@ def generate_character_node_cypher(
         for k_update, v_update in profile.updates.items():
             if (
                 isinstance(v_update, (str, int, float, bool))
-                and not k_update.startswith("development_in_chapter_")
-                and not k_update.startswith("source_quality_chapter_")
+                and not k_update.startswith(kg_keys.DEVELOPMENT_PREFIX)
+                and not k_update.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
             ):
                 if k_update not in basic_props:
                     basic_props[k_update] = v_update
 
     # Determine provisional status based on the current chapter's update source.
-    current_chapter_source_quality_key = (
-        f"source_quality_chapter_{chapter_number_for_delta}"
+    current_chapter_source_quality_key = kg_keys.source_quality_key(
+        chapter_number_for_delta
     )
     if (
         isinstance(profile.updates, dict)
@@ -107,7 +108,7 @@ def generate_character_node_cypher(
                     )
 
     # Process and link development events for the current chapter.
-    dev_event_key = f"development_in_chapter_{chapter_number_for_delta}"
+    dev_event_key = kg_keys.development_key(chapter_number_for_delta)
     if isinstance(profile.updates, dict) and dev_event_key in profile.updates:
         dev_event_summary = profile.updates[dev_event_key]
         if isinstance(dev_event_summary, str) and dev_event_summary.strip():

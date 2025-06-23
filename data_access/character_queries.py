@@ -7,6 +7,7 @@ from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 import utils
+from utils import kg_property_keys as kg_keys
 from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
@@ -192,7 +193,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
 
         for key, value_str in profile_dict.items():
             if (
-                key.startswith("development_in_chapter_")
+                key.startswith(kg_keys.DEVELOPMENT_PREFIX)
                 and isinstance(value_str, str)
                 and value_str.strip()
             ):
@@ -212,7 +213,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                         "summary": dev_event_summary,
                         KG_NODE_CHAPTER_UPDATED: chap_num_int,
                         KG_IS_PROVISIONAL: profile_dict.get(
-                            f"source_quality_chapter_{chap_num_int}"
+                            kg_keys.source_quality_key(chap_num_int)
                         )
                         == "provisional_from_unrevised_draft",
                     }
@@ -293,7 +294,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                             rel_cypher_props[k_rel] = v_rel
 
                 rel_cypher_props[KG_IS_PROVISIONAL] = (
-                    profile_dict.get(f"source_quality_chapter_{chapter_added_val}")
+                    profile_dict.get(kg_keys.source_quality_key(chapter_added_val))
                     == "provisional_from_unrevised_draft"
                 )
 
@@ -418,10 +419,10 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
             chapter_num = dev_rec.get("chapter")
             summary = dev_rec.get("summary")
             if chapter_num is not None and summary is not None:
-                dev_key = f"development_in_chapter_{chapter_num}"
+                dev_key = kg_keys.development_key(chapter_num)
                 profile[dev_key] = summary
                 if dev_rec.get(KG_IS_PROVISIONAL):
-                    profile[f"source_quality_chapter_{chapter_num}"] = (
+                    profile[kg_keys.source_quality_key(chapter_num)] = (
                         "provisional_from_unrevised_draft"
                     )
 
@@ -524,10 +525,10 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
                 chapter_num = dev_rec.get("chapter")
                 summary = dev_rec.get("summary")
                 if chapter_num is not None and summary is not None:
-                    dev_key = f"development_in_chapter_{chapter_num}"
+                    dev_key = kg_keys.development_key(chapter_num)
                     profile[dev_key] = summary
                     if dev_rec.get(KG_IS_PROVISIONAL):
-                        profile[f"source_quality_chapter_{chapter_num}"] = (
+                        profile[kg_keys.source_quality_key(chapter_num)] = (
                             "provisional_from_unrevised_draft"
                         )
 

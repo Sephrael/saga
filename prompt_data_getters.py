@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import config
 import utils  # For _is_fill_in
+from utils import kg_property_keys as kg_keys
 
 # from state_manager import state_manager # No longer directly used
 from data_access import character_queries, kg_queries, world_queries  # MODIFIED
@@ -107,7 +108,7 @@ async def get_character_state_snippet_for_prompt(
                 [
                     k
                     for k in profile_fallback
-                    if k.startswith("development_in_chapter_")
+                    if k.startswith(kg_keys.DEVELOPMENT_PREFIX)
                     and int(k.split("_")[-1]) <= effective_filter_chapter
                 ],
                 key=lambda x: int(x.split("_")[-1]),
@@ -155,7 +156,7 @@ async def get_character_state_snippet_for_prompt(
                 [
                     k
                     for k in profile_fallback
-                    if k.startswith("development_in_chapter_")
+                    if k.startswith(kg_keys.DEVELOPMENT_PREFIX)
                     and int(k.split("_")[-1]) <= effective_filter_chapter
                 ],
                 key=lambda x: int(x.split("_")[-1]),
@@ -271,7 +272,7 @@ async def get_world_state_snippet_for_prompt(
                 if item_count_fb >= world_categories_to_fetch[category_name_result]:
                     break
                 if item_name_fb.startswith(
-                    ("_", "source_quality_chapter_", "category_updated_in_chapter_")
+                    ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
                 ):
                     continue
                 desc_snip_fb = ""
@@ -369,7 +370,11 @@ def _format_dict_for_plain_text_prompt(
         value = data[key]
 
         if key.startswith(
-            ("source_quality_chapter_", "updated_in_chapter_", "added_in_chapter_")
+            (
+                kg_keys.SOURCE_QUALITY_PREFIX,
+                kg_keys.UPDATED_PREFIX,
+                kg_keys.ADDED_PREFIX,
+            )
         ) and key not in ["prompt_notes"]:
             continue
         if key == "is_provisional_hint":
@@ -425,9 +430,9 @@ def _add_provisional_notes_and_filter_developments(
     )
 
     dev_elaboration_prefix = (
-        "development_in_chapter_" if is_character else "elaboration_in_chapter_"
+        kg_keys.DEVELOPMENT_PREFIX if is_character else kg_keys.ELABORATION_PREFIX
     )
-    added_prefix = "added_in_chapter_"
+    added_prefix = kg_keys.ADDED_PREFIX
 
     keys_to_remove = []
     has_provisional_data_relevant_to_filter = False
@@ -451,7 +456,7 @@ def _add_provisional_notes_and_filter_developments(
                     f"Could not parse chapter from key '{key}' during filtering: {e}"
                 )
 
-        if key.startswith("source_quality_chapter_"):
+        if key.startswith(kg_keys.SOURCE_QUALITY_PREFIX):
             try:
                 chap_num_of_source_str = key.split("_")[-1]
                 chap_num_of_source = (

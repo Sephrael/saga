@@ -4,6 +4,8 @@
 import logging
 from typing import Dict
 
+from utils import kg_property_keys as kg_keys
+
 from .models import CharacterProfile, WorldItem
 
 logger = logging.getLogger(__name__)
@@ -13,8 +15,8 @@ def initialize_new_character_profile(
     char_name: str, char_update: CharacterProfile, chapter_number: int
 ) -> CharacterProfile:
     """Create a new character profile from parsed updates."""
-    provisional_key = f"source_quality_chapter_{chapter_number}"
-    dev_key = f"development_in_chapter_{chapter_number}"
+    provisional_key = kg_keys.source_quality_key(chapter_number)
+    dev_key = kg_keys.development_key(chapter_number)
     data = char_update.to_dict()
     new_profile = CharacterProfile(
         name=char_name,
@@ -46,12 +48,12 @@ def merge_character_profile_updates(
     from_flawed_draft: bool,
 ) -> None:
     """Merge character updates into existing profile dictionary."""
-    provisional_key = f"source_quality_chapter_{chapter_number}"
+    provisional_key = kg_keys.source_quality_key(chapter_number)
     for name, update in updates.items():
         data = update.to_dict()
         if from_flawed_draft:
             data[provisional_key] = "provisional_from_unrevised_draft"
-        dev_key = f"development_in_chapter_{chapter_number}"
+        dev_key = kg_keys.development_key(chapter_number)
         if name not in profiles:
             profiles[name] = initialize_new_character_profile(
                 name, update, chapter_number
@@ -62,7 +64,7 @@ def merge_character_profile_updates(
         modified = False
         for key, val in data.items():
             if key in {"modification_proposal", provisional_key} or (
-                key.startswith("development_in_chapter_")
+                key.startswith(kg_keys.DEVELOPMENT_PREFIX)
             ):
                 continue
             if key == "traits" and isinstance(val, list):
@@ -98,7 +100,7 @@ def merge_world_item_updates(
     from_flawed_draft: bool,
 ) -> None:
     """Merge world item updates into the current world dictionary."""
-    provisional_key = f"source_quality_chapter_{chapter_number}"
+    provisional_key = kg_keys.source_quality_key(chapter_number)
     for category, cat_updates in updates.items():
         if category not in world:
             world[category] = {}
@@ -109,7 +111,7 @@ def merge_world_item_updates(
             if name not in world[category]:
                 world[category][name] = update
                 world[category][name].properties.setdefault(
-                    f"added_in_chapter_{chapter_number}", True
+                    kg_keys.added_key(chapter_number), True
                 )
                 continue
             item = world[category][name]
@@ -118,14 +120,14 @@ def merge_world_item_updates(
                 if key in {provisional_key, "modification_proposal"} or (
                     key.startswith(
                         (
-                            "updated_in_chapter_",
-                            "added_in_chapter_",
-                            "source_quality_chapter_",
+                            kg_keys.UPDATED_PREFIX,
+                            kg_keys.ADDED_PREFIX,
+                            kg_keys.SOURCE_QUALITY_PREFIX,
                         )
                     )
                 ):
                     if (
-                        key.startswith("elaboration_in_chapter_")
+                        key.startswith(kg_keys.ELABORATION_PREFIX)
                         and isinstance(val, str)
                         and val.strip()
                     ):
@@ -147,6 +149,6 @@ def merge_world_item_updates(
                 elif cur_val != val:
                     item.properties[key] = val
             item.properties.setdefault(
-                f"updated_in_chapter_{chapter_number}",
+                kg_keys.updated_key(chapter_number),
                 True,
             )
