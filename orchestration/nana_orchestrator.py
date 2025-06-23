@@ -445,6 +445,8 @@ class NANA_Orchestrator:
             await world_queries.get_all_world_item_ids_by_category()
         )
 
+        ignore_spans = patched_spans if attempt == 1 else None
+
         if config.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
@@ -456,7 +458,7 @@ class NANA_Orchestrator:
                     plot_point_focus,
                     plot_point_index,
                     hybrid_context_for_draft,
-                    ignore_spans=patched_spans,
+                    ignore_spans=ignore_spans,
                 )
             )
             task_names.append("evaluation")
@@ -468,7 +470,7 @@ class NANA_Orchestrator:
                     current_text,
                     novel_chapter_number,
                     hybrid_context_for_draft,
-                    ignore_spans=patched_spans,
+                    ignore_spans=ignore_spans,
                 )
             )
             task_names.append("continuity")
