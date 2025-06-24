@@ -1,20 +1,29 @@
 # kg_maintainer/merge.py
 """Helpers for merging parsed updates into existing knowledge graph state."""
 
-import logging
+import structlog
 from typing import Dict
 
 from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def initialize_new_character_profile(
     char_name: str, char_update: CharacterProfile, chapter_number: int
 ) -> CharacterProfile:
-    """Create a new character profile from parsed updates."""
+    """Create a new ``CharacterProfile`` from parsed updates.
+
+    Args:
+        char_name: The character's name.
+        char_update: Parsed attributes for the character.
+        chapter_number: Chapter where the character first appears.
+
+    Returns:
+        The initialized character profile.
+    """
     provisional_key = kg_keys.source_quality_key(chapter_number)
     dev_key = kg_keys.development_key(chapter_number)
     data = char_update.to_dict()
@@ -47,7 +56,17 @@ def merge_character_profile_updates(
     chapter_number: int,
     from_flawed_draft: bool,
 ) -> None:
-    """Merge character updates into existing profile dictionary."""
+    """Merge parsed character updates into existing profiles.
+
+    Args:
+        profiles: Current character profiles keyed by name.
+        updates: Newly parsed updates for the chapter.
+        chapter_number: The chapter number being processed.
+        from_flawed_draft: Whether updates came from an unrevised draft.
+
+    Returns:
+        ``None``. Profiles are modified in place.
+    """
     provisional_key = kg_keys.source_quality_key(chapter_number)
     for name, update in updates.items():
         data = update.to_dict()
@@ -99,7 +118,17 @@ def merge_world_item_updates(
     chapter_number: int,
     from_flawed_draft: bool,
 ) -> None:
-    """Merge world item updates into the current world dictionary."""
+    """Merge parsed world item updates into the in-memory world state.
+
+    Args:
+        world: Existing world items keyed by category then name.
+        updates: Updates parsed from the latest chapter.
+        chapter_number: The chapter number being processed.
+        from_flawed_draft: Whether updates are from an unrevised draft.
+
+    Returns:
+        ``None``. The ``world`` dictionary is modified in place.
+    """
     provisional_key = kg_keys.source_quality_key(chapter_number)
     for category, cat_updates in updates.items():
         if category not in world:

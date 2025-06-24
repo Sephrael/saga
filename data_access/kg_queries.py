@@ -1,5 +1,5 @@
 # data_access/kg_queries.py
-import logging
+import structlog
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,7 +13,7 @@ from kg_constants import (
     NODE_LABELS,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Lookup table for canonical node labels to ensure consistent casing
 _CANONICAL_NODE_LABEL_MAP: Dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
@@ -103,6 +103,11 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     return "".join(final_ordered_labels) + entity_label_suffix
 
 
+def _labels_to_list(labels_cypher: str) -> List[str]:
+    """Convert a Cypher label string to a list of labels."""
+    return [lbl for lbl in labels_cypher.split(":") if lbl]
+
+
 async def add_kg_triples_batch_to_db(
     structured_triples_data: List[Dict[str, Any]],
     chapter_number: int,
@@ -112,16 +117,13 @@ async def add_kg_triples_batch_to_db(
         logger.info("Neo4j: add_kg_triples_batch_to_db: No structured triples to add.")
         return
 
-    statements_with_params: List[Tuple[str, Dict[str, Any]]] = []
+    triple_payload: List[Dict[str, Any]] = []
 
     for triple_dict in structured_triples_data:
         subject_info = triple_dict.get("subject")
         predicate_str = triple_dict.get("predicate")
-
         object_entity_info = triple_dict.get("object_entity")
-        object_literal_val = triple_dict.get(
-            "object_literal"
-        )  # This will be a string from parsing
+        object_literal_val = triple_dict.get("object_literal")
         is_literal_object = triple_dict.get("is_literal_object", False)
 
         if not (
@@ -131,118 +133,106 @@ async def add_kg_triples_batch_to_db(
             and predicate_str
         ):
             logger.warning(
-                f"Neo4j (Batch): Invalid subject or predicate in triple dict: {triple_dict}"
+                "Neo4j (Batch): Invalid subject or predicate in triple dict: %s",
+                triple_dict,
             )
             continue
 
         subject_name = str(subject_info["name"]).strip()
-        subject_type = subject_info.get(
-            "type"
-        )  # This is a string like "Character", "WorldElement", etc.
+        subject_type = subject_info.get("type")
         predicate_clean = str(predicate_str).strip().upper().replace(" ", "_")
 
-        if not all([subject_name, predicate_clean]):
+        if not subject_name or not predicate_clean:
             logger.warning(
-                f"Neo4j (Batch): Empty subject name or predicate after stripping: {triple_dict}"
+                "Neo4j (Batch): Empty subject name or predicate after stripping: %s",
+                triple_dict,
             )
             continue
 
-        subject_labels_cypher = _get_cypher_labels(subject_type)
+        subject_labels_list = _labels_to_list(_get_cypher_labels(subject_type))
 
-        # Base parameters for the relationship
         rel_props = {
             "type": predicate_clean,
             KG_REL_CHAPTER_ADDED: chapter_number,
             KG_IS_PROVISIONAL: is_from_flawed_draft,
-            "confidence": 1.0,  # Default confidence
-            # Add other relationship metadata if available
+            "confidence": 1.0,
         }
-
-        params = {"subject_name_param": subject_name, "rel_props_param": rel_props}
 
         if is_literal_object:
             if object_literal_val is None:
                 logger.warning(
-                    f"Neo4j (Batch): Literal object is None for triple: {triple_dict}"
+                    "Neo4j (Batch): Literal object is None for triple: %s",
+                    triple_dict,
                 )
                 continue
-
-            # For literal objects, merge/create a ValueNode.
-            # The ValueNode is unique by its string value and type 'Literal'.
-            params["object_literal_value_param"] = str(
-                object_literal_val
-            )  # Ensure it's a string for ValueNode value
-            params["value_node_type_param"] = (
-                "Literal"  # Generic type for these literal ValueNodes
+            triple_payload.append(
+                {
+                    "subject_labels": subject_labels_list,
+                    "subject_name": subject_name,
+                    "object_labels": ["Entity", "ValueNode"],
+                    "object_props": {
+                        "value": str(object_literal_val),
+                        "type": "Literal",
+                    },
+                    "rel_props": rel_props,
+                }
             )
-
-            query = f"""
-            MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
-                ON CREATE SET s.created_ts = timestamp()
-            MERGE (o:Entity:ValueNode {{value: $object_literal_value_param, type: $value_node_type_param}})
-                ON CREATE SET o.created_ts = timestamp()
-
-            MERGE (s)-[r:DYNAMIC_REL]->(o)
-                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
-                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
-            """
-            statements_with_params.append((query, params))
-
         elif (
             object_entity_info
             and isinstance(object_entity_info, dict)
             and object_entity_info.get("name")
         ):
             object_name = str(object_entity_info["name"]).strip()
-            object_type = object_entity_info.get(
-                "type"
-            )  # String like "Location", "Item"
+            object_type = object_entity_info.get("type")
             if not object_name:
                 logger.warning(
-                    f"Neo4j (Batch): Empty object name for entity object in triple: {triple_dict}"
+                    "Neo4j (Batch): Empty object name for entity object in triple: %s",
+                    triple_dict,
                 )
                 continue
 
-            object_labels_cypher = _get_cypher_labels(object_type)
-            params["object_name_param"] = object_name
-
-            query = f"""
-            MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
-                ON CREATE SET s.created_ts = timestamp()
-            MERGE (o{object_labels_cypher} {{name: $object_name_param}})
-                ON CREATE SET o.created_ts = timestamp()
-
-            MERGE (s)-[r:DYNAMIC_REL]->(o)
-                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
-                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
-            """
-            statements_with_params.append((query, params))
+            object_labels_list = _labels_to_list(_get_cypher_labels(object_type))
+            triple_payload.append(
+                {
+                    "subject_labels": subject_labels_list,
+                    "subject_name": subject_name,
+                    "object_labels": object_labels_list,
+                    "object_props": {"name": object_name},
+                    "rel_props": rel_props,
+                }
+            )
         else:
             logger.warning(
-                f"Neo4j (Batch): Invalid or missing object information in triple dict: {triple_dict}"
+                "Neo4j (Batch): Invalid or missing object information in triple dict: %s",
+                triple_dict,
             )
             continue
 
-    if not statements_with_params:
-        logger.info(
-            "Neo4j: add_kg_triples_batch_to_db: No valid statements generated from triples."
-        )
+    if not triple_payload:
+        logger.info("Neo4j: add_kg_triples_batch_to_db: No valid triples to process.")
         return
 
+    cypher = """
+    UNWIND $triples AS t
+    CALL apoc.merge.node(t.subject_labels, {name: t.subject_name}) YIELD node AS s
+    SET s.created_ts = coalesce(s.created_ts, timestamp())
+    CALL apoc.merge.node(t.object_labels, t.object_props) YIELD node AS o
+    SET o.created_ts = coalesce(o.created_ts, timestamp())
+    MERGE (s)-[r:DYNAMIC_REL {type: t.rel_props.type}]->(o)
+    ON CREATE SET r += t.rel_props, r.created_ts = timestamp()
+    ON MATCH SET r += t.rel_props, r.updated_ts = timestamp()
+    """
+
     try:
-        await neo4j_manager.execute_cypher_batch(statements_with_params)
+        await neo4j_manager.execute_write_query(cypher, {"triples": triple_payload})
         logger.info(
-            f"Neo4j: Batch processed {len(statements_with_params)} KG triple statements."
+            "Neo4j: Batch processed %d KG triples via UNWIND.",
+            len(triple_payload),
         )
     except Exception as e:
-        # Log first few problematic params for debugging, if any
-        first_few_params_str = (
-            str([p_tuple[1] for p_tuple in statements_with_params[:2]])
-            if statements_with_params
-            else "N/A"
-        )
         logger.error(
-            f"Neo4j: Error in batch adding KG triples. First few params: {first_few_params_str}. Error: {e}",
+            "Neo4j: Error in batch adding KG triples with UNWIND: %s",
+            e,
             exc_info=True,
         )
         raise

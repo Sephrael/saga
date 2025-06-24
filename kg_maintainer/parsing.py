@@ -1,6 +1,6 @@
 # kg_maintainer/parsing.py
 import json  # Added json
-import logging  # Added logging
+import structlog
 from typing import Any, Dict, List  # Added Any, List
 
 import utils
@@ -8,7 +8,7 @@ from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 CHAR_UPDATE_KEY_MAP = {
     "desc": "description",

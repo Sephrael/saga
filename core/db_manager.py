@@ -1,5 +1,5 @@
 # core_db/base_db_manager.py
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -13,7 +13,7 @@ from neo4j.exceptions import ServiceUnavailable  # type: ignore
 import config
 from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class Neo4jManagerSingleton:
@@ -29,7 +29,7 @@ class Neo4jManagerSingleton:
         if self._initialized_flag:
             return
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = structlog.get_logger(__name__)
         self.driver: Optional[AsyncDriver] = None
         self._initialized_flag = True
         self.logger.info(
