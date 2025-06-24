@@ -445,6 +445,8 @@ class NANA_Orchestrator:
             await world_queries.get_all_world_item_ids_by_category()
         )
 
+        ignore_spans = patched_spans if attempt == 1 else None
+
         if config.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
@@ -562,6 +564,7 @@ class NANA_Orchestrator:
             revision_tuple_result
             and revision_tuple_result[0]
             and len(revision_tuple_result[0]) > 50
+            and len(revision_tuple_result[0]) >= len(current_text) * 0.5
         ):
             new_text, rev_raw_output, new_spans = revision_tuple_result
             patched_spans = new_spans

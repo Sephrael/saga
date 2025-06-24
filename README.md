@@ -148,7 +148,8 @@ NARRATOR_MODEL="Qwen3-14B-Q4" # Used for Drafting and a full Revision
 
 # Other important settings in config.py (review defaults)
 # MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL,
-# ENABLE_GPTISM_CLEANUP, GPTISM_SIMILARITY_THRESHOLD, etc.
+# ENABLE_GPTISM_CLEANUP, GPTISM_SIMILARITY_THRESHOLD,
+# POST_PATCH_PROBLEM_THRESHOLD, etc.
 ```
 
 Refer to `config.py` for a full list of configurable options and their defaults.
