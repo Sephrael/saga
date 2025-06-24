@@ -166,33 +166,40 @@ def replace_gptisms(
     for sent in nlp(text).sents:
         sent_text = sent.text
         original_sent_text = sent_text  # Keep original for comparison
-        best_match_info = None # Stores (phrase_to_replace, replacement_text, score, start_index, end_index)
+        best_match_info = None  # Stores (phrase_to_replace, replacement_text, score, start_index, end_index)
 
         for gpt_phrase_pattern in GPT_ISM_PATTERNS:
             # Use fuzz.partial_ratio_alignment to find the best match and its boundaries
             # This helps in identifying *where* in the sentence the match occurs.
             # We are looking for the best partial match of gpt_phrase_pattern within sent_text.
-            match = fuzz.partial_ratio_alignment(gpt_phrase_pattern, sent_text.lower(), score_cutoff=threshold)
+            match = fuzz.partial_ratio_alignment(
+                gpt_phrase_pattern, sent_text.lower(), score_cutoff=threshold
+            )
             if match and match.score >= (best_match_info[2] if best_match_info else 0):
                 # match.src_start and match.src_end give the slice for gpt_phrase_pattern
                 # match.dest_start and match.dest_end give the slice for sent_text
-                
+
                 # Ensure the matched segment in the sentence is reasonably close in length to the pattern
                 # This avoids overly broad matches from partial_ratio on very different length strings.
                 pattern_len = len(gpt_phrase_pattern)
                 matched_segment_len = match.dest_end - match.dest_start
-                
+
                 # Heuristic: if the pattern is significantly shorter than the matched segment,
                 # it might be a poor quality partial match.
                 # This is a simple way to prefer more "complete" matches.
                 # We allow some flexibility, e.g. pattern is at least 50% of segment length.
-                if pattern_len < 0.5 * matched_segment_len and matched_segment_len > len(gpt_phrase_pattern) + 10 : # arbitrary slack
+                if (
+                    pattern_len < 0.5 * matched_segment_len
+                    and matched_segment_len > len(gpt_phrase_pattern) + 10
+                ):  # arbitrary slack
                     continue
 
                 options = GPT_ISM_PATTERNS[gpt_phrase_pattern]
                 # Filter out instructional comments
                 valid_options = [
-                    opt for opt in options if not (opt.startswith("[") and opt.endswith("]"))
+                    opt
+                    for opt in options
+                    if not (opt.startswith("[") and opt.endswith("]"))
                 ]
 
                 if not valid_options:
@@ -200,23 +207,47 @@ def replace_gptisms(
                     continue
 
                 replacement_candidate = random.choice(valid_options)
-                
+
                 # If it's a better score, or same score but longer (more specific) match
-                if best_match_info is None or \
-                   match.score > best_match_info[2] or \
-                   (match.score == best_match_info[2] and matched_segment_len > (best_match_info[4] - best_match_info[3])):
+                if (
+                    best_match_info is None
+                    or match.score > best_match_info[2]
+                    or (
+                        match.score == best_match_info[2]
+                        and matched_segment_len
+                        > (best_match_info[4] - best_match_info[3])
+                    )
+                ):
                     # The actual text to replace is from the original sentence, case-sensitively
-                    text_to_replace_segment = sent_text[match.dest_start:match.dest_end]
+                    text_to_replace_segment = sent_text[
+                        match.dest_start : match.dest_end
+                    ]
                     # Store the gpt_phrase_pattern as well to re-fetch valid_options later if this match is chosen
-                    best_match_info = (text_to_replace_segment, replacement_candidate, match.score, match.dest_start, match.dest_end, gpt_phrase_pattern)
+                    best_match_info = (
+                        text_to_replace_segment,
+                        replacement_candidate,
+                        match.score,
+                        match.dest_start,
+                        match.dest_end,
+                        gpt_phrase_pattern,
+                    )
 
         if best_match_info:
-            text_to_replace, chosen_replacement, score, start, end, final_gpt_pattern = best_match_info
-            
+            (
+                text_to_replace,
+                chosen_replacement,
+                score,
+                start,
+                end,
+                final_gpt_pattern,
+            ) = best_match_info
+
             # Re-filter options for the final chosen pattern, just in case (though logic implies it was already done)
             final_options = GPT_ISM_PATTERNS[final_gpt_pattern]
             valid_final_options = [
-                opt for opt in final_options if not (opt.startswith("[") and opt.endswith("]"))
+                opt
+                for opt in final_options
+                if not (opt.startswith("[") and opt.endswith("]"))
             ]
 
             if not valid_final_options:
@@ -225,17 +256,21 @@ def replace_gptisms(
                 logger.warning(
                     "Best match GPT-ism '%s' (pattern: '%s') has no valid non-comment replacements. Skipping.",
                     text_to_replace,
-                    final_gpt_pattern
+                    final_gpt_pattern,
                 )
-                sent_text = original_sent_text # Ensure original text is used
+                sent_text = original_sent_text  # Ensure original text is used
             else:
                 # If the initially chosen_replacement is still valid (it should be), use it.
                 # Otherwise, if somehow it became invalid (e.g. GPT_ISM_PATTERNS changed mid-run, highly unlikely),
                 # we could re-random.choice(valid_final_options). For simplicity, we assume chosen_replacement is valid.
                 # Ensure chosen_replacement is indeed from valid_final_options if paranoia strikes.
                 # For now, we trust `chosen_replacement` was selected from valid options.
-                
-                sent_text = original_sent_text[:start] + chosen_replacement + original_sent_text[end:]
+
+                sent_text = (
+                    original_sent_text[:start]
+                    + chosen_replacement
+                    + original_sent_text[end:]
+                )
                 logger.info(
                     "Replacing GPT-ism segment '%s' (from pattern '%s', score %.1f) with '%s' in sentence: '%s' -> '%s'",
                     text_to_replace,
@@ -243,10 +278,10 @@ def replace_gptisms(
                     score,
                     chosen_replacement,
                     original_sent_text,
-                    sent_text
+                    sent_text,
                 )
                 replacements += 1
-        
+
         new_sentences.append(sent_text.strip())
     cleaned_text = " ".join(new_sentences)
     return cleaned_text, replacements

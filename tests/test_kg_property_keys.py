@@ -13,3 +13,14 @@ def test_parse_elaboration_key():
     assert keys.parse_elaboration_key("elaboration_in_chapter_7") == 7
     assert keys.parse_elaboration_key("elaboration_in_chapter_bad") is None
     assert keys.parse_elaboration_key("other_key") is None
+
+
+def test_parse_other_keys():
+    assert keys.parse_development_key("development_in_chapter_2") == 2
+    assert keys.parse_development_key("development_in_chapter_x") is None
+    assert keys.parse_source_quality_key("source_quality_chapter_3") == 3
+    assert keys.parse_source_quality_key("source_quality_chapter_bad") is None
+    assert keys.parse_added_key("added_in_chapter_4") == 4
+    assert keys.parse_added_key("added_in_chapter_") is None
+    assert keys.parse_updated_key("updated_in_chapter_5") == 5
+    assert keys.parse_updated_key("updated_in_chapter_bad") is None
