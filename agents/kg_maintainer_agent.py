@@ -64,7 +64,7 @@ async def _llm_summarize_full_chapter_text(
 
 # Prompt template for entity resolution, embedded to avoid new file dependency
 ENTITY_RESOLUTION_PROMPT_TEMPLATE = """/no_think
-You are an expert knowledge graph analyst for a creative writing project. Your task is to determine if two entities from the narrative's knowledge graph are referring to the same canonical thing based on their names, properties, and relationships.
+You are an expert knowledge graph analyst for a creative writing project. Determine if two entities from the narrative's knowledge graph refer to the same canonical thing based on their names, properties, and relationships.
 
 **Entity 1 Details:**
 - Name: {{ entity1.name }}
@@ -98,7 +98,7 @@ You are an expert knowledge graph analyst for a creative writing project. Your t
 Based on all the provided context, including name similarity, properties (like descriptions), and shared relationships, are "Entity 1" and "Entity 2" the same entity within the story's canon? For example, "The Locket" and "The Pendant" might be the same item, or "The Shattered Veil" and "Shattered Veil" are likely the same faction.
 
 **Response Format:**
-Respond in JSON format only, with no other text, commentary, or markdown. Your entire response must be a single, valid JSON object with the following structure:
+Output only JSON, with no other text or markdown. Your entire response must be a single, valid JSON object with the following structure:
 {
   "is_same_entity": boolean,
   "confidence_score": float (from 0.0 to 1.0, representing your certainty),
@@ -109,7 +109,7 @@ Respond in JSON format only, with no other text, commentary, or markdown. Your e
 # Prompt template for dynamic relationship resolution
 DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """/no_think
 You analyze a relationship from the novel's knowledge graph and provide a
-single, canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
+single canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
 relationship between the subject and object.
 
 Subject: {{ subject }} ({{ subject_labels }})
@@ -118,7 +118,7 @@ Existing Type: {{ type }}
 Subject Description: {{ subject_desc }}
 Object Description: {{ object_desc }}
 
-Respond with only the predicate string, no extra words.
+Respond with only the predicate string, nothing else.
 """
 
 
