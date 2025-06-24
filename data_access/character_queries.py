@@ -7,10 +7,10 @@ from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 import config
 import utils
-from utils import kg_property_keys as kg_keys
 from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
+from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.character_cypher import (
     TRAIT_NAME_TO_CANONICAL,
@@ -198,11 +198,8 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 and value_str.strip()
             ):
                 try:
-                    chap_num_int_str = key.split("_")[-1]
-                    chap_num_int = (
-                        int(chap_num_int_str) if chap_num_int_str.isdigit() else -1
-                    )
-                    if chap_num_int == -1:
+                    chap_num_int = kg_keys.parse_development_key(key)
+                    if chap_num_int is None:
                         continue
 
                     dev_event_summary = value_str.strip()

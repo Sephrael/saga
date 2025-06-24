@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 import utils
-from utils import kg_property_keys as kg_keys
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CREATED_CHAPTER
+from utils import kg_property_keys as kg_keys
 
 
 class CharacterProfile(BaseModel):
@@ -49,9 +49,8 @@ class CharacterProfile(BaseModel):
         for key, val in sorted(self.updates.items()):
             if not key.startswith(prefix):
                 continue
-            try:
-                chap = int(key.split("_")[-1])
-            except (ValueError, IndexError):
+            chap = kg_keys.parse_development_key(key)
+            if chap is None:
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):
@@ -125,9 +124,8 @@ class WorldItem(BaseModel):
         for key, val in sorted(self.properties.items()):
             if not key.startswith(prefix):
                 continue
-            try:
-                chap = int(key.split("_")[-1])
-            except (ValueError, IndexError):
+            chap = kg_keys.parse_elaboration_key(key)
+            if chap is None:
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):

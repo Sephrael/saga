@@ -390,11 +390,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                     and value_val.strip()
                 ):
                     try:
-                        chap_num_val_str = key_str.split("_")[-1]
-                        chap_num_val = (
-                            int(chap_num_val_str) if chap_num_val_str.isdigit() else -1
-                        )
-                        if chap_num_val == -1:
+                        chap_num_val = kg_keys.parse_elaboration_key(key_str)
+                        if chap_num_val is None:
                             logger.warning(
                                 f"Could not parse chapter number from world elab key: {key_str} for item {item_name_str}"
                             )

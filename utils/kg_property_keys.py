@@ -41,3 +41,39 @@ def parse_elaboration_key(key: str) -> Optional[int]:
         if suffix.isdigit():
             return int(suffix)
     return None
+
+
+def parse_development_key(key: str) -> Optional[int]:
+    """Return the chapter from a development key if parsable."""
+    if key.startswith(DEVELOPMENT_PREFIX):
+        suffix = key[len(DEVELOPMENT_PREFIX) :]
+        if suffix.isdigit():
+            return int(suffix)
+    return None
+
+
+def parse_source_quality_key(key: str) -> Optional[int]:
+    """Return the chapter from a source quality key if parsable."""
+    if key.startswith(SOURCE_QUALITY_PREFIX):
+        suffix = key[len(SOURCE_QUALITY_PREFIX) :]
+        if suffix.isdigit():
+            return int(suffix)
+    return None
+
+
+def parse_added_key(key: str) -> Optional[int]:
+    """Return the chapter from an added key if parsable."""
+    if key.startswith(ADDED_PREFIX):
+        suffix = key[len(ADDED_PREFIX) :]
+        if suffix.isdigit():
+            return int(suffix)
+    return None
+
+
+def parse_updated_key(key: str) -> Optional[int]:
+    """Return the chapter from an updated key if parsable."""
+    if key.startswith(UPDATED_PREFIX):
+        suffix = key[len(UPDATED_PREFIX) :]
+        if suffix.isdigit():
+            return int(suffix)
+    return None

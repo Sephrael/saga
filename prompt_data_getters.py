@@ -13,11 +13,11 @@ from typing import Any, Dict, List, Optional, Set
 
 import config
 import utils  # For _is_fill_in
-from utils import kg_property_keys as kg_keys
 
 # from state_manager import state_manager # No longer directly used
 from data_access import character_queries, kg_queries, world_queries  # MODIFIED
 from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
+from utils import kg_property_keys as kg_keys
 
 logger = logging.getLogger(__name__)
 
@@ -104,14 +104,15 @@ async def get_character_state_snippet_for_prompt(
                 profile_fallback.get("status", "Unknown (error fetching status)")
             )
             dev_note_fb = "Error fetching development note."
-            dev_keys_fb = sorted(
-                [
-                    k
-                    for k in profile_fallback
-                    if k.startswith(kg_keys.DEVELOPMENT_PREFIX)
-                    and int(k.split("_")[-1]) <= effective_filter_chapter
-                ],
-                key=lambda x: int(x.split("_")[-1]),
+            dev_keys_fb = []
+            for k in profile_fallback:
+                if not k.startswith(kg_keys.DEVELOPMENT_PREFIX):
+                    continue
+                chap = kg_keys.parse_development_key(k)
+                if chap is not None and chap <= effective_filter_chapter:
+                    dev_keys_fb.append(k)
+            dev_keys_fb.sort(
+                key=lambda x: kg_keys.parse_development_key(x) or -1,
                 reverse=True,
             )
             if dev_keys_fb:
@@ -152,14 +153,15 @@ async def get_character_state_snippet_for_prompt(
             )
             status_fb = str(profile_fallback.get("status", "Unknown"))
             dev_note_fb = "N/A"
-            dev_keys_fb = sorted(
-                [
-                    k
-                    for k in profile_fallback
-                    if k.startswith(kg_keys.DEVELOPMENT_PREFIX)
-                    and int(k.split("_")[-1]) <= effective_filter_chapter
-                ],
-                key=lambda x: int(x.split("_")[-1]),
+            dev_keys_fb = []
+            for k in profile_fallback:
+                if not k.startswith(kg_keys.DEVELOPMENT_PREFIX):
+                    continue
+                chap = kg_keys.parse_development_key(k)
+                if chap is not None and chap <= effective_filter_chapter:
+                    dev_keys_fb.append(k)
+            dev_keys_fb.sort(
+                key=lambda x: kg_keys.parse_development_key(x) or -1,
                 reverse=True,
             )
             if dev_keys_fb:
@@ -440,12 +442,16 @@ def _add_provisional_notes_and_filter_developments(
     for key in list(item_data.keys()):
         if key.startswith((dev_elaboration_prefix, added_prefix)):
             try:
-                chap_num_of_key_str = key.split("_")[-1]
-                chap_num_of_key = (
-                    int(re.match(r"\d+", chap_num_of_key_str).group(0))
-                    if re.match(r"\d+", chap_num_of_key_str)
-                    else -1
-                )
+                if key.startswith(dev_elaboration_prefix):
+                    chap_num_of_key = (
+                        kg_keys.parse_development_key(key)
+                        if is_character
+                        else kg_keys.parse_elaboration_key(key)
+                    )
+                else:
+                    chap_num_of_key = kg_keys.parse_added_key(key)
+                if chap_num_of_key is None:
+                    raise ValueError("invalid chapter")
                 if (
                     effective_filter_chapter is not None
                     and chap_num_of_key > effective_filter_chapter
@@ -458,12 +464,9 @@ def _add_provisional_notes_and_filter_developments(
 
         if key.startswith(kg_keys.SOURCE_QUALITY_PREFIX):
             try:
-                chap_num_of_source_str = key.split("_")[-1]
-                chap_num_of_source = (
-                    int(re.match(r"\d+", chap_num_of_source_str).group(0))
-                    if re.match(r"\d+", chap_num_of_source_str)
-                    else -1
-                )
+                chap_num_of_source = kg_keys.parse_source_quality_key(key)
+                if chap_num_of_source is None:
+                    raise ValueError("invalid chapter")
 
                 if (
                     effective_filter_chapter is None
