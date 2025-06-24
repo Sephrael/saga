@@ -200,8 +200,13 @@ class Neo4jManagerSingleton:
             "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
             "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
             "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
+            "CREATE INDEX dynamicRel_source_profile_managed IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.source_profile_managed)",
             "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
             "CREATE INDEX worldElement_name_property_idx IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
+            "CREATE INDEX entity_description_idx IF NOT EXISTS FOR (e:Entity) ON (e.description)",
+            "CREATE INDEX entity_created_chapter_idx IF NOT EXISTS FOR (e:Entity) ON (e.created_chapter)",
+            "CREATE INDEX plotPoint_description_idx IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.description)",
+            "CREATE INDEX valueNode_value_idx IF NOT EXISTS FOR (vn:ValueNode) ON (vn.value)",
             f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
         ]
 
