@@ -458,7 +458,7 @@ class NANA_Orchestrator:
                     plot_point_focus,
                     plot_point_index,
                     hybrid_context_for_draft,
-                    ignore_spans=ignore_spans,
+                    ignore_spans=patched_spans,
                 )
             )
             task_names.append("evaluation")
@@ -470,7 +470,7 @@ class NANA_Orchestrator:
                     current_text,
                     novel_chapter_number,
                     hybrid_context_for_draft,
-                    ignore_spans=ignore_spans,
+                    ignore_spans=patched_spans,
                 )
             )
             task_names.append("continuity")
