@@ -564,6 +564,7 @@ class NANA_Orchestrator:
             revision_tuple_result
             and revision_tuple_result[0]
             and len(revision_tuple_result[0]) > 50
+            and len(revision_tuple_result[0]) >= len(current_text) * 0.5
         ):
             new_text, rev_raw_output, new_spans = revision_tuple_result
             patched_spans = new_spans
