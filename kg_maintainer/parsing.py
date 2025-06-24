@@ -307,6 +307,11 @@ def parse_unified_world_updates(
                         exc_info=True,
                     )
         else:  # Regular category with multiple items
+            # If the category itself appears to describe a single item with
+            # attributes (values are not dicts), treat it as that item's name.
+            if all(not isinstance(v, dict) for v in items_llm.values()):
+                items_llm = {category_name_llm: items_llm}
+
             for item_name_llm, item_attributes_llm in items_llm.items():
                 if not item_name_llm or not isinstance(item_attributes_llm, dict):
                     logger.warning(

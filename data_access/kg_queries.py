@@ -216,8 +216,10 @@ async def add_kg_triples_batch_to_db(
     UNWIND $triples AS t
     CALL apoc.merge.node(t.subject_labels, {name: t.subject_name}) YIELD node AS s
     SET s.created_ts = coalesce(s.created_ts, timestamp())
+    WITH s, t
     CALL apoc.merge.node(t.object_labels, t.object_props) YIELD node AS o
     SET o.created_ts = coalesce(o.created_ts, timestamp())
+    WITH s, o, t
     MERGE (s)-[r:DYNAMIC_REL {type: t.rel_props.type}]->(o)
     ON CREATE SET r += t.rel_props, r.created_ts = timestamp()
     ON MATCH SET r += t.rel_props, r.updated_ts = timestamp()
