@@ -6,6 +6,7 @@ import numpy as np
 
 import config
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ async def save_chapter_data_to_db(
         )
         return
 
+    if embedding_array is None:
+        embedding_array = await llm_service.async_get_embedding(text)
     embedding_list = neo4j_manager.embedding_to_list(embedding_array)
 
     query = f"""
@@ -46,7 +49,7 @@ async def save_chapter_data_to_db(
         c.raw_llm_output = $raw_llm_output_param,
         c.summary = $summary_param,
         c.is_provisional = $is_provisional_param,
-        c.{config.NEO4J_VECTOR_PROPERTY_NAME} = $embedding_vector_param,
+        c.{config.NEO4J_VECTOR_PROPERTY_NAME} = $text_embedding_param,
         c.last_updated = timestamp()
     """
     parameters = {
@@ -55,7 +58,7 @@ async def save_chapter_data_to_db(
         "raw_llm_output_param": raw_llm_output,
         "summary_param": summary if summary is not None else "",
         "is_provisional_param": is_provisional,
-        "embedding_vector_param": embedding_list,
+        "text_embedding_param": embedding_list,
     }
     try:
         await neo4j_manager.execute_write_query(query, parameters)
@@ -104,14 +107,14 @@ async def get_embedding_from_db(chapter_number: int) -> Optional[np.ndarray]:
     query = f"""
     MATCH (c:{config.NEO4J_VECTOR_NODE_LABEL} {{number: $chapter_number_param}})
     WHERE c.{config.NEO4J_VECTOR_PROPERTY_NAME} IS NOT NULL
-    RETURN c.{config.NEO4J_VECTOR_PROPERTY_NAME} AS embedding_vector
+    RETURN c.{config.NEO4J_VECTOR_PROPERTY_NAME} AS text_embedding
     """
     try:
         result = await neo4j_manager.execute_read_query(
             query, {"chapter_number_param": chapter_number}
         )
-        if result and result[0] and result[0].get("embedding_vector"):
-            embedding_list = result[0]["embedding_vector"]
+        if result and result[0] and result[0].get("text_embedding"):
+            embedding_list = result[0]["text_embedding"]
             return neo4j_manager.list_to_embedding(embedding_list)
         logger.debug(
             f"Neo4j: No embedding vector found on chapter node {chapter_number}."
@@ -207,7 +210,7 @@ async def get_all_past_embeddings_from_db(
     MATCH (c:{config.NEO4J_VECTOR_NODE_LABEL})
     WHERE c.number < $current_chapter_number_param AND c.number > 0
       AND c.{config.NEO4J_VECTOR_PROPERTY_NAME} IS NOT NULL
-    RETURN c.number AS chapter_number, c.{config.NEO4J_VECTOR_PROPERTY_NAME} AS embedding_vector
+    RETURN c.number AS chapter_number, c.{config.NEO4J_VECTOR_PROPERTY_NAME} AS text_embedding
     ORDER BY c.number DESC
     """
     try:
@@ -216,9 +219,9 @@ async def get_all_past_embeddings_from_db(
         )
         if results:
             for record in results:
-                if record.get("embedding_vector"):
+                if record.get("text_embedding"):
                     deserialized_emb = neo4j_manager.list_to_embedding(
-                        record["embedding_vector"]
+                        record["text_embedding"]
                     )
                     if deserialized_emb is not None:
                         embeddings_list.append(
