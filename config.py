@@ -11,6 +11,7 @@ import os
 from typing import List, Optional
 
 import structlog
+from structlog.dev import ConsoleRenderer
 from dotenv import load_dotenv
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -392,9 +393,11 @@ os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
 # Configure structlog
 structlog.configure(
     processors=[
+        structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        # Replace render_to_log_kwargs with ConsoleRenderer
     ],
     logger_factory=structlog.stdlib.LoggerFactory(),
     wrapper_class=structlog.stdlib.BoundLogger,

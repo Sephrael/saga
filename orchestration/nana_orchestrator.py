@@ -3,6 +3,7 @@ import asyncio
 import logging
 import logging.handlers
 import os
+import structlog
 import time  # For Rich display updates
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1372,16 +1373,33 @@ class NANA_Orchestrator:
 
 
 def setup_logging_nana():
-    logging.basicConfig(
-        level=config.LOG_LEVEL_STR,
-        format=config.LOG_FORMAT,
-        datefmt=config.LOG_DATE_FORMAT,
-        handlers=[],
+    # Step 1: Configure structlog to prepare data and pass it to the standard logger.
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            # This processor formats log messages with positional arguments (e.g., %s)
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            # This processor passes the structured log data to the standard logger,
+            # which RichHandler will then receive.
+            structlog.stdlib.render_to_log_kwargs,
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
     )
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
 
+    # Step 2: Set up the root logger and clear previous configurations.
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(config.LOG_LEVEL_STR)
+
+    # Step 3: Configure handlers. RichHandler will now do the console formatting.
     if config.LOG_FILE:
         try:
             log_dir = os.path.dirname(config.LOG_FILE)
@@ -1394,57 +1412,41 @@ def setup_logging_nana():
                 mode="a",
                 encoding="utf-8",
             )
-            file_handler.setLevel(config.LOG_LEVEL_STR)
-            formatter = logging.Formatter(
-                config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
-            )
-            file_handler.setFormatter(formatter)
+            # Use a standard formatter for the file log.
+            file_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+            file_handler.setFormatter(file_formatter)
             root_logger.addHandler(file_handler)
-            root_logger.info(f"File logging enabled. Log file: {config.LOG_FILE}")
         except Exception as e:
-            console_handler_fallback = logging.StreamHandler()
-            console_handler_fallback.setFormatter(
-                logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
-            )
-            root_logger.addHandler(console_handler_fallback)
-            root_logger.error(
-                f"Failed to configure file logging to {config.LOG_FILE}: {e}. Logging to console instead.",
-                exc_info=True,
-            )
+            print(f"Error setting up file logger: {e}")
 
+    # Configure Console Handler
     if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
-        existing_console = None
-        if root_logger.handlers:
-            for h_idx, h in enumerate(root_logger.handlers):
-                if hasattr(h, "console") and not isinstance(h, logging.FileHandler):
-                    existing_console = h.console  # type: ignore
-                    break
-
-        rich_handler = RichHandler(
+        # Let RichHandler control its own formatting.
+        # We turn its decorations back ON and do NOT set a formatter on it.
+        console_handler = RichHandler(
             level=config.LOG_LEVEL_STR,
             rich_tracebacks=True,
             show_path=False,
             markup=True,
-            show_time=True,
-            show_level=True,
-            console=existing_console,
+            show_time=True,  # Turn back ON
+            show_level=True, # Turn back ON
         )
-        root_logger.addHandler(rich_handler)
-        root_logger.info("Rich logging handler enabled for console.")
-    elif not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
+        root_logger.addHandler(console_handler)
+    else:
+        # Fallback to a standard stream handler with a standard formatter
         stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(config.LOG_LEVEL_STR)
-        stream_formatter = logging.Formatter(
-            config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
-        )
+        stream_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
-        root_logger.info("Standard stream logging handler enabled for console.")
 
+    # Set levels for noisy loggers
     logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
     logging.getLogger("neo4j").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    root_logger.info(
-        f"NANA Logging setup complete. Application Log Level: {logging.getLevelName(config.LOG_LEVEL_STR)}."
+    
+    log = structlog.get_logger()
+    log.info(
+        "NANA Logging setup complete.", 
+        log_level=logging.getLevelName(config.LOG_LEVEL_STR)
     )
