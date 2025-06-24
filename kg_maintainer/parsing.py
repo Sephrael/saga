@@ -1,6 +1,6 @@
 # kg_maintainer/parsing.py
 import json  # Added json
-import logging  # Added logging
+import structlog
 from typing import Any, Dict, List  # Added Any, List
 
 import utils
@@ -8,7 +8,7 @@ from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 CHAR_UPDATE_KEY_MAP = {
     "desc": "description",
@@ -307,6 +307,11 @@ def parse_unified_world_updates(
                         exc_info=True,
                     )
         else:  # Regular category with multiple items
+            # If the category itself appears to describe a single item with
+            # attributes (values are not dicts), treat it as that item's name.
+            if all(not isinstance(v, dict) for v in items_llm.values()):
+                items_llm = {category_name_llm: items_llm}
+
             for item_name_llm, item_attributes_llm in items_llm.items():
                 if not item_name_llm or not isinstance(item_attributes_llm, dict):
                     logger.warning(

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -66,61 +66,54 @@ def mock_neo4j_manager():
     with patch(
         "data_access.kg_queries.neo4j_manager", spec=Neo4jManagerSingleton
     ) as mock_manager:
-        mock_manager.execute_cypher_batch = AsyncMock(return_value=None)
-        # Simplistic mock for query_kg_from_db, will be updated by test logic
+        mock_manager.execute_write_query = AsyncMock(return_value=None)
         mock_manager.execute_read_query = AsyncMock(return_value=[])
         yield mock_manager
 
 
-# Store for captured statements by the mock
-captured_statements_for_tests: List[Tuple[str, Dict[str, Any]]] = []
+# Store for captured query and params
+captured_query: str = ""
+captured_params: Dict[str, Any] = {}
 
 
-async def capture_statements_mock(
-    statements: List[Tuple[str, Dict[str, Any]]],
-):
-    captured_statements_for_tests.clear()
-    captured_statements_for_tests.extend(statements)
+async def capture_write_mock(query: str, params: Dict[str, Any]):
+    global captured_query, captured_params
+    captured_query = query
+    captured_params = params
     return None
 
 
 @pytest.mark.asyncio
 async def test_add_entities_with_character_labeling(mock_neo4j_manager):
-    captured_statements_for_tests.clear()
-    # Override the mock for execute_cypher_batch for this test to capture statements
-    mock_neo4j_manager.execute_cypher_batch = AsyncMock(
-        side_effect=capture_statements_mock
-    )
+    global captured_query, captured_params
+    captured_query = ""
+    captured_params = {}
+    mock_neo4j_manager.execute_write_query = AsyncMock(side_effect=capture_write_mock)
 
     triples_data = [
-        # Scenario 1: Explicit Character type
         {
             "subject": {"name": "Alice", "type": "Character"},
             "predicate": "IS_A",
             "object_literal": "Protagonist",
             "is_literal_object": True,
         },
-        # Scenario 2: Person type, should also get Character label
         {
             "subject": {"name": "Bob", "type": "Person"},
             "predicate": "WORKS_AS",
             "object_literal": "Engineer",
             "is_literal_object": True,
         },
-        # Scenario 3: Other type
         {
             "subject": {"name": "Castle", "type": "Location"},
             "predicate": "IS_NEAR",
             "object_literal": "Forest",
             "is_literal_object": True,
         },
-        # Scenario 4: Character as object
         {
             "subject": {"name": "Story1", "type": "Narrative"},
             "predicate": "FEATURES",
             "object_entity": {"name": "Charles", "type": "Character"},
         },
-        # Scenario 5: Person as object
         {
             "subject": {"name": "ProjectX", "type": "Project"},
             "predicate": "MANAGED_BY",
@@ -132,78 +125,29 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
         triples_data, chapter_number=1, is_from_flawed_draft=False
     )
 
-    # Debug: Print captured statements
-    # for i, (query, params) in enumerate(captured_statements_for_tests):
-    #     print(f"Statement {i}:")
-    #     print(f"  Query: {query.strip()}")
-    #     print(f"  Params: {params}")
-    #     print("-" * 20)
+    assert "UNWIND $triples AS t" in captured_query
+    triples = captured_params.get("triples", [])
+    assert len(triples) == 5
 
-    # Verify generated Cypher for Alice (Character)
-    alice_statement_found = False
-    for query, params in captured_statements_for_tests:
-        if params.get("subject_name_param") == "Alice":
-            assert (
-                "MERGE (s:Character:Entity {name: $subject_name_param})" in query
-                or "MERGE (s:Character:Entity {name: $subject_name_param})" in query
-            )  # Accommodate slight variations if any
-            alice_statement_found = True
-            break
-    assert alice_statement_found, (
-        "Cypher statement for Alice as Character not found or incorrect."
-    )
+    def _get_by_subject(name: str) -> Dict[str, Any]:
+        for t in triples:
+            if t.get("subject_name") == name:
+                return t
+        return {}
 
-    # Verify generated Cypher for Bob (Person -> Character:Person)
-    bob_statement_found = False
-    for query, params in captured_statements_for_tests:
-        if params.get("subject_name_param") == "Bob":
-            assert (
-                "MERGE (s:Character:Person:Entity {name: $subject_name_param})" in query
-                or "MERGE (s:Character:Person:Entity {name: $subject_name_param})"
-                in query
-            )
-            bob_statement_found = True
-            break
-    assert bob_statement_found, (
-        "Cypher statement for Bob as Person:Character not found or incorrect."
-    )
+    def _get_by_object(name: str) -> Dict[str, Any]:
+        for t in triples:
+            if t.get("object_props", {}).get("name") == name:
+                return t
+        return {}
 
-    # Verify generated Cypher for Castle (Location)
-    castle_statement_found = False
-    for query, params in captured_statements_for_tests:
-        if params.get("subject_name_param") == "Castle":
-            assert "MERGE (s:Location:Entity {name: $subject_name_param})" in query
-            castle_statement_found = True
-            break
-    assert castle_statement_found, (
-        "Cypher statement for Castle as Location not found or incorrect."
-    )
-
-    # Verify Charles (Object, Character)
-    charles_statement_found = False
-    for query, params in captured_statements_for_tests:
-        if params.get("object_name_param") == "Charles":
-            assert "MERGE (o:Character:Entity {name: $object_name_param})" in query
-            charles_statement_found = True
-            break
-    assert charles_statement_found, (
-        "Cypher statement for Charles as Character (object) not found or incorrect."
-    )
-
-    # Verify Diana (Object, Person -> Character:Person)
-    diana_statement_found = False
-    for query, params in captured_statements_for_tests:
-        if params.get("object_name_param") == "Diana":
-            assert (
-                "MERGE (o:Character:Person:Entity {name: $object_name_param})" in query
-            )
-            diana_statement_found = True
-            break
-    assert diana_statement_found, (
-        "Cypher statement for Diana as Person:Character (object) not found or incorrect."
-    )
+    assert _get_by_subject("Bob")["subject_labels"] == ["Character", "Person", "Entity"]
+    assert _get_by_subject("Castle")["subject_labels"] == ["Location", "Entity"]
+    assert _get_by_object("Charles")["object_labels"] == ["Character", "Entity"]
+    assert _get_by_object("Diana")["object_labels"] == ["Character", "Person", "Entity"]
 
 
+@pytest.mark.asyncio
 # Placeholder for a more comprehensive query test.
 # This would ideally involve setting up mock return values for execute_read_query
 # based on what add_kg_triples_batch_to_db *would* have stored.
