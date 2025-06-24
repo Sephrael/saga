@@ -104,19 +104,72 @@ async def _generate_semantic_chapter_context_logic(
             f"No specific plot point found for ch {current_chapter_number}. Using generic semantic context query."
         )
 
-    query_embedding_np = await llm_service.async_get_embedding(context_query_text)
     max_semantic_tokens = (config.MAX_CONTEXT_TOKENS * 2) // 3
+
+    # Include the summaries of the immediate previous chapters before searching
+    immediate_context_limit = 2
+    immediate_start = max(1, current_chapter_number - immediate_context_limit)
+    immediate_parts: List[str] = []
+    total_tokens_accumulated = 0
+
+    for i in range(immediate_start, current_chapter_number):
+        if total_tokens_accumulated >= max_semantic_tokens:
+            break
+        chap_data = await chapter_queries.get_chapter_data_from_db(i)
+        if chap_data:
+            content = (chap_data.get("summary") or chap_data.get("text", "")).strip()
+            is_prov = chap_data.get("is_provisional", False)
+            ctype = (
+                "Provisional Summary"
+                if chap_data.get("summary") and is_prov
+                else "Summary"
+                if chap_data.get("summary")
+                else "Provisional Text Snippet"
+                if is_prov
+                else "Text Snippet"
+            )
+            if content:
+                prefix = f"[Immediate Context from Chapter {i} ({ctype})]:\n"
+                suffix = "\n---\n"
+                full_content_part = f"{prefix}{content}{suffix}"
+                part_tokens = count_tokens(full_content_part, config.DRAFTING_MODEL)
+                if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
+                    immediate_parts.append(full_content_part)
+                    total_tokens_accumulated += part_tokens
+                else:
+                    remaining_tokens = max_semantic_tokens - total_tokens_accumulated
+                    if (
+                        remaining_tokens
+                        > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10
+                    ):
+                        truncated_content_part = truncate_text_by_tokens(
+                            full_content_part,
+                            config.DRAFTING_MODEL,
+                            remaining_tokens,
+                        )
+                        immediate_parts.append(truncated_content_part)
+                        total_tokens_accumulated += remaining_tokens
+                    break
+
+    if total_tokens_accumulated >= max_semantic_tokens:
+        final_semantic_context = "\n".join(reversed(immediate_parts)).strip()
+        final_tokens_count = count_tokens(final_semantic_context, config.DRAFTING_MODEL)
+        logger.info(
+            f"Constructed semantic context solely from immediate chapters: {final_tokens_count} tokens."
+        )
+        return final_semantic_context
+
+    query_embedding_np = await llm_service.async_get_embedding(context_query_text)
 
     if query_embedding_np is None:
         logger.warning(
             "Failed to generate embedding for semantic context query. Falling back to sequential previous chapter summaries/text."
         )
         context_parts_list: List[str] = []
-        total_tokens_accumulated = 0
         fallback_chapter_limit = config.CONTEXT_CHAPTER_COUNT
         for i in range(
             max(1, current_chapter_number - fallback_chapter_limit),
-            current_chapter_number,
+            immediate_start,
         ):
             if total_tokens_accumulated >= max_semantic_tokens:
                 break
@@ -141,9 +194,7 @@ async def _generate_semantic_chapter_context_logic(
                     )
                     suffix = "\n---\n"
                     full_content_part = f"{prefix}{content}{suffix}"
-                    part_tokens = count_tokens(
-                        full_content_part, config.DRAFTING_MODEL
-                    )  # MODIFIED
+                    part_tokens = count_tokens(full_content_part, config.DRAFTING_MODEL)
                     if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
                         context_parts_list.append(full_content_part)
                         total_tokens_accumulated += part_tokens
@@ -154,21 +205,19 @@ async def _generate_semantic_chapter_context_logic(
                         if (
                             remaining_tokens
                             > count_tokens(prefix + suffix, config.DRAFTING_MODEL) + 10
-                        ):  # MODIFIED
-                            truncated_content_part = (
-                                truncate_text_by_tokens(  # MODIFIED
-                                    full_content_part,
-                                    config.DRAFTING_MODEL,
-                                    remaining_tokens,
-                                )
+                        ):
+                            truncated_content_part = truncate_text_by_tokens(
+                                full_content_part,
+                                config.DRAFTING_MODEL,
+                                remaining_tokens,
                             )
                             context_parts_list.append(truncated_content_part)
                             total_tokens_accumulated += remaining_tokens
                         break
-        final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
-        final_tokens_count = count_tokens(
-            final_semantic_context, config.DRAFTING_MODEL
-        )  # MODIFIED
+        final_semantic_context = "\n".join(
+            immediate_parts + list(reversed(context_parts_list))
+        ).strip()
+        final_tokens_count = count_tokens(final_semantic_context, config.DRAFTING_MODEL)
         logger.info(
             f"Constructed fallback semantic context: {final_tokens_count} tokens."
         )
@@ -186,42 +235,25 @@ async def _generate_semantic_chapter_context_logic(
         )
         return ""
 
-    immediate_prev_chap_num = current_chapter_number - 1
-    if immediate_prev_chap_num > 0:
-        is_immediate_prev_present = any(
-            ch_data["chapter_number"] == immediate_prev_chap_num
-            for ch_data in similar_chapters_data
-        )
-        if not is_immediate_prev_present:
-            immediate_prev_data = await chapter_queries.get_chapter_data_from_db(
-                immediate_prev_chap_num
-            )
-            if immediate_prev_data and (
-                immediate_prev_data.get("summary") or immediate_prev_data.get("text")
-            ):
-                similar_chapters_data.append(
-                    {
-                        "chapter_number": immediate_prev_chap_num,
-                        "summary": immediate_prev_data.get("summary"),
-                        "text": immediate_prev_data.get("text"),
-                        "is_provisional": immediate_prev_data.get(
-                            "is_provisional", False
-                        ),
-                        "score": 0.999,
-                    }
-                )
-                logger.debug(
-                    f"Added immediate previous chapter {immediate_prev_chap_num} to semantic context list from Neo4j search."
-                )
+    # Exclude immediate context chapters and apply decay to similarity scores
+    excluded_chapters = set(range(immediate_start, current_chapter_number))
+    filtered_chapters: List[dict[str, Any]] = []
+    for ch in similar_chapters_data:
+        if ch.get("chapter_number") in excluded_chapters:
+            continue
+        score = float(ch.get("score", 0.0))
+        distance = current_chapter_number - int(ch.get("chapter_number", 0))
+        adjusted = score * (0.95 ** max(distance, 0))
+        ch["adjusted_score"] = adjusted
+        filtered_chapters.append(ch)
 
     sorted_chapters_for_context = sorted(
-        similar_chapters_data,
-        key=lambda x: (x.get("score", 0.0), x.get("chapter_number", 0)),
+        filtered_chapters,
+        key=lambda x: x.get("adjusted_score", 0.0),
         reverse=True,
     )
 
     context_parts_list: List[str] = []
-    total_tokens_accumulated = 0
 
     for chap_data in sorted_chapters_for_context:
         if total_tokens_accumulated >= max_semantic_tokens:
@@ -276,12 +308,12 @@ async def _generate_semantic_chapter_context_logic(
                 f"Chapter {chap_num} (Sim: {score_str}) from vector search had no content (summary/text). Skipping."
             )
 
-    final_semantic_context = "\n".join(reversed(context_parts_list)).strip()
-    final_tokens_count = count_tokens(
-        final_semantic_context, config.DRAFTING_MODEL
-    )  # MODIFIED
+    final_semantic_context = "\n".join(
+        list(reversed(immediate_parts)) + context_parts_list
+    ).strip()
+    final_tokens_count = count_tokens(final_semantic_context, config.DRAFTING_MODEL)
     logger.info(
-        f"Constructed final SEMANTIC context: {final_tokens_count} tokens from {len(context_parts_list)} chapter snippets (via Neo4j vector search)."
+        f"Constructed final SEMANTIC context: {final_tokens_count} tokens from {len(immediate_parts) + len(context_parts_list)} chapter snippets (via Neo4j vector search)."
     )
     return final_semantic_context
 
