@@ -384,38 +384,6 @@ class NANA_Orchestrator:
             )
             return text_to_dedup, 0
 
-    async def perform_gptism_cleanup(
-        self, text: str, chapter_number: int
-    ) -> Tuple[str, int]:
-        """Replace GPT-style phrases in ``text`` if enabled."""
-        if not config.ENABLE_GPTISM_CLEANUP:
-            return text, 0
-        if not text or not text.strip():
-            return text, 0
-
-        logger.info(f"NANA: Performing GPT-ism cleanup for Chapter {chapter_number}...")
-        try:
-            from processing.gptism_cleanup import replace_gptisms
-
-            cleaned, count = replace_gptisms(
-                text, threshold=config.GPTISM_SIMILARITY_THRESHOLD
-            )
-            if count > 0:
-                logger.info(
-                    f"GPT-ism cleanup for Chapter {chapter_number} replaced {count} phrase(s)."
-                )
-            else:
-                logger.info(
-                    f"GPT-ism cleanup for Chapter {chapter_number}: no changes."
-                )
-            return cleaned, count
-        except Exception as e:  # pragma: no cover - unexpected errors
-            logger.error(
-                f"Error during GPT-ism cleanup for Chapter {chapter_number}: {e}",
-                exc_info=True,
-            )
-            return text, 0
-
     async def _run_evaluation_cycle(
         self,
         novel_chapter_number: int,
@@ -725,22 +693,19 @@ class NANA_Orchestrator:
             deduplicated_text, removed_char_count = await self.perform_deduplication(
                 initial_draft_text, novel_chapter_number
             )
-            cleaned_text, replaced = await self.perform_gptism_cleanup(
-                deduplicated_text, novel_chapter_number
-            )
-            is_from_flawed_source_for_kg = removed_char_count > 0 or replaced > 0
+            is_from_flawed_source_for_kg = removed_char_count > 0
             if is_from_flawed_source_for_kg:
                 logger.info(
-                    f"NANA: Ch {novel_chapter_number} - Text marked as flawed for KG due to cleaning removing/replacing text."
+                    f"NANA: Ch {novel_chapter_number} - Text marked as flawed for KG due to de-duplication removing {removed_char_count} characters."
                 )
                 await self._save_debug_output(
                     novel_chapter_number,
                     "deduplicated_text_no_eval_path",
-                    cleaned_text,
+                    deduplicated_text,
                 )
 
             return (
-                cleaned_text,
+                deduplicated_text,
                 initial_raw_llm_text,
                 is_from_flawed_source_for_kg,
             )
@@ -763,15 +728,12 @@ class NANA_Orchestrator:
         ) = await self.perform_deduplication(
             current_text_to_process, novel_chapter_number
         )
-        cleaned_text, replaced = await self.perform_gptism_cleanup(
-            deduplicated_text, novel_chapter_number
-        )
-        if removed_char_count > 0 or replaced > 0:
+        if removed_char_count > 0:
             is_from_flawed_source_for_kg = True
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Post-draft cleaning modified the text (duplicates removed: {removed_char_count}, gpt-isms replaced: {replaced})."
+                f"NANA: Ch {novel_chapter_number} - De-duplication removed {removed_char_count} characters. Text marked as potentially flawed for KG."
             )
-            current_text_to_process = cleaned_text
+            current_text_to_process = deduplicated_text
             await self._save_debug_output(
                 novel_chapter_number,
                 "deduplicated_text_after_draft",
@@ -779,7 +741,7 @@ class NANA_Orchestrator:
             )
         else:
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Post-draft de-duplication and cleanup found no significant changes."
+                f"NANA: Ch {novel_chapter_number} - Post-draft de-duplication found no significant changes."
             )
 
         revisions_made = 0
@@ -931,14 +893,11 @@ class NANA_Orchestrator:
         dedup_text_after_rev, removed_after_rev = await self.perform_deduplication(
             current_text_to_process, novel_chapter_number
         )
-        cleaned_after_rev, replaced_after_rev = await self.perform_gptism_cleanup(
-            dedup_text_after_rev, novel_chapter_number
-        )
-        if removed_after_rev > 0 or replaced_after_rev > 0:
+        if removed_after_rev > 0:
             logger.info(
-                f"NANA: Ch {novel_chapter_number} - Post-revision cleaning modified the text (duplicates removed: {removed_after_rev}, gpt-isms replaced: {replaced_after_rev})."
+                f"NANA: Ch {novel_chapter_number} - De-duplication after revisions removed {removed_after_rev} characters."
             )
-            current_text_to_process = cleaned_after_rev
+            current_text_to_process = dedup_text_after_rev
             is_from_flawed_source_for_kg = True
             await self._save_debug_output(
                 novel_chapter_number,
