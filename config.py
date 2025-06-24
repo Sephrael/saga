@@ -83,7 +83,7 @@ class SagaSettings(BaseSettings):
     # Neo4j Vector Index Configuration
     NEO4J_VECTOR_INDEX_NAME: str = "chapterEmbeddings"
     NEO4J_VECTOR_NODE_LABEL: str = "Chapter"
-    NEO4J_VECTOR_PROPERTY_NAME: str = "embedding_vector"
+    NEO4J_VECTOR_PROPERTY_NAME: str = "text_embedding"
     NEO4J_VECTOR_DIMENSIONS: int = 768
     NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
