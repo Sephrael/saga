@@ -2,20 +2,11 @@
 import logging
 from typing import Any
 
-# from rdflib import Graph, URIRef, Literal, BNode # No longer needed for triples
-# from rdflib.namespace import RDF, RDFS # No longer needed for triples
-
 logger = logging.getLogger(__name__)
 
 
 class ParseError(Exception):
     """Custom exception for parsing errors."""
-
-
-# DEFAULT_BLOCK_SEPARATOR_REGEX and split_text_into_blocks removed as they are no longer used.
-
-# --- New RDF Triple Parsing using rdflib ---
-# Modified to be a custom plain-text triple parser
 
 
 def _get_entity_type_and_name_from_text(entity_text: str) -> dict[str, str | None]:
