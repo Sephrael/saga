@@ -1,11 +1,11 @@
 import argparse
 import asyncio
-import logging
 
+import structlog
 from core.db_manager import neo4j_manager
 from orchestration.nana_orchestrator import NANA_Orchestrator, setup_logging_nana
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def main() -> None:
