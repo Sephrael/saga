@@ -22,7 +22,7 @@ def test_extract_and_merge(monkeypatch):
     monkeypatch.setattr(
         agent,
         "_llm_extract_updates",
-        lambda props, text, num: llm_service_mock.async_call_llm(),
+        lambda *a, **k: llm_service_mock.async_call_llm(),
     )
     monkeypatch.setattr(
         agent, "persist_profiles", lambda profiles, chapter: asyncio.sleep(0)

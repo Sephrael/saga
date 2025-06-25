@@ -9,6 +9,7 @@ You are an expert knowledge graph extractor for a creative writing project. Anal
 - Title: {{ novel_title }}
 - Genre: {{ novel_genre }}
 - Protagonist: {{ protagonist }}
+- Known Characters: {{ character_names | join(', ') }}
 
 **Canonical Schema Information (Your output MUST conform to this):**
 - **Available Node Labels:** {{ available_node_labels | join(', ') }}
