@@ -820,17 +820,22 @@ async def fix_missing_world_element_core_fields() -> int:
 
         props: Dict[str, Any] = {}
 
-        if not w_id and name and category:
-            props["id"] = (
-                f"{utils._normalize_for_id(category)}_{utils._normalize_for_id(name)}"
-            )
-
         if not name and isinstance(w_id, str):
             name_part = w_id.split("_", 1)[-1]
             props["name"] = name_part.replace("_", " ").title()
+            name = props["name"]
 
-        if not category and isinstance(w_id, str):
-            props["category"] = w_id.split("_")[0]
+        if not category:
+            if isinstance(w_id, str):
+                props["category"] = w_id.split("_")[0]
+            else:
+                props["category"] = "unknown_category"
+            category = props["category"]
+
+        if not w_id and name:
+            props["id"] = (
+                f"{utils._normalize_for_id(category)}_{utils._normalize_for_id(name)}"
+            )
 
         if props:
             statements.append(

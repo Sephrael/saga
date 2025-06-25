@@ -1413,7 +1413,9 @@ def setup_logging_nana():
                 encoding="utf-8",
             )
             # Use a standard formatter for the file log.
-            file_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+            file_formatter = logging.Formatter(
+                config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
+            )
             file_handler.setFormatter(file_formatter)
             root_logger.addHandler(file_handler)
         except Exception as e:
@@ -1429,13 +1431,15 @@ def setup_logging_nana():
             show_path=False,
             markup=True,
             show_time=True,  # Turn back ON
-            show_level=True, # Turn back ON
+            show_level=True,  # Turn back ON
         )
         root_logger.addHandler(console_handler)
     else:
         # Fallback to a standard stream handler with a standard formatter
         stream_handler = logging.StreamHandler()
-        stream_formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+        stream_formatter = logging.Formatter(
+            config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
+        )
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
 
@@ -1444,9 +1448,9 @@ def setup_logging_nana():
     logging.getLogger("neo4j").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    
+
     log = structlog.get_logger()
     log.info(
-        "NANA Logging setup complete.", 
-        log_level=logging.getLevelName(config.LOG_LEVEL_STR)
+        "NANA Logging setup complete.",
+        log_level=logging.getLevelName(config.LOG_LEVEL_STR),
     )
