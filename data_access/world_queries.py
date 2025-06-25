@@ -52,7 +52,7 @@ async def sync_world_items(
 ) -> bool:
     """Persist world element data to Neo4j."""
     WORLD_NAME_TO_ID.clear()
-    for cat, items in world_items.items():
+    for _cat, items in world_items.items():
         if not isinstance(items, dict):
             continue
         for item in items.values():
@@ -120,7 +120,7 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
         # Add other direct properties from overview_details if any
         for k_overview, v_overview in overview_details.items():
             if (
-                isinstance(v_overview, (str, int, float, bool))
+                isinstance(v_overview, str | int | float | bool)
                 and k_overview not in wc_props
             ):
                 wc_props[k_overview] = v_overview
@@ -284,7 +284,7 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
             # Add other direct properties
             for k_detail, v_detail in details_dict.items():
                 if (
-                    isinstance(v_detail, (str, int, float, bool))
+                    isinstance(v_detail, str | int | float | bool)
                     and k_detail not in we_node_props
                     and not k_detail.startswith(kg_keys.ELABORATION_PREFIX)
                     and not k_detail.startswith(kg_keys.ADDED_PREFIX)

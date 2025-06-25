@@ -658,7 +658,7 @@ async def get_filtered_world_data_for_prompt_plain_text(
     sorted_categories = sorted(
         [
             cat
-            for cat in world_data_dict_with_notes.keys()
+            for cat in world_data_dict_with_notes
             if cat not in ["_overview_", "is_default", "source", "user_supplied_data"]
         ]
     )
@@ -723,7 +723,7 @@ async def heuristic_entity_spotter_for_kg(
             "source",
             "user_supplied_data",
         ]:
-            for item_name in items.keys():
+            for item_name in items:
                 if isinstance(item_name, str) and item_name.strip():
                     entities.add(item_name.strip())
 

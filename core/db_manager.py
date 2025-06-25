@@ -20,7 +20,7 @@ class Neo4jManagerSingleton:
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(Neo4jManagerSingleton, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized_flag = False
         return cls._instance
 

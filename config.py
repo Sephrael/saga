@@ -6,7 +6,6 @@ Uses Pydantic BaseSettings for automatic environment variable loading.
 from __future__ import annotations
 
 import json
-import logging as stdlib_logging
 import os
 
 import structlog
@@ -407,34 +406,3 @@ os.makedirs(settings.BASE_OUTPUT_DIR, exist_ok=True)
 os.makedirs(CHAPTERS_DIR, exist_ok=True)
 os.makedirs(CHAPTER_LOGS_DIR, exist_ok=True)
 os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
-
-# Configure structlog
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
-
-formatter = structlog.stdlib.ProcessorFormatter(
-    foreign_pre_chain=[
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-    ],
-    processors=[structlog.dev.ConsoleRenderer()],
-)
-
-handler = stdlib_logging.StreamHandler()
-if settings.LOG_FILE:
-    handler = stdlib_logging.FileHandler(
-        os.path.join(settings.BASE_OUTPUT_DIR, settings.LOG_FILE)
-    )
-handler.setFormatter(formatter)
-root_logger = stdlib_logging.getLogger()
-root_logger.addHandler(handler)
-root_logger.setLevel(settings.LOG_LEVEL_STR)

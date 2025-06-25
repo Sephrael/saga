@@ -1380,7 +1380,6 @@ def setup_logging_nana():
     # Step 1: Configure structlog to prepare data and pass it to the standard logger.
     structlog.configure(
         processors=[
-            structlog.stdlib.filter_by_level,
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             # This processor formats log messages with positional arguments (e.g., %s)

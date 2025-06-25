@@ -1,4 +1,5 @@
 # data_access/character_queries.py
+import contextlib
 from typing import Any
 
 import structlog
@@ -111,7 +112,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
         char_direct_props = {
             k: v
             for k, v in profile_dict.items()
-            if isinstance(v, (str, int, float, bool)) and k != "name"
+            if isinstance(v, str | int | float | bool) and k != "name"
         }
         char_direct_props["is_deleted"] = False
 
@@ -234,7 +235,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
         target_chars_in_profile_rels: set[str] = set()
         if isinstance(profile_defined_rels, dict):
             target_chars_in_profile_rels = {
-                str(k).strip() for k in profile_defined_rels.keys() if str(k).strip()
+                str(k).strip() for k in profile_defined_rels if str(k).strip()
             }
 
         statements.append(
@@ -265,10 +266,8 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
 
                 chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM  # MODIFIED
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         chapter_added_val = int(rel_detail["chapter_added"])
-                    except (ValueError, TypeError):
-                        pass
                 rel_cypher_props["chapter_added"] = chapter_added_val
 
                 if isinstance(rel_detail, str) and rel_detail.strip():
@@ -283,7 +282,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
                     )
                     for k_rel, v_rel in rel_detail.items():
                         if (
-                            isinstance(v_rel, (str, int, float, bool))
+                            isinstance(v_rel, str | int | float | bool)
                             and k_rel != "type"
                             and k_rel != "chapter_added"
                         ):

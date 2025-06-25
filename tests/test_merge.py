@@ -81,7 +81,7 @@ def test_merge_world_item_updates_merge_complex():
     }
     merge_world_item_updates(current, updates, 2, False)
     item = current["Places"]["Town"]
-    assert "Town desc" == item.properties["desc"]
+    assert item.properties["desc"] == "Town desc"
     assert set(item.properties["features"]) == {"old", "new"}
     assert item.properties["data"] == {"a": 1, "b": 2}
     assert item.properties["updated_in_chapter_2"]

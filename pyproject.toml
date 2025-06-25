@@ -27,7 +27,9 @@ src = [
     "utils",
     "ui",
 ]
-lint.select = ["E", "F", "B", "I", "UP", "PT"]
+lint.select = ["F", "B", "I", "UP"]
+lint.fixable = ["ALL"]
+lint.unfixable = []
 format.quote-style = "double"
 
 [tool.mypy]

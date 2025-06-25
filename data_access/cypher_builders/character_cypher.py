@@ -23,7 +23,7 @@ def generate_character_node_cypher(
     basic_props = {
         k: v
         for k, v in props_from_profile.items()
-        if isinstance(v, (str, int, float, bool))
+        if isinstance(v, str | int | float | bool)
         and k not in ["name", "traits", "relationships"]
         and not k.startswith(kg_keys.DEVELOPMENT_PREFIX)
         and not k.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
@@ -33,12 +33,11 @@ def generate_character_node_cypher(
     if isinstance(profile.updates, dict):
         for k_update, v_update in profile.updates.items():
             if (
-                isinstance(v_update, (str, int, float, bool))
+                isinstance(v_update, str | int | float | bool)
                 and not k_update.startswith(kg_keys.DEVELOPMENT_PREFIX)
                 and not k_update.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
-            ):
-                if k_update not in basic_props:
-                    basic_props[k_update] = v_update
+            ) and k_update not in basic_props:
+                basic_props[k_update] = v_update
 
     # Determine provisional status based on the current chapter's update source.
     current_chapter_source_quality_key = kg_keys.source_quality_key(
@@ -164,7 +163,7 @@ def generate_character_node_cypher(
                         .replace(" ", "_")
                     )
                     for k_rel, v_rel in rel_detail.items():
-                        if isinstance(v_rel, (str, int, float, bool)):
+                        if isinstance(v_rel, str | int | float | bool):
                             rel_cypher_props[k_rel] = v_rel
                     rel_cypher_props.pop("type", None)
 

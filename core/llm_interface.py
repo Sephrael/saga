@@ -279,7 +279,7 @@ class LLMService:
                         )
                         for key, value in data.items():
                             if isinstance(value, list) and all(
-                                isinstance(item, (float, int)) for item in value
+                                isinstance(item, float | int) for item in value
                             ):
                                 embedding = self._validate_embedding(
                                     value,

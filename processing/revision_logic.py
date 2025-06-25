@@ -147,7 +147,7 @@ async def _get_sentence_embeddings(
     tasks = [llm_service.async_get_embedding(seg[0]) for seg in segments]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     embeddings: list[tuple[int, int, Any]] = []
-    for (seg_text, start, end), res in zip(segments, results, strict=False):
+    for (_seg_text, start, end), res in zip(segments, results, strict=False):
         if isinstance(res, Exception) or res is None:
             continue
         embeddings.append((start, end, res))

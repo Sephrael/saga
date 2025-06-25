@@ -70,9 +70,7 @@ def _normalize_attributes(
         )  # Use normalized if not in map
 
         if mapped_key in list_keys:
-            if isinstance(value, list):
-                normalized_attrs[mapped_key] = value
-            elif isinstance(value, dict):
+            if isinstance(value, list | dict):
                 normalized_attrs[mapped_key] = value
             elif isinstance(value, str):
                 normalized_attrs[mapped_key] = [

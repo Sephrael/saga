@@ -42,7 +42,7 @@ def generate_world_element_node_cypher(
     if isinstance(item.properties, dict):
         for key, value in item.properties.items():
             if (
-                isinstance(value, (str, int, float, bool))
+                isinstance(value, str | int | float | bool)
                 and key not in node_props
                 and not key.startswith(kg_keys.ELABORATION_PREFIX)
                 and not key.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
@@ -50,7 +50,7 @@ def generate_world_element_node_cypher(
                 and key not in ["goals", "rules", "key_elements", "traits"]
             ):
                 node_props[key] = value
-            elif isinstance(value, (list, dict)) and key not in [
+            elif isinstance(value, list | dict) and key not in [
                 "goals",
                 "rules",
                 "key_elements",
