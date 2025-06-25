@@ -27,7 +27,7 @@ async def bootstrap_field(
     response_text, usage_data = await llm_service.async_call_llm(
         model_name=settings.INITIAL_SETUP_MODEL,
         prompt=prompt,
-        temperature=settings.Temperatures.INITIAL_SETUP,
+        temperature=settings.TEMPERATURE_INITIAL_SETUP,
         stream_to_disk=False,
         auto_clean_response=True,
     )
