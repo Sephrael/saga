@@ -71,7 +71,7 @@ class DraftingAgent:
             ) = await llm_service.async_call_llm(
                 model_name=self.drafting_model,
                 prompt=prompt,
-                temperature=settings.Temperatures.DRAFTING,
+                temperature=settings.TEMPERATURE_DRAFTING,
                 max_tokens=settings.MAX_GENERATION_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=True,
@@ -162,7 +162,7 @@ class DraftingAgent:
                 scene_prose, scene_usage_data = await llm_service.async_call_llm(
                     model_name=self.drafting_model,
                     prompt=prompt,
-                    temperature=settings.Temperatures.DRAFTING,
+                    temperature=settings.TEMPERATURE_DRAFTING,
                     max_tokens=max_gen_tokens,
                     allow_fallback=True,
                     stream_to_disk=False,

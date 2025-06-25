@@ -37,7 +37,7 @@ class PatchValidationAgent:
         response_text, usage = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=settings.Temperatures.EVALUATION,
+            temperature=settings.TEMPERATURE_EVALUATION,
             max_tokens=1024,
             allow_fallback=True,
             stream_to_disk=False,

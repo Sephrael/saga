@@ -180,7 +180,7 @@ class WorldContinuityAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=settings.Temperatures.CONSISTENCY_CHECK,
+            temperature=settings.TEMPERATURE_CONSISTENCY_CHECK,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,
@@ -292,7 +292,7 @@ class WorldContinuityAgent:
         cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=settings.Temperatures.CONSISTENCY_CHECK,
+            temperature=settings.TEMPERATURE_CONSISTENCY_CHECK,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,

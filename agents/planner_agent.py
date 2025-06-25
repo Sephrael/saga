@@ -325,7 +325,7 @@ class PlannerAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=settings.Temperatures.PLANNING,
+            temperature=settings.TEMPERATURE_PLANNING,
             max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True,
@@ -383,7 +383,7 @@ class PlannerAgent:
         cleaned, usage = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=settings.Temperatures.PLANNING,
+            temperature=settings.TEMPERATURE_PLANNING,
             max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=False,
