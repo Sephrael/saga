@@ -1,9 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock
 
-from kg_maintainer.models import WorldItem
 import processing.revision_logic as revision_logic
+import pytest
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
+from kg_maintainer.models import WorldItem
 
 
 @pytest.mark.asyncio

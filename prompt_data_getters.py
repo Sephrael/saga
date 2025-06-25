@@ -9,10 +9,10 @@ import asyncio
 import copy
 import logging
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from config import settings
 import utils  # For _is_fill_in
+from config import settings
 
 # from state_manager import state_manager # No longer directly used
 from data_access import character_queries, kg_queries, world_queries  # MODIFIED
@@ -23,21 +23,21 @@ logger = logging.getLogger(__name__)
 
 
 async def get_character_state_snippet_for_prompt(
-    character_profiles: Dict[str, CharacterProfile],
-    plot_outline: Dict[str, Any],
-    current_chapter_num_for_filtering: Optional[int] = None,
+    character_profiles: dict[str, CharacterProfile],
+    plot_outline: dict[str, Any],
+    current_chapter_num_for_filtering: int | None = None,
 ) -> str:
     """
     Creates a concise plain text string of key character states for prompts,
     fetching data directly from Neo4j.
     """
-    text_output_lines_list: List[str] = []
-    char_names_to_process: List[str] = []
+    text_output_lines_list: list[str] = []
+    char_names_to_process: list[str] = []
 
     protagonist_name = plot_outline.get("protagonist_name")
 
     character_profiles_data = character_profiles
-    all_known_char_names_from_state: List[str] = list(character_profiles_data.keys())
+    all_known_char_names_from_state: list[str] = list(character_profiles_data.keys())
 
     if protagonist_name and protagonist_name in all_known_char_names_from_state:
         char_names_to_process.append(protagonist_name)
@@ -211,14 +211,14 @@ async def get_character_state_snippet_for_prompt(
 
 
 async def get_world_state_snippet_for_prompt(
-    world_building: Dict[str, Dict[str, WorldItem]],
-    current_chapter_num_for_filtering: Optional[int] = None,
+    world_building: dict[str, dict[str, WorldItem]],
+    current_chapter_num_for_filtering: int | None = None,
 ) -> str:
     """
     Creates a concise plain text string of key world states for prompts,
     fetching data directly from Neo4j.
     """
-    text_output_lines_list: List[str] = []
+    text_output_lines_list: list[str] = []
     any_provisional_in_world_snippet = False
 
     effective_filter_chapter = (
@@ -338,8 +338,8 @@ async def get_world_state_snippet_for_prompt(
 
 
 def _format_dict_for_plain_text_prompt(
-    data: Dict[str, Any], indent_level: int = 0, name_override: Optional[str] = None
-) -> List[str]:
+    data: dict[str, Any], indent_level: int = 0, name_override: str | None = None
+) -> list[str]:
     lines = []
     indent = "  " * indent_level
     if name_override:
@@ -419,10 +419,10 @@ def _format_dict_for_plain_text_prompt(
 
 
 def _add_provisional_notes_and_filter_developments(
-    item_data_original: Dict[str, Any],
-    up_to_chapter_inclusive: Optional[int],
+    item_data_original: dict[str, Any],
+    up_to_chapter_inclusive: int | None,
     is_character: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     item_data = copy.deepcopy(item_data_original)
     prompt_notes_list = []
     effective_filter_chapter = (
@@ -494,14 +494,14 @@ def _add_provisional_notes_and_filter_developments(
 
 
 async def _get_character_profiles_dict_with_notes(
-    character_names: List[str],
-    up_to_chapter_inclusive: Optional[int],
-) -> Dict[str, Any]:
+    character_names: list[str],
+    up_to_chapter_inclusive: int | None,
+) -> dict[str, Any]:
     logger.debug(
         "Internal: Getting character profiles dict with notes up to chapter %s.",
         up_to_chapter_inclusive,
     )
-    processed_profiles: Dict[str, Any] = {}
+    processed_profiles: dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
 
     if not character_names:
@@ -536,8 +536,8 @@ async def _get_character_profiles_dict_with_notes(
 
 
 async def get_filtered_character_profiles_for_prompt_plain_text(
-    character_names: List[str],
-    up_to_chapter_inclusive: Optional[int] = None,
+    character_names: list[str],
+    up_to_chapter_inclusive: int | None = None,
 ) -> str:
     logger.info(
         f"Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
@@ -573,14 +573,14 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
 
 
 async def _get_world_data_dict_with_notes(
-    world_item_ids_by_category: Dict[str, List[str]],
-    up_to_chapter_inclusive: Optional[int],
-) -> Dict[str, Any]:
+    world_item_ids_by_category: dict[str, list[str]],
+    up_to_chapter_inclusive: int | None,
+) -> dict[str, Any]:
     logger.debug(
         "Internal: Getting world data dict with notes up to chapter %s.",
         up_to_chapter_inclusive,
     )
-    processed_world_data: Dict[str, Any] = {}
+    processed_world_data: dict[str, Any] = {}
     filter_chapter = up_to_chapter_inclusive
 
     if not world_item_ids_by_category:
@@ -588,7 +588,7 @@ async def _get_world_data_dict_with_notes(
         return {}
 
     for category_name, item_id_list in world_item_ids_by_category.items():
-        processed_category: Dict[str, Any] = {}
+        processed_category: dict[str, Any] = {}
 
         for item_id in item_id_list:
             try:
@@ -623,8 +623,8 @@ async def _get_world_data_dict_with_notes(
 
 
 async def get_filtered_world_data_for_prompt_plain_text(
-    world_item_ids_by_category: Dict[str, List[str]],
-    up_to_chapter_inclusive: Optional[int] = None,
+    world_item_ids_by_category: dict[str, list[str]],
+    up_to_chapter_inclusive: int | None = None,
 ) -> str:
     logger.info(
         f"Fetching and formatting filtered world data as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
@@ -702,10 +702,10 @@ async def get_filtered_world_data_for_prompt_plain_text(
 
 
 async def heuristic_entity_spotter_for_kg(
-    character_profiles: Dict[str, CharacterProfile],
-    world_building: Dict[str, Dict[str, WorldItem]],
+    character_profiles: dict[str, CharacterProfile],
+    world_building: dict[str, dict[str, WorldItem]],
     text_snippet: str,
-) -> List[str]:
+) -> list[str]:
     character_profiles_data = character_profiles
     world_building_data = world_building
 
@@ -761,9 +761,9 @@ async def heuristic_entity_spotter_for_kg(
 
 
 async def get_reliable_kg_facts_for_drafting_prompt(
-    plot_outline: Dict[str, Any],
+    plot_outline: dict[str, Any],
     chapter_number: int,
-    chapter_plan: Optional[List[SceneDetail]] = None,
+    chapter_plan: list[SceneDetail] | None = None,
     max_facts_per_char: int = 2,
     max_total_facts: int = 7,
 ) -> str:
@@ -776,14 +776,14 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         else chapter_number - 1
     )
 
-    facts_for_prompt_list: List[str] = []
+    facts_for_prompt_list: list[str] = []
 
     plot_outline_data = plot_outline
     protagonist_name = plot_outline_data.get(
         "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
     )
 
-    characters_of_interest: Set[str] = (
+    characters_of_interest: set[str] = (
         {protagonist_name}
         if protagonist_name and not utils._is_fill_in(protagonist_name)
         else set()
@@ -809,7 +809,7 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     )
 
     if protagonist_name and characters_of_interest:
-        pruned: Set[str] = set()
+        pruned: set[str] = set()
         for c in characters_of_interest:
             if c == protagonist_name:
                 pruned.add(c)

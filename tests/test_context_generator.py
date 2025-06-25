@@ -1,11 +1,10 @@
-import numpy as np
-import pytest
-
 from unittest.mock import AsyncMock
 
-from processing import context_generator
-from data_access import chapter_queries
+import numpy as np
+import pytest
 from core.llm_interface import llm_service
+from data_access import chapter_queries
+from processing import context_generator
 
 
 @pytest.mark.asyncio

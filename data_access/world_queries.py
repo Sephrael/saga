@@ -1,11 +1,10 @@
 # data_access/world_queries.py
+from typing import Any
+
 import structlog
-from typing import Any, Dict, List, Optional, Set, Tuple
-
-from async_lru import alru_cache  # type: ignore
-
-from config import settings # MODIFIED
 import utils
+from async_lru import alru_cache  # type: ignore
+from config import settings  # MODIFIED
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -17,13 +16,13 @@ from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 # Mapping from normalized world item names to canonical IDs
-WORLD_NAME_TO_ID: Dict[str, str] = {}
+WORLD_NAME_TO_ID: dict[str, str] = {}
 
 
-def resolve_world_name(name: str) -> Optional[str]:
+def resolve_world_name(name: str) -> str | None:
     """Return canonical world item ID for a display name if known."""
     if not name:
         return None
@@ -31,8 +30,8 @@ def resolve_world_name(name: str) -> Optional[str]:
 
 
 def get_world_item_by_name(
-    world_data: Dict[str, Dict[str, WorldItem]], name: str
-) -> Optional[WorldItem]:
+    world_data: dict[str, dict[str, WorldItem]], name: str
+) -> WorldItem | None:
     """Retrieve a WorldItem from cached data using a fuzzy name lookup."""
     item_id = resolve_world_name(name)
     if not item_id:
@@ -47,7 +46,7 @@ def get_world_item_by_name(
 
 
 async def sync_world_items(
-    world_items: Dict[str, Dict[str, WorldItem]],
+    world_items: dict[str, dict[str, WorldItem]],
     chapter_number: int,
     full_sync: bool = False,
 ) -> bool:
@@ -66,7 +65,7 @@ async def sync_world_items(
         }
         return await sync_full_state_from_object_to_db(world_dict)
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
     count = 0
     for category_items in world_items.values():
         if not isinstance(category_items, dict):
@@ -96,14 +95,14 @@ async def sync_world_items(
         return False
 
 
-async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
+async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
     logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
     wc_id_param = (
-        settings.MAIN_WORLD_CONTAINER_NODE_ID # MODIFIED
+        settings.MAIN_WORLD_CONTAINER_NODE_ID  # MODIFIED
     )  # Unique ID for the WorldContainer
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     # 1. Synchronize WorldContainer (_overview_)
     overview_details = world_data.get("_overview_", {})
@@ -112,7 +111,9 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             "id": wc_id_param,  # Ensure ID is part of props for SET
             "overview_description": str(overview_details.get("description", "")),
             KG_IS_PROVISIONAL: overview_details.get(
-                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM) # MODIFIED
+                kg_keys.source_quality_key(
+                    settings.KG_PREPOPULATION_CHAPTER_NUM
+                )  # MODIFIED
             )
             == "provisional_from_unrevised_draft",
         }
@@ -147,7 +148,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
         )
 
     # 2. Collect all WorldElement IDs from input data
-    all_input_we_ids: Set[str] = set()
+    all_input_we_ids: set[str] = set()
     for category_str, items_dict_value in world_data.items():
         if category_str == "_overview_" or not isinstance(items_dict_value, dict):
             continue
@@ -191,7 +192,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
             " RETURN we.id AS id"
         )
-        existing_db_we_ids: Set[str] = {
+        existing_db_we_ids: set[str] = {
             record["id"] for record in existing_we_records if record and record["id"]
         }
     except Exception as e:
@@ -252,7 +253,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             created_chap_num = details_dict.get(
                 KG_NODE_CREATED_CHAPTER,  # Check direct KG constant key first
                 details_dict.get(
-                    "created_chapter", settings.KG_PREPOPULATION_CHAPTER_NUM # MODIFIED
+                    "created_chapter",
+                    settings.KG_PREPOPULATION_CHAPTER_NUM,  # MODIFIED
                 ),
             )  # Fallback
 
@@ -333,7 +335,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                 "traits": "HAS_TRAIT_ASPECT",
             }
             for list_prop_key, rel_name_internal in list_prop_map.items():
-                current_prop_values: Set[str] = {
+                current_prop_values: set[str] = {
                     str(v).strip()
                     for v in details_dict.get(list_prop_key, [])
                     if isinstance(v, str) and str(v).strip()
@@ -455,7 +457,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
 
 @alru_cache(maxsize=128)
-async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
+async def get_world_item_by_id(item_id: str) -> WorldItem | None:
     """Retrieve a single ``WorldItem`` from Neo4j by its ID or fall back to name."""
     logger.info("Loading world item '%s' from Neo4j...", item_id)
 
@@ -481,7 +483,7 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
         logger.warning("WorldElement missing category or name for id '%s'.", item_id)
         return None
 
-    item_detail: Dict[str, Any] = dict(we_node)
+    item_detail: dict[str, Any] = dict(we_node)
     item_detail.pop("created_ts", None)
     item_detail.pop("updated_ts", None)
 
@@ -548,7 +550,7 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
 
 
 @alru_cache(maxsize=128)
-async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
+async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
     """Return all world item IDs grouped by category."""
     query = (
         "MATCH (we:WorldElement:Entity) "
@@ -556,7 +558,7 @@ async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
         "RETURN we.category AS category, we.id AS id"
     )
     results = await neo4j_manager.execute_read_query(query)
-    mapping: Dict[str, List[str]] = {}
+    mapping: dict[str, list[str]] = {}
     for record in results:
         category = record.get("category")
         item_id = record.get("id")
@@ -565,10 +567,10 @@ async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
     return mapping
 
 
-async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
+async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
     logger.info("Loading decomposed world building data from Neo4j...")
-    world_data: Dict[str, Dict[str, WorldItem]] = {}
-    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID # MODIFIED
+    world_data: dict[str, dict[str, WorldItem]] = {}
+    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID  # MODIFIED
 
     await fix_missing_world_element_core_fields()
 
@@ -586,7 +588,9 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         overview_data.pop("updated_ts", None)
         if overview_data.get(KG_IS_PROVISIONAL):
             overview_data[
-                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM) # MODIFIED
+                kg_keys.source_quality_key(
+                    settings.KG_PREPOPULATION_CHAPTER_NUM
+                )  # MODIFIED
             ] = "provisional_from_unrevised_draft"
         world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
             "_overview_",
@@ -642,7 +646,8 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         item_detail.pop("updated_ts", None)
 
         created_chapter_num = item_detail.pop(
-            KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM # MODIFIED
+            KG_NODE_CREATED_CHAPTER,
+            settings.KG_PREPOPULATION_CHAPTER_NUM,  # MODIFIED
         )
         item_detail["created_chapter"] = int(
             created_chapter_num
@@ -717,7 +722,7 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
 
 async def get_world_elements_for_snippet_from_db(
     category: str, chapter_limit: int, item_limit: int
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     query = f"""
     MATCH (we:WorldElement:Entity {{category: $category_param}})
     WHERE (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)
@@ -768,7 +773,7 @@ async def get_world_elements_for_snippet_from_db(
     return items
 
 
-async def find_thin_world_elements_for_enrichment() -> List[Dict[str, Any]]:
+async def find_thin_world_elements_for_enrichment() -> list[dict[str, Any]]:
     """Finds WorldElement nodes that are considered 'thin' (e.g., missing description)."""
     query = """
     MATCH (we:WorldElement)
@@ -811,7 +816,7 @@ async def fix_missing_world_element_core_fields() -> int:
     if not results:
         return 0
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     for rec in results:
         neo_id = rec.get("nid")
@@ -829,7 +834,7 @@ async def fix_missing_world_element_core_fields() -> int:
         if isinstance(category, str):
             category = category.strip() or None
 
-        props: Dict[str, Any] = {}
+        props: dict[str, Any] = {}
 
         if not name and isinstance(w_id, str):
             name_part = w_id.split("_", 1)[-1]

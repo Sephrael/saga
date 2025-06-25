@@ -1,6 +1,5 @@
-from jinja2 import DictLoader, Environment
-
 import prompt_renderer
+from jinja2 import DictLoader, Environment
 
 
 def test_render_prompt_with_custom_env(monkeypatch):

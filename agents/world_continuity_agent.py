@@ -2,11 +2,11 @@
 # from parsing_utils import split_text_into_blocks,
 # parse_key_value_block  # Removed
 import json
-import structlog
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from config import settings
+import structlog
 import utils  # MODIFIED: For spaCy functions
+from config import settings
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import character_queries, kg_queries, world_queries
 from kg_maintainer.models import ProblemDetail, SceneDetail
@@ -35,7 +35,7 @@ class WorldContinuityAgent:
 
     async def _parse_llm_consistency_output(
         self, json_text: str, chapter_number: int, original_draft_text: str
-    ) -> List[ProblemDetail]:
+    ) -> list[ProblemDetail]:
         """Parse LLM JSON output for consistency problems."""
         problems = parse_problem_list(json_text, category="consistency")
         if not problems:
@@ -79,12 +79,12 @@ class WorldContinuityAgent:
 
     async def check_consistency(
         self,
-        plot_outline: Dict[str, Any],
+        plot_outline: dict[str, Any],
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str,
-        ignore_spans: Optional[List[Tuple[int, int]]] | None = None,
-    ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
+        ignore_spans: list[tuple[int, int]] | None | None = None,
+    ) -> tuple[list[ProblemDetail], dict[str, int] | None]:
         if not draft_text:
             logger.warning(
                 f"WorldContinuityAgent: Consistency check skipped for Ch {chapter_number}: empty draft text."
@@ -198,10 +198,10 @@ class WorldContinuityAgent:
 
     async def check_scene_plan_consistency(
         self,
-        plot_outline: Dict[str, Any],
-        scene_plan: List[SceneDetail],
+        plot_outline: dict[str, Any],
+        scene_plan: list[SceneDetail],
         chapter_number: int,
-    ) -> Tuple[List[ProblemDetail], Optional[Dict[str, int]]]:
+    ) -> tuple[list[ProblemDetail], dict[str, int] | None]:
         """Validate a scene plan before drafting begins."""
 
         if not scene_plan:
@@ -310,8 +310,8 @@ class WorldContinuityAgent:
         return consistency_problems, usage_data
 
     async def suggest_canon_corrections(
-        self, problems: List[ProblemDetail]
-    ) -> List[str]:
+        self, problems: list[ProblemDetail]
+    ) -> list[str]:
         """Provide actionable suggestions using canonical information.
 
         Args:
@@ -321,7 +321,7 @@ class WorldContinuityAgent:
             A list of correction messages referencing known canon.
         """
 
-        suggestions: List[str] = []
+        suggestions: list[str] = []
         if not problems:
             return suggestions
 
@@ -334,7 +334,7 @@ class WorldContinuityAgent:
             text_for_entities = " ".join(
                 [problem.get("problem_description", ""), base_suggestion]
             )
-            entities: Set[str] = set()
+            entities: set[str] = set()
             if utils.spacy_manager.nlp:
                 doc = utils.spacy_manager.nlp(text_for_entities)
                 entities.update(ent.text for ent in doc.ents)
@@ -343,7 +343,7 @@ class WorldContinuityAgent:
                     word for word in text_for_entities.split() if word.istitle()
                 )
 
-            canonical_facts: List[str] = []
+            canonical_facts: list[str] = []
             for entity in entities:
                 facts = await self.query_kg_for_contradiction(entity)
                 for fact in facts[:3]:
@@ -364,10 +364,10 @@ class WorldContinuityAgent:
     async def query_kg_for_contradiction(
         self,
         entity1: str,
-        entity2: Optional[str] = None,
-        relation: Optional[str] = None,
-        chapter_limit: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        entity2: str | None = None,
+        relation: str | None = None,
+        chapter_limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         logger.info(
             f"WorldContinuityAgent: Querying KG regarding potential"
             f" contradiction around '{entity1}'..."

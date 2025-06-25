@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
 from data_access import plot_queries
 
 

@@ -2,7 +2,6 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from config import settings
 from initialization.bootstrappers.world_bootstrapper import (
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,

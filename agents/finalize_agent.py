@@ -1,31 +1,31 @@
 import asyncio
 import json
 import re
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, TypedDict
 
 import numpy as np
 import structlog
-
-from agents.kg_maintainer_agent import KGMaintainerAgent
 from core.llm_interface import llm_service
 from data_access import chapter_queries, kg_queries
 from kg_maintainer.models import CharacterProfile, WorldItem
 from parsing_utils import parse_rdf_triples_with_rdflib
 
+from agents.kg_maintainer_agent import KGMaintainerAgent
+
 logger = structlog.get_logger(__name__)
 
 
 class FinalizationResult(TypedDict, total=False):
-    summary: Optional[str]
-    embedding: Optional[np.ndarray]
-    summary_usage: Optional[Dict[str, int]]
-    kg_usage: Optional[Dict[str, int]]
+    summary: str | None
+    embedding: np.ndarray | None
+    summary_usage: dict[str, int] | None
+    kg_usage: dict[str, int] | None
 
 
 class FinalizeAgent:
     """Handle chapter finalization and KG updates."""
 
-    def __init__(self, kg_agent: Optional[KGMaintainerAgent] = None) -> None:
+    def __init__(self, kg_agent: KGMaintainerAgent | None = None) -> None:
         self.kg_agent = kg_agent or KGMaintainerAgent()
         logger.info("FinalizeAgent initialized")
 
@@ -72,14 +72,14 @@ class FinalizeAgent:
                     return block
         return ""
 
-    def _validate_character_updates(self, updates: Dict[str, CharacterProfile]) -> bool:
+    def _validate_character_updates(self, updates: dict[str, CharacterProfile]) -> bool:
         for name, profile in updates.items():
             if not name or not profile.name:
                 logger.error("Invalid character update", name=name)
                 return False
         return True
 
-    def _validate_world_updates(self, updates: Dict[str, Dict[str, WorldItem]]) -> bool:
+    def _validate_world_updates(self, updates: dict[str, dict[str, WorldItem]]) -> bool:
         for category, items in updates.items():
             if not category:
                 logger.error("World update missing category")
@@ -94,13 +94,13 @@ class FinalizeAgent:
 
     async def _extract_merge_and_persist(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
         chapter_number: int,
         chapter_text: str,
         from_flawed_draft: bool,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         raw_text, usage_data = await self.kg_agent._llm_extract_updates(
             plot_outline,
             chapter_text,
@@ -174,12 +174,12 @@ class FinalizeAgent:
 
     async def finalize_chapter(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
         chapter_number: int,
         final_text: str,
-        raw_llm_output: Optional[str] = None,
+        raw_llm_output: str | None = None,
         from_flawed_draft: bool = False,
     ) -> FinalizationResult:
         """Finalize a chapter and persist all related updates.
@@ -230,9 +230,9 @@ class FinalizeAgent:
 
     async def ingest_and_finalize_chunk(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
         chunk_number: int,
         chunk_text: str,
     ) -> FinalizationResult:

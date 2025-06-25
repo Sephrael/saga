@@ -1,17 +1,17 @@
 import asyncio
-from typing import Any, Coroutine, Dict, Optional, Tuple
+from collections.abc import Coroutine
+from typing import Any
 
 import structlog
-
-from config import settings
 import utils
+from config import settings
 
 from .common import bootstrap_field
 
 logger = structlog.get_logger(__name__)
 
 
-def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
+def create_default_plot(default_protagonist_name: str) -> dict[str, Any]:
     """Create a default plot outline with placeholders."""
     num_points = settings.TARGET_PLOT_POINTS_INITIAL_GENERATION
     return {
@@ -34,11 +34,11 @@ def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
 
 
 async def bootstrap_plot_outline(
-    plot_outline: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    plot_outline: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, int] | None]:
     """Fill missing plot fields via LLM."""
-    tasks: Dict[str, Coroutine] = {}
-    usage_data: Dict[str, int] = {
+    tasks: dict[str, Coroutine] = {}
+    usage_data: dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,

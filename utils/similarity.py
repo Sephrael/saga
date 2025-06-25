@@ -1,9 +1,7 @@
 import asyncio
-import structlog
-from typing import Optional, Tuple
 
 import numpy as np
-
+import structlog
 from core.llm_interface import llm_service
 
 from .text_processing import get_text_segments
@@ -11,9 +9,7 @@ from .text_processing import get_text_segments
 logger = structlog.get_logger(__name__)
 
 
-def numpy_cosine_similarity(
-    vec1: Optional[np.ndarray], vec2: Optional[np.ndarray]
-) -> float:
+def numpy_cosine_similarity(vec1: np.ndarray | None, vec2: np.ndarray | None) -> float:
     """Calculate cosine similarity between two numpy vectors."""
     if vec1 is None or vec2 is None:
         logger.debug("Cosine similarity: one or both vectors are None. Returning 0.0.")
@@ -52,7 +48,7 @@ async def find_semantically_closest_segment(
     query_text: str,
     segment_type: str = "paragraph",
     min_similarity_threshold: float = 0.65,
-) -> Optional[Tuple[int, int, float]]:
+) -> tuple[int, int, float] | None:
     """Find the document segment most semantically similar to ``query_text``."""
     if not original_doc or not query_text:
         logger.debug(
@@ -76,7 +72,7 @@ async def find_semantically_closest_segment(
         )
         return None
 
-    best_match_info: Optional[Tuple[int, int, float]] = None
+    best_match_info: tuple[int, int, float] | None = None
     highest_similarity = -2.0
 
     segment_texts = [s[0] for s in segments_with_indices]

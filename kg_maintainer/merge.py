@@ -2,8 +2,6 @@
 """Helpers for merging parsed updates into existing knowledge graph state."""
 
 import structlog
-from typing import Dict
-
 from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
@@ -51,8 +49,8 @@ def initialize_new_character_profile(
 
 
 def merge_character_profile_updates(
-    profiles: Dict[str, CharacterProfile],
-    updates: Dict[str, CharacterProfile],
+    profiles: dict[str, CharacterProfile],
+    updates: dict[str, CharacterProfile],
     chapter_number: int,
     from_flawed_draft: bool,
 ) -> None:
@@ -113,8 +111,8 @@ def merge_character_profile_updates(
 
 
 def merge_world_item_updates(
-    world: Dict[str, Dict[str, WorldItem]],
-    updates: Dict[str, Dict[str, WorldItem]],
+    world: dict[str, dict[str, WorldItem]],
+    updates: dict[str, dict[str, WorldItem]],
     chapter_number: int,
     from_flawed_draft: bool,
 ) -> None:

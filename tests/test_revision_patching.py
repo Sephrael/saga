@@ -2,12 +2,11 @@ import asyncio
 import time
 
 import numpy as np
-import pytest
-
-from config import settings
 import processing.revision_logic as chapter_revision_logic
+import pytest
 import utils
 from agents.patch_validation_agent import PatchValidationAgent
+from config import settings
 from core.llm_interface import llm_service
 from processing.revision_logic import _apply_patches_to_text
 

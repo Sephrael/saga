@@ -1,13 +1,12 @@
 # kg_maintainer_agent.py
 import asyncio
 import json
-import structlog
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
+import utils
 from async_lru import alru_cache  # type: ignore
-from jinja2 import Template
-
 from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
@@ -17,7 +16,7 @@ from data_access import (
     plot_queries,
     world_queries,
 )
-import utils
+from jinja2 import Template
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
@@ -32,7 +31,7 @@ logger = structlog.get_logger(__name__)
 @alru_cache(maxsize=settings.SUMMARY_CACHE_SIZE)
 async def _llm_summarize_full_chapter_text(
     chapter_text: str, chapter_number: int
-) -> Tuple[str, Optional[Dict[str, int]]]:
+) -> tuple[str, dict[str, int] | None]:
     """Summarize full chapter text via the configured LLM."""
     prompt = render_prompt(
         "kg_maintainer_agent/chapter_summary.j2",
@@ -128,8 +127,8 @@ class KGMaintainerAgent:
 
     def __init__(self, model_name: str = settings.KNOWLEDGE_UPDATE_MODEL):
         self.model_name = model_name
-        self.node_labels: List[str] = []
-        self.relationship_types: List[str] = []
+        self.node_labels: list[str] = []
+        self.relationship_types: list[str] = []
         logger.info(
             "KGMaintainerAgent initialized with model for extraction: %s",
             self.model_name,
@@ -145,22 +144,22 @@ class KGMaintainerAgent:
 
     def parse_character_updates(
         self, text: str, chapter_number: int
-    ) -> Dict[str, models.CharacterProfile]:
+    ) -> dict[str, models.CharacterProfile]:
         """Parse character update text into structured profiles."""
         return parsing.parse_unified_character_updates(text, chapter_number)
 
     def parse_world_updates(
         self, text: str, chapter_number: int
-    ) -> Dict[str, Dict[str, models.WorldItem]]:
+    ) -> dict[str, dict[str, models.WorldItem]]:
         """Parse world update text into structured items."""
         return parsing.parse_unified_world_updates(text, chapter_number)
 
     def merge_updates(
         self,
-        current_profiles: Dict[str, models.CharacterProfile],
-        current_world: Dict[str, Dict[str, models.WorldItem]],
-        char_updates_parsed: Dict[str, models.CharacterProfile],
-        world_updates_parsed: Dict[str, Dict[str, models.WorldItem]],
+        current_profiles: dict[str, models.CharacterProfile],
+        current_world: dict[str, dict[str, models.WorldItem]],
+        char_updates_parsed: dict[str, models.CharacterProfile],
+        world_updates_parsed: dict[str, dict[str, models.WorldItem]],
         chapter_number: int,
         from_flawed_draft: bool = False,
     ) -> None:
@@ -174,7 +173,7 @@ class KGMaintainerAgent:
 
     async def persist_profiles(
         self,
-        profiles_to_persist: Dict[str, models.CharacterProfile],
+        profiles_to_persist: dict[str, models.CharacterProfile],
         chapter_number_for_delta: int,
         full_sync: bool = False,
     ) -> None:
@@ -185,7 +184,7 @@ class KGMaintainerAgent:
 
     async def persist_world(
         self,
-        world_items_to_persist: Dict[str, Dict[str, models.WorldItem]],
+        world_items_to_persist: dict[str, dict[str, models.WorldItem]],
         chapter_number_for_delta: int,
         full_sync: bool = False,
     ) -> None:
@@ -199,8 +198,8 @@ class KGMaintainerAgent:
         return await plot_queries.append_plot_point(description, prev_plot_point_id)
 
     async def summarize_chapter(
-        self, chapter_text: Optional[str], chapter_number: int
-    ) -> Tuple[Optional[str], Optional[Dict[str, int]]]:
+        self, chapter_text: str | None, chapter_number: int
+    ) -> tuple[str | None, dict[str, int] | None]:
         if (
             not chapter_text
             or len(chapter_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
@@ -233,10 +232,10 @@ class KGMaintainerAgent:
             )
             return None, None
 
-    def _extract_character_names_from_text(self, text: str) -> List[str]:
+    def _extract_character_names_from_text(self, text: str) -> list[str]:
         """Return a list of probable character names from ``text``."""
         utils.load_spacy_model_if_needed()
-        names: List[str] = []
+        names: list[str] = []
         nlp = utils.spacy_manager.nlp
         if nlp is not None:
             doc = nlp(text)
@@ -253,11 +252,11 @@ class KGMaintainerAgent:
 
     async def _llm_extract_updates(
         self,
-        plot_outline: Dict[str, Any],
+        plot_outline: dict[str, Any],
         chapter_text: str,
         chapter_number: int,
-        character_names: Optional[List[str]] = None,
-    ) -> Tuple[str, Optional[Dict[str, int]]]:
+        character_names: list[str] | None = None,
+    ) -> tuple[str, dict[str, int] | None]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
         protagonist = plot_outline.get(
             "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
@@ -299,13 +298,13 @@ class KGMaintainerAgent:
 
     async def extract_and_merge_knowledge(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, models.CharacterProfile],
-        world_building: Dict[str, Dict[str, models.WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, models.CharacterProfile],
+        world_building: dict[str, dict[str, models.WorldItem]],
         chapter_number: int,
         chapter_text: str,
         is_from_flawed_draft: bool = False,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         if not chapter_text:
             logger.warning(
                 "Skipping knowledge extraction for chapter %s: no text provided.",
@@ -505,9 +504,9 @@ class KGMaintainerAgent:
 
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
-    async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
+    async def _find_and_enrich_thin_nodes(self) -> list[tuple[str, dict[str, Any]]]:
         """Finds thin characters and world elements and generates enrichment updates in parallel."""
-        statements: List[Tuple[str, Dict[str, Any]]] = []
+        statements: list[tuple[str, dict[str, Any]]] = []
         enrichment_tasks = []
 
         # Find all thin nodes first
@@ -541,8 +540,8 @@ class KGMaintainerAgent:
         return statements
 
     async def _create_character_enrichment_task(
-        self, char_info: Dict[str, Any]
-    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        self, char_info: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
         char_name = char_info.get("name")
         if not char_name:
             return None
@@ -580,8 +579,8 @@ class KGMaintainerAgent:
         return None
 
     async def _create_world_element_enrichment_task(
-        self, element_info: Dict[str, Any]
-    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        self, element_info: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
         element_id = element_info.get("id")
         if not element_id:
             return None

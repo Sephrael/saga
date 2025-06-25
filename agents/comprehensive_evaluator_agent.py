@@ -1,9 +1,9 @@
 # comprehensive_evaluator_agent.py
-import structlog
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from config import settings
+import structlog
 import utils  # MODIFIED: For spaCy functions
+from config import settings
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import chapter_queries
 from kg_maintainer.models import EvaluationResult, ProblemDetail
@@ -62,12 +62,12 @@ class ComprehensiveEvaluatorAgent:
 
     async def _parse_llm_evaluation_output(
         self, json_text: str, chapter_number: int, original_draft_text: str
-    ) -> List[ProblemDetail]:
+    ) -> list[ProblemDetail]:
         """
         Parses LLM JSON output for chapter evaluation problems.
         Populates character offsets for the quote and its containing sentence using spaCy.
         """
-        final_problems: List[ProblemDetail] = []
+        final_problems: list[ProblemDetail] = []
 
         parsed_data = parse_problem_list(json_text)
         if not parsed_data:
@@ -144,15 +144,15 @@ class ComprehensiveEvaluatorAgent:
 
     async def _perform_llm_comprehensive_evaluation(
         self,
-        plot_outline: Dict[str, Any],
-        character_names: List[str],
-        world_item_ids_by_category: Dict[str, List[str]],
+        plot_outline: dict[str, Any],
+        character_names: list[str],
+        world_item_ids_by_category: dict[str, list[str]],
         draft_text: str,
         chapter_number: int,
-        plot_point_focus: Optional[str],
+        plot_point_focus: str | None,
         plot_point_index: int,
         previous_chapters_context: str,
-    ) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    ) -> tuple[dict[str, Any], dict[str, int] | None]:
         if not draft_text:
             logger.warning(
                 f"Comprehensive evaluation skipped for Ch {chapter_number}: empty draft text."
@@ -293,7 +293,7 @@ class ComprehensiveEvaluatorAgent:
                 ):
                     is_likely_no_issues_text = True
                     break
-        eval_output_dict: Dict[str, Any]
+        eval_output_dict: dict[str, Any]
         if is_likely_no_issues_text:
             logger.info(
                 f"Heuristic: Evaluation for Ch {chapter_number} appears to indicate 'no issues': '{cleaned_evaluation_text[:100]}...'"
@@ -351,25 +351,25 @@ class ComprehensiveEvaluatorAgent:
 
     async def evaluate_chapter_draft(
         self,
-        plot_outline: Dict[str, Any],
-        character_names: List[str],
-        world_item_ids_by_category: Dict[str, List[str]],
+        plot_outline: dict[str, Any],
+        character_names: list[str],
+        world_item_ids_by_category: dict[str, list[str]],
         draft_text: str,
         chapter_number: int,
-        plot_point_focus: Optional[str],
+        plot_point_focus: str | None,
         plot_point_index: int,
         previous_chapters_context: str,
-        ignore_spans: Optional[List[Tuple[int, int]]] | None = None,
-    ) -> Tuple[EvaluationResult, Optional[Dict[str, int]]]:
+        ignore_spans: list[tuple[int, int]] | None | None = None,
+    ) -> tuple[EvaluationResult, dict[str, int] | None]:
         processed_text = utils.remove_spans_from_text(draft_text, ignore_spans or [])
         logger.info(
             f"ComprehensiveEvaluatorAgent evaluating chapter {chapter_number} draft (length: {len(processed_text)} chars)..."
         )
         reasons_for_revision_summary: list[str] = []
-        problem_details_list: List[ProblemDetail] = []
+        problem_details_list: list[ProblemDetail] = []
         needs_revision = False
-        coherence_score: Optional[float] = None
-        total_usage_data: Dict[str, int] = {
+        coherence_score: float | None = None
+        total_usage_data: dict[str, int] = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
@@ -512,7 +512,7 @@ class ComprehensiveEvaluatorAgent:
             needs_revision = True
 
         unique_reasons_summary = sorted(list(set(reasons_for_revision_summary)))
-        validated_problem_details_list: List[ProblemDetail] = []
+        validated_problem_details_list: list[ProblemDetail] = []
         for prob_item in problem_details_list:
             if (
                 prob_item["quote_from_original_text"]

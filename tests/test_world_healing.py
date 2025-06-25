@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 import utils
 from data_access import world_queries
 

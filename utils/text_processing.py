@@ -1,13 +1,12 @@
 import re
-import structlog
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import spacy
+import structlog
+from config import settings  # MODIFIED
 from rapidfuzz.fuzz import partial_ratio_alignment
 
-from config import settings # MODIFIED
-
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     pass
@@ -39,10 +38,10 @@ class SpaCyModelManager:
     """Lazily loads and stores the spaCy model used across the project."""
 
     def __init__(self) -> None:
-        self._nlp: Optional[spacy.language.Language] = None
+        self._nlp: spacy.language.Language | None = None
 
     @property
-    def nlp(self) -> Optional[spacy.language.Language]:
+    def nlp(self) -> spacy.language.Language | None:
         return self._nlp
 
     def load(self) -> None:
@@ -104,7 +103,7 @@ def _token_similarity(a: str, b: str) -> float:
 
 async def find_quote_and_sentence_offsets_with_spacy(
     doc_text: str, quote_text_from_llm: str
-) -> Optional[Tuple[int, int, int, int]]:
+) -> tuple[int, int, int, int] | None:
     """Locate quote and sentence offsets within ``doc_text``."""
     load_spacy_model_if_needed()
     if (
@@ -252,16 +251,16 @@ async def find_quote_and_sentence_offsets_with_spacy(
 
 def get_text_segments(
     text: str, segment_level: str = "paragraph"
-) -> List[Tuple[str, int, int]]:
+) -> list[tuple[str, int, int]]:
     """Segment text into paragraphs or sentences with offsets."""
     load_spacy_model_if_needed()
-    segments: List[Tuple[str, int, int]] = []
+    segments: list[tuple[str, int, int]] = []
 
     if not text.strip():
         return segments
 
     if segment_level == "paragraph":
-        current_paragraph_lines: List[str] = []
+        current_paragraph_lines: list[str] = []
         current_paragraph_start_char = -1
 
         for line_match in re.finditer(r"([^\r\n]*(?:\r\n|\r|\n)?)", text):

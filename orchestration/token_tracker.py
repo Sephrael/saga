@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +11,7 @@ class TokenTracker:
     def __init__(self) -> None:
         self.total = 0
 
-    def add(self, operation_name: str, usage_data: Optional[Dict[str, int]]) -> None:
+    def add(self, operation_name: str, usage_data: dict[str, int] | None) -> None:
         """Add tokens from an LLM usage response."""
         if usage_data and isinstance(usage_data.get("completion_tokens"), int):
             completed_tokens = usage_data["completion_tokens"]

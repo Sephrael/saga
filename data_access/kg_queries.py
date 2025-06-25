@@ -1,11 +1,10 @@
 # data_access/kg_queries.py
-import structlog
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
 from async_lru import alru_cache
-
-from config import settings # MODIFIED
+from config import settings  # MODIFIED
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -17,7 +16,7 @@ from kg_constants import (
 logger = structlog.get_logger(__name__)
 
 # Lookup table for canonical node labels to ensure consistent casing
-_CANONICAL_NODE_LABEL_MAP: Dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
+_CANONICAL_NODE_LABEL_MAP: dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
 
 
 def _to_pascal_case(text: str) -> str:
@@ -42,7 +41,7 @@ async def normalize_existing_relationship_types() -> None:
         logger.error("Error reading existing relationship types: %s", exc)
         return
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
     for record in results:
         current = record.get("t")
         if not current:
@@ -65,11 +64,11 @@ async def normalize_existing_relationship_types() -> None:
             )
 
 
-def _get_cypher_labels(entity_type: Optional[str]) -> str:
+def _get_cypher_labels(entity_type: str | None) -> str:
     """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
 
     entity_label_suffix = ":Entity"  # All nodes get this
-    specific_labels_parts: List[str] = []
+    specific_labels_parts: list[str] = []
 
     if entity_type and entity_type.strip():
         cleaned = re.sub(r"[^a-zA-Z0-9_\s]+", "", entity_type)
@@ -104,13 +103,13 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     return "".join(final_ordered_labels) + entity_label_suffix
 
 
-def _labels_to_list(labels_cypher: str) -> List[str]:
+def _labels_to_list(labels_cypher: str) -> list[str]:
     """Convert a Cypher label string to a list of labels."""
     return [lbl for lbl in labels_cypher.split(":") if lbl]
 
 
 async def add_kg_triples_batch_to_db(
-    structured_triples_data: List[Dict[str, Any]],
+    structured_triples_data: list[dict[str, Any]],
     chapter_number: int,
     is_from_flawed_draft: bool,
 ):
@@ -118,7 +117,7 @@ async def add_kg_triples_batch_to_db(
         logger.info("Neo4j: add_kg_triples_batch_to_db: No structured triples to add.")
         return
 
-    triple_payload: List[Dict[str, Any]] = []
+    triple_payload: list[dict[str, Any]] = []
 
     for triple_dict in structured_triples_data:
         subject_info = triple_dict.get("subject")
@@ -242,15 +241,15 @@ async def add_kg_triples_batch_to_db(
 
 
 async def query_kg_from_db(
-    subject: Optional[str] = None,
-    predicate: Optional[str] = None,
-    obj_val: Optional[str] = None,
-    chapter_limit: Optional[int] = None,
+    subject: str | None = None,
+    predicate: str | None = None,
+    obj_val: str | None = None,
+    chapter_limit: int | None = None,
     include_provisional: bool = True,
-    limit_results: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    limit_results: int | None = None,
+) -> list[dict[str, Any]]:
     conditions = []
-    parameters: Dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
     match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o) "
 
     if subject is not None:
@@ -300,7 +299,7 @@ async def query_kg_from_db(
     )
     try:
         results = await neo4j_manager.execute_read_query(full_query, parameters)
-        triples_list: List[Dict[str, Any]] = (
+        triples_list: list[dict[str, Any]] = (
             [dict(record) for record in results] if results else []
         )
         logger.debug(
@@ -318,9 +317,9 @@ async def query_kg_from_db(
 async def get_most_recent_value_from_db(
     subject: str,
     predicate: str,
-    chapter_limit: Optional[int] = None,
+    chapter_limit: int | None = None,
     include_provisional: bool = False,
-) -> Optional[Any]:
+) -> Any | None:
     if not subject.strip() or not predicate.strip():
         logger.warning(
             f"Neo4j: get_most_recent_value_from_db: empty subject or predicate. S='{subject}', P='{predicate}'"
@@ -358,13 +357,13 @@ async def get_most_recent_value_from_db(
     return None
 
 
-async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
+async def get_novel_info_property_from_db(property_key: str) -> Any | None:
     """Return a property value from the NovelInfo node."""
     if not property_key.strip():
         logger.warning("Neo4j: empty property key for NovelInfo query")
         return None
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
     query = f"MATCH (ni:NovelInfo:Entity {{id: $novel_id_param}}) RETURN ni.{property_key} AS value"
     try:
         results = await neo4j_manager.execute_read_query(
@@ -381,8 +380,8 @@ async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
 
 
 async def get_chapter_context_for_entity(
-    entity_name: Optional[str] = None, entity_id: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    entity_name: str | None = None, entity_id: str | None = None
+) -> list[dict[str, Any]]:
     """
     Finds chapters where an entity was mentioned or involved to provide context for enrichment.
     Searches by name for Characters/ValueNodes or by ID for WorldElements.
@@ -432,8 +431,8 @@ async def get_chapter_context_for_entity(
 
 
 async def find_contradictory_trait_characters(
-    contradictory_trait_pairs: List[Tuple[str, str]],
-) -> List[Dict[str, Any]]:
+    contradictory_trait_pairs: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
     """
     Finds characters who have contradictory traits based on a provided list of pairs.
     e.g. [('Brave', 'Cowardly'), ('Honest', 'Deceitful')]
@@ -462,7 +461,7 @@ async def find_contradictory_trait_characters(
     return all_findings
 
 
-async def find_post_mortem_activity() -> List[Dict[str, Any]]:
+async def find_post_mortem_activity() -> list[dict[str, Any]]:
     """
     Finds characters who have relationships or activities recorded in chapters
     after they were marked as dead.
@@ -495,7 +494,7 @@ async def find_post_mortem_activity() -> List[Dict[str, Any]]:
 
 async def find_candidate_duplicate_entities(
     similarity_threshold: float = 0.85, limit: int = 50
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Finds pairs of entities with similar names using APOC's Levenshtein distance.
     This requires the APOC plugin to be installed in Neo4j.
@@ -535,7 +534,7 @@ async def find_candidate_duplicate_entities(
 
 async def get_entity_context_for_resolution(
     entity_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Gathers comprehensive context for an entity to help an LLM decide on a merge.
     """
@@ -603,7 +602,7 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
 
 
 @alru_cache(maxsize=1)
-async def get_defined_node_labels() -> List[str]:
+async def get_defined_node_labels() -> list[str]:
     """Queries the database for all defined node labels and caches the result."""
     try:
         results = await neo4j_manager.execute_read_query("CALL db.labels() YIELD label")
@@ -616,11 +615,13 @@ async def get_defined_node_labels() -> List[str]:
     except Exception:
         logger.error("Failed to query defined node labels from Neo4j.", exc_info=True)
         # Fallback to constants if DB query fails
-        return list(NODE_LABELS) # Reverted: This should use the imported constant, not settings
+        return list(
+            NODE_LABELS
+        )  # Reverted: This should use the imported constant, not settings
 
 
 @alru_cache(maxsize=1)
-async def get_defined_relationship_types() -> List[str]:
+async def get_defined_relationship_types() -> list[str]:
     """Queries the database for all defined relationship types and caches the result."""
     try:
         results = await neo4j_manager.execute_read_query(
@@ -632,7 +633,9 @@ async def get_defined_relationship_types() -> List[str]:
             "Failed to query defined relationship types from Neo4j.", exc_info=True
         )
         # Fallback to constants if DB query fails
-        return list(RELATIONSHIP_TYPES) # Reverted: This should use the imported constant, not settings
+        return list(
+            RELATIONSHIP_TYPES
+        )  # Reverted: This should use the imported constant, not settings
 
 
 async def promote_dynamic_relationships() -> int:
@@ -680,7 +683,7 @@ async def deduplicate_relationships() -> int:
 
 async def fetch_unresolved_dynamic_relationships(
     limit: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fetch dynamic relationships lacking a specific type."""
     query = """
     MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
@@ -718,7 +721,7 @@ async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
 
 async def get_shortest_path_length_between_entities(
     name1: str, name2: str, max_depth: int = 4
-) -> Optional[int]:
+) -> int | None:
     """Return the shortest path length between two entities if it exists."""
     if max_depth <= 0:
         return None

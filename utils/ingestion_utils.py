@@ -1,14 +1,13 @@
-from config import settings # MODIFIED
-from typing import List
+from config import settings  # MODIFIED
 
 
 def split_text_into_chapters(
     text: str, max_chars: int = settings.MIN_ACCEPTABLE_DRAFT_LENGTH
-) -> List[str]:
+) -> list[str]:
     """Split text into pseudo-chapters by paragraph boundaries."""
     paragraphs = text.split("\n\n")
-    chapters: List[str] = []
-    current: List[str] = []
+    chapters: list[str] = []
+    current: list[str] = []
     current_length = 0
     for para in paragraphs:
         para_len = len(para) + 2

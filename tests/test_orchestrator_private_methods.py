@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 import utils
 from data_access import character_queries, world_queries
 from models.user_input_models import (

@@ -5,9 +5,9 @@ Now includes a hybrid approach combining semantic context and Knowledge Graph fa
 """
 
 import asyncio
-import structlog
-from typing import Any, List, Optional
+from typing import Any
 
+import structlog
 from config import settings
 from core.llm_interface import (
     count_tokens,
@@ -109,7 +109,7 @@ async def _generate_semantic_chapter_context_logic(
     # Include the summaries of the immediate previous chapters before searching
     immediate_context_limit = 2
     immediate_start = max(1, current_chapter_number - immediate_context_limit)
-    immediate_parts: List[str] = []
+    immediate_parts: list[str] = []
     total_tokens_accumulated = 0
 
     for i in range(immediate_start, current_chapter_number):
@@ -153,7 +153,9 @@ async def _generate_semantic_chapter_context_logic(
 
     if total_tokens_accumulated >= max_semantic_tokens:
         final_semantic_context = "\n".join(reversed(immediate_parts)).strip()
-        final_tokens_count = count_tokens(final_semantic_context, settings.DRAFTING_MODEL)
+        final_tokens_count = count_tokens(
+            final_semantic_context, settings.DRAFTING_MODEL
+        )
         logger.info(
             f"Constructed semantic context solely from immediate chapters: {final_tokens_count} tokens."
         )
@@ -165,7 +167,7 @@ async def _generate_semantic_chapter_context_logic(
         logger.warning(
             "Failed to generate embedding for semantic context query. Falling back to sequential previous chapter summaries/text."
         )
-        context_parts_list: List[str] = []
+        context_parts_list: list[str] = []
         fallback_chapter_limit = settings.CONTEXT_CHAPTER_COUNT
         for i in range(
             max(1, current_chapter_number - fallback_chapter_limit),
@@ -194,7 +196,9 @@ async def _generate_semantic_chapter_context_logic(
                     )
                     suffix = "\n---\n"
                     full_content_part = f"{prefix}{content}{suffix}"
-                    part_tokens = count_tokens(full_content_part, settings.DRAFTING_MODEL)
+                    part_tokens = count_tokens(
+                        full_content_part, settings.DRAFTING_MODEL
+                    )
                     if total_tokens_accumulated + part_tokens <= max_semantic_tokens:
                         context_parts_list.append(full_content_part)
                         total_tokens_accumulated += part_tokens
@@ -204,7 +208,8 @@ async def _generate_semantic_chapter_context_logic(
                         )
                         if (
                             remaining_tokens
-                            > count_tokens(prefix + suffix, settings.DRAFTING_MODEL) + 10
+                            > count_tokens(prefix + suffix, settings.DRAFTING_MODEL)
+                            + 10
                         ):
                             truncated_content_part = truncate_text_by_tokens(
                                 full_content_part,
@@ -217,7 +222,9 @@ async def _generate_semantic_chapter_context_logic(
         final_semantic_context = "\n".join(
             immediate_parts + list(reversed(context_parts_list))
         ).strip()
-        final_tokens_count = count_tokens(final_semantic_context, settings.DRAFTING_MODEL)
+        final_tokens_count = count_tokens(
+            final_semantic_context, settings.DRAFTING_MODEL
+        )
         logger.info(
             f"Constructed fallback semantic context: {final_tokens_count} tokens."
         )
@@ -237,7 +244,7 @@ async def _generate_semantic_chapter_context_logic(
 
     # Exclude immediate context chapters and apply decay to similarity scores
     excluded_chapters = set(range(immediate_start, current_chapter_number))
-    filtered_chapters: List[dict[str, Any]] = []
+    filtered_chapters: list[dict[str, Any]] = []
     for ch in similar_chapters_data:
         if ch.get("chapter_number") in excluded_chapters:
             continue
@@ -253,7 +260,7 @@ async def _generate_semantic_chapter_context_logic(
         reverse=True,
     )
 
-    context_parts_list: List[str] = []
+    context_parts_list: list[str] = []
 
     for chap_data in sorted_chapters_for_context:
         if total_tokens_accumulated >= max_semantic_tokens:
@@ -321,7 +328,7 @@ async def _generate_semantic_chapter_context_logic(
 async def generate_hybrid_chapter_context_logic(
     agent_or_props: Any,
     current_chapter_number: int,
-    chapter_plan: Optional[List[SceneDetail]],
+    chapter_plan: list[SceneDetail] | None,
 ) -> str:
     """
     Constructs HYBRID context for the current chapter.
@@ -351,7 +358,7 @@ async def generate_hybrid_chapter_context_logic(
     semantic_context_str, kg_facts_str = await asyncio.gather(
         semantic_context_task, kg_facts_task
     )
-    hybrid_context_parts: List[str] = []
+    hybrid_context_parts: list[str] = []
     if semantic_context_str and semantic_context_str.strip():
         hybrid_context_parts.append(
             "--- SEMANTIC CONTEXT FROM PAST CHAPTERS (FOR NARRATIVE FLOW & TONE) ---"

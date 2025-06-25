@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 
 import utils
 from config import settings
@@ -28,7 +27,7 @@ class TextDeduplicator:
 
     async def deduplicate(
         self, original_text: str, segment_level: str = "paragraph"
-    ) -> Tuple[str, int]:
+    ) -> tuple[str, int]:
         """Remove near-duplicate segments from ``original_text``."""
         return await utils.deduplicate_text_segments(
             original_text,

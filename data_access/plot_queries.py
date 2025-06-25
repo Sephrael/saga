@@ -1,16 +1,16 @@
 # data_access/plot_queries.py
-import structlog # MODIFIED
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from config import settings # MODIFIED
+import structlog  # MODIFIED
+from config import settings  # MODIFIED
 from core.db_manager import neo4j_manager
 
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 
 async def ensure_novel_info() -> None:
     """Create the NovelInfo node if it does not exist."""
-    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
     query = "MATCH (n:NovelInfo:Entity {id: $id}) RETURN n"
     result = await neo4j_manager.execute_read_query(query, {"id": novel_id})
     if not result or not result[0] or not result[0].get("n"):
@@ -19,12 +19,12 @@ async def ensure_novel_info() -> None:
             MERGE (n:NovelInfo:Entity {id: $id})
                 ON CREATE SET n.title = $title, n.created_ts = timestamp()
             """,
-            {"id": novel_id, "title": settings.DEFAULT_PLOT_OUTLINE_TITLE}, # MODIFIED
+            {"id": novel_id, "title": settings.DEFAULT_PLOT_OUTLINE_TITLE},  # MODIFIED
         )
         logger.info("Created NovelInfo node with id '%s'", novel_id)
 
 
-async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
+async def save_plot_outline_to_db(plot_data: dict[str, Any]) -> bool:
     logger.info("Synchronizing plot outline to Neo4j (non-destructive)...")
     if not plot_data:
         logger.warning(
@@ -32,8 +32,8 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
         )
         return True  # Or False if an empty plot_data implies deletion of existing plot
 
-    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     # 1. Synchronize NovelInfo node (basic properties of the plot)
     novel_props_for_set = {
@@ -56,7 +56,7 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
 
     # 2. Synchronize PlotPoint nodes and their relationships
     input_plot_points_list = plot_data.get("plot_points", [])
-    all_input_pp_ids: Set[str] = set()
+    all_input_pp_ids: set[str] = set()
     if isinstance(input_plot_points_list, list):
         for i, _ in enumerate(input_plot_points_list):
             pp_id = f"pp_{novel_id}_{i + 1}"  # Consistent ID generation
@@ -68,7 +68,7 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
             "MATCH (:NovelInfo:Entity {id: $novel_id_param})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity) RETURN pp.id AS id",
             {"novel_id_param": novel_id},
         )
-        existing_db_pp_ids: Set[str] = {
+        existing_db_pp_ids: set[str] = {
             record["id"] for record in existing_pp_records if record and record["id"]
         }
     except Exception as e:
@@ -181,10 +181,10 @@ async def save_plot_outline_to_db(plot_data: Dict[str, Any]) -> bool:
         return False
 
 
-async def get_plot_outline_from_db() -> Dict[str, Any]:
+async def get_plot_outline_from_db() -> dict[str, Any]:
     logger.info("Loading decomposed plot outline from Neo4j...")
-    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
-    plot_data: Dict[str, Any] = {}
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
+    plot_data: dict[str, Any] = {}
 
     # Fetch NovelInfo node properties
     novel_info_query = "MATCH (ni:NovelInfo:Entity {id: $novel_id_param}) RETURN ni"
@@ -242,7 +242,7 @@ async def get_plot_outline_from_db() -> Dict[str, Any]:
 
 async def append_plot_point(description: str, prev_plot_point_id: str) -> str:
     """Append a new PlotPoint node linked to NovelInfo and previous PlotPoint."""
-    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
     # Determine next sequence number
     query = (
         "MATCH (:NovelInfo:Entity {id: $novel_id})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity) "
@@ -301,7 +301,7 @@ async def plot_point_exists(description: str) -> bool:
     return bool(result and result[0] and result[0].get("cnt", 0) > 0)
 
 
-async def get_last_plot_point_id() -> Optional[str]:
+async def get_last_plot_point_id() -> str | None:
     """Return the ID of the most recent PlotPoint."""
     query = """
     MATCH (pp:PlotPoint:Entity)

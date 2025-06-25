@@ -1,9 +1,9 @@
 # planner_agent.py
 import json
-import structlog
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
 from config import settings
 from core.llm_interface import llm_service
 from data_access import chapter_queries
@@ -46,7 +46,7 @@ class PlannerAgent:
 
     def _parse_llm_scene_plan_output(
         self, json_text: str, chapter_number: int
-    ) -> Optional[List[SceneDetail]]:
+    ) -> list[SceneDetail] | None:
         """
         Parses JSON scene plan output from LLM.
         Expects a JSON array of scene objects.
@@ -90,7 +90,7 @@ class PlannerAgent:
             )
             return None
 
-        scenes_data: List[SceneDetail] = []
+        scenes_data: list[SceneDetail] = []
         for i, scene_item in enumerate(parsed_data):
             if not isinstance(scene_item, dict):
                 logger.warning(
@@ -98,7 +98,7 @@ class PlannerAgent:
                 )
                 continue
 
-            processed_scene_dict: Dict[str, Any] = {}
+            processed_scene_dict: dict[str, Any] = {}
             for llm_key, value in scene_item.items():
                 internal_key = SCENE_PLAN_KEY_MAP.get(
                     llm_key.lower().replace(" ", "_"), llm_key
@@ -149,13 +149,13 @@ class PlannerAgent:
 
     async def plan_chapter_scenes(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
         chapter_number: int,
-        plot_point_focus: Optional[str],
+        plot_point_focus: str | None,
         plot_point_index: int,
-    ) -> Tuple[Optional[List[SceneDetail]], Optional[Dict[str, int]]]:
+    ) -> tuple[list[SceneDetail] | None, dict[str, int] | None]:
         """
         Generates a detailed scene plan for the chapter.
         Returns the plan and LLM usage data.
@@ -175,7 +175,7 @@ class PlannerAgent:
             )
             return None, None
 
-        context_summary_parts: List[str] = []
+        context_summary_parts: list[str] = []
         if chapter_number > 1:
             prev_chap_data = await chapter_queries.get_chapter_data_from_db(
                 chapter_number - 1
@@ -221,7 +221,7 @@ class PlannerAgent:
             world_building, chapter_number
         )
 
-        future_plot_context_parts: List[str] = []
+        future_plot_context_parts: list[str] = []
         all_plot_points = plot_outline.get("plot_points", [])
         total_plot_points_in_novel = len(all_plot_points)
 
@@ -339,7 +339,7 @@ class PlannerAgent:
         )
 
         if parsed_scenes_list_of_dicts:
-            final_scenes_typed: List[SceneDetail] = []
+            final_scenes_typed: list[SceneDetail] = []
             for i, scene_dict in enumerate(parsed_scenes_list_of_dicts):
                 if not isinstance(scene_dict, dict):
                     logger.warning(
@@ -374,7 +374,7 @@ class PlannerAgent:
 
     async def plan_continuation(
         self, summary_text: str, num_points: int = 5
-    ) -> Tuple[Optional[List[str]], Optional[Dict[str, int]]]:
+    ) -> tuple[list[str] | None, dict[str, int] | None]:
         """Generate future plot points from a story summary."""
         prompt = render_prompt(
             "planner_agent/plan_continuation.j2",

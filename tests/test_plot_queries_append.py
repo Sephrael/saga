@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
 from config import settings
 from data_access import plot_queries
 
@@ -28,7 +28,7 @@ async def test_append_plot_point(monkeypatch):
     )
 
     new_id = await plot_queries.append_plot_point(
-        "New", "pp_{}_2".format(settings.MAIN_NOVEL_INFO_NODE_ID)
+        "New", f"pp_{settings.MAIN_NOVEL_INFO_NODE_ID}_2"
     )
 
     assert new_id == f"pp_{settings.MAIN_NOVEL_INFO_NODE_ID}_3"

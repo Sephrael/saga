@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 from data_access import kg_queries
 
 

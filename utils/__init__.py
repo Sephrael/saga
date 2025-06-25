@@ -8,7 +8,6 @@ import re
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
-
 from config import settings
 from core.llm_interface import count_tokens, llm_service
 
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def format_scene_plan_for_prompt(
-    chapter_plan: List["SceneDetail"],
+    chapter_plan: list[SceneDetail],
     model_name_for_tokens: str,
     max_tokens_budget: int,
 ) -> str:
@@ -90,7 +89,7 @@ async def deduplicate_text_segments(
     use_semantic_comparison: bool = settings.DEDUPLICATION_USE_SEMANTIC,
     min_segment_length_chars: int = settings.DEDUPLICATION_MIN_SEGMENT_LENGTH,
     prefer_newer: bool = False,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Remove near-duplicate segments from text."""
     if not original_text.strip():
         return original_text, 0
@@ -102,8 +101,8 @@ async def deduplicate_text_segments(
     num_segments = len(segments_with_offsets)
     indices_to_remove = set()
 
-    embeddings: List[Optional[np.ndarray]] = []
-    normalized_texts: List[str] = []
+    embeddings: list[np.ndarray | None] = []
+    normalized_texts: list[str] = []
 
     if use_semantic_comparison:
         tasks = [
@@ -182,7 +181,7 @@ async def deduplicate_text_segments(
     ]
     spans_to_remove_offsets.sort(key=lambda x: x[0])
 
-    new_text_parts: List[str] = []
+    new_text_parts: list[str] = []
     last_pos = 0
     for start, end in spans_to_remove_offsets:
         if start > last_pos:
@@ -200,13 +199,13 @@ async def deduplicate_text_segments(
     return deduplicated_text, characters_removed_count
 
 
-def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
+def remove_spans_from_text(text: str, spans: list[tuple[int, int]]) -> str:
     """Remove character spans from ``text``."""
     if not spans:
         return text
 
     spans_sorted = sorted(spans, key=lambda x: x[0])
-    result_parts: List[str] = []
+    result_parts: list[str] = []
     last_end = 0
     for start, end in spans_sorted:
         if start > last_end:

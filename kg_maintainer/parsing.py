@@ -1,8 +1,8 @@
 # kg_maintainer/parsing.py
 import json  # Added json
-import structlog
-from typing import Any, Dict, List  # Added Any, List
+from typing import Any  # Added Any, List
 
+import structlog
 import utils
 from utils import kg_property_keys as kg_keys
 
@@ -50,11 +50,11 @@ WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = [
 
 
 def _normalize_attributes(
-    attributes_dict: Dict[str, Any],
-    key_map: Dict[str, str],
-    list_keys: List[str],
-) -> Dict[str, Any]:
-    normalized_attrs: Dict[str, Any] = {}
+    attributes_dict: dict[str, Any],
+    key_map: dict[str, str],
+    list_keys: list[str],
+) -> dict[str, Any]:
+    normalized_attrs: dict[str, Any] = {}
     if not isinstance(attributes_dict, dict):
         logger.warning(
             "Input to _normalize_attributes was not a dict: %s",
@@ -105,9 +105,9 @@ def _normalize_attributes(
 
 def parse_unified_character_updates(
     json_text_block: str, chapter_number: int
-) -> Dict[str, CharacterProfile]:
+) -> dict[str, CharacterProfile]:
     """Parse character update JSON provided by LLM."""
-    char_updates: Dict[str, CharacterProfile] = {}
+    char_updates: dict[str, CharacterProfile] = {}
     if not json_text_block.strip():
         return char_updates
 
@@ -161,7 +161,7 @@ def parse_unified_character_updates(
         rels_val = processed_char_attributes.get("relationships")
         if isinstance(rels_val, list):
             rels_list = rels_val
-            rels_dict: Dict[str, str] = {}
+            rels_dict: dict[str, str] = {}
             for rel_entry in rels_list:
                 if isinstance(rel_entry, str):
                     if ":" in rel_entry:
@@ -237,9 +237,9 @@ def parse_unified_character_updates(
 
 def parse_unified_world_updates(
     json_text_block: str, chapter_number: int
-) -> Dict[str, Dict[str, WorldItem]]:
+) -> dict[str, dict[str, WorldItem]]:
     """Parse world update JSON provided by LLM."""
-    world_updates: Dict[str, Dict[str, WorldItem]] = {}
+    world_updates: dict[str, dict[str, WorldItem]] = {}
     if not json_text_block.strip():
         return world_updates
 
@@ -258,7 +258,7 @@ def parse_unified_world_updates(
         )
         return world_updates
 
-    results: Dict[str, Dict[str, WorldItem]] = {}
+    results: dict[str, dict[str, WorldItem]] = {}
     for category_name_llm, items_llm in parsed_data.items():
         if not isinstance(items_llm, dict):
             logger.warning(
@@ -269,7 +269,7 @@ def parse_unified_world_updates(
         # category_name_llm is e.g. "Locations", "Faction Alpha". This is used as the .category for WorldItem
         # The WorldItem model itself might normalize this for ID generation.
 
-        category_dict_by_item_name: Dict[str, WorldItem] = {}
+        category_dict_by_item_name: dict[str, WorldItem] = {}
         elaboration_key_standard = kg_keys.elaboration_key(chapter_number)
 
         if (

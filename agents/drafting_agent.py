@@ -1,7 +1,7 @@
 # drafting_agent.py
-import structlog
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
 from config import settings
 from core.llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 from kg_maintainer.models import SceneDetail
@@ -31,12 +31,12 @@ class DraftingAgent:
 
     async def draft_chapter(
         self,
-        plot_outline: Dict[str, Any],
+        plot_outline: dict[str, Any],
         chapter_number: int,
         plot_point_focus: str,
         hybrid_context_for_draft: str,
-        chapter_plan: Optional[List[SceneDetail]],
-    ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, int]]]:
+        chapter_plan: list[SceneDetail] | None,
+    ) -> tuple[str | None, str | None, dict[str, int] | None]:
         """
         Generates the initial draft for a chapter.
 
@@ -101,9 +101,9 @@ class DraftingAgent:
                 f"DraftingAgent: Starting scene-by-scene draft for Chapter {chapter_number}..."
             )
 
-            all_scenes_prose: List[str] = []
-            all_raw_outputs: List[str] = []
-            total_usage_data: Dict[str, int] = {
+            all_scenes_prose: list[str] = []
+            all_raw_outputs: list[str] = []
+            total_usage_data: dict[str, int] = {
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,

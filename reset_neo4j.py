@@ -1,17 +1,17 @@
 # reset_neo4j.py
 import argparse
 import asyncio  # Required to call async methods
-import structlog # MODIFIED
 import time
-from typing import Any, Dict, List  # Added for type hints
+from typing import Any  # Added for type hints
 
-from config import settings # MODIFIED
+import structlog  # MODIFIED
+from config import settings  # MODIFIED
 from core.db_manager import Neo4jManagerSingleton  # Use the singleton
 
 # Configure a basic logger for this script
 # Standard structlog configuration will be handled by config.py if this script is run as part of the app.
 # For standalone, basic logging is fine or could be enhanced.
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 
 # Create an instance of the manager to use its methods
@@ -34,9 +34,9 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             print("Operation cancelled.")
             return False
 
-    effective_uri = uri or settings.NEO4J_URI # MODIFIED
-    effective_user = user or settings.NEO4J_USER # MODIFIED
-    effective_password = password or settings.NEO4J_PASSWORD # MODIFIED
+    effective_uri = uri or settings.NEO4J_URI  # MODIFIED
+    effective_user = user or settings.NEO4J_USER  # MODIFIED
+    effective_password = password or settings.NEO4J_PASSWORD  # MODIFIED
 
     # Store original settings from the global settings object
     original_uri, original_user, original_pass = (
@@ -75,7 +75,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         # --- END: Added Connection Retry Logic ---
 
         async with neo4j_manager_instance.driver.session(
-            database=settings.NEO4J_DATABASE # MODIFIED
+            database=settings.NEO4J_DATABASE  # MODIFIED
         ) as session:  # type: ignore
             result = await session.run("MATCH (n) RETURN count(n) as count")
             single_result = await result.single()
@@ -88,7 +88,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         nodes_deleted_total = 0
         while True:
             async with neo4j_manager_instance.driver.session(
-                database=settings.NEO4J_DATABASE # MODIFIED
+                database=settings.NEO4J_DATABASE  # MODIFIED
             ) as session:  # type: ignore
                 tx = await session.begin_transaction()
                 result = await tx.run(
@@ -109,10 +109,10 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
 
         logger.info("Attempting to drop ALL user-defined constraints...")
         async with neo4j_manager_instance.driver.session(
-            database=settings.NEO4J_DATABASE # MODIFIED
+            database=settings.NEO4J_DATABASE  # MODIFIED
         ) as session:  # type: ignore
             constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
-            constraints_to_drop: List[str] = [
+            constraints_to_drop: list[str] = [
                 record["name"]
                 for record in await constraints_result.data()
                 if record["name"]
@@ -143,7 +143,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             "Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)..."
         )
         async with neo4j_manager_instance.driver.session(
-            database=settings.NEO4J_DATABASE # MODIFIED
+            database=settings.NEO4J_DATABASE  # MODIFIED
         ) as session:  # type: ignore
             # Query for indexes, trying to filter out system ones if possible (type might not always be 'SYSTEM_LOOKUP')
             # The most reliable way is usually by name patterns if system indexes have those, or by excluding known types.
@@ -151,7 +151,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             # And also not 'RANGE' or 'POINT' unless we are sure SAGA doesn't use them (it mostly uses BTREE for properties and VECTOR).
             # A simpler approach for a full reset is to try dropping all and let `IF EXISTS` handle it.
             indexes_result = await session.run("SHOW INDEXES YIELD name, type")
-            indexes_to_drop_info: List[Dict[str, Any]] = await indexes_result.data()
+            indexes_to_drop_info: list[dict[str, Any]] = await indexes_result.data()
 
             if not indexes_to_drop_info:
                 logger.info("   No user-defined indexes found to drop.")
@@ -225,15 +225,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--uri",
         default=None,
-        help=f"Neo4j connection URI (default: {settings.NEO4J_URI})", # MODIFIED
+        help=f"Neo4j connection URI (default: {settings.NEO4J_URI})",  # MODIFIED
     )
     parser.add_argument(
-        "--user", default=None, help=f"Neo4j username (default: {settings.NEO4J_USER})" # MODIFIED
+        "--user",
+        default=None,
+        help=f"Neo4j username (default: {settings.NEO4J_USER})",  # MODIFIED
     )
     parser.add_argument(
         "--password",
         default=None,
-        help=f"Neo4j password (default: {settings.NEO4J_PASSWORD})", # MODIFIED
+        help=f"Neo4j password (default: {settings.NEO4J_PASSWORD})",  # MODIFIED
     )
     parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
 

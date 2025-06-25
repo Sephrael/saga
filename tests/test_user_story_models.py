@@ -1,6 +1,5 @@
-import yaml
-
 import config
+import yaml
 from initialization.data_loader import (
     load_user_supplied_model as _load_user_supplied_data,
 )

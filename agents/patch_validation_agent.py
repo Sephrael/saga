@@ -1,6 +1,4 @@
 import structlog
-from typing import Dict, List, Optional, Tuple
-
 from config import settings
 from core.llm_interface import llm_service
 from kg_maintainer.models import PatchInstruction, ProblemDetail
@@ -20,8 +18,8 @@ class PatchValidationAgent:
         self,
         context_snippet: str,
         patch: PatchInstruction,
-        problems: List[ProblemDetail],
-    ) -> Tuple[bool, Optional[Dict[str, int]]]:
+        problems: list[ProblemDetail],
+    ) -> tuple[bool, dict[str, int] | None]:
         """Return True if patch addresses all problems adequately."""
 
         issues_list = "\n".join(f"- {p['problem_description']}" for p in problems)

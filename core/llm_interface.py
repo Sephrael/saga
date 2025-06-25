@@ -24,23 +24,23 @@ Copyright 2025 Dennis Lewis
 import asyncio
 import functools
 import json
-import structlog
 import os
 import re
 import tempfile
 
 # Type hints
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import httpx
 
 # Third-party imports
 import numpy as np
+import structlog
 import tiktoken
 from async_lru import alru_cache
 
 # Local imports
-from config import settings # MODIFIED
+from config import settings  # MODIFIED
 
 logger = structlog.get_logger(__name__)
 
@@ -54,11 +54,11 @@ def _completion_token_param(api_base: str) -> str:
 
 
 # --- Tokenizer Cache and Utility Functions (Module Level) ---
-_tokenizer_cache: Dict[str, tiktoken.Encoding] = {}
+_tokenizer_cache: dict[str, tiktoken.Encoding] = {}
 
 
 @functools.lru_cache(maxsize=settings.TOKENIZER_CACHE_SIZE)
-def _get_tokenizer(model_name: str) -> Optional[tiktoken.Encoding]:
+def _get_tokenizer(model_name: str) -> tiktoken.Encoding | None:
     """
     Gets a tiktoken encoder for the given model name, with caching.
     Tries model-specific encoding, then a default, then returns None.
@@ -212,10 +212,10 @@ class LLMService:
 
     def _validate_embedding(
         self,
-        embedding_list: List[Union[float, int]],
+        embedding_list: list[float | int],
         expected_dim: int,
         dtype: np.dtype,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Helper to validate and convert a list to a 1D numpy embedding."""
         try:
             embedding = np.array(embedding_list).astype(dtype)
@@ -237,7 +237,7 @@ class LLMService:
         return None
 
     @alru_cache(maxsize=settings.EMBEDDING_CACHE_SIZE)
-    async def async_get_embedding(self, text: str) -> Optional[np.ndarray]:
+    async def async_get_embedding(self, text: str) -> np.ndarray | None:
         """
         Asynchronously retrieves an embedding for the given text from Ollama with retry logic.
         """
@@ -253,9 +253,9 @@ class LLMService:
                 f"Async Embedding req to Ollama for model '{settings.EMBEDDING_MODEL}': '{text[:80].replace(chr(10), ' ')}...'"
             )
 
-            last_exception: Optional[Exception] = None
+            last_exception: Exception | None = None
             for attempt in range(settings.LLM_RETRY_ATTEMPTS):
-                api_response: Optional[httpx.Response] = None
+                api_response: httpx.Response | None = None
                 try:
                     self.request_count += 1
                     api_response = await self._client.post(
@@ -359,7 +359,7 @@ class LLMService:
     def _log_llm_usage(
         self,
         model_name: str,
-        usage_data: Optional[Dict[str, int]],
+        usage_data: dict[str, int] | None,
         async_mode: bool = False,
         streamed: bool = False,
     ):
@@ -380,14 +380,14 @@ class LLMService:
         self,
         model_name: str,
         prompt: str,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         allow_fallback: bool = False,
         stream_to_disk: bool = False,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
         auto_clean_response: bool = True,
-    ) -> Tuple[str, Optional[Dict[str, int]]]:
+    ) -> tuple[str, dict[str, int] | None]:
         """
         Asynchronously calls the LLM (OpenAI-compatible API) with retry and optional model fallback.
         Returns the LLM's text response as a string (optionally cleaned), and a dictionary containing token usage.
@@ -405,7 +405,9 @@ class LLMService:
                 max_tokens if max_tokens is not None else settings.MAX_GENERATION_TOKENS
             )
             effective_temperature = (
-                temperature if temperature is not None else settings.TEMPERATURE_DEFAULT # Using Temperatures.DEFAULT from settings
+                temperature
+                if temperature is not None
+                else settings.TEMPERATURE_DEFAULT  # Using Temperatures.DEFAULT from settings
             )
 
             headers = {
@@ -415,10 +417,10 @@ class LLMService:
 
             current_model_to_try = model_name
             is_fallback_attempt = False
-            current_usage_data: Optional[Dict[str, int]] = None
+            current_usage_data: dict[str, int] | None = None
             final_text_response = ""
 
-            for attempt_num_overall in range(2): # Max 1 primary + 1 fallback attempt
+            for attempt_num_overall in range(2):  # Max 1 primary + 1 fallback attempt
                 if is_fallback_attempt:
                     if not allow_fallback or not settings.FALLBACK_GENERATION_MODEL:
                         logger.warning(
@@ -433,11 +435,13 @@ class LLMService:
                     logger.info(
                         f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'."
                     )
-                    prompt_token_count = count_tokens(prompt, current_model_to_try) # Recalculate for fallback
-                    current_usage_data = None # Reset usage for fallback
+                    prompt_token_count = count_tokens(
+                        prompt, current_model_to_try
+                    )  # Recalculate for fallback
+                    current_usage_data = None  # Reset usage for fallback
 
                 token_param_name = _completion_token_param(settings.OPENAI_API_BASE)
-                payload: Dict[str, Any] = {
+                payload: dict[str, Any] = {
                     "model": current_model_to_try,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": effective_temperature,
@@ -450,8 +454,8 @@ class LLMService:
                 if presence_penalty is not None:
                     payload["presence_penalty"] = presence_penalty
 
-                last_exception_for_current_model: Optional[Exception] = None
-                temp_file_path_for_stream: Optional[str] = None # For stream_to_disk
+                last_exception_for_current_model: Exception | None = None
+                temp_file_path_for_stream: str | None = None  # For stream_to_disk
 
                 for retry_attempt in range(settings.LLM_RETRY_ATTEMPTS):
                     penalty_log_str = ""
@@ -465,27 +469,35 @@ class LLMService:
                         f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. "
                         f"Temp: {effective_temperature}, TopP: {settings.LLM_TOP_P}{penalty_log_str}"
                     )
-                    api_response_obj: Optional[httpx.Response] = None # For non-streamed response
+                    api_response_obj: httpx.Response | None = (
+                        None  # For non-streamed response
+                    )
 
                     try:
                         if stream_to_disk:
-                            payload["stream"] = True # Ensure stream is enabled in payload
+                            payload["stream"] = (
+                                True  # Ensure stream is enabled in payload
+                            )
                             _tmp_fd, temp_file_path_for_stream = tempfile.mkstemp(
                                 suffix=".llmstream.txt", text=True
                             )
                             os.close(_tmp_fd)
 
                             accumulated_stream_content = ""
-                            stream_usage_data: Optional[Dict[str, int]] = None # To capture usage from stream
+                            stream_usage_data: dict[str, int] | None = (
+                                None  # To capture usage from stream
+                            )
 
                             try:
                                 self.request_count += 1
-                                async with self._client.stream(
-                                    "POST",
-                                    f"{settings.OPENAI_API_BASE}/chat/completions", # Use settings
-                                    json=payload,
-                                    headers=headers,
-                                ) as response_stream:
+                                async with (
+                                    self._client.stream(
+                                        "POST",
+                                        f"{settings.OPENAI_API_BASE}/chat/completions",  # Use settings
+                                        json=payload,
+                                        headers=headers,
+                                    ) as response_stream
+                                ):
                                     response_stream.raise_for_status()
 
                                     with open(
@@ -584,7 +596,6 @@ class LLMService:
                                         else:
                                             with open(
                                                 temp_file_path_for_stream,
-                                                "r",
                                                 encoding="utf-8",
                                             ) as f_read_final_err:
                                                 final_text_response = (
@@ -708,10 +719,12 @@ class LLMService:
                                 )
 
                     if (
-                        retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1 # Use settings
+                        retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1  # Use settings
                         and last_exception_for_current_model is not None
                     ):
-                        delay = settings.LLM_RETRY_DELAY_SECONDS * (2**retry_attempt) # Use settings
+                        delay = settings.LLM_RETRY_DELAY_SECONDS * (
+                            2**retry_attempt
+                        )  # Use settings
                         retry_reason = (
                             type(last_exception_for_current_model).__name__
                             if last_exception_for_current_model
@@ -723,11 +736,13 @@ class LLMService:
                         await asyncio.sleep(delay)
                     elif last_exception_for_current_model is not None:
                         logger.error(
-                            f"Async LLM ('{current_model_to_try}'): All {settings.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}" # Use settings
+                            f"Async LLM ('{current_model_to_try}'): All {settings.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}"  # Use settings
                         )
 
-                if last_exception_for_current_model is None: # Successful call for current_model_to_try
-                    break # Exit the outer loop (primary/fallback attempts)
+                if (
+                    last_exception_for_current_model is None
+                ):  # Successful call for current_model_to_try
+                    break  # Exit the outer loop (primary/fallback attempts)
 
                 is_fallback_attempt = True
 

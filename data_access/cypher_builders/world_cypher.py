@@ -1,24 +1,24 @@
 import json
-import structlog # MODIFIED
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-from config import settings # MODIFIED
-from utils import kg_property_keys as kg_keys
+import structlog  # MODIFIED
+from config import settings  # MODIFIED
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem
+from utils import kg_property_keys as kg_keys
 
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 
 def generate_world_element_node_cypher(
     item: WorldItem, chapter_number_for_delta: int = 0
-) -> List[Tuple[str, Dict[str, Any]]]:
+) -> list[tuple[str, dict[str, Any]]]:
     """Create Cypher statements for a world element update."""
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     node_props = {
         "name": item.name,
@@ -89,7 +89,10 @@ def generate_world_element_node_cypher(
             MATCH (we:WorldElement:Entity {id: $we_id})
             MERGE (wc)-[:CONTAINS_ELEMENT]->(we)
             """,
-            {"wc_id": settings.MAIN_WORLD_CONTAINER_NODE_ID, "we_id": item.id}, # MODIFIED
+            {
+                "wc_id": settings.MAIN_WORLD_CONTAINER_NODE_ID,
+                "we_id": item.id,
+            },  # MODIFIED
         )
     )
 

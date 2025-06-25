@@ -1,17 +1,17 @@
 import asyncio
-from typing import Any, Coroutine, Dict, List, Optional, Tuple
+from collections.abc import Coroutine
+from typing import Any
 
 import structlog
-
-from config import settings
 import utils
+from config import settings
 from kg_maintainer.models import WorldItem
 
 from .common import bootstrap_field
 
 logger = structlog.get_logger(__name__)
 
-WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: Dict[str, str] = {
+WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: dict[str, str] = {
     "overview": "_overview_",
     "locations": "locations",
     "society": "society",
@@ -21,12 +21,12 @@ WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL: Dict[str, str] = {
     "factions": "factions",
 }
 
-WORLD_DETAIL_LIST_INTERNAL_KEYS: List[str] = []
+WORLD_DETAIL_LIST_INTERNAL_KEYS: list[str] = []
 
 
 async def generate_world_building_logic(
-    world_building: Dict[str, Any], plot_outline: Dict[str, Any]
-) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    world_building: dict[str, Any], plot_outline: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, int] | None]:
     """Stub world-building generation function."""
     logger.warning("generate_world_building_logic stub called")
     if not world_building:
@@ -34,9 +34,9 @@ async def generate_world_building_logic(
     return world_building, None
 
 
-def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
+def create_default_world() -> dict[str, dict[str, WorldItem]]:
     """Create a default world-building structure."""
-    world_data: Dict[str, Dict[str, WorldItem]] = {
+    world_data: dict[str, dict[str, WorldItem]] = {
         "_overview_": {
             "_overview_": WorldItem.from_dict(
                 "_overview_",
@@ -73,17 +73,17 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
 
 
 async def bootstrap_world(
-    world_building: Dict[str, Any],
-    plot_outline: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    world_building: dict[str, Any],
+    plot_outline: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, int] | None]:
     """Fill missing world-building information via LLM."""
-    overall_usage_data: Dict[str, int] = {
+    overall_usage_data: dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
     }
 
-    def _accumulate_usage(item_usage: Optional[Dict[str, int]]) -> None:
+    def _accumulate_usage(item_usage: dict[str, int] | None) -> None:
         if item_usage:
             for key, val in item_usage.items():
                 overall_usage_data[key] = overall_usage_data.get(key, 0) + val
@@ -122,7 +122,7 @@ async def bootstrap_world(
                     overview_item_obj.properties["source"] = "descr_bootstrapped"
 
     # Stage 1: Bootstrap names for [Fill-in] items
-    name_bootstrap_tasks: Dict[Tuple[str, str], Coroutine] = {}
+    name_bootstrap_tasks: dict[tuple[str, str], Coroutine] = {}
     for category, items_dict in world_building.items():
         if not isinstance(items_dict, dict) or category == "_overview_":
             continue
@@ -150,8 +150,8 @@ async def bootstrap_world(
         name_results_list = await asyncio.gather(*name_bootstrap_tasks.values())
         name_task_keys = list(name_bootstrap_tasks.keys())
 
-        new_items_to_add_stage1: Dict[str, Dict[str, WorldItem]] = {}
-        items_to_remove_stage1: Dict[str, List[str]] = {}
+        new_items_to_add_stage1: dict[str, dict[str, WorldItem]] = {}
+        items_to_remove_stage1: dict[str, list[str]] = {}
 
         for i, (new_name_value, name_usage) in enumerate(name_results_list):
             _accumulate_usage(name_usage)
@@ -218,7 +218,7 @@ async def bootstrap_world(
         )
 
     # Stage 2: Bootstrap properties for all items (excluding _overview_ top-level)
-    property_bootstrap_tasks: Dict[Tuple[str, str, str], Coroutine] = {}
+    property_bootstrap_tasks: dict[tuple[str, str, str], Coroutine] = {}
     for category, items_dict in world_building.items():
         if not isinstance(items_dict, dict) or category == "_overview_":
             continue

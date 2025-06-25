@@ -1,20 +1,17 @@
 # data_access/chapter_queries.py
-import structlog # MODIFIED
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-
-from config import settings # MODIFIED
+import structlog  # MODIFIED
+from config import settings  # MODIFIED
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 
-logger = structlog.get_logger(__name__) # MODIFIED
+logger = structlog.get_logger(__name__)  # MODIFIED
 
 
 async def load_chapter_count_from_db() -> int:
-    query = (
-        f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count" # MODIFIED
-    )
+    query = f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"  # MODIFIED
     try:
         result = await neo4j_manager.execute_read_query(query)
         count = result[0]["chapter_count"] if result and result[0] else 0
@@ -29,8 +26,8 @@ async def save_chapter_data_to_db(
     chapter_number: int,
     text: str,
     raw_llm_output: str,
-    summary: Optional[str],
-    embedding_array: Optional[np.ndarray],
+    summary: str | None,
+    embedding_array: np.ndarray | None,
     is_provisional: bool = False,
 ):
     if chapter_number <= 0:
@@ -72,7 +69,7 @@ async def save_chapter_data_to_db(
         )
 
 
-async def get_chapter_data_from_db(chapter_number: int) -> Optional[Dict[str, Any]]:
+async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None:
     if chapter_number <= 0:
         return None
     query = f"""
@@ -101,7 +98,7 @@ async def get_chapter_data_from_db(chapter_number: int) -> Optional[Dict[str, An
         return None
 
 
-async def get_embedding_from_db(chapter_number: int) -> Optional[np.ndarray]:
+async def get_embedding_from_db(chapter_number: int) -> np.ndarray | None:
     if chapter_number <= 0:
         return None
     query = f"""
@@ -130,8 +127,8 @@ async def get_embedding_from_db(chapter_number: int) -> Optional[np.ndarray]:
 async def find_similar_chapters_in_db(
     query_embedding: np.ndarray,
     limit: int,
-    current_chapter_to_exclude: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    current_chapter_to_exclude: int | None = None,
+) -> list[dict[str, Any]]:
     if query_embedding is None or query_embedding.size == 0:
         logger.warning(
             "Neo4j: find_similar_chapters_in_db called with empty query_embedding."
@@ -146,8 +143,8 @@ async def find_similar_chapters_in_db(
         return []
 
     exclude_clause = ""
-    params_dict: Dict[str, Any] = {
-        "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME, # MODIFIED
+    params_dict: dict[str, Any] = {
+        "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME,  # MODIFIED
         "limit_param": limit + (1 if current_chapter_to_exclude is not None else 0),
         "queryVector_param": query_embedding_list,
     }
@@ -166,7 +163,7 @@ async def find_similar_chapters_in_db(
            score
     ORDER BY score DESC
     """
-    similar_chapters_data: List[Dict[str, Any]] = []
+    similar_chapters_data: list[dict[str, Any]] = []
     try:
         results = await neo4j_manager.execute_read_query(similarity_query, params_dict)
         if results:
@@ -201,11 +198,11 @@ async def find_similar_chapters_in_db(
 
 async def get_all_past_embeddings_from_db(
     current_chapter_number: int,
-) -> List[Tuple[int, np.ndarray]]:
+) -> list[tuple[int, np.ndarray]]:
     logger.warning(
         "get_all_past_embeddings_from_db is deprecated. Use find_similar_chapters_in_db for semantic context."
     )
-    embeddings_list: List[Tuple[int, np.ndarray]] = []
+    embeddings_list: list[tuple[int, np.ndarray]] = []
     query = f"""
     MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL})
     WHERE c.number < $current_chapter_number_param AND c.number > 0

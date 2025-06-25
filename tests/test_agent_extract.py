@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile
 

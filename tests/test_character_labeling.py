@@ -1,8 +1,7 @@
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from core.db_manager import (
     Neo4jManagerSingleton,
 )  # Needed for type hinting if neo4j_manager is mocked
@@ -73,10 +72,10 @@ def mock_neo4j_manager():
 
 # Store for captured query and params
 captured_query: str = ""
-captured_params: Dict[str, Any] = {}
+captured_params: dict[str, Any] = {}
 
 
-async def capture_write_mock(query: str, params: Dict[str, Any]):
+async def capture_write_mock(query: str, params: dict[str, Any]):
     global captured_query, captured_params
     captured_query = query
     captured_params = params
@@ -129,13 +128,13 @@ async def test_add_entities_with_character_labeling(mock_neo4j_manager):
     triples = captured_params.get("triples", [])
     assert len(triples) == 5
 
-    def _get_by_subject(name: str) -> Dict[str, Any]:
+    def _get_by_subject(name: str) -> dict[str, Any]:
         for t in triples:
             if t.get("subject_name") == name:
                 return t
         return {}
 
-    def _get_by_object(name: str) -> Dict[str, Any]:
+    def _get_by_object(name: str) -> dict[str, Any]:
         for t in triples:
             if t.get("object_props", {}).get("name") == name:
                 return t
@@ -167,9 +166,9 @@ async def test_query_retrieves_all_character_types(mock_neo4j_manager):
     # Let's modify the mock to capture the query string for query_kg_from_db
 
     captured_query_string = ""
-    captured_query_params: Dict[str, Any] = {}
+    captured_query_params: dict[str, Any] = {}
 
-    async def capture_read_query_mock(query: str, params: Dict[str, Any]):
+    async def capture_read_query_mock(query: str, params: dict[str, Any]):
         nonlocal captured_query_string, captured_query_params
         captured_query_string = query
         captured_query_params = params

@@ -1,8 +1,7 @@
 from unittest.mock import AsyncMock
 
-import pytest
-
 import config
+import pytest
 import utils
 from core.db_manager import neo4j_manager
 from data_access import plot_queries
