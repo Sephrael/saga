@@ -1,4 +1,3 @@
-import logging
 import re
 import structlog
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
