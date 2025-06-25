@@ -1,5 +1,6 @@
 # data_access/world_queries.py
 import logging
+import structlog
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from async_lru import alru_cache  # type: ignore
@@ -486,7 +487,7 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
     item_detail.pop("updated_ts", None)
 
     created_chapter_num = item_detail.pop(
-        KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM
+        KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
     )
     item_detail["created_chapter"] = int(created_chapter_num)
     item_detail[kg_keys.added_key(created_chapter_num)] = True

@@ -2,7 +2,7 @@ from typing import Any, Dict, Tuple
 
 import structlog
 
-import config
+from config import settings
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from data_access import plot_queries
 from kg_maintainer.models import CharacterProfile, WorldItem
@@ -45,7 +45,7 @@ async def run_genesis_phase() -> Tuple[
         logger.info("Loaded user story elements from YAML file.")
     else:
         logger.info("No valid user YAML found. Using default placeholders.")
-        plot_outline = create_default_plot(config.DEFAULT_PROTAGONIST_NAME)
+        plot_outline = create_default_plot(settings.DEFAULT_PROTAGONIST_NAME)
         character_profiles = create_default_characters(plot_outline["protagonist_name"])
         world_building = create_default_world()
 
@@ -71,10 +71,10 @@ async def run_genesis_phase() -> Tuple[
         if k not in ["is_default", "source"] and isinstance(v, dict)
     }
     await kg_agent.persist_profiles(
-        character_profiles, config.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
+        character_profiles, settings.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
     )
     await kg_agent.persist_world(
-        world_items_for_kg, config.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
+        world_items_for_kg, settings.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
     )
     logger.info("Knowledge graph pre-population complete (full sync).")
 

@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import structlog
 
-import config
+from config import settings
 from kg_maintainer.models import CharacterProfile, WorldItem
 from models.user_input_models import UserStoryInputModel, user_story_to_objects
 from yaml_parser import load_yaml_file
@@ -12,7 +12,7 @@ logger = structlog.get_logger(__name__)
 
 def load_user_supplied_model() -> Optional[UserStoryInputModel]:
     """Load user story YAML into a validated model."""
-    data = load_yaml_file(config.USER_STORY_ELEMENTS_FILE_PATH)
+    data = load_yaml_file(settings.USER_STORY_ELEMENTS_FILE_PATH)
     if not data:
         return None
     try:

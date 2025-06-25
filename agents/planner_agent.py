@@ -4,7 +4,7 @@ import structlog
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-import config
+from config import settings
 from core.llm_interface import llm_service
 from data_access import chapter_queries
 from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
@@ -40,7 +40,7 @@ SCENE_PLAN_LIST_INTERNAL_KEYS = [
 
 
 class PlannerAgent:
-    def __init__(self, model_name: str = config.PLANNING_MODEL):
+    def __init__(self, model_name: str = settings.PLANNING_MODEL):
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
 
@@ -160,7 +160,7 @@ class PlannerAgent:
         Generates a detailed scene plan for the chapter.
         Returns the plan and LLM usage data.
         """
-        if not config.ENABLE_AGENTIC_PLANNING:
+        if not settings.ENABLE_AGENTIC_PLANNING:
             logger.info(
                 f"Agentic planning disabled. Skipping detailed planning for Chapter {chapter_number}."
             )
@@ -207,7 +207,7 @@ class PlannerAgent:
         context_summary_str = "".join(context_summary_parts)
 
         protagonist_name = plot_outline.get(
-            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+            "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
         kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
             plot_outline, chapter_number, None
@@ -295,9 +295,9 @@ class PlannerAgent:
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
-                "target_scenes_min": config.TARGET_SCENES_MIN,
-                "target_scenes_max": config.TARGET_SCENES_MAX,
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "target_scenes_min": settings.TARGET_SCENES_MIN,
+                "target_scenes_max": settings.TARGET_SCENES_MAX,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled"),
                 "novel_genre": plot_outline.get("genre", "N/A"),
@@ -316,7 +316,7 @@ class PlannerAgent:
             },
         )
         logger.info(
-            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
+            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {settings.TARGET_SCENES_MIN}-{settings.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
         )
 
         (
@@ -325,12 +325,12 @@ class PlannerAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.PLANNING,
-            max_tokens=config.MAX_PLANNING_TOKENS,
+            temperature=settings.Temperatures.PLANNING,
+            max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True,
-            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
+            frequency_penalty=settings.FREQUENCY_PENALTY_PLANNING,
+            presence_penalty=settings.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
 
@@ -383,12 +383,12 @@ class PlannerAgent:
         cleaned, usage = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.PLANNING,
-            max_tokens=config.MAX_PLANNING_TOKENS,
+            temperature=settings.Temperatures.PLANNING,
+            max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
+            frequency_penalty=settings.FREQUENCY_PENALTY_PLANNING,
+            presence_penalty=settings.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
         try:

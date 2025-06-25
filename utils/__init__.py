@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
-import config
+from config import settings
 from core.llm_interface import count_tokens, llm_service
 
 from .helpers import _is_fill_in
@@ -86,9 +86,9 @@ def format_scene_plan_for_prompt(
 async def deduplicate_text_segments(
     original_text: str,
     segment_level: str = "paragraph",
-    similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD,
-    use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,
-    min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+    similarity_threshold: float = settings.DEDUPLICATION_SEMANTIC_THRESHOLD,
+    use_semantic_comparison: bool = settings.DEDUPLICATION_USE_SEMANTIC,
+    min_segment_length_chars: int = settings.DEDUPLICATION_MIN_SEGMENT_LENGTH,
     prefer_newer: bool = False,
 ) -> Tuple[str, int]:
     """Remove near-duplicate segments from text."""

@@ -2,7 +2,7 @@
 import structlog
 from typing import Any, Dict, List, Optional, Tuple
 
-import config
+from config import settings
 import utils  # MODIFIED: For spaCy functions
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import chapter_queries
@@ -53,7 +53,7 @@ def _normalize_llm_category_to_internal(llm_category_str: str) -> str:
 
 
 class ComprehensiveEvaluatorAgent:
-    def __init__(self, model_name: str = config.EVALUATION_MODEL):
+    def __init__(self, model_name: str = settings.EVALUATION_MODEL):
         self.model_name = model_name
         logger.info(
             f"ComprehensiveEvaluatorAgent initialized with model: {self.model_name}"
@@ -232,11 +232,11 @@ class ComprehensiveEvaluatorAgent:
         prompt = render_prompt(
             "comprehensive_evaluator_agent/evaluate_chapter.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,
-                "min_length": config.MIN_ACCEPTABLE_DRAFT_LENGTH,
+                "min_length": settings.MIN_ACCEPTABLE_DRAFT_LENGTH,
                 "novel_genre": plot_outline.get("genre", "N/A"),
                 "novel_theme": plot_outline.get("theme", "N/A"),
                 "novel_protagonist": plot_outline.get("protagonist_name", "N/A"),
@@ -258,11 +258,11 @@ class ComprehensiveEvaluatorAgent:
         cleaned_evaluation_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.EVALUATION,
+            temperature=settings.Temperatures.EVALUATION,
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=config.FREQUENCY_PENALTY_EVALUATION,
-            presence_penalty=config.PRESENCE_PENALTY_EVALUATION,
+            frequency_penalty=settings.FREQUENCY_PENALTY_EVALUATION,
+            presence_penalty=settings.PRESENCE_PENALTY_EVALUATION,
             auto_clean_response=True,
         )
 
@@ -390,22 +390,22 @@ class ComprehensiveEvaluatorAgent:
                 }
             )
             reasons_for_revision_summary.append("Draft is empty.")
-        elif len(draft_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+        elif len(draft_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
             needs_revision = True
             problem_details_list.append(
                 {
                     "issue_category": "narrative_depth_and_length",
-                    "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
+                    "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
                     "quote_from_original_text": "N/A - General Issue",
                     "quote_char_start": None,
                     "quote_char_end": None,
                     "sentence_char_start": None,
                     "sentence_char_end": None,
-                    "suggested_fix_focus": f"Expand content significantly across multiple scenes/sections to meet the {config.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue.",
+                    "suggested_fix_focus": f"Expand content significantly across multiple scenes/sections to meet the {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue.",
                 }
             )
             reasons_for_revision_summary.append(
-                f"Draft is too short ({len(draft_text)} chars). Minimum required: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}."
+                f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}."
             )
 
         current_embedding_task = llm_service.async_get_embedding(draft_text)  # MODIFIED
@@ -421,12 +421,12 @@ class ComprehensiveEvaluatorAgent:
                 logger.info(
                     f"Coherence score with previous chapter ({chapter_number - 1}): {coherence_score:.4f}"
                 )
-                if coherence_score < config.REVISION_COHERENCE_THRESHOLD:
+                if coherence_score < settings.REVISION_COHERENCE_THRESHOLD:
                     needs_revision = True
                     problem_details_list.append(
                         {
                             "issue_category": "consistency",
-                            "problem_description": f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {config.REVISION_COHERENCE_THRESHOLD}). The narrative flow or tone may be disjointed.",
+                            "problem_description": f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {settings.REVISION_COHERENCE_THRESHOLD}). The narrative flow or tone may be disjointed.",
                             "quote_from_original_text": "N/A - General Issue",
                             "quote_char_start": None,
                             "quote_char_end": None,
@@ -436,7 +436,7 @@ class ComprehensiveEvaluatorAgent:
                         }
                     )
                     reasons_for_revision_summary.append(
-                        f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {config.REVISION_COHERENCE_THRESHOLD})."
+                        f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {settings.REVISION_COHERENCE_THRESHOLD})."
                     )
             else:
                 logger.warning(

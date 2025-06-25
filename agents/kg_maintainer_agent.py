@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from async_lru import alru_cache  # type: ignore
 from jinja2 import Template
 
-import config
+from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from data_access import (
@@ -29,7 +29,7 @@ from prompt_renderer import render_prompt
 logger = structlog.get_logger(__name__)
 
 
-@alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
+@alru_cache(maxsize=settings.SUMMARY_CACHE_SIZE)
 async def _llm_summarize_full_chapter_text(
     chapter_text: str, chapter_number: int
 ) -> Tuple[str, Optional[Dict[str, int]]]:
@@ -37,19 +37,19 @@ async def _llm_summarize_full_chapter_text(
     prompt = render_prompt(
         "kg_maintainer_agent/chapter_summary.j2",
         {
-            "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
             "chapter_number": chapter_number,
             "chapter_text": chapter_text,
         },
     )
     summary, usage_data = await llm_service.async_call_llm(
-        model_name=config.SMALL_MODEL,  # Using SMALL_MODEL for summarization
+        model_name=settings.SMALL_MODEL,  # Using SMALL_MODEL for summarization
         prompt=prompt,
-        temperature=config.Temperatures.SUMMARY,
-        max_tokens=config.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
+        temperature=settings.Temperatures.SUMMARY,
+        max_tokens=settings.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
         stream_to_disk=False,
-        frequency_penalty=config.FREQUENCY_PENALTY_SUMMARY,
-        presence_penalty=config.PRESENCE_PENALTY_SUMMARY,
+        frequency_penalty=settings.FREQUENCY_PENALTY_SUMMARY,
+        presence_penalty=settings.PRESENCE_PENALTY_SUMMARY,
         auto_clean_response=True,
     )
     summary_text = summary.strip()
@@ -126,7 +126,7 @@ Respond with only the predicate string, nothing else.
 class KGMaintainerAgent:
     """High level interface for KG parsing and persistence."""
 
-    def __init__(self, model_name: str = config.KNOWLEDGE_UPDATE_MODEL):
+    def __init__(self, model_name: str = settings.KNOWLEDGE_UPDATE_MODEL):
         self.model_name = model_name
         self.node_labels: List[str] = []
         self.relationship_types: List[str] = []
@@ -203,13 +203,13 @@ class KGMaintainerAgent:
     ) -> Tuple[Optional[str], Optional[Dict[str, int]]]:
         if (
             not chapter_text
-            or len(chapter_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
+            or len(chapter_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
         ):
             logger.warning(
                 "Chapter %s text too short for summarization (%d chars, min_req for meaningful summary: %d).",
                 chapter_number,
                 len(chapter_text or ""),
-                config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2,
+                settings.MIN_ACCEPTABLE_DRAFT_LENGTH // 2,
             )
             return None, None
 
@@ -260,7 +260,7 @@ class KGMaintainerAgent:
     ) -> Tuple[str, Optional[Dict[str, int]]]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
         protagonist = plot_outline.get(
-            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+            "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
 
         names = set(character_names or [])
@@ -268,7 +268,7 @@ class KGMaintainerAgent:
         prompt = render_prompt(
             "kg_maintainer_agent/extract_updates.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "protagonist": protagonist,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
@@ -284,12 +284,12 @@ class KGMaintainerAgent:
             text, usage = await llm_service.async_call_llm(
                 model_name=self.model_name,
                 prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
-                max_tokens=config.MAX_KG_TRIPLE_TOKENS,
+                temperature=settings.Temperatures.KG_EXTRACTION,
+                max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=False,
-                frequency_penalty=config.FREQUENCY_PENALTY_KG_EXTRACTION,
-                presence_penalty=config.PRESENCE_PENALTY_KG_EXTRACTION,
+                frequency_penalty=settings.FREQUENCY_PENALTY_KG_EXTRACTION,
+                presence_penalty=settings.PRESENCE_PENALTY_KG_EXTRACTION,
                 auto_clean_response=True,
             )
             return text, usage
@@ -556,9 +556,9 @@ class KGMaintainerAgent:
             {"character_name": char_name, "chapter_context": context_chapters},
         )
         enrichment_text, _ = await llm_service.async_call_llm(
-            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            model_name=settings.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt,
-            temperature=config.Temperatures.KG_EXTRACTION,
+            temperature=settings.Temperatures.KG_EXTRACTION,
             auto_clean_response=True,
         )
         if enrichment_text:
@@ -597,9 +597,9 @@ class KGMaintainerAgent:
             {"element": element_info, "chapter_context": context_chapters},
         )
         enrichment_text, _ = await llm_service.async_call_llm(
-            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            model_name=settings.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt,
-            temperature=config.Temperatures.KG_EXTRACTION,
+            temperature=settings.Temperatures.KG_EXTRACTION,
             auto_clean_response=True,
         )
         if enrichment_text:
@@ -688,7 +688,7 @@ class KGMaintainerAgent:
 
             prompt = jinja_template.render(entity1=context1, entity2=context2)
             llm_response, _ = await llm_service.async_call_llm(
-                model_name=config.KNOWLEDGE_UPDATE_MODEL,
+                model_name=settings.KNOWLEDGE_UPDATE_MODEL,
                 prompt=prompt,
                 temperature=0.1,
                 auto_clean_response=True,
@@ -750,9 +750,9 @@ class KGMaintainerAgent:
         for rel in dyn_rels:
             prompt = jinja_template.render(rel)
             new_type_raw, _ = await llm_service.async_call_llm(
-                model_name=config.MEDIUM_MODEL,
+                model_name=settings.MEDIUM_MODEL,
                 prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
+                temperature=settings.Temperatures.KG_EXTRACTION,
                 max_tokens=10,
                 auto_clean_response=True,
             )

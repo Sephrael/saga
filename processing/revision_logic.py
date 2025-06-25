@@ -10,7 +10,7 @@ import hashlib
 import structlog
 from typing import Any, Dict, List, Optional, Tuple
 
-import config
+from config import settings
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import PatchValidationAgent
@@ -187,12 +187,12 @@ async def _generate_single_patch_instruction_llm(
     """
     plan_focus_section_parts: List[str] = []
     plot_point_focus, _ = _get_plot_point_info(plot_outline, chapter_number)
-    max_plan_tokens_for_patch_prompt = config.MAX_CONTEXT_TOKENS // 2
+    max_plan_tokens_for_patch_prompt = settings.MAX_CONTEXT_TOKENS // 2
 
-    if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
+    if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
         formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback(
             chapter_plan,
-            config.PATCH_GENERATION_MODEL,
+            settings.PATCH_GENERATION_MODEL,
             max_plan_tokens_for_patch_prompt,
         )
         plan_focus_section_parts.append(formatted_plan)
@@ -250,7 +250,7 @@ async def _generate_single_patch_instruction_llm(
             'that addresses the "Problem Description" and "Suggested Fix Focus" as guided by the `length_expansion_instruction_header_str`. '
             "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
         )
-        max_patch_output_tokens = config.MAX_GENERATION_TOKENS // 2
+        max_patch_output_tokens = settings.MAX_GENERATION_TOKENS // 2
         max_patch_output_tokens = max(max_patch_output_tokens, 750)
         logger.info(
             f"Patch (Ch {chapter_number}, general expansion): Max output tokens set to {max_patch_output_tokens}."
@@ -271,12 +271,12 @@ async def _generate_single_patch_instruction_llm(
         )
         original_snippet_tokens = count_tokens(
             original_chapter_text_snippet_for_llm,
-            config.PATCH_GENERATION_MODEL,
+            settings.PATCH_GENERATION_MODEL,
         )
         expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
         max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
         max_patch_output_tokens = min(
-            max_patch_output_tokens, config.MAX_GENERATION_TOKENS // 2
+            max_patch_output_tokens, settings.MAX_GENERATION_TOKENS // 2
         )
         max_patch_output_tokens = max(max_patch_output_tokens, 200)
         logger.info(
@@ -287,7 +287,7 @@ async def _generate_single_patch_instruction_llm(
     )
 
     protagonist_name = plot_outline.get(
-        "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+        "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
     )
 
     few_shot_patch_example_str = """
@@ -303,7 +303,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
 """
 
     prompt_lines = []
-    if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+    if settings.ENABLE_LLM_NO_THINK_DIRECTIVE:
         prompt_lines.append("/no_think")
 
     prompt_lines.extend(
@@ -355,21 +355,21 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
     prompt = "\n".join(prompt_lines)
 
     logger.info(
-        f"Calling LLM ({config.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10), ' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10), ' ')}...' Max Output Tokens: {max_patch_output_tokens}"
+        f"Calling LLM ({settings.PATCH_GENERATION_MODEL}) for patch in Ch {chapter_number}. Problem: '{problem['problem_description'][:60].replace(chr(10), ' ')}...' Quote Text: '{original_quote_text_from_problem[:50].replace(chr(10), ' ')}...' Max Output Tokens: {max_patch_output_tokens}"
     )
 
     (
         replace_with_text_cleaned,
         usage_data,
     ) = await llm_service.async_call_llm(
-        model_name=config.PATCH_GENERATION_MODEL,
+        model_name=settings.PATCH_GENERATION_MODEL,
         prompt=prompt,
-        temperature=config.Temperatures.PATCH,
+        temperature=settings.Temperatures.PATCH,
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
         stream_to_disk=False,
-        frequency_penalty=config.FREQUENCY_PENALTY_PATCH,
-        presence_penalty=config.PRESENCE_PENALTY_PATCH,
+        frequency_penalty=settings.FREQUENCY_PENALTY_PATCH,
+        presence_penalty=settings.PRESENCE_PENALTY_PATCH,
         auto_clean_response=True,
     )
 
@@ -641,7 +641,7 @@ async def _generate_patch_instructions_logic(
 
     grouped = _group_problems_for_patch_generation(problems_to_fix)
 
-    groups_to_process = grouped[: config.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
+    groups_to_process = grouped[: settings.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
     if len(grouped) > len(groups_to_process):
         logger.warning(
             f"Found {len(grouped)} patch groups for Ch {chapter_number}. "
@@ -656,7 +656,7 @@ async def _generate_patch_instructions_logic(
         context_snippet = await _get_context_window_for_patch_llm(
             original_text,
             group_problem,
-            config.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW,
+            settings.MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW,
         )
 
         patch_instr: Optional[PatchInstruction] = None
@@ -666,7 +666,7 @@ async def _generate_patch_instructions_logic(
             "total_tokens": 0,
         }
 
-        for _ in range(config.PATCH_GENERATION_ATTEMPTS):
+        for _ in range(settings.PATCH_GENERATION_ATTEMPTS):
             patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
                 plot_outline,
                 context_snippet,
@@ -680,7 +680,7 @@ async def _generate_patch_instructions_logic(
                     usage_acc[k] += v
             if not patch_instr_tmp:
                 continue
-            if not config.AGENT_ENABLE_PATCH_VALIDATION:
+            if not settings.AGENT_ENABLE_PATCH_VALIDATION:
                 patch_instr = patch_instr_tmp
                 break
             valid, val_usage = await validator.validate_patch(
@@ -808,7 +808,7 @@ async def _apply_patches_to_text(
                 orig_emb is not None
                 and repl_emb is not None
                 and utils.numpy_cosine_similarity(orig_emb, repl_emb)
-                >= config.REVISION_SIMILARITY_ACCEPTANCE
+                >= settings.REVISION_SIMILARITY_ACCEPTANCE
             ):
                 logger.info(
                     f"Patch {patch_idx + 1}: replacement highly similar to original segment {segment_start}-{segment_end}. Skipping."
@@ -947,12 +947,12 @@ async def revise_chapter_draft_logic(
     patched_text: Optional[str] = None
     all_spans_in_patched_text: List[Tuple[int, int]] = already_patched_spans
 
-    if config.ENABLE_PATCH_BASED_REVISION:
+    if settings.ENABLE_PATCH_BASED_REVISION:
         logger.info(
             f"Attempting patch-based revision for Ch {chapter_number} with {len(problems_to_fix)} problem(s)."
         )
         sentence_embeddings = await _get_sentence_embeddings(original_text)
-        if config.AGENT_ENABLE_PATCH_VALIDATION:
+        if settings.AGENT_ENABLE_PATCH_VALIDATION:
             validator: PatchValidationAgent | Any = PatchValidationAgent()
         else:
 
@@ -1022,7 +1022,7 @@ async def revise_chapter_draft_logic(
         )
         _add_usage(post_usage)
         remaining = len(post_eval.get("problems_found", []))
-        if remaining <= config.POST_PATCH_PROBLEM_THRESHOLD:
+        if remaining <= settings.POST_PATCH_PROBLEM_THRESHOLD:
             use_patched_text_as_final = True
 
     if use_patched_text_as_final:
@@ -1034,10 +1034,10 @@ async def revise_chapter_draft_logic(
         logger.info(
             f"Proceeding with full chapter rewrite for Ch {chapter_number} as patching was ineffective or disabled."
         )
-        max_original_snippet_tokens = config.MAX_CONTEXT_TOKENS // 3
+        max_original_snippet_tokens = settings.MAX_CONTEXT_TOKENS // 3
         original_snippet = truncate_text_by_tokens(
             original_text,
-            config.REVISION_MODEL,
+            settings.REVISION_MODEL,
             max_original_snippet_tokens,
             truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)",
         )
@@ -1045,11 +1045,11 @@ async def revise_chapter_draft_logic(
         plot_point_focus_full_rewrite, _ = _get_plot_point_info(
             plot_outline, chapter_number
         )
-        max_plan_tokens_for_full_rewrite = config.MAX_CONTEXT_TOKENS // 2
-        if config.ENABLE_AGENTIC_PLANNING and chapter_plan:
+        max_plan_tokens_for_full_rewrite = settings.MAX_CONTEXT_TOKENS // 2
+        if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
             formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(
                 chapter_plan,
-                config.REVISION_MODEL,
+                settings.REVISION_MODEL,
                 max_plan_tokens_for_full_rewrite,
             )
             plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
@@ -1083,7 +1083,7 @@ async def revise_chapter_draft_logic(
                 [
                     "\n**Specific Focus on Expansion:** A key critique involves insufficient length and/or narrative depth. ",
                     "Your revision MUST substantially expand the narrative by incorporating more descriptive details, character thoughts/introspection, dialogue, actions, and sensory information. ",
-                    f"Aim for a chapter length of at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
+                    f"Aim for a chapter length of at least {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} characters.",
                 ]
             )
         length_issue_explicit_instruction_full_rewrite_str = "".join(
@@ -1091,7 +1091,7 @@ async def revise_chapter_draft_logic(
         )
 
         protagonist_name_full_rewrite = plot_outline.get(
-            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+            "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
 
         all_problem_descriptions_parts: List[str] = []
@@ -1120,7 +1120,7 @@ async def revise_chapter_draft_logic(
             )
 
         prompt_full_rewrite_lines = []
-        if config.ENABLE_LLM_NO_THINK_DIRECTIVE:
+        if settings.ENABLE_LLM_NO_THINK_DIRECTIVE:
             prompt_full_rewrite_lines.append("/no_think")
 
         prompt_full_rewrite_lines.extend(
@@ -1152,7 +1152,7 @@ async def revise_chapter_draft_logic(
                 "3.  If a Detailed Scene Plan is provided in `plan_focus_section_full_rewrite_str`, follow it closely. Otherwise, align with the `Original Chapter Focus`.",
                 "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
                 f"5.  Maintain the novel's established tone, style, and genre ('{plot_outline.get('genre', 'story')}').",
-                f"6.  Target a substantial chapter length, aiming for at least {config.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
+                f"6.  Target a substantial chapter length, aiming for at least {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
                 '7.  Output ONLY the rewritten chapter text.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.',
                 "",
                 f"--- BEGIN REVISED CHAPTER {chapter_number} TEXT ---",
@@ -1161,21 +1161,21 @@ async def revise_chapter_draft_logic(
         prompt_full_rewrite = "\n".join(prompt_full_rewrite_lines)
 
         logger.info(
-            f"Calling LLM ({config.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {config.MIN_ACCEPTABLE_DRAFT_LENGTH} chars."
+            f"Calling LLM ({settings.REVISION_MODEL}) for Ch {chapter_number} full rewrite. Min length: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} chars."
         )
 
         (
             raw_revised_llm_output_for_log,
             full_rewrite_usage,
         ) = await llm_service.async_call_llm(
-            model_name=config.REVISION_MODEL,
+            model_name=settings.REVISION_MODEL,
             prompt=prompt_full_rewrite,
-            temperature=config.Temperatures.REVISION,
+            temperature=settings.Temperatures.REVISION,
             max_tokens=None,
             allow_fallback=True,
             stream_to_disk=True,
-            frequency_penalty=config.FREQUENCY_PENALTY_REVISION,
-            presence_penalty=config.PRESENCE_PENALTY_REVISION,
+            frequency_penalty=settings.FREQUENCY_PENALTY_REVISION,
+            presence_penalty=settings.PRESENCE_PENALTY_REVISION,
             auto_clean_response=False,
         )
         _add_usage(full_rewrite_usage)
@@ -1201,9 +1201,9 @@ async def revise_chapter_draft_logic(
             else None,
         )
 
-    if len(final_revised_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+    if len(final_revised_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
         logger.warning(
-            f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {config.MIN_ACCEPTABLE_DRAFT_LENGTH}."
+            f"Final revised draft for ch {chapter_number} is short ({len(final_revised_text)} chars). Min target: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}."
         )
 
     logger.info(

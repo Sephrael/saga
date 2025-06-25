@@ -7,7 +7,7 @@ import structlog
 import time  # For Rich display updates
 from typing import Any, Dict, List, Optional, Tuple
 
-import config
+from config import settings
 import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.drafting_agent import DraftingAgent
@@ -100,7 +100,7 @@ class NANA_Orchestrator:
             return
 
         summaries: List[str] = []
-        start = max(1, self.chapter_count - config.CONTEXT_CHAPTER_COUNT + 1)
+        start = max(1, self.chapter_count - settings.CONTEXT_CHAPTER_COUNT + 1)
         for i in range(start, self.chapter_count + 1):
             chap = await chapter_queries.get_chapter_data_from_db(i)
             if chap and (chap.get("summary") or chap.get("text")):
@@ -135,16 +135,16 @@ class NANA_Orchestrator:
 
     def _update_novel_props_cache(self):
         self.novel_props_cache = {
-            "title": self.plot_outline.get("title", config.DEFAULT_PLOT_OUTLINE_TITLE),
-            "genre": self.plot_outline.get("genre", config.CONFIGURED_GENRE),
-            "theme": self.plot_outline.get("theme", config.CONFIGURED_THEME),
+            "title": self.plot_outline.get("title", settings.DEFAULT_PLOT_OUTLINE_TITLE),
+            "genre": self.plot_outline.get("genre", settings.CONFIGURED_GENRE),
+            "theme": self.plot_outline.get("theme", settings.CONFIGURED_THEME),
             "protagonist_name": self.plot_outline.get(
-                "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+                "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
             ),
             "character_arc": self.plot_outline.get("character_arc", "N/A"),
             "logline": self.plot_outline.get("logline", "N/A"),
             "setting": self.plot_outline.get(
-                "setting", config.CONFIGURED_SETTING_DESCRIPTION
+                "setting", settings.CONFIGURED_SETTING_DESCRIPTION
             ),
             "narrative_style": self.plot_outline.get("narrative_style", "N/A"),
             "tone": self.plot_outline.get("tone", "N/A"),
@@ -237,10 +237,10 @@ class NANA_Orchestrator:
         ] = await world_queries.get_world_building_from_db()
 
         await self.kg_maintainer_agent.persist_profiles(
-            profile_objs, config.KG_PREPOPULATION_CHAPTER_NUM
+            profile_objs, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
         await self.kg_maintainer_agent.persist_world(
-            world_objs, config.KG_PREPOPULATION_CHAPTER_NUM
+            world_objs, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
         logger.info("   Knowledge Graph pre-population step complete.")
         self._update_rich_display(step="KG Pre-population Complete")
@@ -269,7 +269,7 @@ class NANA_Orchestrator:
             logger.warning(
                 f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is empty or invalid. Using placeholder."
             )
-            return config.FILL_IN, plot_point_index
+            return settings.FILL_IN, plot_point_index
         else:
             logger.error(
                 f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points_list)}) for chapter {novel_chapter_number}."
@@ -301,10 +301,10 @@ class NANA_Orchestrator:
         self, chapter_number: int, final_text: str, raw_llm_log: str
     ):
         chapter_file_path = os.path.join(
-            config.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
+            settings.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
         )
         log_file_path = os.path.join(
-            config.CHAPTER_LOGS_DIR,
+            settings.CHAPTER_LOGS_DIR,
             f"chapter_{chapter_number:04d}_raw_llm_log.txt",
         )
         os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
@@ -328,7 +328,7 @@ class NANA_Orchestrator:
                 c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
             )
             file_name = f"chapter_{chapter_number:04d}_{safe_stage_desc}.txt"
-            file_path = os.path.join(config.DEBUG_OUTPUTS_DIR, file_name)
+            file_path = os.path.join(settings.DEBUG_OUTPUTS_DIR, file_name)
             await loop.run_in_executor(
                 None, self._save_debug_output_sync_io, file_path, content_str
             )
@@ -357,9 +357,9 @@ class NANA_Orchestrator:
             return text_to_dedup, 0
         try:
             deduper = TextDeduplicator(
-                similarity_threshold=config.DEDUPLICATION_SEMANTIC_THRESHOLD,
-                use_semantic_comparison=config.DEDUPLICATION_USE_SEMANTIC,
-                min_segment_length_chars=config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+                similarity_threshold=settings.DEDUPLICATION_SEMANTIC_THRESHOLD,
+                use_semantic_comparison=settings.DEDUPLICATION_USE_SEMANTIC,
+                min_segment_length_chars=settings.DEDUPLICATION_MIN_SEGMENT_LENGTH,
             )
             deduplicated_text, chars_removed = await deduper.deduplicate(
                 text_to_dedup, segment_level="sentence"
@@ -367,7 +367,7 @@ class NANA_Orchestrator:
             if chars_removed > 0:
                 method = (
                     "semantic"
-                    if config.DEDUPLICATION_USE_SEMANTIC
+                    if settings.DEDUPLICATION_USE_SEMANTIC
                     else "normalized string"
                 )
                 logger.info(
@@ -416,7 +416,7 @@ class NANA_Orchestrator:
 
         ignore_spans = patched_spans if attempt == 1 else None
 
-        if config.ENABLE_COMPREHENSIVE_EVALUATION:
+        if settings.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
                     self.plot_outline,
@@ -432,7 +432,7 @@ class NANA_Orchestrator:
             )
             task_names.append("evaluation")
 
-        if config.ENABLE_WORLD_CONTINUITY_CHECK:
+        if settings.ENABLE_WORLD_CONTINUITY_CHECK:
             tasks_to_run.append(
                 self.world_continuity_agent.check_consistency(
                     self.plot_outline,
@@ -485,9 +485,9 @@ class NANA_Orchestrator:
     ) -> Tuple[
         Optional[str], Optional[str], List[Tuple[int, int]], Optional[Dict[str, int]]
     ]:
-        if attempt >= config.MAX_REVISION_CYCLES_PER_CHAPTER:
+        if attempt >= settings.MAX_REVISION_CYCLES_PER_CHAPTER:
             logger.error(
-                f"NANA: Ch {novel_chapter_number} - Max revision attempts ({config.MAX_REVISION_CYCLES_PER_CHAPTER}) reached."
+                f"NANA: Ch {novel_chapter_number} - Max revision attempts ({settings.MAX_REVISION_CYCLES_PER_CHAPTER}) reached."
             )
             return current_text, None, patched_spans, None
 
@@ -551,9 +551,9 @@ class NANA_Orchestrator:
         chapter_plan: Optional[List[SceneDetail]] = chapter_plan_result
 
         if (
-            config.ENABLE_SCENE_PLAN_VALIDATION
+            settings.ENABLE_SCENE_PLAN_VALIDATION
             and chapter_plan is not None
-            and config.ENABLE_WORLD_CONTINUITY_CHECK
+            and settings.ENABLE_WORLD_CONTINUITY_CHECK
         ):
             (
                 plan_problems,
@@ -581,7 +581,7 @@ class NANA_Orchestrator:
             self, novel_chapter_number, chapter_plan
         )
 
-        if config.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
+        if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
                 f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only."
             )
@@ -654,8 +654,8 @@ class NANA_Orchestrator:
     ) -> Tuple[Optional[str], Optional[str], bool]:
         # FAST PATH: If all evaluation agents are disabled, just de-duplicate and return.
         if (
-            not config.ENABLE_COMPREHENSIVE_EVALUATION
-            and not config.ENABLE_WORLD_CONTINUITY_CHECK
+            not settings.ENABLE_COMPREHENSIVE_EVALUATION
+            and not settings.ENABLE_WORLD_CONTINUITY_CHECK
         ):
             logger.info(
                 f"NANA: Ch {novel_chapter_number} - All evaluation agents disabled. Applying de-duplication and finalizing draft."
@@ -721,7 +721,7 @@ class NANA_Orchestrator:
         revisions_made = 0
         needs_revision = True
         while (
-            needs_revision and revisions_made < config.MAX_REVISION_CYCLES_PER_CHAPTER
+            needs_revision and revisions_made < settings.MAX_REVISION_CYCLES_PER_CHAPTER
         ):
             attempt = revisions_made + 1
             if current_text_to_process is None:
@@ -823,7 +823,7 @@ class NANA_Orchestrator:
                         similarity = utils.numpy_cosine_similarity(
                             prev_embedding, new_embedding
                         )
-                        if similarity > config.REVISION_SIMILARITY_ACCEPTANCE:
+                        if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
                             logger.warning(
                                 f"NANA: Ch {novel_chapter_number} revision attempt {attempt} produced text too similar to previous (score: {similarity:.4f}). Stopping revisions."
                             )
@@ -872,7 +872,7 @@ class NANA_Orchestrator:
                 current_text_to_process,
             )
 
-        if len(current_text_to_process) < config.MIN_ACCEPTABLE_DRAFT_LENGTH:
+        if len(current_text_to_process) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
             logger.warning(
                 f"NANA: Final chosen text for Ch {novel_chapter_number} is short ({len(current_text_to_process)} chars). Marked as flawed for KG."
             )
@@ -1042,14 +1042,14 @@ class NANA_Orchestrator:
 
     def _validate_critical_configs(self) -> bool:
         critical_str_configs = {
-            "OLLAMA_EMBED_URL": config.OLLAMA_EMBED_URL,
-            "OPENAI_API_BASE": config.OPENAI_API_BASE,
-            "EMBEDDING_MODEL": config.EMBEDDING_MODEL,
-            "NEO4J_URI": config.NEO4J_URI,
-            "LARGE_MODEL": config.Models.LARGE,
-            "MEDIUM_MODEL": config.Models.MEDIUM,
-            "SMALL_MODEL": config.Models.SMALL,
-            "NARRATOR_MODEL": config.Models.NARRATOR,
+            "OLLAMA_EMBED_URL": settings.OLLAMA_EMBED_URL,
+            "OPENAI_API_BASE": settings.OPENAI_API_BASE,
+            "EMBEDDING_MODEL": settings.EMBEDDING_MODEL,
+            "NEO4J_URI": settings.NEO4J_URI,
+            "LARGE_MODEL": settings.Models.LARGE,
+            "MEDIUM_MODEL": settings.Models.MEDIUM,
+            "SMALL_MODEL": settings.Models.SMALL,
+            "NARRATOR_MODEL": settings.Models.NARRATOR,
         }
         missing_or_empty_configs = []
         for name, value in critical_str_configs.items():
@@ -1062,9 +1062,9 @@ class NANA_Orchestrator:
             )
             return False
 
-        if config.EXPECTED_EMBEDDING_DIM <= 0:
+        if settings.EXPECTED_EMBEDDING_DIM <= 0:
             logger.critical(
-                f"NANA CRITICAL CONFIGURATION ERROR: EXPECTED_EMBEDDING_DIM must be a positive integer, but is {config.EXPECTED_EMBEDDING_DIM}."
+                f"NANA CRITICAL CONFIGURATION ERROR: EXPECTED_EMBEDDING_DIM must be a positive integer, but is {settings.EXPECTED_EMBEDDING_DIM}."
             )
             return False
 
@@ -1156,16 +1156,16 @@ class NANA_Orchestrator:
             )
 
             if remaining_plot_points_to_address_in_novel <= 0:
-                await self._generate_plot_points_from_kg(config.CHAPTERS_PER_RUN)
+                await self._generate_plot_points_from_kg(settings.CHAPTERS_PER_RUN)
                 await self.refresh_plot_outline()
 
             logger.info(
-                f"NANA: Starting dynamic chapter loop (max {config.CHAPTERS_PER_RUN} chapter(s) this run)."
+                f"NANA: Starting dynamic chapter loop (max {settings.CHAPTERS_PER_RUN} chapter(s) this run)."
             )
 
             chapters_successfully_written_this_run = 0
             attempts_this_run = 0
-            while attempts_this_run < config.CHAPTERS_PER_RUN:
+            while attempts_this_run < settings.CHAPTERS_PER_RUN:
                 plot_points_raw = self.plot_outline.get("plot_points", [])
                 if isinstance(plot_points_raw, list):
                     plot_points_list = plot_points_raw
@@ -1191,7 +1191,7 @@ class NANA_Orchestrator:
 
                 if remaining_plot_points_to_address_in_novel <= 0:
                     await self._generate_plot_points_from_kg(
-                        config.CHAPTERS_PER_RUN - attempts_this_run
+                        settings.CHAPTERS_PER_RUN - attempts_this_run
                     )
                     await self.refresh_plot_outline()
                     plot_points_raw = self.plot_outline.get("plot_points", [])
@@ -1225,7 +1225,7 @@ class NANA_Orchestrator:
                 current_novel_chapter_number = self.chapter_count + 1
 
                 logger.info(
-                    f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} (attempt {attempts_this_run + 1}/{config.CHAPTERS_PER_RUN}) ---"
+                    f"\n--- NANA: Attempting Novel Chapter {current_novel_chapter_number} (attempt {attempts_this_run + 1}/{settings.CHAPTERS_PER_RUN}) ---"
                 )
                 self._update_rich_display(
                     chapter_num=current_novel_chapter_number,
@@ -1248,7 +1248,7 @@ class NANA_Orchestrator:
                         if (
                             current_novel_chapter_number > 0
                             and current_novel_chapter_number
-                            % config.KG_HEALING_INTERVAL
+                            % settings.KG_HEALING_INTERVAL
                             == 0
                         ):
                             logger.info(
@@ -1351,7 +1351,7 @@ class NANA_Orchestrator:
                 summaries.append(str(result["summary"]))
                 plot_outline["plot_points"].append(result["summary"])
 
-            if idx % config.KG_HEALING_INTERVAL == 0:
+            if idx % settings.KG_HEALING_INTERVAL == 0:
                 logger.info(
                     f"--- NANA: Triggering KG Healing/Enrichment after Ingestion Chunk {idx} ---"
                 )
@@ -1397,16 +1397,16 @@ def setup_logging_nana():
     # Step 2: Set up the root logger and clear previous configurations.
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
-    root_logger.setLevel(config.LOG_LEVEL_STR)
+    root_logger.setLevel(settings.LOG_LEVEL_STR)
 
     # Step 3: Configure handlers. RichHandler will now do the console formatting.
-    if config.LOG_FILE:
+    if settings.LOG_FILE:
         try:
-            log_dir = os.path.dirname(config.LOG_FILE)
+            log_dir = os.path.dirname(settings.LOG_FILE)
             if log_dir:
                 os.makedirs(log_dir, exist_ok=True)
             file_handler = logging.handlers.RotatingFileHandler(
-                config.LOG_FILE,
+                settings.LOG_FILE,
                 maxBytes=10 * 1024 * 1024,
                 backupCount=5,
                 mode="a",
@@ -1414,7 +1414,7 @@ def setup_logging_nana():
             )
             # Use a standard formatter for the file log.
             file_formatter = logging.Formatter(
-                config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
+                settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
             )
             file_handler.setFormatter(file_formatter)
             root_logger.addHandler(file_handler)
@@ -1422,11 +1422,11 @@ def setup_logging_nana():
             print(f"Error setting up file logger: {e}")
 
     # Configure Console Handler
-    if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
+    if RICH_AVAILABLE and settings.ENABLE_RICH_PROGRESS:
         # Let RichHandler control its own formatting.
         # We turn its decorations back ON and do NOT set a formatter on it.
         console_handler = RichHandler(
-            level=config.LOG_LEVEL_STR,
+            level=settings.LOG_LEVEL_STR,
             rich_tracebacks=True,
             show_path=False,
             markup=True,
@@ -1438,7 +1438,7 @@ def setup_logging_nana():
         # Fallback to a standard stream handler with a standard formatter
         stream_handler = logging.StreamHandler()
         stream_formatter = logging.Formatter(
-            config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT
+            settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
         )
         stream_handler.setFormatter(stream_formatter)
         root_logger.addHandler(stream_handler)
@@ -1452,5 +1452,5 @@ def setup_logging_nana():
     log = structlog.get_logger()
     log.info(
         "NANA Logging setup complete.",
-        log_level=logging.getLevelName(config.LOG_LEVEL_STR),
+        log_level=logging.getLevelName(settings.LOG_LEVEL_STR),
     )

@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-import config
+from config import settings
 import utils
 from core.llm_interface import llm_service
 
@@ -22,9 +22,9 @@ class TextDeduplicator:
 
     def __init__(
         self,
-        similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD,
-        use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,
-        min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+        similarity_threshold: float = settings.DEDUPLICATION_SEMANTIC_THRESHOLD,
+        use_semantic_comparison: bool = settings.DEDUPLICATION_USE_SEMANTIC,
+        min_segment_length_chars: int = settings.DEDUPLICATION_MIN_SEGMENT_LENGTH,
         prefer_newer: bool = False,
     ) -> None:
         self.similarity_threshold = similarity_threshold
