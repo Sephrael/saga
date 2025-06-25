@@ -1,5 +1,4 @@
 # data_access/world_queries.py
-import logging
 import structlog
 from typing import Any, Dict, List, Optional, Set, Tuple
 

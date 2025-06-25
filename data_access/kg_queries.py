@@ -11,6 +11,7 @@ from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_REL_CHAPTER_ADDED,
     NODE_LABELS,
+    RELATIONSHIP_TYPES,
 )
 
 logger = structlog.get_logger(__name__)

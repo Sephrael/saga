@@ -7,7 +7,12 @@ import structlog
 import time  # For Rich display updates
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import settings
+from config import (
+    CHAPTERS_DIR,
+    CHAPTER_LOGS_DIR,
+    DEBUG_OUTPUTS_DIR,
+    settings,
+)
 import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.drafting_agent import DraftingAgent
@@ -301,10 +306,10 @@ class NANA_Orchestrator:
         self, chapter_number: int, final_text: str, raw_llm_log: str
     ):
         chapter_file_path = os.path.join(
-            settings.CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
+            CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
         )
         log_file_path = os.path.join(
-            settings.CHAPTER_LOGS_DIR,
+            CHAPTER_LOGS_DIR,
             f"chapter_{chapter_number:04d}_raw_llm_log.txt",
         )
         os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
@@ -328,7 +333,7 @@ class NANA_Orchestrator:
                 c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
             )
             file_name = f"chapter_{chapter_number:04d}_{safe_stage_desc}.txt"
-            file_path = os.path.join(settings.DEBUG_OUTPUTS_DIR, file_name)
+            file_path = os.path.join(DEBUG_OUTPUTS_DIR, file_name)
             await loop.run_in_executor(
                 None, self._save_debug_output_sync_io, file_path, content_str
             )
@@ -1402,11 +1407,16 @@ def setup_logging_nana():
     # Step 3: Configure handlers. RichHandler will now do the console formatting.
     if settings.LOG_FILE:
         try:
-            log_dir = os.path.dirname(settings.LOG_FILE)
+            file_path = (
+                settings.LOG_FILE
+                if os.path.isabs(settings.LOG_FILE)
+                else os.path.join(settings.BASE_OUTPUT_DIR, settings.LOG_FILE)
+            )
+            log_dir = os.path.dirname(file_path)
             if log_dir:
                 os.makedirs(log_dir, exist_ok=True)
             file_handler = logging.handlers.RotatingFileHandler(
-                settings.LOG_FILE,
+                file_path,
                 maxBytes=10 * 1024 * 1024,
                 backupCount=5,
                 mode="a",

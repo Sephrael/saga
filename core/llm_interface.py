@@ -41,7 +41,6 @@ from async_lru import alru_cache
 
 # Local imports
 from config import settings # MODIFIED
-import structlog # Already structlog
 
 logger = structlog.get_logger(__name__)
 
