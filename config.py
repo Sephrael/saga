@@ -326,21 +326,35 @@ settings = SagaSettings()
 
 
 # --- Reconstruct objects for backward compatibility ---
-class ModelsCompat:
-    pass
+class _ModelsConfig: # Renamed from ModelsCompat, made "private"
+    LARGE: str
+    MEDIUM: str
+    SMALL: str
+    NARRATOR: str
 
+class _TemperaturesConfig: # Renamed from TempsCompat, made "private"
+    INITIAL_SETUP: float
+    DRAFTING: float
+    REVISION: float
+    PLANNING: float
+    EVALUATION: float
+    CONSISTENCY_CHECK: float
+    KG_EXTRACTION: float
+    SUMMARY: float
+    PATCH: float
+    DEFAULT: float
 
-class TempsCompat:
-    pass
+# It's better to instantiate these after settings is fully validated and available.
+# However, for minimal changes to existing code that might use config.Models directly at import time,
+# we define them here and assign later. MyPy will understand the attributes are there.
 
-
-Models = ModelsCompat()
+Models = _ModelsConfig() # Instance of the renamed class
 Models.LARGE = settings.LARGE_MODEL
 Models.MEDIUM = settings.MEDIUM_MODEL
 Models.SMALL = settings.SMALL_MODEL
 Models.NARRATOR = settings.NARRATOR_MODEL
 
-Temperatures = TempsCompat()
+Temperatures = _TemperaturesConfig() # Instance of the renamed class
 Temperatures.INITIAL_SETUP = settings.TEMPERATURE_INITIAL_SETUP
 Temperatures.DRAFTING = settings.TEMPERATURE_DRAFTING
 Temperatures.REVISION = settings.TEMPERATURE_REVISION
@@ -354,8 +368,12 @@ Temperatures.DEFAULT = 0.6  # Set default explicitly
 
 
 # Update module level variables for backward compatibility
-for _field in settings.model_fields:
-    globals()[_field] = getattr(settings, _field)
+# Removing this loop:
+# for _field in settings.model_fields:
+#     globals()[_field] = getattr(settings, _field)
+# Code should import 'settings' object directly, e.g., 'from config import settings'
+# and access attributes via 'settings.MY_SETTING'.
+# The Models and Temperatures objects above are kept for specific backward compatibility uses if needed.
 
 
 PLOT_OUTLINE_FILE = os.path.join(settings.BASE_OUTPUT_DIR, settings.PLOT_OUTLINE_FILE)

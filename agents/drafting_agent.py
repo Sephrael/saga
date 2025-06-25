@@ -1,5 +1,5 @@
 # drafting_agent.py
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
@@ -7,7 +7,7 @@ from core.llm_interface import count_tokens, llm_service, truncate_text_by_token
 from kg_maintainer.models import SceneDetail
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DraftingAgent:

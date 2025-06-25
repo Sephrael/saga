@@ -7,7 +7,7 @@ Context data for prompts is now formatted as plain text.
 
 import asyncio
 import hashlib
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
@@ -24,7 +24,7 @@ from kg_maintainer.models import (
     WorldItem,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 utils.load_spacy_model_if_needed()  # Ensure spaCy model is loaded when this module is imported
 
 

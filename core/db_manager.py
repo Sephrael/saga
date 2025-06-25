@@ -10,7 +10,7 @@ from neo4j import (  # type: ignore
 )
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
-import config
+from config import settings # MODIFIED
 from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
 
 logger = structlog.get_logger(__name__)
@@ -52,10 +52,10 @@ class Neo4jManagerSingleton:
 
         try:
             self.driver = AsyncGraphDatabase.driver(
-                config.NEO4J_URI, auth=(config.NEO4J_USER, config.NEO4J_PASSWORD)
+                settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
             )
             await self.driver.verify_connectivity()
-            self.logger.info(f"Successfully connected to Neo4j at {config.NEO4J_URI}")
+            self.logger.info(f"Successfully connected to Neo4j at {settings.NEO4J_URI}")
         except ServiceUnavailable as e:
             self.logger.critical(
                 f"Neo4j connection failed: {e}. Ensure the Neo4j database is running and accessible."
@@ -105,14 +105,14 @@ class Neo4jManagerSingleton:
         self, query: str, parameters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
             return await session.execute_read(self._execute_query_tx, query, parameters)
 
     async def execute_write_query(
         self, query: str, parameters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
             return await session.execute_write(
                 self._execute_query_tx, query, parameters
             )
@@ -125,7 +125,7 @@ class Neo4jManagerSingleton:
             return
 
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
             tx: Optional[AsyncManagedTransaction] = None
             try:
                 tx = await session.begin_transaction()
@@ -179,7 +179,7 @@ class Neo4jManagerSingleton:
         core_constraints_queries = [
             "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
             "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
-            f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
+            f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
             "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
             "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
             "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
@@ -207,7 +207,7 @@ class Neo4jManagerSingleton:
             "CREATE INDEX entity_created_chapter_idx IF NOT EXISTS FOR (e:Entity) ON (e.created_chapter)",
             "CREATE INDEX plotPoint_description_idx IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.description)",
             "CREATE INDEX valueNode_value_idx IF NOT EXISTS FOR (vn:ValueNode) ON (vn.value)",
-            f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
+            f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
         ]
 
         # Ensure schema tokens exist to avoid Neo4j warnings when
@@ -225,11 +225,11 @@ class Neo4jManagerSingleton:
         ]
 
         vector_index_query = f"""
-        CREATE VECTOR INDEX {config.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
-        FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.{config.NEO4J_VECTOR_PROPERTY_NAME})
+        CREATE VECTOR INDEX {settings.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
+        FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) ON (c.{settings.NEO4J_VECTOR_PROPERTY_NAME})
         OPTIONS {{indexConfig: {{
-            `vector.dimensions`: {config.NEO4J_VECTOR_DIMENSIONS},
-            `vector.similarity_function`: '{config.NEO4J_VECTOR_SIMILARITY_FUNCTION}'
+            `vector.dimensions`: {settings.NEO4J_VECTOR_DIMENSIONS},
+            `vector.similarity_function`: '{settings.NEO4J_VECTOR_SIMILARITY_FUNCTION}'
         }}}}
         """
 
@@ -296,7 +296,7 @@ class Neo4jManagerSingleton:
         if embedding_list is None:
             return None
         try:
-            return np.array(embedding_list, dtype=config.EMBEDDING_DTYPE)
+            return np.array(embedding_list, dtype=settings.EMBEDDING_DTYPE)
         except Exception as e:
             self.logger.error(
                 f"Error converting list to numpy embedding: {e}", exc_info=True

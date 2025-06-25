@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 import spacy
 from rapidfuzz.fuzz import partial_ratio_alignment
 
-import config
+from config import settings # MODIFIED
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__) # MODIFIED
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     pass
@@ -72,7 +72,7 @@ spacy_manager = SpaCyModelManager()
 
 def _is_fill_in(value: Any) -> bool:
     """Return True if ``value`` is the fill-in placeholder."""
-    return isinstance(value, str) and value.strip() == config.FILL_IN
+    return isinstance(value, str) and value.strip() == settings.FILL_IN
 
 
 def load_spacy_model_if_needed() -> None:

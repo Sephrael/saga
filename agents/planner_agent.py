@@ -1,6 +1,6 @@
 # planner_agent.py
 import json
-import logging
+import structlog
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,7 +15,7 @@ from prompt_data_getters import (
 )
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 SCENE_PLAN_KEY_MAP = {
     "scene": "scene_number",

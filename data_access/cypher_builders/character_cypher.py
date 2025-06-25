@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Tuple
 
 import structlog
 
-import config
+from config import settings # MODIFIED
 import utils
 from utils import kg_property_keys as kg_keys
 from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
@@ -81,7 +81,7 @@ def generate_character_node_cypher(
             MATCH (c:Character:Entity {name: $name})
             MERGE (ni)-[:HAS_CHARACTER]->(c)
             """,
-            {"novel_id": config.MAIN_NOVEL_INFO_NODE_ID, "name": profile.name},
+            {"novel_id": settings.MAIN_NOVEL_INFO_NODE_ID, "name": profile.name}, # MODIFIED
         )
     )
 

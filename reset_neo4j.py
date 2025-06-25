@@ -1,18 +1,17 @@
 # reset_neo4j.py
 import argparse
 import asyncio  # Required to call async methods
-import logging  # Added logging
+import structlog # MODIFIED
 import time
 from typing import Any, Dict, List  # Added for type hints
 
-import config  # To get default URI, user, pass if not provided via args
+from config import settings # MODIFIED
 from core.db_manager import Neo4jManagerSingleton  # Use the singleton
 
 # Configure a basic logger for this script
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Standard structlog configuration will be handled by config.py if this script is run as part of the app.
+# For standalone, basic logging is fine or could be enhanced.
+logger = structlog.get_logger(__name__) # MODIFIED
 
 
 # Create an instance of the manager to use its methods
@@ -35,16 +34,18 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             print("Operation cancelled.")
             return False
 
-    effective_uri = uri or config.NEO4J_URI
-    effective_user = user or config.NEO4J_USER
-    effective_password = password or config.NEO4J_PASSWORD
+    effective_uri = uri or settings.NEO4J_URI # MODIFIED
+    effective_user = user or settings.NEO4J_USER # MODIFIED
+    effective_password = password or settings.NEO4J_PASSWORD # MODIFIED
 
+    # Store original settings from the global settings object
     original_uri, original_user, original_pass = (
-        config.NEO4J_URI,
-        config.NEO4J_USER,
-        config.NEO4J_PASSWORD,
+        settings.NEO4J_URI,
+        settings.NEO4J_USER,
+        settings.NEO4J_PASSWORD,
     )
-    config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = (
+    # Temporarily override settings in the global settings object for the duration of this script execution
+    settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD = (
         effective_uri,
         effective_user,
         effective_password,
@@ -74,7 +75,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         # --- END: Added Connection Retry Logic ---
 
         async with neo4j_manager_instance.driver.session(
-            database=config.NEO4J_DATABASE
+            database=settings.NEO4J_DATABASE # MODIFIED
         ) as session:  # type: ignore
             result = await session.run("MATCH (n) RETURN count(n) as count")
             single_result = await result.single()
@@ -87,7 +88,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         nodes_deleted_total = 0
         while True:
             async with neo4j_manager_instance.driver.session(
-                database=config.NEO4J_DATABASE
+                database=settings.NEO4J_DATABASE # MODIFIED
             ) as session:  # type: ignore
                 tx = await session.begin_transaction()
                 result = await tx.run(
@@ -108,7 +109,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
 
         logger.info("Attempting to drop ALL user-defined constraints...")
         async with neo4j_manager_instance.driver.session(
-            database=config.NEO4J_DATABASE
+            database=settings.NEO4J_DATABASE # MODIFIED
         ) as session:  # type: ignore
             constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
             constraints_to_drop: List[str] = [
@@ -142,7 +143,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             "Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)..."
         )
         async with neo4j_manager_instance.driver.session(
-            database=config.NEO4J_DATABASE
+            database=settings.NEO4J_DATABASE # MODIFIED
         ) as session:  # type: ignore
             # Query for indexes, trying to filter out system ones if possible (type might not always be 'SYSTEM_LOOKUP')
             # The most reliable way is usually by name patterns if system indexes have those, or by excluding known types.
@@ -209,7 +210,8 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
         if neo4j_manager_instance.driver:
             await neo4j_manager_instance.close()
             logger.info("Connection closed.")
-        config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD = (
+        # Restore original settings to the global settings object
+        settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD = (
             original_uri,
             original_user,
             original_pass,
@@ -223,15 +225,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--uri",
         default=None,
-        help=f"Neo4j connection URI (default: {config.NEO4J_URI})",
+        help=f"Neo4j connection URI (default: {settings.NEO4J_URI})", # MODIFIED
     )
     parser.add_argument(
-        "--user", default=None, help=f"Neo4j username (default: {config.NEO4J_USER})"
+        "--user", default=None, help=f"Neo4j username (default: {settings.NEO4J_USER})" # MODIFIED
     )
     parser.add_argument(
         "--password",
         default=None,
-        help=f"Neo4j password (default: {config.NEO4J_PASSWORD})",
+        help=f"Neo4j password (default: {settings.NEO4J_PASSWORD})", # MODIFIED
     )
     parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
 

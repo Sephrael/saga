@@ -1,7 +1,7 @@
 # kg_maintainer_agent.py
 import asyncio
 import json
-import logging
+import structlog
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,7 +26,7 @@ from parsing_utils import (
 )
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)

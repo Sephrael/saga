@@ -5,7 +5,7 @@ Now includes a hybrid approach combining semantic context and Knowledge Graph fa
 """
 
 import asyncio
-import logging
+import structlog
 from typing import Any, List, Optional
 
 import config
@@ -20,7 +20,7 @@ from data_access import (
 from kg_maintainer.models import SceneDetail
 from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _get_nested_prop_from_agent_or_props(

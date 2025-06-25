@@ -2,7 +2,7 @@
 # from parsing_utils import split_text_into_blocks,
 # parse_key_value_block  # Removed
 import json
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import config
@@ -17,7 +17,7 @@ from prompt_data_getters import (
 )
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PROBLEM_DETAIL_KEY_MAP = {
     "issue_category": "issue_category",

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from async_lru import alru_cache
 
-import config
+from config import settings # MODIFIED
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -363,7 +363,7 @@ async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
         logger.warning("Neo4j: empty property key for NovelInfo query")
         return None
 
-    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
     query = f"MATCH (ni:NovelInfo:Entity {{id: $novel_id_param}}) RETURN ni.{property_key} AS value"
     try:
         results = await neo4j_manager.execute_read_query(
@@ -414,7 +414,7 @@ async def get_chapter_context_for_entity(
     WHERE chapter_num IS NOT NULL AND chapter_num > 0
 
     // Now fetch the chapter data
-    MATCH (c:{config.NEO4J_VECTOR_NODE_LABEL} {{number: chapter_num}})
+    MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL} {{number: chapter_num}})
     RETURN c.number as chapter_number, c.summary as summary, c.text as text
     ORDER BY c.number DESC
     LIMIT 5 // Limit context to most recent 5 chapters
@@ -615,7 +615,7 @@ async def get_defined_node_labels() -> List[str]:
     except Exception:
         logger.error("Failed to query defined node labels from Neo4j.", exc_info=True)
         # Fallback to constants if DB query fails
-        return list(config.NODE_LABELS)
+        return list(NODE_LABELS) # Reverted: This should use the imported constant, not settings
 
 
 @alru_cache(maxsize=1)
@@ -631,7 +631,7 @@ async def get_defined_relationship_types() -> List[str]:
             "Failed to query defined relationship types from Neo4j.", exc_info=True
         )
         # Fallback to constants if DB query fails
-        return list(config.RELATIONSHIP_TYPES)
+        return list(RELATIONSHIP_TYPES) # Reverted: This should use the imported constant, not settings
 
 
 async def promote_dynamic_relationships() -> int:

@@ -1,5 +1,5 @@
 # comprehensive_evaluator_agent.py
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
@@ -15,7 +15,7 @@ from prompt_data_getters import (
 )
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PROBLEM_DETAIL_KEY_MAP = {
     "issue_category": "issue_category",
