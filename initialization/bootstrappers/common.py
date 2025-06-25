@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import structlog
 
-import config
+from config import settings
 from core.llm_interface import llm_service
 from prompt_renderer import render_prompt
 
@@ -25,9 +25,9 @@ async def bootstrap_field(
     )
 
     response_text, usage_data = await llm_service.async_call_llm(
-        model_name=config.INITIAL_SETUP_MODEL,
+        model_name=settings.INITIAL_SETUP_MODEL,
         prompt=prompt,
-        temperature=config.Temperatures.INITIAL_SETUP,
+        temperature=settings.TEMPERATURE_INITIAL_SETUP,
         stream_to_disk=False,
         auto_clean_response=True,
     )

@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any, Dict, Optional
 
-import config
+from config import settings
 from core.llm_interface import llm_service
 
 try:
@@ -56,7 +56,7 @@ class RichDisplayManager:
         self._stop_event: asyncio.Event = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
 
-        if RICH_AVAILABLE and config.ENABLE_RICH_PROGRESS:
+        if RICH_AVAILABLE and settings.ENABLE_RICH_PROGRESS:
             self.group = Group(
                 self.status_text_novel_title,
                 self.status_text_current_chapter,

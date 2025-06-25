@@ -2,10 +2,10 @@
 # from parsing_utils import split_text_into_blocks,
 # parse_key_value_block  # Removed
 import json
-import logging
+import structlog
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import config
+from config import settings
 import utils  # MODIFIED: For spaCy functions
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import character_queries, kg_queries, world_queries
@@ -17,7 +17,7 @@ from prompt_data_getters import (
 )
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PROBLEM_DETAIL_KEY_MAP = {
     "issue_category": "issue_category",
@@ -28,7 +28,7 @@ PROBLEM_DETAIL_KEY_MAP = {
 
 
 class WorldContinuityAgent:
-    def __init__(self, model_name: str = config.EVALUATION_MODEL):
+    def __init__(self, model_name: str = settings.EVALUATION_MODEL):
         self.model_name = model_name
         logger.info(f"WorldContinuityAgent initialized with model: {self.model_name}")
         utils.load_spacy_model_if_needed()  # Ensure spaCy model is available
@@ -152,7 +152,7 @@ class WorldContinuityAgent:
         prompt = render_prompt(
             "world_continuity_agent/consistency_check.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,
@@ -180,7 +180,7 @@ class WorldContinuityAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.CONSISTENCY_CHECK,
+            temperature=settings.Temperatures.CONSISTENCY_CHECK,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,
@@ -267,7 +267,7 @@ class WorldContinuityAgent:
         prompt = render_prompt(
             "world_continuity_agent/plan_consistency_check.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,
@@ -292,7 +292,7 @@ class WorldContinuityAgent:
         cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.CONSISTENCY_CHECK,
+            temperature=settings.Temperatures.CONSISTENCY_CHECK,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,

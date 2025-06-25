@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Set
 
-import config
+from config import settings
 import utils  # For _is_fill_in
 
 # from state_manager import state_manager # No longer directly used
@@ -46,12 +46,12 @@ async def get_character_state_snippet_for_prompt(
         if (
             name != protagonist_name
             and len(char_names_to_process)
-            < config.PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET
+            < settings.PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET
         ):
             char_names_to_process.append(name)
         elif (
             len(char_names_to_process)
-            >= config.PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET
+            >= settings.PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET
         ):
             break
 
@@ -59,7 +59,7 @@ async def get_character_state_snippet_for_prompt(
         (current_chapter_num_for_filtering - 1)
         if current_chapter_num_for_filtering is not None
         and current_chapter_num_for_filtering > 0
-        else config.KG_PREPOPULATION_CHAPTER_NUM
+        else settings.KG_PREPOPULATION_CHAPTER_NUM
     )
 
     fetch_tasks = [
@@ -96,7 +96,7 @@ async def get_character_state_snippet_for_prompt(
                         profile_fallback.get(
                             "description", "Error fetching description."
                         )
-                    )[: config.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]
+                    )[: settings.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]
                 ).strip()
                 + "..."
             )
@@ -119,7 +119,7 @@ async def get_character_state_snippet_for_prompt(
                 dev_note_fb = (
                     (
                         str(profile_fallback.get(dev_keys_fb[0], "N/A"))[
-                            : config.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE
+                            : settings.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE
                         ]
                     ).strip()
                     + "..."
@@ -146,7 +146,7 @@ async def get_character_state_snippet_for_prompt(
             desc_fb = (
                 (
                     str(profile_fallback.get("description", "N/A"))[
-                        : config.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC
+                        : settings.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC
                     ]
                 ).strip()
                 + "..."
@@ -168,7 +168,7 @@ async def get_character_state_snippet_for_prompt(
                 dev_note_fb = (
                     (
                         str(profile_fallback.get(dev_keys_fb[0], "N/A"))[
-                            : config.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE
+                            : settings.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE
                         ]
                     ).strip()
                     + "..."
@@ -193,13 +193,13 @@ async def get_character_state_snippet_for_prompt(
                 profile_summary.get("most_recent_development_note", "N/A")
             )
             text_output_lines_list.append(
-                f"  Description Snippet: {(desc_text[: config.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]).strip()}..."
+                f"  Description Snippet: {(desc_text[: settings.PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC]).strip()}..."
             )
             text_output_lines_list.append(
                 f"  Current Status: {status_text}{provisional_note}"
             )
             text_output_lines_list.append(
-                f"  Most Recent Development Note: {(dev_note_text[: config.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE]).strip()}..."
+                f"  Most Recent Development Note: {(dev_note_text[: settings.PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE]).strip()}..."
             )
         text_output_lines_list.append("")
 
@@ -225,13 +225,13 @@ async def get_world_state_snippet_for_prompt(
         (current_chapter_num_for_filtering - 1)
         if current_chapter_num_for_filtering is not None
         and current_chapter_num_for_filtering > 0
-        else config.KG_PREPOPULATION_CHAPTER_NUM
+        else settings.KG_PREPOPULATION_CHAPTER_NUM
     )
 
     world_categories_to_fetch = {
-        "locations": config.PLANNING_CONTEXT_MAX_LOCATIONS_IN_SNIPPET,
-        "systems": config.PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET,
-        "factions": config.PLANNING_CONTEXT_MAX_FACTIONS_IN_SNIPPET,
+        "locations": settings.PLANNING_CONTEXT_MAX_LOCATIONS_IN_SNIPPET,
+        "systems": settings.PLANNING_CONTEXT_MAX_SYSTEMS_IN_SNIPPET,
+        "factions": settings.PLANNING_CONTEXT_MAX_FACTIONS_IN_SNIPPET,
     }
 
     fetch_tasks_world = []
@@ -426,8 +426,8 @@ def _add_provisional_notes_and_filter_developments(
     item_data = copy.deepcopy(item_data_original)
     prompt_notes_list = []
     effective_filter_chapter = (
-        config.KG_PREPOPULATION_CHAPTER_NUM
-        if up_to_chapter_inclusive == config.KG_PREPOPULATION_CHAPTER_NUM
+        settings.KG_PREPOPULATION_CHAPTER_NUM
+        if up_to_chapter_inclusive == settings.KG_PREPOPULATION_CHAPTER_NUM
         else up_to_chapter_inclusive
     )
 
@@ -543,7 +543,7 @@ async def get_filtered_character_profiles_for_prompt_plain_text(
         f"Fetching and formatting filtered character profiles as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
     )
     filter_chapter_for_profiles = (
-        config.KG_PREPOPULATION_CHAPTER_NUM
+        settings.KG_PREPOPULATION_CHAPTER_NUM
         if up_to_chapter_inclusive == 0
         else up_to_chapter_inclusive
     )
@@ -630,7 +630,7 @@ async def get_filtered_world_data_for_prompt_plain_text(
         f"Fetching and formatting filtered world data as PLAIN TEXT up to chapter {up_to_chapter_inclusive}."
     )
     filter_chapter_for_world = (
-        config.KG_PREPOPULATION_CHAPTER_NUM
+        settings.KG_PREPOPULATION_CHAPTER_NUM
         if up_to_chapter_inclusive == 0
         else up_to_chapter_inclusive
     )
@@ -771,7 +771,7 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         return "No KG facts applicable for pre-first chapter."
 
     kg_chapter_limit = (
-        config.KG_PREPOPULATION_CHAPTER_NUM
+        settings.KG_PREPOPULATION_CHAPTER_NUM
         if chapter_number == 1
         else chapter_number - 1
     )
@@ -780,7 +780,7 @@ async def get_reliable_kg_facts_for_drafting_prompt(
 
     plot_outline_data = plot_outline
     protagonist_name = plot_outline_data.get(
-        "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+        "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
     )
 
     characters_of_interest: Set[str] = (

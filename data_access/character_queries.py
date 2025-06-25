@@ -5,7 +5,7 @@ import structlog
 from async_lru import alru_cache  # type: ignore
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
-import config
+from config import settings # MODIFIED
 import utils
 from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
@@ -69,7 +69,7 @@ async def sync_characters(
 async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bool:
     logger.info("Synchronizing character profiles to Neo4j (non-destructive)...")
 
-    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID # MODIFIED
     statements: List[Tuple[str, Dict[str, Any]]] = []
 
     all_input_char_names: Set[str] = set(profiles_data.keys())
@@ -264,7 +264,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     "confidence": 1.0,
                 }
 
-                chapter_added_val = config.KG_PREPOPULATION_CHAPTER_NUM
+                chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM # MODIFIED
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
                     try:
                         chapter_added_val = int(rel_detail["chapter_added"])

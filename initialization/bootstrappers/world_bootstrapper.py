@@ -3,7 +3,7 @@ from typing import Any, Coroutine, Dict, List, Optional, Tuple
 
 import structlog
 
-import config
+from config import settings
 import utils
 from kg_maintainer.models import WorldItem
 
@@ -42,7 +42,7 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
                 "_overview_",
                 "_overview_",
                 {
-                    "description": config.CONFIGURED_SETTING_DESCRIPTION,
+                    "description": settings.CONFIGURED_SETTING_DESCRIPTION,
                     "source": "default_overview",
                 },
             )
@@ -62,10 +62,10 @@ def create_default_world() -> Dict[str, Dict[str, WorldItem]]:
 
     for cat_key in standard_categories:
         world_data[cat_key] = {
-            config.FILL_IN: WorldItem.from_dict(
+            settings.FILL_IN: WorldItem.from_dict(
                 cat_key,
-                config.FILL_IN,
-                {"description": config.FILL_IN, "source": "default_placeholder"},
+                settings.FILL_IN,
+                {"description": settings.FILL_IN, "source": "default_placeholder"},
             )
         }
 
@@ -161,7 +161,7 @@ async def bootstrap_world(
                 new_name_value
                 and isinstance(new_name_value, str)
                 and not utils._is_fill_in(new_name_value)
-                and new_name_value != config.FILL_IN
+                and new_name_value != settings.FILL_IN
             ):
                 original_item_obj = world_building[original_category][
                     original_fill_in_name

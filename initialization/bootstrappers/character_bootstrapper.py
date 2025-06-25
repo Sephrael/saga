@@ -3,7 +3,7 @@ from typing import Any, Coroutine, Dict, Optional, Tuple
 
 import structlog
 
-import config
+from config import settings
 import utils
 from kg_maintainer.models import CharacterProfile
 
@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 def create_default_characters(protagonist_name: str) -> Dict[str, CharacterProfile]:
     """Create a default protagonist profile."""
     profile = CharacterProfile(name=protagonist_name)
-    profile.description = config.FILL_IN
+    profile.description = settings.FILL_IN
     profile.updates["role"] = "protagonist"
     return {protagonist_name: profile}
 

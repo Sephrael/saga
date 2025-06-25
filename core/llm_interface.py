@@ -24,7 +24,7 @@ Copyright 2025 Dennis Lewis
 import asyncio
 import functools
 import json
-import logging
+import structlog
 import os
 import re
 import tempfile
@@ -40,9 +40,10 @@ import tiktoken
 from async_lru import alru_cache
 
 # Local imports
-import config
+from config import settings # MODIFIED
+import structlog # Already structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # Token parameter handling
@@ -57,7 +58,7 @@ def _completion_token_param(api_base: str) -> str:
 _tokenizer_cache: Dict[str, tiktoken.Encoding] = {}
 
 
-@functools.lru_cache(maxsize=config.TOKENIZER_CACHE_SIZE)
+@functools.lru_cache(maxsize=settings.TOKENIZER_CACHE_SIZE)
 def _get_tokenizer(model_name: str) -> Optional[tiktoken.Encoding]:
     """
     Gets a tiktoken encoder for the given model name, with caching.
@@ -71,9 +72,9 @@ def _get_tokenizer(model_name: str) -> Optional[tiktoken.Encoding]:
             encoder = tiktoken.encoding_for_model(model_name)
         except KeyError:
             logger.debug(
-                f"No direct tiktoken encoding for '{model_name}'. Using default '{config.TIKTOKEN_DEFAULT_ENCODING}'."
+                f"No direct tiktoken encoding for '{model_name}'. Using default '{settings.TIKTOKEN_DEFAULT_ENCODING}'."
             )
-            encoder = tiktoken.get_encoding(config.TIKTOKEN_DEFAULT_ENCODING)
+            encoder = tiktoken.get_encoding(settings.TIKTOKEN_DEFAULT_ENCODING)
 
         _tokenizer_cache[model_name] = encoder
         logger.debug(
@@ -82,7 +83,7 @@ def _get_tokenizer(model_name: str) -> Optional[tiktoken.Encoding]:
         return encoder
     except KeyError:
         logger.error(
-            f"Default tiktoken encoding '{config.TIKTOKEN_DEFAULT_ENCODING}' also not found. "
+            f"Default tiktoken encoding '{settings.TIKTOKEN_DEFAULT_ENCODING}' also not found. "
             f"Token counting will fall back to character-based heuristic for '{model_name}'."
         )
         return None
@@ -108,7 +109,7 @@ def count_tokens(text: str, model_name: str) -> int:
         return len(encoder.encode(text, allowed_special="all"))
     else:
         char_count = len(text)
-        token_estimate = int(char_count / config.FALLBACK_CHARS_PER_TOKEN)
+        token_estimate = int(char_count / settings.FALLBACK_CHARS_PER_TOKEN)
         logger.warning(
             f"count_tokens: Failed to get tokenizer for '{model_name}'. "
             f"Falling back to character-based estimate: {char_count} chars -> ~{token_estimate} tokens."
@@ -132,7 +133,7 @@ def truncate_text_by_tokens(
     encoder = _get_tokenizer(model_name)
 
     if not encoder:
-        max_chars = int(max_tokens * config.FALLBACK_CHARS_PER_TOKEN)
+        max_chars = int(max_tokens * settings.FALLBACK_CHARS_PER_TOKEN)
         logger.warning(
             f"truncate_text_by_tokens: Failed to get tokenizer for '{model_name}'. "
             f"Falling back to character-based truncation: {max_tokens} tokens -> ~{max_chars} chars."
@@ -185,7 +186,7 @@ def truncate_text_by_tokens(
         avg_chars_per_token = (
             len(text) / len(tokens)
             if len(tokens) > 0
-            else config.FALLBACK_CHARS_PER_TOKEN
+            else settings.FALLBACK_CHARS_PER_TOKEN
         )
         estimated_char_limit_for_content = int(
             content_tokens_to_keep * avg_chars_per_token
@@ -196,14 +197,14 @@ def truncate_text_by_tokens(
 class LLMService:
     """Utility class for interacting with LLM and embedding endpoints."""
 
-    def __init__(self, timeout: float = config.HTTPX_TIMEOUT):
+    def __init__(self, timeout: float = settings.HTTPX_TIMEOUT):
         # Use a single async client for all requests to reuse connections
         self._client = httpx.AsyncClient(timeout=timeout)
         # Add a semaphore to limit concurrent requests
-        self._semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_LLM_CALLS)
+        self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_LLM_CALLS)
         self.request_count = 0
         logger.info(
-            f"LLMService initialized with a concurrency limit of {config.MAX_CONCURRENT_LLM_CALLS}."
+            f"LLMService initialized with a concurrency limit of {settings.MAX_CONCURRENT_LLM_CALLS}."
         )
 
     async def aclose(self) -> None:
@@ -236,7 +237,7 @@ class LLMService:
             logger.error(f"Failed to convert embedding list to numpy array: {e}")
         return None
 
-    @alru_cache(maxsize=config.EMBEDDING_CACHE_SIZE)
+    @alru_cache(maxsize=settings.EMBEDDING_CACHE_SIZE)
     async def async_get_embedding(self, text: str) -> Optional[np.ndarray]:
         """
         Asynchronously retrieves an embedding for the given text from Ollama with retry logic.
@@ -248,18 +249,18 @@ class LLMService:
                 )
                 return None
 
-            payload = {"model": config.EMBEDDING_MODEL, "prompt": text.strip()}
+            payload = {"model": settings.EMBEDDING_MODEL, "prompt": text.strip()}
             logger.debug(
-                f"Async Embedding req to Ollama for model '{config.EMBEDDING_MODEL}': '{text[:80].replace(chr(10), ' ')}...'"
+                f"Async Embedding req to Ollama for model '{settings.EMBEDDING_MODEL}': '{text[:80].replace(chr(10), ' ')}...'"
             )
 
             last_exception: Optional[Exception] = None
-            for attempt in range(config.LLM_RETRY_ATTEMPTS):
+            for attempt in range(settings.LLM_RETRY_ATTEMPTS):
                 api_response: Optional[httpx.Response] = None
                 try:
                     self.request_count += 1
                     api_response = await self._client.post(
-                        f"{config.OLLAMA_EMBED_URL}/api/embeddings", json=payload
+                        f"{settings.OLLAMA_EMBED_URL}/api/embeddings", json=payload
                     )
                     api_response.raise_for_status()
                     data = api_response.json()
@@ -268,8 +269,8 @@ class LLMService:
                     if primary_key in data and isinstance(data[primary_key], list):
                         embedding = self._validate_embedding(
                             data[primary_key],
-                            config.EXPECTED_EMBEDDING_DIM,
-                            config.EMBEDDING_DTYPE,
+                            settings.EXPECTED_EMBEDDING_DIM,
+                            settings.EMBEDDING_DTYPE,
                         )
                         if embedding is not None:
                             return embedding
@@ -283,8 +284,8 @@ class LLMService:
                             ):
                                 embedding = self._validate_embedding(
                                     value,
-                                    config.EXPECTED_EMBEDDING_DIM,
-                                    config.EMBEDDING_DTYPE,
+                                    settings.EXPECTED_EMBEDDING_DIM,
+                                    settings.EMBEDDING_DTYPE,
                                 )
                                 if embedding is not None:
                                     logger.info(
@@ -302,13 +303,13 @@ class LLMService:
                 except httpx.TimeoutException as e_timeout:
                     last_exception = e_timeout
                     logger.warning(
-                        f"Ollama Embedding (Attempt {attempt + 1}/{config.LLM_RETRY_ATTEMPTS}): Request timed out: {e_timeout}"
+                        f"Ollama Embedding (Attempt {attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): Request timed out: {e_timeout}"
                     )
                 except httpx.HTTPStatusError as e_status:
                     last_exception = e_status
                     error_message_detail = f"HTTP status {e_status.response.status_code}: {e_status}. Body: {e_status.response.text[:200]}"
                     logger.warning(
-                        f"Ollama Embedding (Attempt {attempt + 1}/{config.LLM_RETRY_ATTEMPTS}): {error_message_detail}"
+                        f"Ollama Embedding (Attempt {attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): {error_message_detail}"
                     )
                     if 400 <= e_status.response.status_code < 500:
                         logger.error(
@@ -318,7 +319,7 @@ class LLMService:
                 except httpx.RequestError as e_req:
                     last_exception = e_req
                     logger.warning(
-                        f"Ollama Embedding (Attempt {attempt + 1}/{config.LLM_RETRY_ATTEMPTS}): Request error: {e_req}"
+                        f"Ollama Embedding (Attempt {attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): Request error: {e_req}"
                     )
                 except json.JSONDecodeError as e_json:
                     last_exception = e_json
@@ -328,18 +329,18 @@ class LLMService:
                         else "N/A"
                     )
                     logger.warning(
-                        f"Ollama Embedding (Attempt {attempt + 1}/{config.LLM_RETRY_ATTEMPTS}): Failed to decode JSON response: {e_json}. "
+                        f"Ollama Embedding (Attempt {attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): Failed to decode JSON response: {e_json}. "
                         f"Response text: {response_text_snippet}"
                     )
                 except Exception as e_exc:
                     last_exception = e_exc
                     logger.warning(
-                        f"Ollama Embedding (Attempt {attempt + 1}/{config.LLM_RETRY_ATTEMPTS}): Unexpected error: {e_exc}",
+                        f"Ollama Embedding (Attempt {attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): Unexpected error: {e_exc}",
                         exc_info=True,
                     )
 
-                if attempt < config.LLM_RETRY_ATTEMPTS - 1:
-                    delay = config.LLM_RETRY_DELAY_SECONDS * (2**attempt)
+                if attempt < settings.LLM_RETRY_ATTEMPTS - 1:
+                    delay = settings.LLM_RETRY_DELAY_SECONDS * (2**attempt)
                     retry_reason = (
                         type(last_exception).__name__
                         if last_exception
@@ -351,7 +352,7 @@ class LLMService:
                     await asyncio.sleep(delay)
                 else:
                     logger.error(
-                        f"Ollama Embedding: All {config.LLM_RETRY_ATTEMPTS} retry attempts failed. Last error: {last_exception}"
+                        f"Ollama Embedding: All {settings.LLM_RETRY_ATTEMPTS} retry attempts failed. Last error: {last_exception}"
                     )
                     return None
             return None
@@ -402,14 +403,14 @@ class LLMService:
 
             prompt_token_count = count_tokens(prompt, model_name)
             effective_max_output_tokens = (
-                max_tokens if max_tokens is not None else config.MAX_GENERATION_TOKENS
+                max_tokens if max_tokens is not None else settings.MAX_GENERATION_TOKENS
             )
             effective_temperature = (
-                temperature if temperature is not None else config.Temperatures.DEFAULT
+                temperature if temperature is not None else settings.TEMPERATURE_DEFAULT # Using Temperatures.DEFAULT from settings
             )
 
             headers = {
-                "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
                 "Content-Type": "application/json",
             }
 
@@ -418,9 +419,9 @@ class LLMService:
             current_usage_data: Optional[Dict[str, int]] = None
             final_text_response = ""
 
-            for attempt_num_overall in range(2):
+            for attempt_num_overall in range(2): # Max 1 primary + 1 fallback attempt
                 if is_fallback_attempt:
-                    if not allow_fallback or not config.FALLBACK_GENERATION_MODEL:
+                    if not allow_fallback or not settings.FALLBACK_GENERATION_MODEL:
                         logger.warning(
                             f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Aborting call."
                         )
@@ -429,19 +430,19 @@ class LLMService:
                                 final_text_response
                             )
                         return final_text_response, current_usage_data
-                    current_model_to_try = config.FALLBACK_GENERATION_MODEL
+                    current_model_to_try = settings.FALLBACK_GENERATION_MODEL
                     logger.info(
                         f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'."
                     )
-                    prompt_token_count = count_tokens(prompt, current_model_to_try)
-                    current_usage_data = None
+                    prompt_token_count = count_tokens(prompt, current_model_to_try) # Recalculate for fallback
+                    current_usage_data = None # Reset usage for fallback
 
-                token_param_name = _completion_token_param(config.OPENAI_API_BASE)
+                token_param_name = _completion_token_param(settings.OPENAI_API_BASE)
                 payload: Dict[str, Any] = {
                     "model": current_model_to_try,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": effective_temperature,
-                    "top_p": config.LLM_TOP_P,
+                    "top_p": settings.LLM_TOP_P,
                     token_param_name: effective_max_output_tokens,
                 }
 
@@ -451,9 +452,9 @@ class LLMService:
                     payload["presence_penalty"] = presence_penalty
 
                 last_exception_for_current_model: Optional[Exception] = None
-                temp_file_path_for_stream: Optional[str] = None
+                temp_file_path_for_stream: Optional[str] = None # For stream_to_disk
 
-                for retry_attempt in range(config.LLM_RETRY_ATTEMPTS):
+                for retry_attempt in range(settings.LLM_RETRY_ATTEMPTS):
                     penalty_log_str = ""
                     if frequency_penalty is not None:
                         penalty_log_str += f" FreqPen: {frequency_penalty}"
@@ -461,28 +462,28 @@ class LLMService:
                         penalty_log_str += f" PresPen: {presence_penalty}"
 
                     logger.debug(
-                        f"Async Calling LLM '{current_model_to_try}' (Attempt {retry_attempt + 1}/{config.LLM_RETRY_ATTEMPTS}, OverallAttempt: {attempt_num_overall + 1}). "
+                        f"Async Calling LLM '{current_model_to_try}' (Attempt {retry_attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}, OverallAttempt: {attempt_num_overall + 1}). "
                         f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. Max output tokens: {effective_max_output_tokens}. "
-                        f"Temp: {effective_temperature}, TopP: {config.LLM_TOP_P}{penalty_log_str}"
+                        f"Temp: {effective_temperature}, TopP: {settings.LLM_TOP_P}{penalty_log_str}"
                     )
-                    api_response_obj: Optional[httpx.Response] = None
+                    api_response_obj: Optional[httpx.Response] = None # For non-streamed response
 
                     try:
                         if stream_to_disk:
-                            payload["stream"] = True
+                            payload["stream"] = True # Ensure stream is enabled in payload
                             _tmp_fd, temp_file_path_for_stream = tempfile.mkstemp(
                                 suffix=".llmstream.txt", text=True
                             )
                             os.close(_tmp_fd)
 
                             accumulated_stream_content = ""
-                            stream_usage_data: Optional[Dict[str, int]] = None
+                            stream_usage_data: Optional[Dict[str, int]] = None # To capture usage from stream
 
                             try:
                                 self.request_count += 1
                                 async with self._client.stream(
                                     "POST",
-                                    f"{config.OPENAI_API_BASE}/chat/completions",
+                                    f"{settings.OPENAI_API_BASE}/chat/completions", # Use settings
                                     json=payload,
                                     headers=headers,
                                 ) as response_stream:
@@ -598,7 +599,7 @@ class LLMService:
                             payload["stream"] = False
                             self.request_count += 1
                             api_response_obj = await self._client.post(
-                                f"{config.OPENAI_API_BASE}/chat/completions",
+                                f"{settings.OPENAI_API_BASE}/chat/completions",
                                 json=payload,
                                 headers=headers,
                             )
@@ -708,10 +709,10 @@ class LLMService:
                                 )
 
                     if (
-                        retry_attempt < config.LLM_RETRY_ATTEMPTS - 1
+                        retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1 # Use settings
                         and last_exception_for_current_model is not None
                     ):
-                        delay = config.LLM_RETRY_DELAY_SECONDS * (2**retry_attempt)
+                        delay = settings.LLM_RETRY_DELAY_SECONDS * (2**retry_attempt) # Use settings
                         retry_reason = (
                             type(last_exception_for_current_model).__name__
                             if last_exception_for_current_model
@@ -723,11 +724,11 @@ class LLMService:
                         await asyncio.sleep(delay)
                     elif last_exception_for_current_model is not None:
                         logger.error(
-                            f"Async LLM ('{current_model_to_try}'): All {config.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}"
+                            f"Async LLM ('{current_model_to_try}'): All {settings.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}" # Use settings
                         )
 
-                if last_exception_for_current_model is None:
-                    break
+                if last_exception_for_current_model is None: # Successful call for current_model_to_try
+                    break # Exit the outer loop (primary/fallback attempts)
 
                 is_fallback_attempt = True
 

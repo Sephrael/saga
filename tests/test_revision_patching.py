@@ -4,7 +4,7 @@ import time
 import numpy as np
 import pytest
 
-import config
+from config import settings
 import processing.revision_logic as chapter_revision_logic
 import utils
 from agents.patch_validation_agent import PatchValidationAgent
@@ -198,8 +198,8 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_patch_validation_toggle(monkeypatch):
-    config.settings.AGENT_ENABLE_PATCH_VALIDATION = False
-    config.AGENT_ENABLE_PATCH_VALIDATION = False
+    settings.settings.AGENT_ENABLE_PATCH_VALIDATION = False
+    settings.AGENT_ENABLE_PATCH_VALIDATION = False
 
     called = False
 
@@ -382,8 +382,8 @@ async def test_patch_generation_concurrent(monkeypatch):
     assert len(res) == 3
     assert duration < 0.25
 
-    config.settings.AGENT_ENABLE_PATCH_VALIDATION = True
-    config.AGENT_ENABLE_PATCH_VALIDATION = True
+    settings.settings.AGENT_ENABLE_PATCH_VALIDATION = True
+    settings.AGENT_ENABLE_PATCH_VALIDATION = True
 
 
 @pytest.mark.asyncio

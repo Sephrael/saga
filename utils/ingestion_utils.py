@@ -1,9 +1,9 @@
-import config
+from config import settings # MODIFIED
 from typing import List
 
 
 def split_text_into_chapters(
-    text: str, max_chars: int = config.MIN_ACCEPTABLE_DRAFT_LENGTH
+    text: str, max_chars: int = settings.MIN_ACCEPTABLE_DRAFT_LENGTH
 ) -> List[str]:
     """Split text into pseudo-chapters by paragraph boundaries."""
     paragraphs = text.split("\n\n")
