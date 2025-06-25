@@ -47,6 +47,60 @@ async def test_fix_missing_world_element_core_fields(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fix_missing_world_element_core_fields_defaults(monkeypatch):
+    sample = [{"nid": 4, "id": None, "name": "Feeds", "category": None}]
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_read_query",
+        AsyncMock(return_value=sample),
+    )
+    captured = []
+
+    async def fake_batch(statements):
+        captured.extend(statements)
+
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_cypher_batch",
+        AsyncMock(side_effect=fake_batch),
+    )
+
+    updated = await world_queries.fix_missing_world_element_core_fields()
+
+    assert updated == 1
+    props = captured[0][1]["props"]
+    assert props["category"] == "unknown_category"
+    assert props["id"].startswith("unknown_category_")
+
+
+@pytest.mark.asyncio
+async def test_fix_missing_world_element_core_fields_blank(monkeypatch):
+    sample = [{"nid": 5, "id": " ", "name": "Hope", "category": ""}]
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_read_query",
+        AsyncMock(return_value=sample),
+    )
+    captured = []
+
+    async def fake_batch(statements):
+        captured.extend(statements)
+
+    monkeypatch.setattr(
+        world_queries.neo4j_manager,
+        "execute_cypher_batch",
+        AsyncMock(side_effect=fake_batch),
+    )
+
+    updated = await world_queries.fix_missing_world_element_core_fields()
+
+    assert updated == 1
+    props = captured[0][1]["props"]
+    assert props["category"] == "unknown_category"
+    assert props["id"].startswith("unknown_category_")
+
+
+@pytest.mark.asyncio
 async def test_get_world_building_runs_healer(monkeypatch):
     sample_we = [
         {

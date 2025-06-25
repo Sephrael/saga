@@ -102,7 +102,10 @@ class FinalizeAgent:
         from_flawed_draft: bool,
     ) -> Optional[Dict[str, int]]:
         raw_text, usage_data = await self.kg_agent._llm_extract_updates(
-            plot_outline, chapter_text, chapter_number
+            plot_outline,
+            chapter_text,
+            chapter_number,
+            list(character_profiles.keys()),
         )
         if not raw_text.strip():
             logger.warning("LLM extraction returned no text", chapter=chapter_number)

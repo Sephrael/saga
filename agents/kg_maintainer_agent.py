@@ -17,6 +17,7 @@ from data_access import (
     plot_queries,
     world_queries,
 )
+import utils
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
@@ -232,17 +233,38 @@ class KGMaintainerAgent:
             )
             return None, None
 
+    def _extract_character_names_from_text(self, text: str) -> List[str]:
+        """Return a list of probable character names from ``text``."""
+        utils.load_spacy_model_if_needed()
+        names: List[str] = []
+        nlp = utils.spacy_manager.nlp
+        if nlp is not None:
+            doc = nlp(text)
+            for ent in doc.ents:
+                if ent.label_ == "PERSON":
+                    cleaned = ent.text.strip()
+                    if cleaned and cleaned not in names:
+                        names.append(cleaned)
+        else:
+            for match in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text):
+                if match not in names:
+                    names.append(match)
+        return names
+
     async def _llm_extract_updates(
         self,
         plot_outline: Dict[str, Any],
         chapter_text: str,
         chapter_number: int,
+        character_names: Optional[List[str]] = None,
     ) -> Tuple[str, Optional[Dict[str, int]]]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
         protagonist = plot_outline.get(
             "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
         )
 
+        names = set(character_names or [])
+        names.update(self._extract_character_names_from_text(chapter_text))
         prompt = render_prompt(
             "kg_maintainer_agent/extract_updates.j2",
             {
@@ -254,6 +276,7 @@ class KGMaintainerAgent:
                 "chapter_text": chapter_text,
                 "available_node_labels": self.node_labels,
                 "available_relationship_types": self.relationship_types,
+                "character_names": sorted(names),
             },
         )
 
@@ -297,7 +320,10 @@ class KGMaintainerAgent:
         )
 
         raw_extracted_text, usage_data = await self._llm_extract_updates(
-            plot_outline, chapter_text, chapter_number
+            plot_outline,
+            chapter_text,
+            chapter_number,
+            list(character_profiles.keys()),
         )
 
         if not raw_extracted_text.strip():
