@@ -7,10 +7,10 @@ import numpy as np
 import structlog
 from core.llm_interface import llm_service
 from data_access import chapter_queries, kg_queries
-from models import CharacterProfile, WorldItem
 from parsing_utils import parse_rdf_triples_with_rdflib
 
 from agents.kg_maintainer_agent import KGMaintainerAgent
+from models import CharacterProfile, WorldItem
 
 logger = structlog.get_logger(__name__)
 

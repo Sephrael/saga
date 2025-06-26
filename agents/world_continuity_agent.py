@@ -9,13 +9,14 @@ import utils  # MODIFIED: For spaCy functions
 from config import settings
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import character_queries, kg_queries, world_queries
-from models import ProblemDetail, SceneDetail
 from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
     get_filtered_world_data_for_prompt_plain_text,
 )
 from prompt_renderer import render_prompt
+
+from models import ProblemDetail, SceneDetail
 
 logger = structlog.get_logger(__name__)
 

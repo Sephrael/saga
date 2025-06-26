@@ -6,7 +6,6 @@ import utils  # MODIFIED: For spaCy functions
 from config import settings
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import chapter_queries
-from models import EvaluationResult, ProblemDetail
 from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -14,6 +13,8 @@ from prompt_data_getters import (
     get_reliable_kg_facts_for_drafting_prompt,
 )
 from prompt_renderer import render_prompt
+
+from models import EvaluationResult, ProblemDetail
 
 logger = structlog.get_logger(__name__)
 
