@@ -1112,14 +1112,14 @@ class NANA_Orchestrator:
         self.run_start_time = time.time()
         self.display.start()
         try:
-            await neo4j_manager.connect()
-            await neo4j_manager.create_db_schema()
-            logger.info("NANA: Neo4j connection and schema verified.")
+            async with neo4j_manager:
+                await neo4j_manager.create_db_schema()
+                logger.info("NANA: Neo4j connection and schema verified.")
 
-            await self.kg_maintainer_agent.load_schema_from_db()
-            logger.info("NANA: KG schema loaded into maintainer agent.")
+                await self.kg_maintainer_agent.load_schema_from_db()
+                logger.info("NANA: KG schema loaded into maintainer agent.")
 
-            await self.async_init_orchestrator()
+                await self.async_init_orchestrator()
 
             plot_points_exist = (
                 self.plot_outline
@@ -1337,8 +1337,6 @@ class NANA_Orchestrator:
             self._update_rich_display(step="Critical Error in Main Loop")
         finally:
             await self.display.stop()
-            await neo4j_manager.close()
-            logger.info("NANA: Neo4j driver successfully closed on application exit.")
 
     async def run_ingestion_process(self, text_file: str) -> None:
         """Ingest existing text and populate the knowledge graph."""
@@ -1350,13 +1348,15 @@ class NANA_Orchestrator:
 
         self.display.start()
         self.run_start_time = time.time()
-        await neo4j_manager.connect()
-        await neo4j_manager.create_db_schema()
-        if neo4j_manager.driver is not None:
-            await plot_queries.ensure_novel_info()
-        else:
-            logger.warning("Neo4j driver not initialized. Skipping NovelInfo setup.")
-        await self.kg_maintainer_agent.load_schema_from_db()
+        async with neo4j_manager:
+            await neo4j_manager.create_db_schema()
+            if neo4j_manager.driver is not None:
+                await plot_queries.ensure_novel_info()
+            else:
+                logger.warning(
+                    "Neo4j driver not initialized. Skipping NovelInfo setup."
+                )
+            await self.kg_maintainer_agent.load_schema_from_db()
 
         with open(text_file, encoding="utf-8") as f:
             raw_text = f.read()
@@ -1397,7 +1397,6 @@ class NANA_Orchestrator:
         self.chapter_count = len(chunks)
         await plot_queries.save_plot_outline_to_db(plot_outline)
         await self.display.stop()
-        await neo4j_manager.close()
         logger.info("NANA: Ingestion process completed.")
 
 
