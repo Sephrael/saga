@@ -90,6 +90,31 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **(F) KG Maintenance (Periodic):**
         *   Every `KG_HEALING_INTERVAL` chapters, the `KGMaintainerAgent.heal_and_enrich_kg()` method is called to perform maintenance like resolving duplicate entities.
 
+## Revision Phase
+
+The revision stage is coordinated by `processing.revision_manager.RevisionManager`.
+It receives the draft text and `EvaluationResult` objects and chooses between
+patch-based fixes or a full rewrite. Patching is handled by
+`processing.patch_generator.PatchGenerator`, which groups related problems,
+generates patch instructions, optionally validates them via the
+`PatchValidationAgent`, and applies the changes. After patching, the chapter is
+re-evaluated and may loop through additional revision cycles up to
+`MAX_REVISION_CYCLES_PER_CHAPTER`.
+
+### Configuration Highlights
+
+Several options in `config.py` adjust revision behavior:
+
+* `ENABLE_PATCH_BASED_REVISION` – enable/disable the patch workflow.
+* `AGENT_ENABLE_PATCH_VALIDATION` – use the LLM-based validator before applying patches.
+* `MAX_PATCH_INSTRUCTIONS_TO_GENERATE` and `PATCH_GENERATION_ATTEMPTS` – control how many patches are produced and how many attempts are made.
+* `POST_PATCH_PROBLEM_THRESHOLD` – if remaining problems after patching are at or below this value, the patched text is accepted.
+* `REVISION_SIMILARITY_ACCEPTANCE` – skip patches that are too similar to the original text.
+* `MAX_REVISION_CYCLES_PER_CHAPTER` and `MIN_ACCEPTABLE_DRAFT_LENGTH` – govern full rewrite limits and minimum chapter length.
+
+Refer to `config.py` for additional settings such as temperatures and penalty
+values that further tune revision and patch prompts.
+
 ## Setup
 
 ### Prerequisites
