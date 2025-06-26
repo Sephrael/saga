@@ -367,6 +367,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             "2.  Generate a `replace_with` text according to the following:",
             prompt_instruction_for_replacement_scope_str,
             '3.  The `replace_with` text MUST address the "Problem Description" and "Suggested Fix Focus".',
+            "   Follow the 'Suggested Fix Focus' EXACTLY, e.g., 'Rewrite this paragraph so the protagonist thinks before acting, but without using any verbs that imply a physical body.'",
             # MODIFICATION START: Added instruction for deletion via empty string.
             "4.  If the best way to fix the problem is to **completely remove** the 'Original Quote' segment (e.g., it is redundant or unnecessary), then you **MUST output an empty string**. Do not write a justification; simply provide no text as the `replace_with` output.",
             # MODIFICATION END

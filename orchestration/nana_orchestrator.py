@@ -736,9 +736,11 @@ class NANA_Orchestrator:
                     f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text. Proceeding with previous draft, marked as flawed."
                 )
                 self._update_rich_display(
-                    step=f"Ch {novel_chapter_number} - Revision Failed (Flawed)"
+                    step=f"Ch {novel_chapter_number} - Revision Failed (Retrying)"
                 )
-                break
+                revisions_made += 1
+                needs_revision = True
+                continue
 
         return (
             current_text,
