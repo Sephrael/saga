@@ -62,7 +62,9 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **Initial Story Generation (`initialization.genesis`):**
         *   If `user_story_elements.yaml` is provided, it's parsed to bootstrap the plot, characters, and world.
         *   Otherwise, or if key elements are marked `[Fill-in]`, the `bootstrapper` modules fill in the plot outline, character profiles, and world-building details via targeted LLM calls.
+        *   The results are returned as typed models: `PlotOutline`, `CharacterProfile`, and `WorldBuilding` defined in `initialization.models`.
     *   **KG Pre-population:** The `KGMaintainerAgent` performs a full sync of this foundational story data to the Neo4j graph.
+    *   **Reset Neo4j:** To restart from a clean slate, stop the container with `docker-compose down -v` or run `python reset_neo4j.py --force` and then re-run `docker-compose up -d neo4j`.
 
 2.  **Chapter Generation Loop (up to `CHAPTERS_PER_RUN` chapters):**
     *   **(A) Prerequisites (`orchestration.chapter_flow`):**
@@ -157,12 +159,15 @@ OPENAI_API_KEY="nope"                       # API key (can be any string if serv
 OLLAMA_EMBED_URL="http://127.0.0.1:11434"     # URL of your Ollama API
 EMBEDDING_MODEL="nomic-embed-text:latest"   # Ensure this model is pulled in Ollama (ollama pull nomic-embed-text)
 EXPECTED_EMBEDDING_DIM="768"                # Dimension of your embedding model (e.g., 768 for nomic-embed-text)
+ENABLE_RERANKING="True"                     # Enable reranker step for vector search
+RERANKER_MODEL="mxbai-rerank-large-v1:latest" # Reranker model used when ENABLE_RERANKING is True
 
 # Neo4j Connection (Defaults usually work with the provided Docker setup)
 NEO4J_URI="bolt://localhost:7687"
 NEO4J_USER="neo4j"
 NEO4J_PASSWORD="saga_password"
 NEO4J_DATABASE="neo4j" # Or your specific database name if not default
+NEO4J_VECTOR_DIMENSIONS="768"                # Dimensions of your vector index
 
 # Model Aliases (Set to the names of models available on your OPENAI_API_BASE server)
 LARGE_MODEL="Qwen3-14B-Q4"    # Used for Planning, Evaluation
