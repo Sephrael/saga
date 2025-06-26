@@ -1,10 +1,10 @@
 from unittest.mock import AsyncMock
 
 import processing.patch_generator as patch_generator
-import processing.revision_logic as revision_logic
 import pytest
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from kg_maintainer.models import WorldItem
+from processing.revision_manager import RevisionManager
 
 
 @pytest.mark.asyncio
@@ -47,8 +47,9 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         AsyncMock(side_effect=fake_evaluate),
     )
 
-    res, _ = await revision_logic.revise_chapter_draft_logic(
-        {},
+    manager = RevisionManager()
+    res, _ = await manager.revise_chapter(
+        {"plot_points": ["focus"]},
         {},
         world_building,
         "Hello world",
