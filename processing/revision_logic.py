@@ -42,14 +42,40 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
 def _get_plot_point_info(
     plot_outline: dict[str, Any], chapter_number: int
 ) -> tuple[str | None, int]:
+    """
+    Gets the plot point information for a given chapter number.
+    This corrected version handles index out of bounds errors gracefully and
+    can extract descriptions from dictionary-based plot points.
+    """
     plot_points = plot_outline.get("plot_points", [])
     if not isinstance(plot_points, list) or not plot_points or chapter_number <= 0:
+        logger.error(
+            f"No plot points available or invalid chapter number ({chapter_number})."
+        )
         return None, -1
-    plot_point_index = min(chapter_number - 1, len(plot_points) - 1)
+
+    plot_point_index = chapter_number - 1
+
     if 0 <= plot_point_index < len(plot_points):
-        plot_point = plot_points[plot_point_index]
-        return str(plot_point) if plot_point is not None else None, plot_point_index
-    return None, -1
+        plot_point_item = plot_points[plot_point_index]
+        # Handle both simple string plot points and dictionary-based ones
+        plot_point_text = (
+            plot_point_item.get("description")
+            if isinstance(plot_point_item, dict)
+            else str(plot_point_item)
+        )
+        if isinstance(plot_point_text, str) and plot_point_text.strip():
+            return plot_point_text, plot_point_index
+        else:
+            logger.warning(
+                f"Plot point at index {plot_point_index} for chapter {chapter_number} is empty or invalid. Using placeholder."
+            )
+            return settings.FILL_IN, plot_point_index
+    else:
+        logger.error(
+            f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points)}) for chapter {chapter_number}."
+        )
+        return None, -1
 
 
 async def _get_context_window_for_patch_llm(
