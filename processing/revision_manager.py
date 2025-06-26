@@ -12,7 +12,7 @@ from kg_maintainer.models import (
     WorldItem,
 )
 
-from . import revision_logic
+from . import patch_generator, revision_logic
 
 logger = structlog.get_logger(__name__)
 
@@ -98,9 +98,6 @@ class RevisionManager:
                 chapter_number,
                 len(problems_to_fix),
             )
-            sentence_embeddings = await revision_logic._get_sentence_embeddings(
-                original_text
-            )
             if settings.AGENT_ENABLE_PATCH_VALIDATION:
                 validator: PatchValidationAgent | Any = PatchValidationAgent()
             else:
@@ -112,35 +109,27 @@ class RevisionManager:
                         return True, None
 
                 validator = _BypassValidator()
+
+            patcher = patch_generator.PatchGenerator()
             (
-                patch_instructions,
-                patch_usage,
-            ) = await revision_logic._generate_patch_instructions_logic(
+                patched_text,
+                all_spans_in_patched_text,
+            ) = await patcher.generate_and_apply(
                 plot_outline,
                 original_text,
                 problems_to_fix,
                 chapter_number,
                 hybrid_context_for_revision,
                 chapter_plan,
+                already_patched_spans,
                 validator,
             )
-            _add_usage(patch_usage)
-            if patch_instructions:
-                (
-                    patched_text,
-                    all_spans_in_patched_text,
-                ) = await revision_logic._apply_patches_to_text(
-                    original_text,
-                    patch_instructions,
-                    already_patched_spans,
-                    sentence_embeddings,
-                )
+            if patched_text != original_text:
                 logger.info(
-                    "Patch process for Ch %s: Generated %s patch instructions and applied them. Original len: %s, Patched text len: %s.",
+                    "Patch process for Ch %s produced revised text. Original len: %s, Patched text len: %s.",
                     chapter_number,
-                    len(patch_instructions),
                     len(original_text),
-                    len(patched_text or ""),
+                    len(patched_text),
                 )
             else:
                 logger.warning(
@@ -162,7 +151,7 @@ class RevisionManager:
                 for cat, items in world_building.items()
                 if isinstance(items, dict)
             }
-            plot_focus, plot_idx = revision_logic._get_plot_point_info(
+            plot_focus, plot_idx = patch_generator._get_plot_point_info(
                 plot_outline, chapter_number
             )
             post_eval, post_usage = await evaluator.evaluate_chapter_draft(
@@ -199,13 +188,13 @@ class RevisionManager:
                 truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)",
             )
             plan_focus_section_full_rewrite_parts: list[str] = []
-            plot_point_focus_full_rewrite, _ = revision_logic._get_plot_point_info(
+            plot_point_focus_full_rewrite, _ = patch_generator._get_plot_point_info(
                 plot_outline, chapter_number
             )
             max_plan_tokens_for_full_rewrite = settings.MAX_CONTEXT_TOKENS // 2
             if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
                 formatted_plan_fr = (
-                    revision_logic._get_formatted_scene_plan_from_agent_or_fallback(
+                    patch_generator._get_formatted_scene_plan_from_agent_or_fallback(
                         chapter_plan,
                         settings.REVISION_MODEL,
                         max_plan_tokens_for_full_rewrite,

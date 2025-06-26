@@ -2,13 +2,13 @@ import asyncio
 import time
 
 import numpy as np
-import processing.revision_logic as chapter_revision_logic
+import processing.patch_generator as patch_generator
 import pytest
 import utils
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service
-from processing.revision_logic import _apply_patches_to_text
+from processing.patch_generator import _apply_patches_to_text
 
 
 @pytest.mark.asyncio
@@ -229,7 +229,7 @@ async def test_patch_validation_toggle(monkeypatch):
         )
 
     monkeypatch.setattr(
-        chapter_revision_logic,
+        patch_generator,
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )
@@ -246,7 +246,7 @@ async def test_patch_validation_toggle(monkeypatch):
     ]
 
     validator = PatchValidationAgent()
-    result, _ = await chapter_revision_logic._generate_patch_instructions_logic(
+    result, _ = await patch_generator._generate_patch_instructions_logic(
         {},
         "Hello world",
         problems,
@@ -292,8 +292,8 @@ async def test_sentence_embedding_cache(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
     cache: dict[str, list[tuple[int, int, object]]] = {}
-    await chapter_revision_logic._get_sentence_embeddings(text, cache)
-    await chapter_revision_logic._get_sentence_embeddings(text, cache)
+    await patch_generator._get_sentence_embeddings(text, cache)
+    await patch_generator._get_sentence_embeddings(text, cache)
     assert call_count == 2
 
 
@@ -346,7 +346,7 @@ async def test_patch_generation_concurrent(monkeypatch):
         return True, None
 
     monkeypatch.setattr(
-        chapter_revision_logic,
+        patch_generator,
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )
@@ -367,7 +367,7 @@ async def test_patch_generation_concurrent(monkeypatch):
     ]
 
     start = time.monotonic()
-    res, _ = await chapter_revision_logic._generate_patch_instructions_logic(
+    res, _ = await patch_generator._generate_patch_instructions_logic(
         {},
         "Hello world",
         problems,
@@ -412,5 +412,5 @@ async def test_deduplicate_problems():
         },
     ]
 
-    result = chapter_revision_logic._deduplicate_problems(problems)
+    result = patch_generator._deduplicate_problems(problems)
     assert len(result) == 2

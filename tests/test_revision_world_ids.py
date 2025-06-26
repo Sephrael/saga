@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+import processing.patch_generator as patch_generator
 import processing.revision_logic as revision_logic
 import pytest
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
@@ -37,9 +38,9 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         return {"problems_found": []}, None
 
     monkeypatch.setattr(
-        revision_logic, "_generate_patch_instructions_logic", fake_generate
+        patch_generator, "_generate_patch_instructions_logic", fake_generate
     )
-    monkeypatch.setattr(revision_logic, "_apply_patches_to_text", fake_apply)
+    monkeypatch.setattr(patch_generator, "_apply_patches_to_text", fake_apply)
     monkeypatch.setattr(
         ComprehensiveEvaluatorAgent,
         "evaluate_chapter_draft",
