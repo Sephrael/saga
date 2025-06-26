@@ -31,6 +31,11 @@ class AgentBaseModel(BaseModel):
     def __getitem__(self, item: str) -> Any:  # pragma: no cover - convenience
         return getattr(self, item)
 
+    def __setitem__(
+        self, key: str, value: Any
+    ) -> None:  # pragma: no cover - convenience
+        setattr(self, key, value)
+
     def get(
         self, item: str, default: Any = None
     ) -> Any:  # pragma: no cover - convenience
