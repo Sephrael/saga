@@ -38,7 +38,7 @@ from kg_maintainer.models import (
 )
 from models.user_input_models import UserStoryInputModel, user_story_to_objects
 from processing.context_generator import generate_hybrid_chapter_context_logic
-from processing.revision_logic import revise_chapter_draft_logic
+from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from ui.rich_display import RichDisplayManager
 from utils.ingestion_utils import split_text_into_chapters
@@ -70,6 +70,7 @@ class NANA_Orchestrator:
         self.world_continuity_agent = WorldContinuityAgent()
         self.kg_maintainer_agent = KGMaintainerAgent()
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
+        self.revision_manager = RevisionManager()
 
         self.plot_outline: dict[str, Any] = {}
         self.chapter_count: int = 0
@@ -491,7 +492,7 @@ class NANA_Orchestrator:
         tuple[str, str | None, list[tuple[int, int]]] | None, dict[str, int] | None
     ]:
         """Run the revision logic and return raw results and usage."""
-        return await revise_chapter_draft_logic(
+        return await self.revision_manager.revise_chapter(
             self.plot_outline,
             await character_queries.get_character_profiles_from_db(),
             await world_queries.get_world_building_from_db(),
