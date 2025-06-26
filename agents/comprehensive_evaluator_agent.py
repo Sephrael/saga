@@ -203,6 +203,12 @@ class ComprehensiveEvaluatorAgent:
 [
   {
     "issue_category": "CONSISTENCY",
+    "problem_description": "Sága's corporeality is inconsistent with earlier chapters where it is clearly incorporeal.",
+    "quote_from_original_text": "Saga darted through the crowd, shoving people aside with its own hands.",
+    "suggested_fix_focus": "Rewrite this passage to describe Sága's actions without using physical verbs. Depict its interaction through its control of the environment or remote avatars, consistent with its 'incorporeal' nature."
+  },
+  {
+    "issue_category": "CONSISTENCY",
     "problem_description": "Character Elara states she has never left her village, but her profile mentions she trained at the Royal Academy in the Capital.",
     "quote_from_original_text": "I've never seen anything beyond these village walls,\\" Elara sighed, gazing at the distant mountains.",
     "suggested_fix_focus": "Adjust Elara's dialogue to align with her established backstory of training in the Capital, or reconcile this statement with her past (e.g., she's being metaphorical or hiding her past)."
