@@ -384,31 +384,31 @@ class ComprehensiveEvaluatorAgent:
         if not draft_text:
             needs_revision = True
             problem_details_list.append(
-                {
-                    "issue_category": "meta",
-                    "problem_description": "Draft is empty.",
-                    "quote_from_original_text": "N/A - General Issue",
-                    "quote_char_start": None,
-                    "quote_char_end": None,
-                    "sentence_char_start": None,
-                    "sentence_char_end": None,
-                    "suggested_fix_focus": "Generate content for the chapter.",
-                }
+                ProblemDetail(
+                    issue_category="meta",
+                    problem_description="Draft is empty.",
+                    quote_from_original_text="N/A - General Issue",
+                    quote_char_start=None,
+                    quote_char_end=None,
+                    sentence_char_start=None,
+                    sentence_char_end=None,
+                    suggested_fix_focus="Generate content for the chapter.",
+                )
             )
             reasons_for_revision_summary.append("Draft is empty.")
         elif len(draft_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
             needs_revision = True
             problem_details_list.append(
-                {
-                    "issue_category": "narrative_depth_and_length",
-                    "problem_description": f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
-                    "quote_from_original_text": "N/A - General Issue",
-                    "quote_char_start": None,
-                    "quote_char_end": None,
-                    "sentence_char_start": None,
-                    "sentence_char_end": None,
-                    "suggested_fix_focus": f"Expand content significantly across multiple scenes/sections to meet the {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue.",
-                }
+                ProblemDetail(
+                    issue_category="narrative_depth_and_length",
+                    problem_description=f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}.",
+                    quote_from_original_text="N/A - General Issue",
+                    quote_char_start=None,
+                    quote_char_end=None,
+                    sentence_char_start=None,
+                    sentence_char_end=None,
+                    suggested_fix_focus=f"Expand content significantly across multiple scenes/sections to meet the {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} character target. Focus on adding descriptive detail, character introspection, and dialogue.",
+                )
             )
             reasons_for_revision_summary.append(
                 f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}."
@@ -430,16 +430,16 @@ class ComprehensiveEvaluatorAgent:
                 if coherence_score < settings.REVISION_COHERENCE_THRESHOLD:
                     needs_revision = True
                     problem_details_list.append(
-                        {
-                            "issue_category": "consistency",
-                            "problem_description": f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {settings.REVISION_COHERENCE_THRESHOLD}). The narrative flow or tone may be disjointed.",
-                            "quote_from_original_text": "N/A - General Issue",
-                            "quote_char_start": None,
-                            "quote_char_end": None,
-                            "sentence_char_start": None,
-                            "sentence_char_end": None,
-                            "suggested_fix_focus": "Review the transition from the previous chapter. Ensure stylistic, tonal, and narrative continuity. This might involve adjusting opening scenes or overall pacing.",
-                        }
+                        ProblemDetail(
+                            issue_category="consistency",
+                            problem_description=f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {settings.REVISION_COHERENCE_THRESHOLD}). The narrative flow or tone may be disjointed.",
+                            quote_from_original_text="N/A - General Issue",
+                            quote_char_start=None,
+                            quote_char_end=None,
+                            sentence_char_start=None,
+                            sentence_char_end=None,
+                            suggested_fix_focus="Review the transition from the previous chapter. Ensure stylistic, tonal, and narrative continuity. This might involve adjusting opening scenes or overall pacing.",
+                        )
                     )
                     reasons_for_revision_summary.append(
                         f"Low coherence with previous chapter (Score: {coherence_score:.4f}, Threshold: {settings.REVISION_COHERENCE_THRESHOLD})."
@@ -491,7 +491,7 @@ class ComprehensiveEvaluatorAgent:
                 "meta": "Meta/Uncategorized issues identified by LLM.",
             }
             for prob in parsed_problems_from_llm:
-                reason = category_map_to_reason.get(prob["issue_category"])
+                reason = category_map_to_reason.get(prob.issue_category)
                 if reason and reason not in reasons_for_revision_summary:
                     reasons_for_revision_summary.append(reason)
         elif (
@@ -502,16 +502,16 @@ class ComprehensiveEvaluatorAgent:
                 f"LLM evaluation for Ch {chapter_number} provided text, but no problems were parsed. Text: '{llm_eval_text_output[:200]}...'"
             )
             problem_details_list.append(
-                {
-                    "issue_category": "meta",
-                    "problem_description": "LLM evaluation output was non-empty but could not be parsed into specific problems.",
-                    "quote_from_original_text": "N/A - LLM Output Parsing",
-                    "quote_char_start": None,
-                    "quote_char_end": None,
-                    "sentence_char_start": None,
-                    "sentence_char_end": None,
-                    "suggested_fix_focus": "Review LLM evaluation output and parsing logic. The output might not conform to the expected problem format.",
-                }
+                ProblemDetail(
+                    issue_category="meta",
+                    problem_description="LLM evaluation output was non-empty but could not be parsed into specific problems.",
+                    quote_from_original_text="N/A - LLM Output Parsing",
+                    quote_char_start=None,
+                    quote_char_end=None,
+                    sentence_char_start=None,
+                    sentence_char_end=None,
+                    suggested_fix_focus="Review LLM evaluation output and parsing logic. The output might not conform to the expected problem format.",
+                )
             )
             if "LLM evaluation output unparsable." not in reasons_for_revision_summary:
                 reasons_for_revision_summary.append("LLM evaluation output unparsable.")
