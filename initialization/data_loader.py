@@ -4,6 +4,7 @@ import structlog
 from config import settings
 from kg_maintainer.models import CharacterProfile, WorldItem
 from models.user_input_models import UserStoryInputModel, user_story_to_objects
+from pydantic import ValidationError
 from yaml_parser import load_yaml_file
 
 logger = structlog.get_logger(__name__)
@@ -16,8 +17,8 @@ def load_user_supplied_model() -> UserStoryInputModel | None:
         return None
     try:
         return UserStoryInputModel(**data)
-    except Exception as exc:  # pragma: no cover
-        logger.error("Failed to parse user story YAML: %s", exc)
+    except ValidationError:  # pragma: no cover
+        logger.exception("Failed to parse user story YAML")
         return None
 
 
