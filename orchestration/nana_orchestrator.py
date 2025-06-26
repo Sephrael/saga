@@ -28,7 +28,9 @@ from data_access import (
     plot_queries,
     world_queries,
 )
+from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
+from initialization.models import PlotOutline
 from kg_maintainer.models import (
     CharacterProfile,
     EvaluationResult,
@@ -36,13 +38,13 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
-from models.user_input_models import UserStoryInputModel, user_story_to_objects
 from processing.context_generator import generate_hybrid_chapter_context_logic
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from ui.rich_display import RichDisplayManager
 from utils.ingestion_utils import split_text_into_chapters
 
+from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
 from orchestration.token_tracker import TokenTracker
 
@@ -72,7 +74,7 @@ class NANA_Orchestrator:
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
         self.revision_manager = RevisionManager()
 
-        self.plot_outline: dict[str, Any] = {}
+        self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
         self.novel_props_cache: dict[str, Any] = {}
         self.token_tracker = TokenTracker()
@@ -137,7 +139,7 @@ class NANA_Orchestrator:
 
     def load_state_from_user_model(self, model: UserStoryInputModel) -> None:
         """Populate orchestrator state from a user-provided model."""
-        plot_outline, _, _ = user_story_to_objects(model)
+        plot_outline, _, _ = convert_model_to_objects(model)
         self.plot_outline = plot_outline
 
     def _update_novel_props_cache(self):
@@ -167,7 +169,7 @@ class NANA_Orchestrator:
         """Reload plot outline from the database."""
         result = await plot_queries.get_plot_outline_from_db()
         if isinstance(result, dict):
-            self.plot_outline = result
+            self.plot_outline = PlotOutline(**result)
             self._update_novel_props_cache()
         else:
             logger.error("Failed to refresh plot outline from DB: %s", result)
@@ -185,9 +187,11 @@ class NANA_Orchestrator:
                 result,
                 exc_info=result,
             )
-            self.plot_outline = {}
+            self.plot_outline = PlotOutline()
         else:
-            self.plot_outline = result if isinstance(result, dict) else {}
+            self.plot_outline = (
+                PlotOutline(**result) if isinstance(result, dict) else PlotOutline()
+            )
 
         if not self.plot_outline.get("plot_points"):
             logger.warning(

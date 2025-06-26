@@ -1,11 +1,11 @@
 import asyncio
 from collections.abc import Coroutine
-from typing import Any
 
 import structlog
 import utils
 from config import settings
-from kg_maintainer.models import WorldItem
+
+from initialization.models import PlotOutline, WorldBuilding, WorldItem
 
 from .common import bootstrap_field
 
@@ -25,15 +25,15 @@ WORLD_DETAIL_LIST_INTERNAL_KEYS: list[str] = []
 
 
 async def generate_world_building_logic(
-    world_building: dict[str, Any], plot_outline: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, int] | None]:
+    world_building: WorldBuilding, plot_outline: PlotOutline
+) -> tuple[WorldBuilding, dict[str, int] | None]:
     """Generate complete world-building information."""
-    if not world_building:
+    if not world_building or not world_building.data:
         world_building = create_default_world()
     return await bootstrap_world(world_building, plot_outline)
 
 
-def create_default_world() -> dict[str, dict[str, WorldItem]]:
+def create_default_world() -> WorldBuilding:
     """Create a default world-building structure."""
     world_data: dict[str, dict[str, WorldItem]] = {
         "_overview_": {
@@ -68,13 +68,13 @@ def create_default_world() -> dict[str, dict[str, WorldItem]]:
             )
         }
 
-    return world_data
+    return WorldBuilding(data=world_data, is_default=True, source="default_fallback")
 
 
 async def bootstrap_world(
-    world_building: dict[str, Any],
-    plot_outline: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, int] | None]:
+    world_building: WorldBuilding,
+    plot_outline: PlotOutline,
+) -> tuple[WorldBuilding, dict[str, int] | None]:
     """Fill missing world-building information via LLM."""
     overall_usage_data: dict[str, int] = {
         "prompt_tokens": 0,

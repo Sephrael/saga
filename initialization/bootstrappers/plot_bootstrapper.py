@@ -1,41 +1,42 @@
 import asyncio
 from collections.abc import Coroutine
-from typing import Any
 
 import structlog
 import utils
 from config import settings
+
+from initialization.models import PlotOutline
 
 from .common import bootstrap_field
 
 logger = structlog.get_logger(__name__)
 
 
-def create_default_plot(default_protagonist_name: str) -> dict[str, Any]:
+def create_default_plot(default_protagonist_name: str) -> PlotOutline:
     """Create a default plot outline with placeholders."""
     num_points = settings.TARGET_PLOT_POINTS_INITIAL_GENERATION
-    return {
-        "title": settings.DEFAULT_PLOT_OUTLINE_TITLE,
-        "protagonist_name": default_protagonist_name,
-        "genre": settings.CONFIGURED_GENRE,
-        "setting": settings.CONFIGURED_SETTING_DESCRIPTION,
-        "theme": settings.CONFIGURED_THEME,
-        "logline": settings.FILL_IN,
-        "inciting_incident": settings.FILL_IN,
-        "central_conflict": settings.FILL_IN,
-        "stakes": settings.FILL_IN,
-        "plot_points": [f"{settings.FILL_IN}" for _ in range(num_points)],
-        "narrative_style": settings.FILL_IN,
-        "tone": settings.FILL_IN,
-        "pacing": settings.FILL_IN,
-        "is_default": True,
-        "source": "default_fallback",
-    }
+    return PlotOutline(
+        title=settings.DEFAULT_PLOT_OUTLINE_TITLE,
+        protagonist_name=default_protagonist_name,
+        genre=settings.CONFIGURED_GENRE,
+        setting=settings.CONFIGURED_SETTING_DESCRIPTION,
+        theme=settings.CONFIGURED_THEME,
+        logline=settings.FILL_IN,
+        inciting_incident=settings.FILL_IN,
+        central_conflict=settings.FILL_IN,
+        stakes=settings.FILL_IN,
+        plot_points=[f"{settings.FILL_IN}" for _ in range(num_points)],
+        narrative_style=settings.FILL_IN,
+        tone=settings.FILL_IN,
+        pacing=settings.FILL_IN,
+        is_default=True,
+        source="default_fallback",
+    )
 
 
 async def bootstrap_plot_outline(
-    plot_outline: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, int] | None]:
+    plot_outline: PlotOutline,
+) -> tuple[PlotOutline, dict[str, int] | None]:
     """Fill missing plot fields via LLM."""
     tasks: dict[str, Coroutine] = {}
     usage_data: dict[str, int] = {

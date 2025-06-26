@@ -5,6 +5,7 @@ import pytest
 import utils
 from core.db_manager import neo4j_manager
 from data_access import chapter_queries
+from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
@@ -16,7 +17,7 @@ async def test_dynamic_chapter_adjustment(monkeypatch):
     orch = NANA_Orchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
 
-    orch.plot_outline = {"title": "T", "plot_points": ["p1", "p2"]}
+    orch.plot_outline = PlotOutline(title="T", plot_points=["p1", "p2"])
     orch.chapter_count = 0
 
     calls = []
