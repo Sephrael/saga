@@ -1,11 +1,11 @@
 import asyncio
 from collections.abc import Coroutine
-from typing import Any
 
 import structlog
 import utils
 from config import settings
-from kg_maintainer.models import CharacterProfile
+
+from initialization.models import CharacterProfile, PlotOutline
 
 from .common import bootstrap_field
 
@@ -22,7 +22,7 @@ def create_default_characters(protagonist_name: str) -> dict[str, CharacterProfi
 
 async def bootstrap_characters(
     character_profiles: dict[str, CharacterProfile],
-    plot_outline: dict[str, Any],
+    plot_outline: PlotOutline,
 ) -> tuple[dict[str, CharacterProfile], dict[str, int] | None]:
     """Fill missing character profile data via LLM."""
     tasks: dict[tuple[str, str], Coroutine] = {}

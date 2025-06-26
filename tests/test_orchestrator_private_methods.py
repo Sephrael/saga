@@ -3,6 +3,9 @@ from unittest.mock import AsyncMock
 import pytest
 import utils
 from data_access import character_queries, world_queries
+from initialization.models import PlotOutline
+from orchestration.nana_orchestrator import NANA_Orchestrator
+
 from models.user_input_models import (
     KeyLocationModel,
     NovelConceptModel,
@@ -10,7 +13,6 @@ from models.user_input_models import (
     SettingModel,
     UserStoryInputModel,
 )
-from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def orchestrator(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_validate_plot_outline_missing(orchestrator):
-    orchestrator.plot_outline = {}
+    orchestrator.plot_outline = PlotOutline()
     assert not await orchestrator._validate_plot_outline(1)
 
 
@@ -80,7 +82,7 @@ def test_load_state_from_user_model(orchestrator):
 
 @pytest.mark.asyncio
 async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
-    orchestrator.plot_outline = {"plot_points": ["Intro"]}
+    orchestrator.plot_outline = PlotOutline(plot_points=["Intro"])
     monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
 
     async def fake_plan(*_args, **_kwargs):

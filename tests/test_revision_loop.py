@@ -2,13 +2,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 from data_access import character_queries, world_queries
+from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 class DummyOrchestrator(NANA_Orchestrator):
     def __init__(self):
         super().__init__()
-        self.plot_outline = {"plot_points": ["a"]}
+        self.plot_outline = PlotOutline(plot_points=["a"])
 
 
 @pytest.mark.asyncio

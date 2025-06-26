@@ -1,10 +1,8 @@
-from typing import Any
-
 import structlog
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from config import settings
 from data_access import plot_queries
-from kg_maintainer.models import CharacterProfile, WorldItem
+from kg_maintainer.models import WorldItem
 
 from .bootstrappers.character_bootstrapper import (
     bootstrap_characters,
@@ -13,14 +11,15 @@ from .bootstrappers.character_bootstrapper import (
 from .bootstrappers.plot_bootstrapper import bootstrap_plot_outline, create_default_plot
 from .bootstrappers.world_bootstrapper import bootstrap_world, create_default_world
 from .data_loader import convert_model_to_objects, load_user_supplied_model
+from .models import CharacterProfile, PlotOutline, WorldBuilding
 
 logger = structlog.get_logger(__name__)
 
 
 async def run_genesis_phase() -> tuple[
-    dict[str, Any],
+    PlotOutline,
     dict[str, CharacterProfile],
-    dict[str, dict[str, WorldItem]],
+    WorldBuilding,
     dict[str, int],
 ]:
     """Execute the initial bootstrapping phase."""
@@ -60,15 +59,13 @@ async def run_genesis_phase() -> tuple[
     if world_usage:
         _add_usage(usage_totals, world_usage)
 
-    await plot_queries.save_plot_outline_to_db(plot_outline)
+    await plot_queries.save_plot_outline_to_db(
+        plot_outline.model_dump(exclude_none=True)
+    )
     logger.info("Persisted bootstrapped plot outline to Neo4j.")
 
     kg_agent = KGMaintainerAgent()
-    world_items_for_kg: dict[str, dict[str, WorldItem]] = {
-        k: v
-        for k, v in world_building.items()
-        if k not in ["is_default", "source"] and isinstance(v, dict)
-    }
+    world_items_for_kg: dict[str, dict[str, WorldItem]] = dict(world_building.items())
     await kg_agent.persist_profiles(
         character_profiles, settings.KG_PREPOPULATION_CHAPTER_NUM, full_sync=True
     )
