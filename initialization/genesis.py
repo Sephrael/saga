@@ -77,4 +77,8 @@ async def run_genesis_phase() -> tuple[
     )
     logger.info("Knowledge graph pre-population complete (full sync).")
 
+    # New enrichment pass to clarify ambiguous concepts before drafting begins
+    await kg_agent.heal_and_enrich_kg()
+    logger.info("Initial KG enrichment pass executed.")
+
     return plot_outline, character_profiles, world_items_for_kg, usage_totals
