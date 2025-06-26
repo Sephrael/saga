@@ -2,8 +2,9 @@
 """Utilities for rendering LLM prompts using Jinja2 templates."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from jinja2.utils import htmlsafe_json_dumps
@@ -20,6 +21,13 @@ def _default_json_serializer(value: Any) -> Any:
     raise TypeError(
         f"Object of type {value.__class__.__name__} is not JSON serializable"
     )
+
+
+_env.policies["json.dumps_function"] = lambda obj, **kw: json.dumps(
+    obj,
+    default=_default_json_serializer,
+    **kw,
+)
 
 
 def _tojson(value: Any, indent: int | None = None) -> str:
