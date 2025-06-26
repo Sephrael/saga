@@ -229,31 +229,6 @@ class NANA_Orchestrator:
 
         return True
 
-    async def _prepopulate_kg_if_needed(self):
-        self._update_rich_display(step="Pre-populating KG (if needed)")
-        logger.info("NANA: Checking if KG pre-population is needed...")
-
-        plot_source = self.plot_outline.get("source", "")
-        logger.info(
-            f"\n--- NANA: Pre-populating Knowledge Graph from Initial Data (Plot Source: '{plot_source}') ---"
-        )
-
-        profile_objs: dict[
-            str, CharacterProfile
-        ] = await character_queries.get_character_profiles_from_db()
-        world_objs: dict[
-            str, dict[str, WorldItem]
-        ] = await world_queries.get_world_building_from_db()
-
-        await self.kg_maintainer_agent.persist_profiles(
-            profile_objs, settings.KG_PREPOPULATION_CHAPTER_NUM
-        )
-        await self.kg_maintainer_agent.persist_world(
-            world_objs, settings.KG_PREPOPULATION_CHAPTER_NUM
-        )
-        logger.info("   Knowledge Graph pre-population step complete.")
-        self._update_rich_display(step="KG Pre-population Complete")
-
     def _get_plot_point_info_for_chapter(
         self, novel_chapter_number: int
     ) -> tuple[str | None, int]:
