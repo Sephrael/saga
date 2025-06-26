@@ -1,7 +1,7 @@
 import structlog
 from config import settings
 from core.llm_interface import llm_service
-from kg_maintainer.models import PatchInstruction, ProblemDetail
+from models import PatchInstruction, ProblemDetail
 from prompt_renderer import render_prompt
 
 logger = structlog.get_logger(__name__)

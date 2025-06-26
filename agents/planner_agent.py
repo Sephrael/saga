@@ -7,7 +7,7 @@ import structlog
 from config import settings
 from core.llm_interface import llm_service
 from data_access import chapter_queries
-from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
+from models import CharacterProfile, SceneDetail, WorldItem
 from prompt_data_getters import (
     get_character_state_snippet_for_prompt,
     get_reliable_kg_facts_for_drafting_prompt,

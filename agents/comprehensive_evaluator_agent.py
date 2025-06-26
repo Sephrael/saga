@@ -6,7 +6,7 @@ import utils  # MODIFIED: For spaCy functions
 from config import settings
 from core.llm_interface import llm_service  # MODIFIED
 from data_access import chapter_queries
-from kg_maintainer.models import EvaluationResult, ProblemDetail
+from models import EvaluationResult, ProblemDetail
 from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (
     get_filtered_character_profiles_for_prompt_plain_text,
@@ -75,33 +75,33 @@ class ComprehensiveEvaluatorAgent:
             return []
 
         for i, problem_dict in enumerate(parsed_data):
-            if not isinstance(problem_dict, dict):
+            if not isinstance(problem_dict, ProblemDetail):
                 logger.warning(
-                    f"Problem item {i + 1} in JSON list for Ch {chapter_number} is not a dictionary. Skipping. Item: {problem_dict}"
+                    f"Problem item {i + 1} in JSON list for Ch {chapter_number} is not valid. Skipping. Item: {problem_dict}"
                 )
                 continue
 
-            problem_meta: ProblemDetail = {
-                "issue_category": _normalize_llm_category_to_internal(
+            problem_meta = ProblemDetail(
+                issue_category=_normalize_llm_category_to_internal(
                     problem_dict.get("issue_category", "meta")
                 ),
-                "problem_description": problem_dict.get(
+                problem_description=problem_dict.get(
                     "problem_description", "N/A - Missing description from LLM"
                 ),
-                "quote_from_original_text": problem_dict.get(
+                quote_from_original_text=problem_dict.get(
                     "quote_from_original_text", "N/A - General Issue"
                 ),
-                "quote_char_start": None,
-                "quote_char_end": None,
-                "sentence_char_start": None,
-                "sentence_char_end": None,
-                "suggested_fix_focus": problem_dict.get(
+                quote_char_start=None,
+                quote_char_end=None,
+                sentence_char_start=None,
+                sentence_char_end=None,
+                suggested_fix_focus=problem_dict.get(
                     "suggested_fix_focus", "N/A - Missing suggestion from LLM"
                 ),
-            }
+            )
 
             if (
-                problem_meta["issue_category"] == "meta"
+                problem_meta.issue_category == "meta"
                 and str(problem_dict.get("issue_category", "")).lower().strip()
                 != "meta"
             ):
@@ -109,23 +109,23 @@ class ComprehensiveEvaluatorAgent:
                     f"LLM provided category '{problem_dict.get('issue_category')}' in problem {i + 1} for Ch {chapter_number}, which normalized to 'meta'."
                 )
 
-            quote_text_from_llm = problem_meta["quote_from_original_text"]
+            quote_text_from_llm = problem_meta.quote_from_original_text
             if (
                 "N/A - General Issue" in quote_text_from_llm
                 or not quote_text_from_llm.strip()
                 or quote_text_from_llm == "N/A"
             ):
-                problem_meta["quote_from_original_text"] = "N/A - General Issue"
+                problem_meta.quote_from_original_text = "N/A - General Issue"
             elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
                 offsets_tuple = await utils.find_quote_and_sentence_offsets_with_spacy(
                     original_draft_text, quote_text_from_llm
                 )
                 if offsets_tuple:
                     q_start, q_end, s_start, s_end = offsets_tuple
-                    problem_meta["quote_char_start"] = q_start
-                    problem_meta["quote_char_end"] = q_end
-                    problem_meta["sentence_char_start"] = s_start
-                    problem_meta["sentence_char_end"] = s_end
+                    problem_meta.quote_char_start = q_start
+                    problem_meta.quote_char_end = q_end
+                    problem_meta.sentence_char_start = s_start
+                    problem_meta.sentence_char_end = s_end
                 else:
                     logger.warning(
                         f"Ch {chapter_number} problem {i + 1}: Could not find quote via spaCy: '{quote_text_from_llm[:50]}...'"
@@ -521,19 +521,19 @@ class ComprehensiveEvaluatorAgent:
         validated_problem_details_list: list[ProblemDetail] = []
         for prob_item in problem_details_list:
             if (
-                prob_item["quote_from_original_text"]
+                prob_item.quote_from_original_text
                 not in [
                     "N/A - General Issue",
                     "N/A - LLM Output Parsing",
                     "N/A - Malformed LLM Output",
                 ]
-                and prob_item["quote_char_start"] is None
-                and prob_item["quote_from_original_text"].strip()
+                and prob_item.quote_char_start is None
+                and prob_item.quote_from_original_text.strip()
                 and draft_text.strip()
             ):
                 logger.warning(
-                    f"CompEvaluator: Problem quote TEXT for Ch {chapter_number} ('{prob_item['quote_from_original_text'][:50]}...') present, "
-                    f"but its offsets were NOT found by spaCy utils. Problem desc: {prob_item['problem_description']}"
+                    f"CompEvaluator: Problem quote TEXT for Ch {chapter_number} ('{prob_item.quote_from_original_text[:50]}...') present, "
+                    f"but its offsets were NOT found by spaCy utils. Problem desc: {prob_item.problem_description}"
                 )
             validated_problem_details_list.append(prob_item)
 
@@ -541,20 +541,18 @@ class ComprehensiveEvaluatorAgent:
             f"Evaluation for Ch {chapter_number} complete. Needs revision: {needs_revision}. Summary of reasons: {'; '.join(unique_reasons_summary) if unique_reasons_summary else 'None'}. Detailed problems found: {len(validated_problem_details_list)}"
         )
 
-        final_eval_result: EvaluationResult = {
-            "needs_revision": needs_revision,
-            "reasons": unique_reasons_summary,
-            "problems_found": validated_problem_details_list,
-            "coherence_score": coherence_score,
-            "consistency_issues": llm_eval_output_dict.get("legacy_consistency_issues"),
-            "plot_deviation_reason": llm_eval_output_dict.get(
-                "legacy_plot_arc_deviation"
-            ),
-            "thematic_issues": llm_eval_output_dict.get("legacy_thematic_issues"),
-            "narrative_depth_issues": llm_eval_output_dict.get(
+        final_eval_result = EvaluationResult(
+            needs_revision=needs_revision,
+            reasons=unique_reasons_summary,
+            problems_found=validated_problem_details_list,
+            coherence_score=coherence_score,
+            consistency_issues=llm_eval_output_dict.get("legacy_consistency_issues"),
+            plot_deviation_reason=llm_eval_output_dict.get("legacy_plot_arc_deviation"),
+            thematic_issues=llm_eval_output_dict.get("legacy_thematic_issues"),
+            narrative_depth_issues=llm_eval_output_dict.get(
                 "legacy_narrative_depth_issues"
             ),
-        }
+        )
         return final_eval_result, total_usage_data if total_usage_data[
             "total_tokens"
         ] > 0 else None

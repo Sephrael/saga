@@ -9,7 +9,7 @@ from typing import Any
 
 import structlog
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
-from kg_maintainer.models import (
+from models import (
     CharacterProfile,
     EvaluationResult,
     SceneDetail,

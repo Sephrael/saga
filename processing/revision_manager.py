@@ -5,7 +5,7 @@ from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
-from kg_maintainer.models import (
+from models import (
     CharacterProfile,
     EvaluationResult,
     SceneDetail,
