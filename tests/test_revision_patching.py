@@ -197,7 +197,6 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_patch_validation_toggle(monkeypatch):
-    settings.settings.AGENT_ENABLE_PATCH_VALIDATION = False
     settings.AGENT_ENABLE_PATCH_VALIDATION = False
 
     called = False
@@ -381,7 +380,6 @@ async def test_patch_generation_concurrent(monkeypatch):
     assert len(res) == 3
     assert duration < 0.25
 
-    settings.settings.AGENT_ENABLE_PATCH_VALIDATION = True
     settings.AGENT_ENABLE_PATCH_VALIDATION = True
 
 

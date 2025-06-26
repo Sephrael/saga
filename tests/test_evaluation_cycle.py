@@ -15,7 +15,7 @@ def orchestrator(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ignore_spans_only_first_attempt(orchestrator, monkeypatch):
+async def test_ignore_spans_all_attempts(orchestrator, monkeypatch):
     monkeypatch.setattr(
         character_queries, "get_all_character_names", AsyncMock(return_value=[])
     )
@@ -66,5 +66,5 @@ async def test_ignore_spans_only_first_attempt(orchestrator, monkeypatch):
         patched_spans,
     )
 
-    assert received["eval"] == [patched_spans, None]
-    assert received["continuity"] == [patched_spans, None]
+    assert received["eval"] == [patched_spans, patched_spans]
+    assert received["continuity"] == [patched_spans, patched_spans]

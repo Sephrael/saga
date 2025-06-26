@@ -128,6 +128,12 @@ class WorldContinuityAgent:
 [
   {
     "issue_category": "consistency",
+    "problem_description": "Sága's corporeality is inconsistent with earlier chapters where it is defined as incorporeal.",
+    "quote_from_original_text": "Saga darted through the crowd, shoving people aside with its own hands.",
+    "suggested_fix_focus": "Rewrite this passage to describe Sága's actions without using physical verbs. Depict its interaction through its control of the environment or remote avatars, consistent with its 'incorporeal' nature."
+  },
+  {
+    "issue_category": "consistency",
     "problem_description": "The 'Sunstone' is described as glowing blue in this"
     " chapter, but the world building notes explicitly state all Sunstones are"
     " crimson red.",

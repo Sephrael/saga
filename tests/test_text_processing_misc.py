@@ -18,7 +18,7 @@ def test_normalize_text_for_matching():
 
 def test_is_fill_in_and_normalization_helpers():
     assert not text_processing._is_fill_in("test")
-    assert text_processing._is_fill_in(text_processing.config.FILL_IN)
+    assert text_processing._is_fill_in(text_processing.settings.FILL_IN)
 
 
 def test_get_text_segments_paragraph(monkeypatch):

@@ -420,9 +420,7 @@ class NANA_Orchestrator:
             await world_queries.get_all_world_item_ids_by_category()
         )
 
-        ignore_spans = patched_spans if attempt == 1 else None
-
-        ignore_spans = patched_spans if attempt == 1 else None
+        ignore_spans = patched_spans
 
         if settings.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
