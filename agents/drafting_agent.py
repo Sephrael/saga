@@ -4,7 +4,7 @@ from typing import Any
 import structlog
 from config import settings
 from core.llm_interface import count_tokens, llm_service, truncate_text_by_tokens
-from kg_maintainer.models import SceneDetail
+from models import SceneDetail
 from prompt_renderer import render_prompt
 
 logger = structlog.get_logger(__name__)

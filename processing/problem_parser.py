@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from kg_maintainer.models import ProblemDetail
+from models import ProblemDetail
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +35,16 @@ def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDe
     except json.JSONDecodeError as exc:
         logger.error("Failed to decode JSON: %s", exc)
         return [
-            {
-                "issue_category": category or "meta",
-                "problem_description": f"Invalid JSON from LLM: {exc}",
-                "quote_from_original_text": "N/A - Invalid JSON",
-                "quote_char_start": None,
-                "quote_char_end": None,
-                "sentence_char_start": None,
-                "sentence_char_end": None,
-                "suggested_fix_focus": "Ensure LLM outputs valid JSON.",
-            }
+            ProblemDetail(
+                issue_category=category or "meta",
+                problem_description=f"Invalid JSON from LLM: {exc}",
+                quote_from_original_text="N/A - Invalid JSON",
+                quote_char_start=None,
+                quote_char_end=None,
+                sentence_char_start=None,
+                sentence_char_end=None,
+                suggested_fix_focus="Ensure LLM outputs valid JSON.",
+            )
         ]
 
     problems: list[ProblemDetail] = []
@@ -52,23 +52,23 @@ def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDe
         if not isinstance(item, dict):
             logger.warning("Problem item is not a dict: %s", item)
             continue
-        prob: ProblemDetail = {
-            "issue_category": item.get("issue_category", category or "meta"),
-            "problem_description": item.get(
+        prob = ProblemDetail(
+            issue_category=item.get("issue_category", category or "meta"),
+            problem_description=item.get(
                 "problem_description", "N/A - Missing description"
             ),
-            "quote_from_original_text": item.get(
+            quote_from_original_text=item.get(
                 "quote_from_original_text", "N/A - General Issue"
             ),
-            "quote_char_start": None,
-            "quote_char_end": None,
-            "sentence_char_start": None,
-            "sentence_char_end": None,
-            "suggested_fix_focus": item.get(
+            quote_char_start=None,
+            quote_char_end=None,
+            sentence_char_start=None,
+            sentence_char_end=None,
+            suggested_fix_focus=item.get(
                 "suggested_fix_focus", "N/A - Missing suggestion"
             ),
-        }
+        )
         if category:
-            prob["issue_category"] = category
+            prob.issue_category = category
         problems.append(prob)
     return problems
