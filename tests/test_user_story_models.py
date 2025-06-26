@@ -16,7 +16,9 @@ def test_load_user_supplied_data_valid(tmp_path, monkeypatch):
     data = {"novel_concept": {"title": "Test"}}
     file_path = tmp_path / "story.yaml"
     file_path.write_text(yaml.dump(data))
-    monkeypatch.setattr(config, "USER_STORY_ELEMENTS_FILE_PATH", str(file_path))
+    monkeypatch.setattr(
+        config.settings, "USER_STORY_ELEMENTS_FILE_PATH", str(file_path)
+    )
 
     model = _load_user_supplied_data()
     assert isinstance(model, UserStoryInputModel)
@@ -27,7 +29,9 @@ def test_load_user_supplied_data_valid(tmp_path, monkeypatch):
 def test_load_user_supplied_data_invalid(tmp_path, monkeypatch):
     file_path = tmp_path / "bad.yaml"
     file_path.write_text("- item1\n- item2")
-    monkeypatch.setattr(config, "USER_STORY_ELEMENTS_FILE_PATH", str(file_path))
+    monkeypatch.setattr(
+        config.settings, "USER_STORY_ELEMENTS_FILE_PATH", str(file_path)
+    )
 
     result = _load_user_supplied_data()
     assert result is None

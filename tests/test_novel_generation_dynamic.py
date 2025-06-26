@@ -11,7 +11,7 @@ from orchestration.nana_orchestrator import NANA_Orchestrator
 @pytest.mark.asyncio
 async def test_dynamic_chapter_adjustment(monkeypatch):
     monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
-    monkeypatch.setattr(config, "CHAPTERS_PER_RUN", 3)
+    monkeypatch.setattr(config.settings, "CHAPTERS_PER_RUN", 3)
 
     orch = NANA_Orchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
