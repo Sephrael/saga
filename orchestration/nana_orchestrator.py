@@ -479,55 +479,6 @@ class NANA_Orchestrator:
 
         return eval_result_obj, continuity_problems, eval_usage, continuity_usage
 
-    async def _call_revision_logic(
-        self,
-        novel_chapter_number: int,
-        current_text: str,
-        evaluation_result: EvaluationResult,
-        hybrid_context_for_draft: str,
-        chapter_plan: list[SceneDetail] | None,
-        patched_spans: list[tuple[int, int]],
-        is_from_flawed_source_for_kg: bool,
-    ) -> tuple[
-        tuple[str, str | None, list[tuple[int, int]]] | None, dict[str, int] | None
-    ]:
-        """Run the revision logic and return raw results and usage."""
-        return await self.revision_manager.revise_chapter(
-            self.plot_outline,
-            await character_queries.get_character_profiles_from_db(),
-            await world_queries.get_world_building_from_db(),
-            current_text,
-            novel_chapter_number,
-            evaluation_result,
-            hybrid_context_for_draft,
-            chapter_plan,
-            is_from_flawed_source=is_from_flawed_source_for_kg,
-            already_patched_spans=patched_spans,
-        )
-
-    def _revision_successful(
-        self,
-        result: tuple[str, str | None, list[tuple[int, int]]] | None,
-        current_text: str,
-    ) -> bool:
-        """Return True if the revision result is sufficiently long."""
-        return bool(
-            result
-            and result[0]
-            and len(result[0]) > 50
-            and len(result[0]) >= len(current_text) * 0.5
-        )
-
-    def _apply_revision_patches(
-        self,
-        revision_result: tuple[str, str | None, list[tuple[int, int]]],
-        patched_spans: list[tuple[int, int]],
-    ) -> tuple[str, str | None, list[tuple[int, int]]]:
-        """Update patched spans and return the new text and raw output."""
-        new_text, rev_raw_output, new_spans = revision_result
-        patched_spans = new_spans
-        return new_text, rev_raw_output, patched_spans
-
     async def _handle_no_evaluation_fast_path(
         self,
         novel_chapter_number: int,
@@ -684,57 +635,74 @@ class NANA_Orchestrator:
                 step=f"Ch {novel_chapter_number} - Revision Attempt {attempt}"
             )
             (
-                new_text,
-                rev_raw_output,
-                patched_spans,
+                revision_result,
                 revision_usage,
-            ) = await self._perform_revisions(
-                novel_chapter_number,
-                attempt,
+            ) = await self.revision_manager.revise_chapter(
+                self.plot_outline,
+                await character_queries.get_character_profiles_from_db(),
+                await world_queries.get_world_building_from_db(),
                 current_text,
+                novel_chapter_number,
                 evaluation_result,
                 hybrid_context_for_draft,
                 chapter_plan,
-                patched_spans,
-                is_from_flawed_source_for_kg,
+                is_from_flawed_source=is_from_flawed_source_for_kg,
+                already_patched_spans=patched_spans,
             )
             self._accumulate_tokens(
                 f"Ch{novel_chapter_number}-Revision-Attempt{attempt}",
                 revision_usage,
             )
-            if new_text and new_text != current_text:
-                new_embedding, prev_embedding = await asyncio.gather(
-                    llm_service.async_get_embedding(new_text),
-                    llm_service.async_get_embedding(current_text),
-                )
-                if new_embedding is not None and prev_embedding is not None:
-                    similarity = utils.numpy_cosine_similarity(
-                        prev_embedding,
-                        new_embedding,
+            if (
+                revision_result
+                and revision_result[0]
+                and len(revision_result[0]) > 50
+                and len(revision_result[0]) >= len(current_text) * 0.5
+            ):
+                new_text, rev_raw_output, patched_spans = revision_result
+                if new_text and new_text != current_text:
+                    new_embedding, prev_embedding = await asyncio.gather(
+                        llm_service.async_get_embedding(new_text),
+                        llm_service.async_get_embedding(current_text),
                     )
-                    if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
-                        logger.warning(
-                            f"NANA: Ch {novel_chapter_number} revision attempt {attempt} produced text too similar to previous (score: {similarity:.4f}). Stopping revisions."
+                    if new_embedding is not None and prev_embedding is not None:
+                        similarity = utils.numpy_cosine_similarity(
+                            prev_embedding,
+                            new_embedding,
                         )
-                        current_text = new_text
-                        current_raw_llm_output = (
-                            rev_raw_output or current_raw_llm_output
-                        )
-                        break
-                current_text = new_text
-                current_raw_llm_output = rev_raw_output or current_raw_llm_output
-                logger.info(
-                    f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text)}. Re-evaluating."
-                )
-                await self._save_debug_output(
-                    novel_chapter_number,
-                    f"revised_text_attempt_{attempt}",
-                    current_text,
-                )
-                revisions_made += 1
+                        if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
+                            logger.warning(
+                                f"NANA: Ch {novel_chapter_number} revision attempt {attempt} produced text too similar to previous (score: {similarity:.4f}). Stopping revisions."
+                            )
+                            current_text = new_text
+                            current_raw_llm_output = (
+                                rev_raw_output or current_raw_llm_output
+                            )
+                            break
+                    current_text = new_text
+                    current_raw_llm_output = rev_raw_output or current_raw_llm_output
+                    logger.info(
+                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} successful. New text length: {len(current_text)}. Re-evaluating."
+                    )
+                    await self._save_debug_output(
+                        novel_chapter_number,
+                        f"revised_text_attempt_{attempt}",
+                        current_text,
+                    )
+                    revisions_made += 1
+                else:
+                    logger.error(
+                        f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text. Proceeding with previous draft, marked as flawed."
+                    )
+                    self._update_rich_display(
+                        step=f"Ch {novel_chapter_number} - Revision Failed (Retrying)"
+                    )
+                    revisions_made += 1
+                    needs_revision = True
+                    continue
             else:
                 logger.error(
-                    f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text. Proceeding with previous draft, marked as flawed."
+                    f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text."
                 )
                 self._update_rich_display(
                     step=f"Ch {novel_chapter_number} - Revision Failed (Retrying)"
@@ -778,44 +746,6 @@ class NANA_Orchestrator:
             )
             is_flawed = True
         return text, is_flawed
-
-    async def _perform_revisions(
-        self,
-        novel_chapter_number: int,
-        attempt: int,
-        current_text: str,
-        evaluation_result: EvaluationResult,
-        hybrid_context_for_draft: str,
-        chapter_plan: list[SceneDetail] | None,
-        patched_spans: list[tuple[int, int]],
-        is_from_flawed_source_for_kg: bool,
-    ) -> tuple[str | None, str | None, list[tuple[int, int]], dict[str, int] | None]:
-        if attempt >= settings.MAX_REVISION_CYCLES_PER_CHAPTER:
-            logger.error(
-                f"NANA: Ch {novel_chapter_number} - Max revision attempts ({settings.MAX_REVISION_CYCLES_PER_CHAPTER}) reached."
-            )
-            return current_text, None, patched_spans, None
-
-        revision_tuple_result, revision_usage = await self._call_revision_logic(
-            novel_chapter_number,
-            current_text,
-            evaluation_result,
-            hybrid_context_for_draft,
-            chapter_plan,
-            patched_spans,
-            is_from_flawed_source_for_kg,
-        )
-
-        if self._revision_successful(revision_tuple_result, current_text):
-            new_text, rev_raw_output, patched_spans = self._apply_revision_patches(
-                revision_tuple_result, patched_spans
-            )
-            return new_text, rev_raw_output, patched_spans, revision_usage
-
-        logger.error(
-            f"NANA: Ch {novel_chapter_number} - Revision attempt {attempt} failed to produce usable text."
-        )
-        return current_text, None, patched_spans, revision_usage
 
     async def _prepare_chapter_prerequisites(
         self, novel_chapter_number: int
