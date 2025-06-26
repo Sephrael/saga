@@ -27,11 +27,10 @@ WORLD_DETAIL_LIST_INTERNAL_KEYS: list[str] = []
 async def generate_world_building_logic(
     world_building: dict[str, Any], plot_outline: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, int] | None]:
-    """Stub world-building generation function."""
-    logger.warning("generate_world_building_logic stub called")
+    """Generate complete world-building information."""
     if not world_building:
         world_building = create_default_world()
-    return world_building, None
+    return await bootstrap_world(world_building, plot_outline)
 
 
 def create_default_world() -> dict[str, dict[str, WorldItem]]:
