@@ -648,7 +648,7 @@ async def promote_dynamic_relationships() -> int:
     CALL apoc.create.relationship(
         s,
         r.type,
-        apoc.map.removeKey(properties(r), 'type'),
+        r {.*, type: null},
         o
     ) YIELD rel
     DELETE r
