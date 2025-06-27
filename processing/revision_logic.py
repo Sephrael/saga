@@ -9,6 +9,7 @@ from typing import Any
 
 import structlog
 import utils  # For numpy_cosine_similarity, find_semantically_closest_segment, AND find_quote_and_sentence_offsets_with_spacy, format_scene_plan_for_prompt
+from utils.plot import get_plot_point_info
 
 from models import (
     CharacterProfile,
@@ -22,7 +23,7 @@ from . import patch_generator
 _get_formatted_scene_plan_from_agent_or_fallback = (
     patch_generator._get_formatted_scene_plan_from_agent_or_fallback
 )
-_get_plot_point_info = patch_generator._get_plot_point_info
+_get_plot_point_info = get_plot_point_info
 _get_context_window_for_patch_llm = patch_generator._get_context_window_for_patch_llm
 _get_sentence_embeddings = patch_generator._get_sentence_embeddings
 _find_sentence_via_embeddings = patch_generator._find_sentence_via_embeddings

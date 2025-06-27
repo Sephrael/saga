@@ -9,6 +9,7 @@ import utils
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import count_tokens, llm_service
+from utils.plot import get_plot_point_info
 
 from models import PatchInstruction, ProblemDetail, SceneDetail
 
@@ -25,44 +26,6 @@ def _get_formatted_scene_plan_from_agent_or_fallback(
     return utils.format_scene_plan_for_prompt(
         chapter_plan, model_name_for_tokens, max_tokens_budget
     )
-
-
-def _get_plot_point_info(
-    plot_outline: dict[str, Any], chapter_number: int
-) -> tuple[str | None, int]:
-    """Return plot point text and index for the chapter."""
-    plot_points = plot_outline.get("plot_points", [])
-    if not isinstance(plot_points, list) or not plot_points or chapter_number <= 0:
-        logger.error(
-            "No plot points available or invalid chapter number (%s).",
-            chapter_number,
-        )
-        return None, -1
-
-    plot_point_index = chapter_number - 1
-    if 0 <= plot_point_index < len(plot_points):
-        plot_point_item = plot_points[plot_point_index]
-        plot_point_text = (
-            plot_point_item.get("description")
-            if isinstance(plot_point_item, dict)
-            else str(plot_point_item)
-        )
-        if isinstance(plot_point_text, str) and plot_point_text.strip():
-            return plot_point_text, plot_point_index
-        logger.warning(
-            "Plot point at index %s for chapter %s is empty or invalid. Using placeholder.",
-            plot_point_index,
-            chapter_number,
-        )
-        return settings.FILL_IN, plot_point_index
-
-    logger.error(
-        "Plot point index %s is out of bounds for plot_points list (len: %s) for chapter %s.",
-        plot_point_index,
-        len(plot_points),
-        chapter_number,
-    )
-    return None, -1
 
 
 async def _get_context_window_for_patch_llm(
@@ -196,7 +159,7 @@ async def _generate_single_patch_instruction_llm(
 ) -> tuple[PatchInstruction | None, dict[str, int] | None]:
     """Generate a single patch instruction using the LLM."""
     plan_focus_section_parts: list[str] = []
-    plot_point_focus, _ = _get_plot_point_info(plot_outline, chapter_number)
+    plot_point_focus, _ = get_plot_point_info(plot_outline, chapter_number)
     max_plan_tokens_for_patch_prompt = settings.MAX_CONTEXT_TOKENS // 2
 
     if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
