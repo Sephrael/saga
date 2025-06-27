@@ -7,6 +7,7 @@ import structlog
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import count_tokens, llm_service
+from core.usage import TokenUsage
 from utils.plot import get_plot_point_info
 
 from models import PatchInstruction, ProblemDetail, SceneDetail
@@ -480,13 +481,9 @@ async def _generate_patch_instructions_logic(
     hybrid_context_for_revision: str,
     chapter_plan: list[SceneDetail] | None,
     validator: PatchValidationAgent,
-) -> tuple[list[PatchInstruction], dict[str, int] | None]:
+) -> tuple[list[PatchInstruction], TokenUsage | None]:
     patch_instructions: list[PatchInstruction] = []
-    total_usage: dict[str, int] = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    }
+    total_usage = TokenUsage()
 
     grouped = _group_problems_for_patch_generation(problems_to_fix)
 
@@ -503,7 +500,7 @@ async def _generate_patch_instructions_logic(
 
     async def _process_group(
         group_idx: int, group_problem: ProblemDetail, group_members: list[ProblemDetail]
-    ) -> tuple[PatchInstruction | None, dict[str, int]]:
+    ) -> tuple[PatchInstruction | None, TokenUsage]:
         context_snippet = await _get_context_window_for_patch_llm(
             original_text,
             group_problem,
@@ -511,11 +508,7 @@ async def _generate_patch_instructions_logic(
         )
 
         patch_instr: PatchInstruction | None = None
-        usage_acc: dict[str, int] = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        usage_acc = TokenUsage()
 
         for _ in range(settings.PATCH_GENERATION_ATTEMPTS):
             patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
@@ -527,8 +520,7 @@ async def _generate_patch_instructions_logic(
                 chapter_plan,
             )
             if usage:
-                for k, v in usage.items():
-                    usage_acc[k] += v
+                usage_acc.add(usage)
             if not patch_instr_tmp:
                 continue
             if not settings.AGENT_ENABLE_PATCH_VALIDATION:
@@ -538,8 +530,7 @@ async def _generate_patch_instructions_logic(
                 context_snippet, patch_instr_tmp, group_members
             )
             if val_usage:
-                for k, v in val_usage.items():
-                    usage_acc[k] += v
+                usage_acc.add(val_usage)
             if valid:
                 patch_instr = patch_instr_tmp
                 break
@@ -561,12 +552,11 @@ async def _generate_patch_instructions_logic(
     for patch_instr, usage_acc in results:
         if patch_instr:
             patch_instructions.append(patch_instr)
-        for k, v in usage_acc.items():
-            total_usage[k] += v
+        total_usage.add(usage_acc)
 
     logger.info(
         "Generated %s patch instructions for Ch %s.",
         len(patch_instructions),
         chapter_number,
     )
-    return patch_instructions, total_usage if total_usage["total_tokens"] > 0 else None
+    return patch_instructions, total_usage if total_usage.total_tokens > 0 else None

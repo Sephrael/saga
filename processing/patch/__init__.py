@@ -3,6 +3,7 @@
 from typing import Any
 
 from agents.patch_validation_agent import PatchValidationAgent
+from core.usage import TokenUsage
 
 from models import ProblemDetail, SceneDetail
 
@@ -36,10 +37,10 @@ class PatchGenerator:
         chapter_plan: list[SceneDetail] | None,
         already_patched_spans: list[tuple[int, int]] | None,
         validator: PatchValidationAgent,
-    ) -> tuple[str, list[tuple[int, int]]]:
-        """Return revised text and updated spans after applying patches."""
+    ) -> tuple[str, list[tuple[int, int]], TokenUsage | None]:
+        """Return revised text, updated spans, and token usage."""
         sentence_embeddings = await _get_sentence_embeddings(original_text)
-        patch_instructions, _ = await _generate_patch_instructions_logic(
+        patch_instructions, usage = await _generate_patch_instructions_logic(
             plot_outline,
             original_text,
             problems_to_fix,
@@ -48,9 +49,10 @@ class PatchGenerator:
             chapter_plan,
             validator,
         )
-        return await _apply_patches_to_text(
+        patched_text, spans = await _apply_patches_to_text(
             original_text,
             patch_instructions,
             already_patched_spans,
             sentence_embeddings,
         )
+        return patched_text, spans, usage

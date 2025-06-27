@@ -31,7 +31,7 @@ async def test_patch_generator_successful_application(monkeypatch):
     monkeypatch.setattr(patch_generator, "_apply_patches_to_text", fake_apply)
 
     patcher = patch_generator.PatchGenerator()
-    result, spans = await patcher.generate_and_apply(
+    result, spans, usage = await patcher.generate_and_apply(
         {"plot_points": ["a"]},
         "Hello world",
         [
@@ -53,6 +53,7 @@ async def test_patch_generator_successful_application(monkeypatch):
 
     assert result == "Hi world"
     assert spans == [(0, 2)]
+    assert usage is None
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,7 @@ async def test_patch_generator_failed_validation(monkeypatch):
     )
 
     patcher = patch_generator.PatchGenerator()
-    result, spans = await patcher.generate_and_apply(
+    result, spans, usage = await patcher.generate_and_apply(
         {"plot_points": ["a"]},
         "Hello world",
         [
@@ -107,12 +108,13 @@ async def test_patch_generator_failed_validation(monkeypatch):
 
     assert result == "Hello world"
     assert spans == []
+    assert usage is None
 
 
 @pytest.mark.asyncio
 async def test_revision_manager_full_rewrite(monkeypatch):
     async def fake_generate_and_apply(*_args, **_kwargs):
-        return "Hello world", []
+        return "Hello world", [], None
 
     async def fake_call_llm(*_args, **_kwargs):
         return "Rewrite done", None
@@ -175,7 +177,7 @@ async def test_revision_manager_uses_noop_validator(monkeypatch):
             received = args[-1]
         else:
             received = _kwargs.get("validator")
-        return "Hello world", []
+        return "Hello world", [], None
 
     monkeypatch.setattr(
         patch_generator.PatchGenerator,
