@@ -21,7 +21,21 @@ class PatchValidationAgent:
         patch: PatchInstruction,
         problems: list[ProblemDetail],
     ) -> tuple[bool, dict[str, int] | None]:
-        """Return True if patch addresses all problems adequately."""
+        """Validate a single patch against reported problems.
+
+        Args:
+            context_snippet: Portion of chapter text surrounding the problem.
+            patch: Proposed patch instruction to validate.
+            problems: Collection of issues the patch should address.
+
+        Returns:
+            A tuple where the first element indicates whether the patch passed
+            validation and the second contains optional token usage data from the
+            LLM call.
+
+        Side Effects:
+            Sends a prompt to the LLM service and logs diagnostic information.
+        """
 
         issues_list = "\n".join(f"- {p['problem_description']}" for p in problems)
         prompt = render_prompt(
@@ -70,5 +84,18 @@ class NoOpPatchValidator(PatchValidationAgent):
         patch: PatchInstruction,
         problems: list[ProblemDetail],
     ) -> tuple[bool, None]:
-        """Return True without performing validation."""
+        """Approve patches without validation.
+
+        Args:
+            context_snippet: Unused text snippet from the chapter.
+            patch: Patch instruction being "validated".
+            problems: Original list of problems for context.
+
+        Returns:
+            ``True`` with ``None`` for usage to mimic the real validator's
+            return type.
+
+        Side Effects:
+            None.
+        """
         return True, None

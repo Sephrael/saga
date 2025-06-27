@@ -41,7 +41,34 @@ class RevisionManager:
         is_from_flawed_source: bool = False,
         already_patched_spans: list[tuple[int, int]] | None = None,
     ) -> tuple[tuple[str, str | None, list[tuple[int, int]]] | None, TokenUsage | None]:
-        """Revise a chapter draft based on evaluation feedback."""
+        """Revise a chapter draft based on evaluation feedback.
+
+        Args:
+            plot_outline: The overall plot outline for the novel.
+            character_profiles: Profiles of all major characters.
+            world_building: World building items grouped by category.
+            original_text: The initial chapter draft to revise.
+            chapter_number: Number of the chapter being revised.
+            evaluation_result: Structured feedback from the evaluator agent.
+            hybrid_context_for_revision: Context window for maintaining
+                continuity with previous chapters.
+            chapter_plan: Optional scene plan used when agentic planning is
+                enabled.
+            is_from_flawed_source: Whether the original text came from a flawed
+                generation process.
+            already_patched_spans: Spans previously protected from further
+                modification.
+
+        Returns:
+            A tuple containing either the revised text, the raw LLM output, and
+            updated spans, or ``None`` if revision failed. The second element of
+            the outer tuple is token usage information accumulated during the
+            process.
+
+        Side Effects:
+            Communicates with multiple agents and the LLM service and logs
+            progress throughout the revision process.
+        """
         if already_patched_spans is None:
             already_patched_spans = []
 
