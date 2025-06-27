@@ -8,7 +8,44 @@ import utils
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service
-from processing.patch import _apply_patches_to_text
+from processing.patch import _apply_patches_to_text, locate_patch_targets
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_direct():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "target_char_start": 0,
+        "target_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greeting",
+    }
+    res = await locate_patch_targets("Hello world", patch, None)
+    assert res == (0, 5)
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_semantic(monkeypatch):
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+
+    async def fake_find(*_args, **_kwargs):
+        return (0, 5)
+
+    monkeypatch.setattr(
+        patch_generator.apply,
+        "_find_sentence_via_embeddings",
+        fake_find,
+    )
+    res = await locate_patch_targets(
+        "Hello world",
+        patch,
+        [(0, 5, object())],
+    )
+    assert res == (0, 5)
 
 
 @pytest.mark.asyncio

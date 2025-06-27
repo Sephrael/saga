@@ -59,6 +59,39 @@ async def _find_sentence_via_embeddings(
     return best_span
 
 
+async def locate_patch_targets(
+    original_text: str,
+    patch: PatchInstruction,
+    embeddings: list[tuple[int, int, Any]] | None = None,
+) -> tuple[int, int] | None:
+    """Resolve and return the target offsets for a patch instruction."""
+    start = patch.get("target_char_start")
+    end = patch.get("target_char_end")
+    if start is not None and end is not None:
+        return start, end
+
+    quote_text = patch.get("original_problem_quote_text", "")
+    if not quote_text or quote_text == "N/A - General Issue":
+        logger.warning("Patch %s lacks offsets and quote text.", patch)
+        return None
+
+    logger.info("Locating patch target for '%s...'", quote_text[:50])
+    if embeddings:
+        found = await _find_sentence_via_embeddings(quote_text, embeddings)
+        if found:
+            return found
+
+    match = await utils.find_semantically_closest_segment(
+        original_text, quote_text, "sentence"
+    )
+    if match:
+        start, end, _ = match
+        return start, end
+
+    logger.warning("Failed to locate patch target for '%s...'.", quote_text[:50])
+    return None
+
+
 async def _apply_patches_to_text(
     original_text: str,
     patch_instructions: list[PatchInstruction],
@@ -74,49 +107,16 @@ async def _apply_patches_to_text(
 
     replacements: list[tuple[int, int, str]] = []
     for patch_idx, patch in enumerate(patch_instructions):
-        replacement_text = patch.get("replace_with", "")
-        if replacement_text is None:
-            replacement_text = ""
+        replacement_text = patch.get("replace_with", "") or ""
 
-        segment_start: int | None = patch.get("target_char_start")
-        segment_end: int | None = patch.get("target_char_end")
-        method_used = "direct offsets"
-
-        if segment_start is None or segment_end is None:
-            quote_text = patch["original_problem_quote_text"]
-            if quote_text != "N/A - General Issue" and quote_text.strip():
-                logger.info(
-                    "Patch %s: Missing direct offsets for '%s...'. Using semantic search.",
-                    patch_idx + 1,
-                    quote_text[:50],
-                )
-                method_used = "semantic search"
-                if sentence_embeddings:
-                    found = await _find_sentence_via_embeddings(
-                        quote_text, sentence_embeddings
-                    )
-                    if found:
-                        segment_start, segment_end = found
-                if segment_start is None or segment_end is None:
-                    match = await utils.find_semantically_closest_segment(
-                        original_text, quote_text, "sentence"
-                    )
-                    if match:
-                        segment_start, segment_end, _ = match
-            else:
-                logger.warning(
-                    "Patch %s: Cannot apply, no quote text for search and no offsets.",
-                    patch_idx + 1,
-                )
-                continue
-
-        if segment_start is None or segment_end is None:
-            logger.warning(
-                "Patch %s: Failed to find target segment via %s.",
-                patch_idx + 1,
-                method_used,
-            )
+        target_span = await locate_patch_targets(
+            original_text, patch, sentence_embeddings
+        )
+        if not target_span:
+            logger.warning("Patch %s: Failed to locate target span.", patch_idx + 1)
             continue
+
+        segment_start, segment_end = target_span
 
         is_overlapping = any(
             max(segment_start, old_start) < min(segment_end, old_end)
@@ -166,12 +166,11 @@ async def _apply_patches_to_text(
         replacements.append((segment_start, segment_end, replacement_text))
         log_action = "DELETION" if not replacement_text.strip() else "REPLACEMENT"
         logger.info(
-            "Patch %s: Queued %s for %s-%s via %s.",
+            "Patch %s: Queued %s for %s-%s.",
             patch_idx + 1,
             log_action,
             segment_start,
             segment_end,
-            method_used,
         )
 
     if not replacements:
