@@ -22,6 +22,7 @@ async def _get_sentence_embeddings(
     """Return (start, end, embedding) for each sentence."""
     if cache is None:
         cache = _sentence_embedding_cache
+    utils.load_spacy_model_if_needed()
     text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if text_hash in cache:
         return cache[text_hash]
