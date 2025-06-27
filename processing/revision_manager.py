@@ -2,7 +2,7 @@ from typing import Any
 
 import structlog
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
-from agents.patch_validation_agent import PatchValidationAgent
+from agents.patch_validation_agent import NoOpPatchValidator, PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
 from utils.plot import get_plot_point_info
@@ -108,14 +108,7 @@ class RevisionManager:
             if settings.AGENT_ENABLE_PATCH_VALIDATION:
                 validator: PatchValidationAgent | Any = PatchValidationAgent()
             else:
-
-                class _BypassValidator:
-                    async def validate_patch(
-                        self, *_args: Any, **_kwargs: Any
-                    ) -> tuple[bool, None]:
-                        return True, None
-
-                validator = _BypassValidator()
+                validator = NoOpPatchValidator()
 
             patcher = PatchGenerator()
             (
