@@ -1,0 +1,119 @@
+"""Service for running evaluation cycles."""
+
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import structlog
+from config import settings
+from data_access import character_queries, world_queries
+from kg_maintainer.models import EvaluationResult, ProblemDetail
+
+if TYPE_CHECKING:  # pragma: no cover - type hint import
+    from orchestration.nana_orchestrator import NANA_Orchestrator
+
+logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class EvaluationCycleResult:
+    """Result from a single evaluation cycle."""
+
+    evaluation: EvaluationResult
+    continuity_problems: list[ProblemDetail]
+    eval_usage: dict[str, int] | None
+    continuity_usage: dict[str, int] | None
+
+
+class EvaluationService:
+    """Run evaluation cycles for drafted chapters."""
+
+    def __init__(self, orchestrator: NANA_Orchestrator) -> None:
+        self.orchestrator = orchestrator
+
+    async def run_cycle(
+        self,
+        chapter_number: int,
+        attempt: int,
+        current_text: str,
+        plot_point_focus: str,
+        plot_point_index: int,
+        hybrid_context_for_draft: str,
+        patched_spans: list[tuple[int, int]],
+    ) -> EvaluationCycleResult:
+        self.orchestrator._update_rich_display(
+            step=f"Ch {chapter_number} - Evaluation Cycle {attempt} (Parallel)"
+        )
+
+        tasks_to_run: list[asyncio.Future] = []
+        task_names: list[str] = []
+
+        character_names = await character_queries.get_all_character_names()
+        world_item_ids_by_category = (
+            await world_queries.get_all_world_item_ids_by_category()
+        )
+
+        ignore_spans = patched_spans
+
+        if settings.ENABLE_COMPREHENSIVE_EVALUATION:
+            tasks_to_run.append(
+                self.orchestrator.evaluator_agent.evaluate_chapter_draft(
+                    self.orchestrator.plot_outline,
+                    character_names,
+                    world_item_ids_by_category,
+                    current_text,
+                    chapter_number,
+                    plot_point_focus,
+                    plot_point_index,
+                    hybrid_context_for_draft,
+                    ignore_spans=ignore_spans,
+                )
+            )
+            task_names.append("evaluation")
+
+        if settings.ENABLE_WORLD_CONTINUITY_CHECK:
+            tasks_to_run.append(
+                self.orchestrator.world_continuity_agent.check_consistency(
+                    self.orchestrator.plot_outline,
+                    current_text,
+                    chapter_number,
+                    hybrid_context_for_draft,
+                    ignore_spans=ignore_spans,
+                )
+            )
+            task_names.append("continuity")
+
+        results = await asyncio.gather(*tasks_to_run)
+
+        eval_result_obj: EvaluationResult | None = None
+        eval_usage = None
+        continuity_problems: list[ProblemDetail] = []
+        continuity_usage = None
+
+        result_idx = 0
+        if "evaluation" in task_names:
+            eval_result_obj, eval_usage = results[result_idx]
+            result_idx += 1
+        if "continuity" in task_names:
+            continuity_problems, continuity_usage = results[result_idx]
+
+        if eval_result_obj is None:
+            eval_result_obj = EvaluationResult(
+                needs_revision=False,
+                reasons=[],
+                problems_found=[],
+                coherence_score=None,
+                consistency_issues=None,
+                plot_deviation_reason=None,
+                thematic_issues=None,
+                narrative_depth_issues=None,
+            )
+
+        return EvaluationCycleResult(
+            evaluation=eval_result_obj,
+            continuity_problems=continuity_problems,
+            eval_usage=eval_usage,
+            continuity_usage=continuity_usage,
+        )
