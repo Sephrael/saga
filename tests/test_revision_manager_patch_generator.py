@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock
 
 import processing.patch as patch_generator
 import pytest
-from agents.patch_validation_agent import PatchValidationAgent
+from agents.patch_validation_agent import NoOpPatchValidator, PatchValidationAgent
+from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
 from processing.revision_manager import RevisionManager
 
@@ -157,3 +158,69 @@ async def test_revision_manager_full_rewrite(monkeypatch):
 
     assert res[0] == "Rewrite done"
     assert res[2] == []
+
+
+@pytest.mark.asyncio
+async def test_revision_manager_uses_noop_validator(monkeypatch):
+    settings.AGENT_ENABLE_PATCH_VALIDATION = False
+    received = None
+
+    async def fake_generate_and_apply(
+        self,
+        *args,
+        **_kwargs,
+    ):
+        nonlocal received
+        if args:
+            received = args[-1]
+        else:
+            received = _kwargs.get("validator")
+        return "Hello world", []
+
+    monkeypatch.setattr(
+        patch_generator.PatchGenerator,
+        "generate_and_apply",
+        fake_generate_and_apply,
+    )
+    monkeypatch.setattr(
+        llm_service, "async_call_llm", AsyncMock(return_value=("rw", None))
+    )
+    monkeypatch.setattr(llm_service, "clean_model_response", lambda t: t)
+    monkeypatch.setattr(
+        truncate_text_by_tokens, "__call__", lambda text, *_a, **_k: text, raising=False
+    )
+
+    manager = RevisionManager()
+    eval_result = {
+        "needs_revision": True,
+        "problems_found": [
+            {
+                "issue_category": "style",
+                "problem_description": "d",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "suggested_fix_focus": "fix",
+            }
+        ],
+    }
+
+    await manager.revise_chapter(
+        {"plot_points": ["a"]},
+        {},
+        {},
+        "Hello world",
+        1,
+        eval_result,
+        "ctx",
+        None,
+    )
+
+    assert isinstance(received, NoOpPatchValidator)
+
+
+@pytest.mark.asyncio
+async def test_noop_validator_always_passes():
+    validator = NoOpPatchValidator()
+    ok, usage = await validator.validate_patch("ctx", {}, [])
+    assert ok and usage is None

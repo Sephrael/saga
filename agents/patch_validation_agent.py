@@ -55,3 +55,20 @@ class PatchValidationAgent:
         if not is_pass:
             logger.info("Patch validation score %d below threshold", score)
         return is_pass, usage
+
+
+class NoOpPatchValidator(PatchValidationAgent):
+    """Bypass patch validation and always approve patches."""
+
+    def __init__(self) -> None:  # noqa: D401 - no behavior to document
+        """Initialize without calling the parent constructor."""
+        # Intentionally skip PatchValidationAgent initialization
+
+    async def validate_patch(
+        self,
+        context_snippet: str,
+        patch: PatchInstruction,
+        problems: list[ProblemDetail],
+    ) -> tuple[bool, None]:
+        """Return True without performing validation."""
+        return True, None
