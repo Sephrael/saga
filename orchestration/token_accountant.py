@@ -36,16 +36,15 @@ class TokenAccountant:
         """Record token usage for a stage."""
         stage_name = stage.value if isinstance(stage, Stage) else stage
 
+        usage_dict: dict[str, int]
         if isinstance(usage, TokenUsage):
-            usage_dict: dict[str, int] = {
+            usage_dict = {
                 "prompt_tokens": usage.prompt_tokens,
                 "completion_tokens": usage.completion_tokens,
                 "total_tokens": usage.total_tokens,
             }
-        elif isinstance(usage, dict):
-            usage_dict = {k: int(v) for k, v in usage.items()}
         else:
-            usage_dict = {}
+            usage_dict = usage or {}
 
         if usage_dict and isinstance(usage_dict.get("completion_tokens"), int):
             completed_tokens = usage_dict["completion_tokens"]
