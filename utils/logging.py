@@ -9,20 +9,29 @@ import os
 import structlog
 from config import settings
 
+_RichHandler: type[logging.Handler]
+
 logger = structlog.get_logger(__name__)
 
 try:
-    from rich.logging import RichHandler
+    import rich.logging as rich_logging
+
+    _RichHandler = rich_logging.RichHandler
 
     RICH_AVAILABLE = True
 except Exception:  # pragma: no cover - fallback when Rich is missing
     RICH_AVAILABLE = False
 
     class _FallbackRichHandler(logging.Handler):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__()
+
         def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover
             logging.getLogger(__name__).handle(record)
 
-    RichHandler = _FallbackRichHandler
+    _RichHandler = _FallbackRichHandler
+
+RichHandler = _RichHandler
 
 
 __all__ = ["setup_logging_nana"]
