@@ -9,6 +9,8 @@ import os
 import structlog
 from config import settings
 
+logger = structlog.get_logger(__name__)
+
 try:
     from rich.logging import RichHandler
 
@@ -69,7 +71,7 @@ def setup_logging_nana() -> None:
             file_handler.setFormatter(file_formatter)
             root_logger.addHandler(file_handler)
         except Exception as e:  # pragma: no cover - path issues
-            print(f"Error setting up file logger: {e}")
+            logger.error("Error setting up file logger: %s", e)
 
     if RICH_AVAILABLE and settings.ENABLE_RICH_PROGRESS:
         console_handler = RichHandler(

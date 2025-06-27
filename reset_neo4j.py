@@ -31,7 +31,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
             "in the Neo4j database. This is a destructive operation. Continue? (y/N): "
         )
         if response.lower() not in ["y", "yes"]:
-            print("Operation cancelled.")
+            logger.info("Operation cancelled.")
             return False
 
     effective_uri = uri or settings.NEO4J_URI  # MODIFIED
