@@ -156,10 +156,21 @@ class PlannerAgent:
         chapter_number: int,
         plot_point_focus: str | None,
         plot_point_index: int,
+        plot_point_progress_chapter: int,
     ) -> tuple[list[SceneDetail] | None, dict[str, int] | None]:
-        """
-        Generates a detailed scene plan for the chapter.
-        Returns the plan and LLM usage data.
+        """Generate a detailed scene plan for a chapter.
+
+        Args:
+            plot_outline: Full plot outline for the novel.
+            character_profiles: Character data keyed by name.
+            world_building: World-building data.
+            chapter_number: The sequential chapter number.
+            plot_point_focus: The active major plot point.
+            plot_point_index: Index of the active plot point in the outline.
+            plot_point_progress_chapter: Chapter count within the current plot point span (1-based).
+
+        Returns:
+            The planned scenes and token usage data.
         """
         if not settings.ENABLE_AGENTIC_PLANNING:
             logger.info(
@@ -307,6 +318,8 @@ class PlannerAgent:
                 "protagonist_arc": plot_outline.get("character_arc", "N/A"),
                 "plot_point_index_plus1": plot_point_index + 1,
                 "total_plot_points_in_novel": total_plot_points_in_novel,
+                "plot_point_chapter_progress": plot_point_progress_chapter,
+                "plot_point_chapter_span": settings.PLOT_POINT_CHAPTER_SPAN,
                 "plot_point_focus": plot_point_focus,
                 "future_plot_context_str": future_plot_context_str,
                 "context_summary_str": context_summary_str,
@@ -317,7 +330,10 @@ class PlannerAgent:
             },
         )
         logger.info(
-            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {settings.TARGET_SCENES_MIN}-{settings.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
+            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} "
+            f"(target scenes: {settings.TARGET_SCENES_MIN}-{settings.TARGET_SCENES_MAX}, expecting JSON). "
+            f"Plot Point {plot_point_index + 1}/{total_plot_points_in_novel} "
+            f"progress {plot_point_progress_chapter}/{settings.PLOT_POINT_CHAPTER_SPAN}."
         )
 
         (
