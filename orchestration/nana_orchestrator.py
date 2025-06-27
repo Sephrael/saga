@@ -52,6 +52,7 @@ from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from ui.rich_display import RichDisplayManager
 from utils.ingestion_utils import split_text_into_chapters
+from utils.plot import get_plot_point_info
 
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
@@ -257,37 +258,6 @@ class NANA_Orchestrator:
         self._update_rich_display(step="Initial State Saved")
 
         return True
-
-    def _get_plot_point_info_for_chapter(
-        self, novel_chapter_number: int
-    ) -> tuple[str | None, int]:
-        plot_points_list = self.plot_outline.get("plot_points", [])
-        if not isinstance(plot_points_list, list) or not plot_points_list:
-            logger.error(
-                f"No plot points available in orchestrator state for chapter {novel_chapter_number}."
-            )
-            return None, -1
-
-        plot_point_index = novel_chapter_number - 1
-
-        if 0 <= plot_point_index < len(plot_points_list):
-            plot_point_item = plot_points_list[plot_point_index]
-            plot_point_text = (
-                plot_point_item.get("description")
-                if isinstance(plot_point_item, dict)
-                else str(plot_point_item)
-            )
-            if isinstance(plot_point_text, str) and plot_point_text.strip():
-                return plot_point_text, plot_point_index
-            logger.warning(
-                f"Plot point at index {plot_point_index} for chapter {novel_chapter_number} is empty or invalid. Using placeholder."
-            )
-            return settings.FILL_IN, plot_point_index
-        else:
-            logger.error(
-                f"Plot point index {plot_point_index} is out of bounds for plot_points list (len: {len(plot_points_list)}) for chapter {novel_chapter_number}."
-            )
-            return None, -1
 
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: str | None
@@ -543,8 +513,8 @@ class NANA_Orchestrator:
             step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
         )
 
-        plot_point_focus, plot_point_index = self._get_plot_point_info_for_chapter(
-            novel_chapter_number
+        plot_point_focus, plot_point_index = get_plot_point_info(
+            self.plot_outline, novel_chapter_number
         )
         if plot_point_focus is None:
             logger.error(

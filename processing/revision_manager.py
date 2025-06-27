@@ -5,6 +5,7 @@ from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
+from utils.plot import get_plot_point_info
 
 from models import (
     CharacterProfile,
@@ -152,9 +153,7 @@ class RevisionManager:
                 for cat, items in world_building.items()
                 if isinstance(items, dict)
             }
-            plot_focus, plot_idx = patch_generator._get_plot_point_info(
-                plot_outline, chapter_number
-            )
+            plot_focus, plot_idx = get_plot_point_info(plot_outline, chapter_number)
             post_eval, post_usage = await evaluator.evaluate_chapter_draft(
                 plot_outline,
                 list(character_profiles.keys()),
@@ -189,7 +188,7 @@ class RevisionManager:
                 truncation_marker="\n... (original draft snippet truncated for brevity in rewrite prompt)",
             )
             plan_focus_section_full_rewrite_parts: list[str] = []
-            plot_point_focus_full_rewrite, _ = patch_generator._get_plot_point_info(
+            plot_point_focus_full_rewrite, _ = get_plot_point_info(
                 plot_outline, chapter_number
             )
             max_plan_tokens_for_full_rewrite = settings.MAX_CONTEXT_TOKENS // 2

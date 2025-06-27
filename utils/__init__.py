@@ -12,6 +12,7 @@ from config import settings
 from core.llm_interface import count_tokens, llm_service
 
 from .helpers import _is_fill_in
+from .plot import get_plot_point_info
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
 from .text_processing import (
     SpaCyModelManager,
@@ -228,6 +229,7 @@ __all__ = [
     "numpy_cosine_similarity",
     "get_text_segments",
     "format_scene_plan_for_prompt",
+    "get_plot_point_info",
     "deduplicate_text_segments",
     "remove_spans_from_text",
 ]
