@@ -3,7 +3,8 @@ import asyncio
 
 import structlog
 from core.db_manager import neo4j_manager
-from orchestration.nana_orchestrator import NANA_Orchestrator, setup_logging_nana
+from orchestration.nana_orchestrator import NANA_Orchestrator
+from utils.logging import setup_logging_nana
 
 logger = structlog.get_logger(__name__)
 
