@@ -22,6 +22,7 @@ _group_problems_for_patch_generation = instructions._group_problems_for_patch_ge
 _generate_patch_instructions_logic = instructions._generate_patch_instructions_logic
 _apply_patches_to_text = apply._apply_patches_to_text
 _get_sentence_embeddings = apply._get_sentence_embeddings
+locate_patch_targets = apply.locate_patch_targets
 
 
 class PatchGenerator:
