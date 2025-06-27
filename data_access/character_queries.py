@@ -67,6 +67,8 @@ async def sync_characters(
 
 
 async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bool:
+    """Persist the full set of character profiles to Neo4j."""
+
     logger.info("Synchronizing character profiles to Neo4j (non-destructive)...")
 
     novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
@@ -437,6 +439,8 @@ async def get_all_character_names() -> list[str]:
 
 
 async def get_character_profiles_from_db() -> dict[str, CharacterProfile]:
+    """Load all character profiles from Neo4j."""
+
     logger.info("Loading decomposed character profiles from Neo4j...")
     profiles_data: dict[str, CharacterProfile] = {}
 
@@ -538,6 +542,16 @@ async def get_character_profiles_from_db() -> dict[str, CharacterProfile]:
 async def get_character_info_for_snippet_from_db(
     char_name: str, chapter_limit: int
 ) -> dict[str, Any] | None:
+    """Return character details with history up to ``chapter_limit``.
+
+    Args:
+        char_name: Name of the character to fetch.
+        chapter_limit: Highest chapter number to consider when collecting data.
+
+    Returns:
+        A dictionary of character info or ``None`` if not found.
+    """
+
     canonical_name = resolve_character_name(char_name)
     query = """
     MATCH (c:Character:Entity {name: $char_name_param})

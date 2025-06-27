@@ -113,6 +113,8 @@ async def add_kg_triples_batch_to_db(
     chapter_number: int,
     is_from_flawed_draft: bool,
 ):
+    """Insert a batch of knowledge graph triples into Neo4j."""
+
     if not structured_triples_data:
         logger.info("Neo4j: add_kg_triples_batch_to_db: No structured triples to add.")
         return
@@ -248,6 +250,19 @@ async def query_kg_from_db(
     include_provisional: bool = True,
     limit_results: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Query dynamic relationships from the graph with optional filters.
+
+    Args:
+        subject: Subject entity name to match.
+        predicate: Relationship type to match.
+        obj_val: Object entity or literal value to match.
+        chapter_limit: Only consider relationships up to this chapter.
+        include_provisional: Include provisional relationships when ``True``.
+        limit_results: Maximum number of records to return.
+
+    Returns:
+        A list of matching relationship dictionaries.
+    """
     conditions = []
     parameters: dict[str, str] = {}
     match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o) "
@@ -322,6 +337,8 @@ async def get_most_recent_value_from_db(
     chapter_limit: int | None = None,
     include_provisional: bool = False,
 ) -> Any | None:
+    """Get the newest relationship value for ``subject`` and ``predicate``."""
+
     if not subject.strip() or not predicate.strip():
         logger.warning(
             f"Neo4j: get_most_recent_value_from_db: empty subject or predicate. S='{subject}', P='{predicate}'"
