@@ -17,7 +17,7 @@ async def run_chapter_pipeline(
     if not await orchestrator._validate_plot_outline(novel_chapter_number):
         return None
 
-    prereq_result = await orchestrator._prepare_chapter_prerequisites(
+    prereq_result = await orchestrator.prerequisites_service.prepare(
         novel_chapter_number
     )
     processed_prereqs = await orchestrator._process_prereq_result(
@@ -29,7 +29,7 @@ async def run_chapter_pipeline(
         processed_prereqs
     )
 
-    draft_result = await orchestrator._draft_initial_chapter_text(
+    draft_result = await orchestrator.drafting_service.draft_initial_text(
         novel_chapter_number,
         plot_point_focus,
         hybrid_context_for_draft,
