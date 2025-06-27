@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
+from chapter_generation.context_service import ContextService
 from core.llm_interface import llm_service
 from data_access import chapter_queries
-from processing import context_generator
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,8 @@ async def test_immediate_context_added(monkeypatch):
         AsyncMock(side_effect=fake_find_similar),
     )
 
-    ctx = await context_generator._generate_semantic_chapter_context_logic({}, 4)
+    service = ContextService(chapter_queries, llm_service)
+    ctx = await service.get_semantic_context({}, 4)
     assert ctx.startswith("[Immediate Context from Chapter 3")
     assert ctx.index("[Immediate Context from Chapter 2") < ctx.index(
         "Semantic Context from Chapter 1"
@@ -90,7 +91,8 @@ async def test_decay_sorting(monkeypatch):
         AsyncMock(side_effect=fake_find_similar),
     )
 
-    ctx = await context_generator._generate_semantic_chapter_context_logic({}, 11)
+    service = ContextService(chapter_queries, llm_service)
+    ctx = await service.get_semantic_context({}, 11)
     pos8 = ctx.index("Semantic Context from Chapter 8")
     pos5 = ctx.index("Semantic Context from Chapter 5")
     pos1 = ctx.index("Semantic Context from Chapter 1")
