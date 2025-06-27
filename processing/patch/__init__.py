@@ -25,7 +25,7 @@ _get_sentence_embeddings = apply._get_sentence_embeddings
 
 
 class PatchGenerator:
-    """Generate patch instructions and apply them to text."""
+    """Generate and apply patch instructions to chapter text."""
 
     async def generate_and_apply(
         self,
@@ -38,7 +38,26 @@ class PatchGenerator:
         already_patched_spans: list[tuple[int, int]] | None,
         validator: PatchValidationAgent,
     ) -> tuple[str, list[tuple[int, int]], TokenUsage | None]:
-        """Return revised text, updated spans, and token usage."""
+        """Generate patch instructions and apply them.
+
+        Args:
+            plot_outline: Outline of the overall plot for context.
+            original_text: The raw chapter text to be revised.
+            problems_to_fix: Issues detected during evaluation.
+            chapter_number: Current chapter index.
+            hybrid_context_for_revision: Context window from previous chapters.
+            chapter_plan: Optional list of scene details for planning.
+            already_patched_spans: Ranges that should be preserved.
+            validator: Agent responsible for validating proposed patches.
+
+        Returns:
+            A tuple containing the patched text, the spans in the revised text
+            that correspond to applied patches, and optional token usage data.
+
+        Side Effects:
+            Calls out to the LLM service for embeddings and patch generation and
+            logs progress via ``structlog``.
+        """
         sentence_embeddings = await _get_sentence_embeddings(original_text)
         patch_instructions, usage = await _generate_patch_instructions_logic(
             plot_outline,
