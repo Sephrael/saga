@@ -12,6 +12,7 @@ from config import settings
 from core.llm_interface import llm_service
 from data_access import character_queries, world_queries
 from kg_maintainer.models import EvaluationResult
+from orchestration.token_accountant import Stage
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -83,11 +84,11 @@ class RevisionService:
             )
 
             self.orchestrator._accumulate_tokens(
-                f"Ch{chapter_number}-Evaluation-Attempt{attempt}",
+                f"Ch{chapter_number}-{Stage.EVALUATION.value}-Attempt{attempt}",
                 eval_usage,
             )
             self.orchestrator._accumulate_tokens(
-                f"Ch{chapter_number}-ContinuityCheck-Attempt{attempt}",
+                f"Ch{chapter_number}-{Stage.CONTINUITY_CHECK.value}-Attempt{attempt}",
                 continuity_usage,
             )
 
@@ -160,7 +161,8 @@ class RevisionService:
                 already_patched_spans=patched_spans,
             )
             self.orchestrator._accumulate_tokens(
-                f"Ch{chapter_number}-Revision-Attempt{attempt}", revision_usage
+                f"Ch{chapter_number}-{Stage.REVISION.value}-Attempt{attempt}",
+                revision_usage,
             )
             if (
                 revision_result

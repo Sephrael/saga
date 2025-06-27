@@ -48,7 +48,7 @@ from utils.plot import get_plot_point_info
 
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
-from orchestration.token_tracker import TokenTracker
+from orchestration.token_accountant import Stage, TokenAccountant
 
 logger = structlog.get_logger(__name__)
 
@@ -94,7 +94,7 @@ class NANA_Orchestrator:
         self.chapter_count: int = 0
         self.novel_props_cache: dict[str, Any] = {}
         self.knowledge_cache = KnowledgeCache()
-        self.token_tracker = TokenTracker()
+        self.token_accountant = TokenAccountant()
         self.total_tokens_generated_this_run: int = 0
 
         self.display = RichDisplayManager()
@@ -113,11 +113,9 @@ class NANA_Orchestrator:
             run_start_time=self.run_start_time,
         )
 
-    def _accumulate_tokens(
-        self, operation_name: str, usage_data: dict[str, int] | None
-    ):
-        self.token_tracker.add(operation_name, usage_data)
-        self.total_tokens_generated_this_run = self.token_tracker.total
+    def _accumulate_tokens(self, stage: str, usage_data: dict[str, int] | None) -> None:
+        self.token_accountant.record_usage(stage, usage_data)
+        self.total_tokens_generated_this_run = self.token_accountant.total
         self._update_rich_display()
 
     async def _generate_plot_points_from_kg(self, count: int) -> None:
@@ -140,7 +138,7 @@ class NANA_Orchestrator:
         new_points, usage = await self.planner_agent.plan_continuation(
             combined_summary, count
         )
-        self._accumulate_tokens("PlanContinuation", usage)
+        self._accumulate_tokens(Stage.PLAN_CONTINUATION.value, usage)
         if not new_points:
             logger.error("Failed to generate continuation plot points.")
             return
@@ -246,7 +244,7 @@ class NANA_Orchestrator:
             world_building,
             usage,
         ) = await run_genesis_phase()
-        self._accumulate_tokens("Genesis-Phase", usage)
+        self._accumulate_tokens(Stage.GENESIS_PHASE.value, usage)
 
         plot_source = self.plot_outline.get("source", "unknown")
         logger.info(
@@ -507,7 +505,9 @@ class NANA_Orchestrator:
             plot_point_focus,
             plot_point_index,
         )
-        self._accumulate_tokens(f"Ch{novel_chapter_number}-Planning", plan_usage)
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-{Stage.CHAPTER_PLANNING.value}", plan_usage
+        )
 
         chapter_plan: list[SceneDetail] | None = chapter_plan_result
 
@@ -525,8 +525,7 @@ class NANA_Orchestrator:
                 novel_chapter_number,
             )
             self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-PlanConsistency",
-                usage,
+                f"Ch{novel_chapter_number}-{Stage.PLAN_CONSISTENCY.value}", usage
             )
             await self._save_debug_output(
                 novel_chapter_number,
@@ -585,7 +584,9 @@ class NANA_Orchestrator:
             hybrid_context_for_draft,
             chapter_plan,
         )
-        self._accumulate_tokens(f"Ch{novel_chapter_number}-Drafting", draft_usage)
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-{Stage.DRAFTING.value}", draft_usage
+        )
 
         if not initial_draft_text:
             logger.error(

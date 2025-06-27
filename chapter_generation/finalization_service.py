@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import structlog
 from agents.finalize_agent import FinalizationResult
 from data_access import character_queries, world_queries
+from orchestration.token_accountant import Stage
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -56,10 +57,12 @@ class FinalizationService:
         )
 
         self.orchestrator._accumulate_tokens(
-            f"Ch{chapter_number}-Summarization", result.get("summary_usage")
+            f"Ch{chapter_number}-{Stage.SUMMARIZATION.value}",
+            result.get("summary_usage"),
         )
         self.orchestrator._accumulate_tokens(
-            f"Ch{chapter_number}-KGExtractionMerge", result.get("kg_usage")
+            f"Ch{chapter_number}-{Stage.KG_EXTRACTION_MERGE.value}",
+            result.get("kg_usage"),
         )
         await self.orchestrator._save_debug_output(
             chapter_number, "final_summary", result.get("summary")
