@@ -24,8 +24,11 @@ You are an expert novelist, winner of the Pulitzer Prize in Fiction, capable of 
 **Instructions:**
 1. Write the narrative prose for this scene only. Do not include headings or meta commentary.
 2. Ensure the prose aligns with the Hybrid Context and Prior Scene Prose.
-3. Aim for at least {{ min_length_per_scene }} characters of text.
-4. Let the scene's themes emerge through action, subtext, and metaphorical imagery rather than direct exposition or deus ex machina.
-5. Output ONLY the scene text.
+3. Weave the provided KG facts and world details seamlessly into the scene.
+   Ignoring or contradicting them will result in a penalty, while subtle,
+   "show, don't tell" usage is rewarded.
+4. Aim for at least {{ min_length_per_scene }} characters of text.
+5. Let the scene's themes emerge through action, subtext, and metaphorical imagery rather than direct exposition or deus ex machina.
+6. Output ONLY the scene text.
 
 --- BEGIN SCENE {{ scene_detail.scene_number }} TEXT ---
