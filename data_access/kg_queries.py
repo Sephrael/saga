@@ -394,8 +394,12 @@ async def get_chapter_context_for_entity(
     match_clause = (
         "MATCH (e {id: $id_param})" if entity_id else "MATCH (e {name: $name_param})"
     )
-    params = {"id_param": entity_id} if entity_id else {"name_param": entity_name}
-    params = {k: v for k, v in params.items() if v is not None}
+
+    params: dict[str, str] = {}
+    if entity_id is not None:
+        params["id_param"] = entity_id
+    elif entity_name is not None:
+        params["name_param"] = entity_name
 
     query = f"""
     {match_clause}
