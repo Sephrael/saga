@@ -4,6 +4,7 @@ import config
 import pytest
 import utils
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import plot_queries
 from orchestration.nana_orchestrator import NANA_Orchestrator
 
@@ -35,6 +36,8 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
 
     monkeypatch.setattr(orch.display, "start", lambda: None)
     monkeypatch.setattr(orch.display, "stop", AsyncMock())
+    llm_close = AsyncMock()
+    monkeypatch.setattr(llm_service, "aclose", llm_close)
     monkeypatch.setattr(neo4j_manager, "connect", AsyncMock())
     monkeypatch.setattr(neo4j_manager, "create_db_schema", AsyncMock())
     monkeypatch.setattr(neo4j_manager, "close", AsyncMock())
@@ -52,3 +55,4 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
     await orch.run_ingestion_process(str(text_file))
 
     assert heal.call_count == 3
+    llm_close.assert_awaited_once()

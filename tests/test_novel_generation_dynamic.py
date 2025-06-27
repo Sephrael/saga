@@ -4,6 +4,7 @@ import config
 import pytest
 import utils
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import chapter_queries
 from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -54,9 +55,12 @@ async def test_dynamic_chapter_adjustment(monkeypatch):
     )
     monkeypatch.setattr(orch.display, "start", lambda: None)
     monkeypatch.setattr(orch.display, "stop", AsyncMock())
+    llm_close = AsyncMock()
+    monkeypatch.setattr(llm_service, "aclose", llm_close)
     monkeypatch.setattr(orch, "_validate_critical_configs", lambda: True)
 
     await orch.run_novel_generation_loop()
 
     assert calls == [1, 2, 3]
     assert orch.chapter_count == 3
+    llm_close.assert_awaited_once()

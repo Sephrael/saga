@@ -23,6 +23,7 @@ from chapter_generation import (
 )
 from config import settings
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from core.usage import TokenUsage
 from data_access import (
     chapter_queries,
@@ -913,6 +914,7 @@ class NANA_Orchestrator:
             self._update_rich_display(step="Critical Error in Main Loop")
         finally:
             await self.display.stop()
+            await llm_service.aclose()
 
     async def run_ingestion_process(self, text_file: str) -> None:
         """Ingest existing text and populate the knowledge graph."""
@@ -942,4 +944,5 @@ class NANA_Orchestrator:
             )
         self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         await self.display.stop()
+        await llm_service.aclose()
         logger.info("NANA: Ingestion process completed.")
