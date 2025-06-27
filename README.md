@@ -301,7 +301,7 @@ After resetting and ensuring Neo4j is running, the next execution of `python mai
 Install `ruff` and `mypy` in addition to the core requirements:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt  # installs pytest-cov for coverage
 pip install ruff mypy
 ```
 
