@@ -914,7 +914,7 @@ class NANA_Orchestrator:
             self._update_rich_display(step="Critical Error in Main Loop")
         finally:
             await self.display.stop()
-            await llm_service.aclose()
+            await self.shutdown()
 
     async def run_ingestion_process(self, text_file: str) -> None:
         """Ingest existing text and populate the knowledge graph."""
@@ -942,7 +942,14 @@ class NANA_Orchestrator:
             logger.warning(
                 "Neo4j driver not initialized. Skipping knowledge cache refresh."
             )
+
         self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         await self.display.stop()
-        await llm_service.aclose()
+        await self.shutdown()
         logger.info("NANA: Ingestion process completed.")
+
+    async def shutdown(self) -> None:
+        """Close the Neo4j driver and the LLM service."""
+        if neo4j_manager.driver is not None:
+            await neo4j_manager.close()
+        await llm_service.aclose()
