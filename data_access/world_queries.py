@@ -4,7 +4,7 @@ from typing import Any
 import structlog
 import utils
 from async_lru import alru_cache  # type: ignore
-from config import settings  # MODIFIED
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -16,7 +16,7 @@ from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
-logger = structlog.get_logger(__name__)  # MODIFIED
+logger = structlog.get_logger(__name__)
 
 # Mapping from normalized world item names to canonical IDs
 WORLD_NAME_TO_ID: dict[str, str] = {}
@@ -100,9 +100,9 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
 
     logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
     wc_id_param = (
-        settings.MAIN_WORLD_CONTAINER_NODE_ID  # MODIFIED
+        settings.MAIN_WORLD_CONTAINER_NODE_ID
     )  # Unique ID for the WorldContainer
     statements: list[tuple[str, dict[str, Any]]] = []
 
@@ -113,9 +113,7 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
             "id": wc_id_param,  # Ensure ID is part of props for SET
             "overview_description": str(overview_details.get("description", "")),
             KG_IS_PROVISIONAL: overview_details.get(
-                kg_keys.source_quality_key(
-                    settings.KG_PREPOPULATION_CHAPTER_NUM
-                )  # MODIFIED
+                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
             )
             == "provisional_from_unrevised_draft",
         }
@@ -256,7 +254,7 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
                 KG_NODE_CREATED_CHAPTER,  # Check direct KG constant key first
                 details_dict.get(
                     "created_chapter",
-                    settings.KG_PREPOPULATION_CHAPTER_NUM,  # MODIFIED
+                    settings.KG_PREPOPULATION_CHAPTER_NUM,
                 ),
             )  # Fallback
 
@@ -574,7 +572,7 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
 
     logger.info("Loading decomposed world building data from Neo4j...")
     world_data: dict[str, dict[str, WorldItem]] = {}
-    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID  # MODIFIED
+    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID
 
     await fix_missing_world_element_core_fields()
 
@@ -592,9 +590,7 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
         overview_data.pop("updated_ts", None)
         if overview_data.get(KG_IS_PROVISIONAL):
             overview_data[
-                kg_keys.source_quality_key(
-                    settings.KG_PREPOPULATION_CHAPTER_NUM
-                )  # MODIFIED
+                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
             ] = "provisional_from_unrevised_draft"
         world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
             "_overview_",
@@ -651,7 +647,7 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
 
         created_chapter_num = item_detail.pop(
             KG_NODE_CREATED_CHAPTER,
-            settings.KG_PREPOPULATION_CHAPTER_NUM,  # MODIFIED
+            settings.KG_PREPOPULATION_CHAPTER_NUM,
         )
         item_detail["created_chapter"] = int(
             created_chapter_num

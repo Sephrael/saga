@@ -2,18 +2,20 @@
 from typing import Any
 
 import numpy as np
-import structlog  # MODIFIED
-from config import settings  # MODIFIED
+import structlog
+from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 
-logger = structlog.get_logger(__name__)  # MODIFIED
+logger = structlog.get_logger(__name__)
 
 
 async def load_chapter_count_from_db() -> int:
     """Return the number of chapters stored in the database."""
 
-    query = f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"  # MODIFIED
+    query = (
+        f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"
+    )
     try:
         result = await neo4j_manager.execute_read_query(query)
         count = result[0]["chapter_count"] if result and result[0] else 0
@@ -173,7 +175,7 @@ async def find_similar_chapters_in_db(
 
     exclude_clause = ""
     params_dict: dict[str, Any] = {
-        "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME,  # MODIFIED
+        "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME,
         "limit_param": limit + (1 if current_chapter_to_exclude is not None else 0),
         "queryVector_param": query_embedding_list,
     }

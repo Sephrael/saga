@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 from async_lru import alru_cache
-from config import settings  # MODIFIED
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -382,7 +382,7 @@ async def get_novel_info_property_from_db(property_key: str) -> Any | None:
         logger.warning("Neo4j: empty property key for NovelInfo query")
         return None
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
     query = f"MATCH (ni:NovelInfo:Entity {{id: $novel_id_param}}) RETURN ni.{property_key} AS value"
     try:
         results = await neo4j_manager.execute_read_query(

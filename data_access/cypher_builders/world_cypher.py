@@ -1,8 +1,8 @@
 import json
 from typing import Any
 
-import structlog  # MODIFIED
-from config import settings  # MODIFIED
+import structlog
+from config import settings
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CREATED_CHAPTER,
@@ -10,7 +10,7 @@ from kg_constants import (
 from kg_maintainer.models import WorldItem
 from utils import kg_property_keys as kg_keys
 
-logger = structlog.get_logger(__name__)  # MODIFIED
+logger = structlog.get_logger(__name__)
 
 
 def generate_world_element_node_cypher(
@@ -92,7 +92,7 @@ def generate_world_element_node_cypher(
             {
                 "wc_id": settings.MAIN_WORLD_CONTAINER_NODE_ID,
                 "we_id": item.id,
-            },  # MODIFIED
+            },
         )
     )
 
