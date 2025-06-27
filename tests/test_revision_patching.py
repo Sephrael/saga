@@ -233,6 +233,11 @@ async def test_patch_validation_toggle(monkeypatch):
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )
+    monkeypatch.setattr(
+        patch_generator.instructions,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
 
     problems = [
         {
@@ -290,6 +295,7 @@ async def test_sentence_embedding_cache(monkeypatch):
         call_count += 1
         return np.array([1.0])
 
+    monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
     cache: dict[str, list[tuple[int, int, object]]] = {}
     await patch_generator._get_sentence_embeddings(text, cache)
@@ -347,6 +353,11 @@ async def test_patch_generation_concurrent(monkeypatch):
 
     monkeypatch.setattr(
         patch_generator,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+    monkeypatch.setattr(
+        patch_generator.instructions,
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )

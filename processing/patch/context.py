@@ -6,7 +6,6 @@ import utils
 from models import ProblemDetail, SceneDetail
 
 logger = structlog.get_logger(__name__)
-utils.load_spacy_model_if_needed()
 
 
 def _get_formatted_scene_plan_from_agent_or_fallback(
