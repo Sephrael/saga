@@ -15,6 +15,7 @@ from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
 from agents.world_continuity_agent import WorldContinuityAgent
 from chapter_generation import (
+    ContextService,
     DraftingService,
     DraftResult,
     EvaluationService,
@@ -41,7 +42,6 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
-from processing.context_generator import generate_hybrid_chapter_context_logic
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from storage.file_manager import FileManager
@@ -95,6 +95,7 @@ class NANA_Orchestrator:
         self.evaluation_service = EvaluationService(self, self.file_manager)
         self.revision_service = RevisionService(self, self.file_manager)
         self.finalization_service = FinalizationService(self, self.file_manager)
+        self.context_service = ContextService()
 
         self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
@@ -526,7 +527,7 @@ class NANA_Orchestrator:
                     f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
                 )
 
-        hybrid_context_for_draft = await generate_hybrid_chapter_context_logic(
+        hybrid_context_for_draft = await self.context_service.build_hybrid_context(
             self, novel_chapter_number, chapter_plan
         )
 
