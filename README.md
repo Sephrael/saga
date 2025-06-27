@@ -294,6 +294,41 @@ To start SAGA from a completely fresh state:
 
 After resetting and ensuring Neo4j is running, the next execution of `python main.py` will re-initialize the story and KG.
 
+## Development
+
+### Install Dev Dependencies
+
+Install `ruff` and `mypy` in addition to the core requirements:
+
+```bash
+pip install -r requirements.txt
+pip install ruff mypy
+```
+
+### Environment Variables
+
+Use `.env.example` as a starting point:
+
+```bash
+cp .env.example .env
+```
+
+Two notable variables prefixed with `AGENT_` control behavior:
+
+- `AGENT_LOG_LEVEL` – set log verbosity (e.g., `INFO` or `DEBUG`).
+- `AGENT_ENABLE_PATCH_VALIDATION` – enable the `PatchValidationAgent` to verify patches.
+
+### Running Linters and Tests
+
+Check formatting and linting with Ruff, run type checks, and execute tests with coverage:
+
+```bash
+ruff check .
+ruff format --check .
+mypy .
+pytest -v --cov=. --cov-report=term-missing
+```
+
 ## License
 
 This project is licensed under the Apache License, Version 2.0. See the `LICENSE` file for details.
