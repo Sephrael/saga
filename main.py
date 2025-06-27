@@ -3,6 +3,7 @@ import asyncio
 
 import structlog
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from orchestration.nana_orchestrator import NANA_Orchestrator
 from utils.logging import setup_logging_nana
 
@@ -38,17 +39,22 @@ def main() -> None:
             async def _close_driver_main() -> None:
                 await neo4j_manager.close()
 
-            try:
-                loop = asyncio.get_running_loop()
-                if not loop.is_closed():
-                    loop.create_task(_close_driver_main())
-            except RuntimeError:
-                asyncio.run(_close_driver_main())
-            except Exception as e:
-                logger.warning(
-                    "Could not explicitly close driver from main: %s",
-                    e,
-                )
+        async def _close_llm_main() -> None:
+            await llm_service.aclose()
+
+        try:
+            loop = asyncio.get_running_loop()
+            if not loop.is_closed():
+                loop.create_task(_close_driver_main())
+                loop.create_task(_close_llm_main())
+        except RuntimeError:
+            asyncio.run(_close_driver_main())
+            asyncio.run(_close_llm_main())
+        except Exception as e:
+            logger.warning(
+                "Could not explicitly close driver from main: %s",
+                e,
+            )
 
 
 if __name__ == "__main__":
