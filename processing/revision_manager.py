@@ -5,6 +5,7 @@ from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import NoOpPatchValidator, PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
+from core.usage import TokenUsage
 from utils.plot import get_plot_point_info
 
 from models import (
@@ -39,26 +40,15 @@ class RevisionManager:
         chapter_plan: list[SceneDetail] | None,
         is_from_flawed_source: bool = False,
         already_patched_spans: list[tuple[int, int]] | None = None,
-    ) -> tuple[
-        tuple[str, str | None, list[tuple[int, int]]] | None, dict[str, int] | None
-    ]:
+    ) -> tuple[tuple[str, str | None, list[tuple[int, int]]] | None, TokenUsage | None]:
         """Revise a chapter draft based on evaluation feedback."""
         if already_patched_spans is None:
             already_patched_spans = []
 
-        cumulative_usage_data: dict[str, int] = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
+        cumulative_usage_data = TokenUsage()
 
-        def _add_usage(usage: dict[str, int] | None) -> None:
-            if usage:
-                cumulative_usage_data["prompt_tokens"] += usage.get("prompt_tokens", 0)
-                cumulative_usage_data["completion_tokens"] += usage.get(
-                    "completion_tokens", 0
-                )
-                cumulative_usage_data["total_tokens"] += usage.get("total_tokens", 0)
+        def _add_usage(usage: TokenUsage | dict[str, int] | None) -> None:
+            cumulative_usage_data.add(usage)
 
         if not original_text:
             logger.error(
@@ -114,6 +104,7 @@ class RevisionManager:
             (
                 patched_text,
                 all_spans_in_patched_text,
+                patch_usage,
             ) = await patcher.generate_and_apply(
                 plot_outline,
                 original_text,
@@ -124,6 +115,7 @@ class RevisionManager:
                 already_patched_spans,
                 validator,
             )
+            _add_usage(patch_usage)
             if patched_text != original_text:
                 logger.info(
                     "Patch process for Ch %s produced revised text. Original len: %s, Patched text len: %s.",
@@ -343,7 +335,7 @@ class RevisionManager:
             return (
                 None,
                 cumulative_usage_data
-                if cumulative_usage_data["total_tokens"] > 0
+                if cumulative_usage_data.total_tokens > 0
                 else None,
             )
 
@@ -364,4 +356,4 @@ class RevisionManager:
             final_revised_text,
             final_raw_llm_output,
             final_spans_for_next_cycle,
-        ), cumulative_usage_data if cumulative_usage_data["total_tokens"] > 0 else None
+        ), cumulative_usage_data if cumulative_usage_data.total_tokens > 0 else None
