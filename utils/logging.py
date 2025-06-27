@@ -18,9 +18,11 @@ try:
 except Exception:  # pragma: no cover - fallback when Rich is missing
     RICH_AVAILABLE = False
 
-    class RichHandler(logging.Handler):
+    class _FallbackRichHandler(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover
             logging.getLogger(__name__).handle(record)
+
+    RichHandler = _FallbackRichHandler
 
 
 __all__ = ["setup_logging_nana"]

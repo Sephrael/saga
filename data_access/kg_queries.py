@@ -249,7 +249,7 @@ async def query_kg_from_db(
     limit_results: int | None = None,
 ) -> list[dict[str, Any]]:
     conditions = []
-    parameters: dict[str, Any] = {}
+    parameters: dict[str, str] = {}
     match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o) "
 
     if subject is not None:
@@ -270,7 +270,7 @@ async def query_kg_from_db(
         parameters["object_param"] = obj_val_stripped
     if chapter_limit is not None:
         conditions.append(f"r.{KG_REL_CHAPTER_ADDED} <= $chapter_limit_param")
-        parameters["chapter_limit_param"] = chapter_limit
+        parameters["chapter_limit_param"] = str(chapter_limit)
     if not include_provisional:
         conditions.append(
             f"(r.{KG_IS_PROVISIONAL} = FALSE OR r.{KG_IS_PROVISIONAL} IS NULL)"
@@ -293,6 +293,8 @@ async def query_kg_from_db(
         if limit_results is not None and limit_results > 0
         else ""
     )
+
+    parameters = {k: v for k, v in parameters.items() if v is not None}
 
     full_query = (
         match_clause + where_clause + return_clause + order_clause + limit_clause_str
@@ -393,6 +395,7 @@ async def get_chapter_context_for_entity(
         "MATCH (e {id: $id_param})" if entity_id else "MATCH (e {name: $name_param})"
     )
     params = {"id_param": entity_id} if entity_id else {"name_param": entity_name}
+    params = {k: v for k, v in params.items() if v is not None}
 
     query = f"""
     {match_clause}
