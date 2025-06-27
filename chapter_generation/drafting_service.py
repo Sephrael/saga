@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,11 @@ class DraftResult:
 
     text: str | None
     raw_llm_output: str | None
+
+    def __iter__(self) -> Iterable[str | None]:
+        """Allow tuple-style unpacking of the draft result."""
+        yield self.text
+        yield self.raw_llm_output
 
 
 class DraftingService:
