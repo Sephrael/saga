@@ -1,4 +1,4 @@
-from config import settings  # MODIFIED
+from config import settings
 
 
 def split_text_into_chapters(

@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING, Any
 
 import spacy
 import structlog
-from config import settings  # MODIFIED
+from config import settings
 from rapidfuzz.fuzz import partial_ratio_alignment
 
-logger = structlog.get_logger(__name__)  # MODIFIED
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     pass

@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 import structlog
-from config import settings  # MODIFIED
+from config import settings
 from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
 from neo4j import (  # type: ignore
     AsyncDriver,

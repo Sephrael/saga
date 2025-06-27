@@ -13,9 +13,7 @@ from typing import Any
 
 import utils  # For _is_fill_in
 from config import settings
-
-# from state_manager import state_manager # No longer directly used
-from data_access import character_queries, kg_queries, world_queries  # MODIFIED
+from data_access import character_queries, kg_queries, world_queries
 from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
 from utils import kg_property_keys as kg_keys
 
@@ -64,8 +62,9 @@ async def get_character_state_snippet_for_prompt(
 
     fetch_tasks = [
         character_queries.get_character_info_for_snippet_from_db(
-            name, effective_filter_chapter
-        )  # MODIFIED
+            name,
+            effective_filter_chapter,
+        )
         for name in char_names_to_process
     ]
 
@@ -241,8 +240,10 @@ async def get_world_state_snippet_for_prompt(
         if max_items > 0:
             fetch_tasks_world.append(
                 world_queries.get_world_elements_for_snippet_from_db(
-                    category_name, effective_filter_chapter, max_items
-                )  # MODIFIED
+                    category_name,
+                    effective_filter_chapter,
+                    max_items,
+                )
             )
             category_names_for_tasks.append(category_name)
 

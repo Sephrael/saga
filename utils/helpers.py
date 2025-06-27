@@ -1,4 +1,4 @@
-from config import settings  # MODIFIED
+from config import settings
 
 
 def _is_fill_in(value: object) -> bool:

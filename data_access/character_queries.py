@@ -5,7 +5,7 @@ from typing import Any
 import structlog
 import utils
 from async_lru import alru_cache  # type: ignore
-from config import settings  # MODIFIED
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
@@ -71,7 +71,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
 
     logger.info("Synchronizing character profiles to Neo4j (non-destructive)...")
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
     statements: list[tuple[str, dict[str, Any]]] = []
 
     all_input_char_names: set[str] = set(profiles_data.keys())
@@ -266,7 +266,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
                     "confidence": 1.0,
                 }
 
-                chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM  # MODIFIED
+                chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
                     with contextlib.suppress(ValueError, TypeError):
                         chapter_added_val = int(rel_detail["chapter_added"])

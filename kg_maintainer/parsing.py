@@ -1,6 +1,6 @@
 # kg_maintainer/parsing.py
-import json  # Added json
-from typing import Any  # Added Any, List
+import json
+from typing import Any
 
 import structlog
 import utils
@@ -25,16 +25,13 @@ CHAR_UPDATE_LIST_INTERNAL_KEYS = [
     "traits",
     "relationships",
     "aliases",
-]  # Added aliases as example
-
-# No longer need CHAR_UPDATE_PKVB_SPECIAL_HANDLING as
-# parse_key_value_block is removed
+]
 
 WORLD_UPDATE_DETAIL_KEY_MAP = {
     # Ensure these keys match what LLM will produce in JSON
     "desc": "description",
     "description": "description",
-    "atmosphere": "atmosphere",  # Added from original example
+    "atmosphere": "atmosphere",
     "goals": "goals",
     "rules": "rules",
     "key elements": "key_elements",

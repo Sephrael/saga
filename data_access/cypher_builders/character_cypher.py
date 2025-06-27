@@ -2,7 +2,7 @@ from typing import Any
 
 import structlog
 import utils
-from config import settings  # MODIFIED
+from config import settings
 from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
 from kg_maintainer.models import CharacterProfile
 from utils import kg_property_keys as kg_keys
@@ -82,7 +82,7 @@ def generate_character_node_cypher(
             {
                 "novel_id": settings.MAIN_NOVEL_INFO_NODE_ID,
                 "name": profile.name,
-            },  # MODIFIED
+            },
         )
     )
 

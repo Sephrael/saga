@@ -1,13 +1,11 @@
 # world_continuity_agent.py
-# from parsing_utils import split_text_into_blocks,
-# parse_key_value_block  # Removed
 import json
 from typing import Any
 
 import structlog
-import utils  # MODIFIED: For spaCy functions
+import utils
 from config import settings
-from core.llm_interface import llm_service  # MODIFIED
+from core.llm_interface import llm_service
 from data_access import character_queries, kg_queries, world_queries
 from processing.problem_parser import parse_problem_list
 from prompt_data_getters import (

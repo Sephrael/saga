@@ -2,9 +2,9 @@
 from typing import Any
 
 import structlog
-import utils  # MODIFIED: For spaCy functions
+import utils
 from config import settings
-from core.llm_interface import llm_service  # MODIFIED
+from core.llm_interface import llm_service
 from data_access import chapter_queries
 from processing.evaluation_helpers import (
     parse_llm_evaluation_output,
@@ -83,7 +83,7 @@ class ComprehensiveEvaluatorAgent:
                 f"Draft is too short ({len(draft_text)} chars). Minimum required: {settings.MIN_ACCEPTABLE_DRAFT_LENGTH}."
             )
 
-        current_embedding_task = llm_service.async_get_embedding(draft_text)  # MODIFIED
+        current_embedding_task = llm_service.async_get_embedding(draft_text)
         if chapter_number > 1:
             prev_embedding = await chapter_queries.get_embedding_from_db(
                 chapter_number - 1
