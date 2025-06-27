@@ -168,11 +168,6 @@ async def find_similar_chapters_in_db(
         results = await neo4j_manager.execute_read_query(similarity_query, params_dict)
         if results:
             for record in results:
-                if (
-                    current_chapter_to_exclude is not None
-                    and record.get("chapter_number") == current_chapter_to_exclude
-                ):
-                    continue
                 if len(similar_chapters_data) < limit:
                     similar_chapters_data.append(
                         {
