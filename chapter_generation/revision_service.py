@@ -87,7 +87,10 @@ class RevisionService:
                 continuity_usage,
             )
 
-            evaluation_result: EvaluationResult = EvaluationResult(**eval_result_obj)
+            if isinstance(eval_result_obj, EvaluationResult):
+                evaluation_result: EvaluationResult = eval_result_obj
+            else:
+                evaluation_result = EvaluationResult(**eval_result_obj)
             await self.orchestrator._save_debug_output(
                 chapter_number,
                 f"evaluation_result_attempt_{attempt}",
