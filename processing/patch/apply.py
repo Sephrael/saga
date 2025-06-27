@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+from collections import OrderedDict
+from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
@@ -11,13 +13,38 @@ from core.llm_interface import llm_service
 
 from models import PatchInstruction
 
+
+class LRUDict(OrderedDict[str, list[tuple[int, int, Any]]]):
+    """Simple LRU cache based on ``OrderedDict``."""
+
+    def __init__(self, maxsize: int) -> None:
+        super().__init__()
+        self.maxsize = maxsize
+
+    def __getitem__(self, key: str) -> list[tuple[int, int, Any]]:  # type: ignore[override]
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+    def __setitem__(self, key: str, value: list[tuple[int, int, Any]]) -> None:  # type: ignore[override]
+        if key in self:
+            super().__delitem__(key)
+        elif len(self) >= self.maxsize:
+            super().popitem(last=False)
+        super().__setitem__(key, value)
+
+    def cache_clear(self) -> None:
+        super().clear()
+
+
 logger = structlog.get_logger(__name__)
 
-_sentence_embedding_cache: dict[str, list[tuple[int, int, Any]]] = {}
+_sentence_embedding_cache: LRUDict = LRUDict(settings.SENTENCE_EMBEDDING_CACHE_SIZE)
 
 
 async def _get_sentence_embeddings(
-    text: str, cache: dict[str, list[tuple[int, int, Any]]] | None = None
+    text: str,
+    cache: MutableMapping[str, list[tuple[int, int, Any]]] | None = None,
 ) -> list[tuple[int, int, Any]]:
     """Return (start, end, embedding) for each sentence."""
     if cache is None:
@@ -38,6 +65,13 @@ async def _get_sentence_embeddings(
             continue
         embeddings.append((start, end, res))
     cache[text_hash] = embeddings
+    if (
+        not isinstance(cache, LRUDict)
+        and len(cache) > settings.SENTENCE_EMBEDDING_CACHE_SIZE
+    ):
+        for _ in range(len(cache) - settings.SENTENCE_EMBEDDING_CACHE_SIZE):
+            oldest_key = next(iter(cache))
+            del cache[oldest_key]
     return embeddings
 
 
