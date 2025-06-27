@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from enum import Enum
 
+from core.usage import TokenUsage
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,11 +30,23 @@ class TokenAccountant:
         self.total: int = 0
         self.stage_totals: dict[str, int] = {}
 
-    def record_usage(self, stage: Stage | str, usage: dict[str, int] | None) -> None:
+    def record_usage(
+        self, stage: Stage | str, usage: dict[str, int] | TokenUsage | None
+    ) -> None:
         """Record token usage for a stage."""
         stage_name = stage.value if isinstance(stage, Stage) else stage
-        if usage and isinstance(usage.get("completion_tokens"), int):
-            completed_tokens = usage["completion_tokens"]
+
+        if hasattr(usage, "__dict__") and not isinstance(usage, dict):
+            usage_dict = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(usage, "completion_tokens", 0),
+                "total_tokens": getattr(usage, "total_tokens", 0),
+            }
+        else:
+            usage_dict = usage or {}
+
+        if usage_dict and isinstance(usage_dict.get("completion_tokens"), int):
+            completed_tokens = usage_dict["completion_tokens"]
             self.total += completed_tokens
             self.stage_totals[stage_name] = (
                 self.stage_totals.get(stage_name, 0) + completed_tokens
@@ -44,21 +58,21 @@ class TokenAccountant:
                 self.total,
             )
         elif (
-            usage
-            and isinstance(usage.get("total_tokens"), int)
-            and not isinstance(usage.get("completion_tokens"), int)
+            usage_dict
+            and isinstance(usage_dict.get("total_tokens"), int)
+            and not isinstance(usage_dict.get("completion_tokens"), int)
         ):
             logger.info(
                 "NANA Activity: Total tokens from '%s': %s. (Completion tokens not specifically available). Total generated this run (completion focused): %s",
                 stage_name,
-                usage["total_tokens"],
+                usage_dict["total_tokens"],
                 self.total,
             )
-        elif usage:
+        elif usage_dict:
             logger.warning(
                 "NANA Activity: '%s' - 'completion_tokens' missing or not int in usage_data. Tokens not added. Usage: %s",
                 stage_name,
-                usage,
+                usage_dict,
             )
 
     def get_stage_total(self, stage: Stage | str) -> int:
