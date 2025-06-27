@@ -509,6 +509,7 @@ class NANA_Orchestrator:
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
+            (novel_chapter_number - 1) % settings.PLOT_POINT_CHAPTER_SPAN + 1,
         )
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.CHAPTER_PLANNING.value}", plan_usage

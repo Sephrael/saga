@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def get_plot_point_info(
     plot_outline: dict[str, Any], chapter_number: int
 ) -> tuple[str | None, int]:
-    """Return plot point text and index for the chapter."""
+    """Return the active major plot point text and index for a chapter."""
     plot_points = plot_outline.get("plot_points", [])
     if not isinstance(plot_points, list) or not plot_points or chapter_number <= 0:
         logger.error(
@@ -18,7 +18,7 @@ def get_plot_point_info(
         )
         return None, -1
 
-    plot_point_index = chapter_number - 1
+    plot_point_index = (chapter_number - 1) // settings.PLOT_POINT_CHAPTER_SPAN
     if 0 <= plot_point_index < len(plot_points):
         plot_point_item = plot_points[plot_point_index]
         plot_point_text = (
