@@ -2,13 +2,13 @@ import asyncio
 import time
 
 import numpy as np
-import processing.patch_generator as patch_generator
+import processing.patch as patch_generator
 import pytest
 import utils
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service
-from processing.patch_generator import _apply_patches_to_text
+from processing.patch import _apply_patches_to_text
 
 
 @pytest.mark.asyncio

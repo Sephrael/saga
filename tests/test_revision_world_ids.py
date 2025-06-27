@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock
 
-import processing.patch_generator as patch_generator
+import processing.patch as patch_generator
 import pytest
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from kg_maintainer.models import WorldItem
