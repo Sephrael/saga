@@ -46,8 +46,6 @@ def create_default_world() -> WorldBuilding:
                 },
             )
         },
-        "is_default": True,  # type: ignore
-        "source": "default_fallback",  # type: ignore
     }
 
     standard_categories = [
