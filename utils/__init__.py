@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+import logging as std_logging
 import re
 from typing import TYPE_CHECKING
 
@@ -12,6 +12,7 @@ from config import settings
 from core.llm_interface import count_tokens, llm_service
 
 from .helpers import _is_fill_in
+from .logging import setup_logging_nana
 from .plot import get_plot_point_info
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
 from .text_processing import (
@@ -28,7 +29,7 @@ from .text_processing import (
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from kg_maintainer.models import SceneDetail
 
-logger = logging.getLogger(__name__)
+logger = std_logging.getLogger(__name__)
 
 
 def format_scene_plan_for_prompt(
@@ -232,4 +233,5 @@ __all__ = [
     "get_plot_point_info",
     "deduplicate_text_segments",
     "remove_spans_from_text",
+    "setup_logging_nana",
 ]

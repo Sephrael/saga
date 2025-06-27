@@ -1,7 +1,4 @@
 # nana_orchestrator.py
-import logging
-import logging.handlers
-import os
 import time  # For Rich display updates
 from dataclasses import dataclass
 from typing import Any
@@ -32,40 +29,22 @@ from data_access import (
     plot_queries,
     world_queries,
 )
+from ingestion.ingestion_manager import IngestionManager
 from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
-from kg_maintainer.models import (
-    CharacterProfile,
-    EvaluationResult,
-    ProblemDetail,
-    SceneDetail,
-    WorldItem,
-)
+from kg_maintainer.models import EvaluationResult, ProblemDetail, SceneDetail
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from storage.file_manager import FileManager
 from ui.rich_display import RichDisplayManager
-from utils.ingestion_utils import split_text_into_chapters
 from utils.plot import get_plot_point_info
 
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
 from orchestration.token_tracker import TokenTracker
 
-try:
-    from rich.logging import RichHandler
-
-    RICH_AVAILABLE = True
-except Exception:  # pragma: no cover - fallback when Rich is missing
-    RICH_AVAILABLE = False
-
-    class RichHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover
-            logging.getLogger(__name__).handle(record)
-
-
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -1064,140 +1043,16 @@ class NANA_Orchestrator:
 
         self.display.start()
         self.run_start_time = time.time()
-        async with neo4j_manager:
-            await neo4j_manager.create_db_schema()
-            if neo4j_manager.driver is not None:
-                await plot_queries.ensure_novel_info()
-            else:
-                logger.warning(
-                    "Neo4j driver not initialized. Skipping NovelInfo setup."
-                )
-            await self.kg_maintainer_agent.load_schema_from_db()
 
-        raw_text = await self.file_manager.read_text(text_file)
+        manager = IngestionManager(
+            finalize_agent=self.finalize_agent,
+            planner_agent=self.planner_agent,
+            kg_maintainer=self.kg_maintainer_agent,
+            file_manager=self.file_manager,
+        )
 
-        chunks = split_text_into_chapters(raw_text)
-        plot_outline = {"title": "Ingested Narrative", "plot_points": []}
-        character_profiles: dict[str, CharacterProfile] = {}
-        world_building: dict[str, dict[str, WorldItem]] = {}
-        summaries: list[str] = []
-
-        for idx, chunk in enumerate(chunks, 1):
-            self._update_rich_display(chapter_num=idx, step="Ingesting Text")
-            result = await self.finalize_agent.ingest_and_finalize_chunk(
-                plot_outline,
-                character_profiles,
-                world_building,
-                idx,
-                chunk,
-            )
-            if result.get("summary"):
-                summaries.append(str(result["summary"]))
-                plot_outline["plot_points"].append(result["summary"])
-
-            if idx % settings.KG_HEALING_INTERVAL == 0:
-                logger.info(
-                    f"--- NANA: Triggering KG Healing/Enrichment after Ingestion Chunk {idx} ---"
-                )
-                self._update_rich_display(step=f"Ch {idx} - KG Maintenance")
-                await self.kg_maintainer_agent.heal_and_enrich_kg()
-                await self.refresh_plot_outline()
-
-        await self.kg_maintainer_agent.heal_and_enrich_kg()
-        combined_summary = "\n".join(summaries)
-        continuation, _ = await self.planner_agent.plan_continuation(combined_summary)
-        if continuation:
-            plot_outline["plot_points"].extend(continuation)
-        self.plot_outline = plot_outline
-        self.chapter_count = len(chunks)
-        await plot_queries.save_plot_outline_to_db(plot_outline)
+        await manager.ingest(text_file)
+        await self.refresh_plot_outline()
+        self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         await self.display.stop()
         logger.info("NANA: Ingestion process completed.")
-
-
-def setup_logging_nana():
-    # Step 1: Configure structlog to prepare data and pass it to the standard logger.
-    structlog.configure(
-        processors=[
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            # This processor formats log messages with positional arguments (e.g., %s)
-            structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
-            # This processor passes the structured log data to the standard logger,
-            # which RichHandler will then receive.
-            structlog.stdlib.render_to_log_kwargs,
-        ],
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
-
-    # Step 2: Set up the root logger and clear previous configurations.
-    root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-    root_logger.setLevel(settings.LOG_LEVEL_STR)
-
-    # Step 3: Configure handlers. RichHandler will now do the console formatting.
-    if settings.LOG_FILE:
-        try:
-            file_path = (
-                settings.LOG_FILE
-                if os.path.isabs(settings.LOG_FILE)
-                else os.path.join(settings.BASE_OUTPUT_DIR, settings.LOG_FILE)
-            )
-            log_dir = os.path.dirname(file_path)
-            if log_dir:
-                os.makedirs(log_dir, exist_ok=True)
-            file_handler = logging.handlers.RotatingFileHandler(
-                file_path,
-                maxBytes=10 * 1024 * 1024,
-                backupCount=5,
-                mode="a",
-                encoding="utf-8",
-            )
-            # Use a standard formatter for the file log.
-            file_formatter = logging.Formatter(
-                settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
-            )
-            file_handler.setFormatter(file_formatter)
-            root_logger.addHandler(file_handler)
-        except Exception as e:
-            print(f"Error setting up file logger: {e}")
-
-    # Configure Console Handler
-    if RICH_AVAILABLE and settings.ENABLE_RICH_PROGRESS:
-        # Let RichHandler control its own formatting.
-        # We turn its decorations back ON and do NOT set a formatter on it.
-        console_handler = RichHandler(
-            level=settings.LOG_LEVEL_STR,
-            rich_tracebacks=True,
-            show_path=False,
-            markup=True,
-            show_time=True,  # Turn back ON
-            show_level=True,  # Turn back ON
-        )
-        root_logger.addHandler(console_handler)
-    else:
-        # Fallback to a standard stream handler with a standard formatter
-        stream_handler = logging.StreamHandler()
-        stream_formatter = logging.Formatter(
-            settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
-        )
-        stream_handler.setFormatter(stream_formatter)
-        root_logger.addHandler(stream_handler)
-
-    # Set levels for noisy loggers
-    logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
-    logging.getLogger("neo4j").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-
-    log = structlog.get_logger()
-    log.info(
-        "NANA Logging setup complete.",
-        log_level=logging.getLevelName(settings.LOG_LEVEL_STR),
-    )

@@ -19,7 +19,8 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
     chapters = ["a", "b", "c", "d", "e"]
 
     monkeypatch.setattr(
-        "orchestration.nana_orchestrator.split_text_into_chapters", lambda _t: chapters
+        "ingestion.ingestion_manager.split_text_into_chapters",
+        lambda _t: chapters,
     )
     monkeypatch.setattr(
         orch.finalize_agent,
