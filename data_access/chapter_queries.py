@@ -11,6 +11,8 @@ logger = structlog.get_logger(__name__)  # MODIFIED
 
 
 async def load_chapter_count_from_db() -> int:
+    """Return the number of chapters stored in the database."""
+
     query = f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"  # MODIFIED
     try:
         result = await neo4j_manager.execute_read_query(query)
@@ -30,6 +32,19 @@ async def save_chapter_data_to_db(
     embedding_array: np.ndarray | None,
     is_provisional: bool = False,
 ):
+    """Save chapter text, raw output, and embedding to Neo4j.
+
+    Args:
+        chapter_number: Index of the chapter being stored.
+        text: Final chapter text.
+        raw_llm_output: Unprocessed LLM response for auditing.
+        summary: Optional chapter summary text.
+        embedding_array: Precomputed embedding for ``text``.
+        is_provisional: Whether the chapter is a provisional draft.
+
+    Returns:
+        ``None``. Data is persisted directly to the database.
+    """
     if chapter_number <= 0:
         logger.error(
             f"Neo4j: Cannot save chapter data for invalid chapter_number: {chapter_number}."
@@ -70,6 +85,8 @@ async def save_chapter_data_to_db(
 
 
 async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None:
+    """Retrieve stored chapter data for the given chapter number."""
+
     if chapter_number <= 0:
         return None
     query = f"""
@@ -99,6 +116,8 @@ async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None
 
 
 async def get_embedding_from_db(chapter_number: int) -> np.ndarray | None:
+    """Return the text embedding for a chapter if present."""
+
     if chapter_number <= 0:
         return None
     query = f"""
@@ -129,6 +148,16 @@ async def find_similar_chapters_in_db(
     limit: int,
     current_chapter_to_exclude: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Return chapters with embeddings most similar to the query vector.
+
+    Args:
+        query_embedding: Embedding representing the search text.
+        limit: Maximum number of chapters to return.
+        current_chapter_to_exclude: Optional chapter to omit from results.
+
+    Returns:
+        A list of chapter metadata dictionaries sorted by similarity.
+    """
     if query_embedding is None or query_embedding.size == 0:
         logger.warning(
             "Neo4j: find_similar_chapters_in_db called with empty query_embedding."

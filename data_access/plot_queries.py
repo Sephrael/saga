@@ -25,6 +25,8 @@ async def ensure_novel_info() -> None:
 
 
 async def save_plot_outline_to_db(plot_data: dict[str, Any]) -> bool:
+    """Persist the plot outline structure to Neo4j."""
+
     logger.info("Synchronizing plot outline to Neo4j (non-destructive)...")
     if not plot_data:
         logger.warning(
@@ -182,6 +184,8 @@ async def save_plot_outline_to_db(plot_data: dict[str, Any]) -> bool:
 
 
 async def get_plot_outline_from_db() -> dict[str, Any]:
+    """Retrieve the plot outline and associated plot points from Neo4j."""
+
     logger.info("Loading decomposed plot outline from Neo4j...")
     novel_id = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
     plot_data: dict[str, Any] = {}

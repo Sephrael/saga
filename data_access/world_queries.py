@@ -96,6 +96,8 @@ async def sync_world_items(
 
 
 async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
+    """Persist the entire world-building state to Neo4j."""
+
     logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
     novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID  # MODIFIED
@@ -568,6 +570,8 @@ async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
 
 
 async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
+    """Load all world elements grouped by category from Neo4j."""
+
     logger.info("Loading decomposed world building data from Neo4j...")
     world_data: dict[str, dict[str, WorldItem]] = {}
     wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID  # MODIFIED
@@ -723,6 +727,8 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
 async def get_world_elements_for_snippet_from_db(
     category: str, chapter_limit: int, item_limit: int
 ) -> list[dict[str, Any]]:
+    """Return a subset of world elements for prompt context."""
+
     query = f"""
     MATCH (we:WorldElement:Entity {{category: $category_param}})
     WHERE (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)
