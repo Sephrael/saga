@@ -15,6 +15,7 @@ from kg_maintainer.models import EvaluationResult
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
+    from storage.file_manager import FileManager
 
     from models import SceneDetail
 
@@ -34,8 +35,11 @@ class RevisionResult:
 class RevisionService:
     """Handle evaluation cycles and revisions for a chapter."""
 
-    def __init__(self, orchestrator: NANA_Orchestrator) -> None:
+    def __init__(
+        self, orchestrator: NANA_Orchestrator, file_manager: FileManager
+    ) -> None:
         self.orchestrator = orchestrator
+        self.file_manager = file_manager
 
     async def run_revision_loop(
         self,

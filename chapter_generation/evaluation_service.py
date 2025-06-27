@@ -13,6 +13,7 @@ from kg_maintainer.models import EvaluationResult, ProblemDetail
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
+    from storage.file_manager import FileManager
 
 logger = structlog.get_logger(__name__)
 
@@ -30,8 +31,11 @@ class EvaluationCycleResult:
 class EvaluationService:
     """Run evaluation cycles for drafted chapters."""
 
-    def __init__(self, orchestrator: NANA_Orchestrator) -> None:
+    def __init__(
+        self, orchestrator: NANA_Orchestrator, file_manager: FileManager
+    ) -> None:
         self.orchestrator = orchestrator
+        self.file_manager = file_manager
 
     async def run_cycle(
         self,
