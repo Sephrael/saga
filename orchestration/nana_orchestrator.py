@@ -23,6 +23,7 @@ from chapter_generation import (
 )
 from config import settings
 from core.db_manager import neo4j_manager
+from core.usage import TokenUsage
 from data_access import (
     chapter_queries,
     character_queries,
@@ -114,7 +115,9 @@ class NANA_Orchestrator:
             run_start_time=self.run_start_time,
         )
 
-    def _accumulate_tokens(self, stage: str, usage_data: dict[str, int] | None) -> None:
+    def _accumulate_tokens(
+        self, stage: str, usage_data: dict[str, int] | TokenUsage | None
+    ) -> None:
         self.token_accountant.record_usage(stage, usage_data)
         self.total_tokens_generated_this_run = self.token_accountant.total
         self._update_rich_display()
