@@ -14,7 +14,12 @@ from models import (
     WorldItem,
 )
 
-from . import patch_generator
+from .patch import (
+    PatchGenerator,
+    _consolidate_overlapping_problems,
+    _deduplicate_problems,
+    _get_formatted_scene_plan_from_agent_or_fallback,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -64,8 +69,8 @@ class RevisionManager:
         problems_to_fix: list[dict[str, Any]] = evaluation_result.get(
             "problems_found", []
         )
-        problems_to_fix = patch_generator._deduplicate_problems(
-            patch_generator._consolidate_overlapping_problems(problems_to_fix)
+        problems_to_fix = _deduplicate_problems(
+            _consolidate_overlapping_problems(problems_to_fix)
         )
         if not problems_to_fix and evaluation_result.get("needs_revision"):
             logger.warning(
@@ -112,7 +117,7 @@ class RevisionManager:
 
                 validator = _BypassValidator()
 
-            patcher = patch_generator.PatchGenerator()
+            patcher = PatchGenerator()
             (
                 patched_text,
                 all_spans_in_patched_text,
@@ -193,12 +198,10 @@ class RevisionManager:
             )
             max_plan_tokens_for_full_rewrite = settings.MAX_CONTEXT_TOKENS // 2
             if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
-                formatted_plan_fr = (
-                    patch_generator._get_formatted_scene_plan_from_agent_or_fallback(
-                        chapter_plan,
-                        settings.REVISION_MODEL,
-                        max_plan_tokens_for_full_rewrite,
-                    )
+                formatted_plan_fr = _get_formatted_scene_plan_from_agent_or_fallback(
+                    chapter_plan,
+                    settings.REVISION_MODEL,
+                    max_plan_tokens_for_full_rewrite,
                 )
                 plan_focus_section_full_rewrite_parts.append(formatted_plan_fr)
                 if "plan truncated" in formatted_plan_fr:

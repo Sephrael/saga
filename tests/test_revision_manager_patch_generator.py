@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock
 
-import processing.patch_generator as patch_generator
+import processing.patch as patch_generator
 import pytest
 from agents.patch_validation_agent import PatchValidationAgent
 from core.llm_interface import llm_service, truncate_text_by_tokens
