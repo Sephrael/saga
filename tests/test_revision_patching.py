@@ -1,6 +1,8 @@
 import asyncio
+import hashlib
 import time
 
+import config
 import numpy as np
 import processing.patch as patch_generator
 import pytest
@@ -338,6 +340,26 @@ async def test_sentence_embedding_cache(monkeypatch):
     await patch_generator._get_sentence_embeddings(text, cache)
     await patch_generator._get_sentence_embeddings(text, cache)
     assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_sentence_embedding_cache_eviction(monkeypatch):
+    monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
+    monkeypatch.setattr(config.settings, "SENTENCE_EMBEDDING_CACHE_SIZE", 2)
+    cache = patch_generator.apply.LRUDict(settings.SENTENCE_EMBEDDING_CACHE_SIZE)
+    monkeypatch.setattr(patch_generator.apply, "_sentence_embedding_cache", cache)
+
+    async def fake_embed(_text: str) -> np.ndarray:
+        return np.array([1.0])
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+    await patch_generator._get_sentence_embeddings("A. B.")
+    await patch_generator._get_sentence_embeddings("C. D.")
+    assert len(cache) == 2
+    key1 = hashlib.sha256(b"A. B.").hexdigest()
+    await patch_generator._get_sentence_embeddings("E. F.")
+    assert len(cache) == 2
+    assert key1 not in cache
 
 
 @pytest.mark.asyncio
