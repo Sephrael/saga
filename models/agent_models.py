@@ -26,7 +26,7 @@ class SceneDetail(TypedDict, total=False):
 class AgentBaseModel(BaseModel):
     """Base model supporting mapping style access."""
 
-    model_config = ConfigDict(from_attributes=True, extra="allow")
+    model_config: ConfigDict = ConfigDict(from_attributes=True, extra="allow")
 
     def __getitem__(self, item: str) -> Any:  # pragma: no cover - convenience
         return getattr(self, item)

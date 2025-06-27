@@ -174,7 +174,7 @@ class Neo4jManagerSingleton:
     async def _run_schema_operations(
         self, queries: list[str], description: str
     ) -> None:
-        ops = [(q, {}) for q in queries]
+        ops: list[tuple[str, dict[str, Any]]] = [(q, {}) for q in queries]
         try:
             await self.execute_cypher_batch(ops)
             self.logger.info(f"Successfully executed {description} batch.")
