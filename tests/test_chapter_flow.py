@@ -1,5 +1,8 @@
 import pytest
+from chapter_generation.drafting_service import DraftResult
+from chapter_generation.prerequisites_service import PrerequisiteData
 from orchestration import chapter_flow
+from orchestration.nana_orchestrator import RevisionOutcome
 
 
 class DummyOrchestrator:
@@ -19,27 +22,30 @@ class DummyOrchestrator:
         return self.values.get("validate", True)
 
     async def _prepare_chapter_prerequisites(self, chapter):
-        return self.values.get("prereq", object())
-
-    async def _process_prereq_result(self, chapter, prereq_result):
         return self.values.get(
-            "process_prereqs",
-            ("focus", 1, "plan", "ctx"),
+            "prereq",
+            PrerequisiteData("focus", 1, "plan", "ctx"),
         )
 
+    async def _process_prereq_result(self, chapter, prereq_result):
+        return self.values.get("process_prereqs", prereq_result)
+
     async def _draft_initial_chapter_text(self, *args):
-        return self.values.get("draft", "draft_res")
+        return self.values.get("draft", DraftResult("draft_res", "raw"))
 
     async def _process_initial_draft(self, chapter, draft_result):
-        return self.values.get("process_draft", ("txt", "raw"))
+        return self.values.get("process_draft", draft_result)
 
     async def _process_and_revise_draft(self, *args):
-        return self.values.get("revise", "revise_res")
+        return self.values.get(
+            "revise",
+            RevisionOutcome("revise_res", "raw", False),
+        )
 
     async def _process_revision_result(self, chapter, rev_res):
         return self.values.get(
             "process_revision",
-            ("processed", "raw", False),
+            RevisionOutcome("processed", "raw", False),
         )
 
     async def _finalize_and_log(self, *args):

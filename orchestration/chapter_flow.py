@@ -25,9 +25,10 @@ async def run_chapter_pipeline(
     )
     if processed_prereqs is None:
         return None
-    plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft = (
-        processed_prereqs
-    )
+    plot_point_focus = processed_prereqs.plot_point_focus
+    plot_point_index = processed_prereqs.plot_point_index
+    chapter_plan = processed_prereqs.chapter_plan
+    hybrid_context_for_draft = processed_prereqs.hybrid_context_for_draft
 
     draft_result = await orchestrator.drafting_service.draft_initial_text(
         novel_chapter_number,
@@ -40,7 +41,8 @@ async def run_chapter_pipeline(
     )
     if processed_draft is None:
         return None
-    initial_draft_text, initial_raw_llm_text = processed_draft
+    initial_draft_text = processed_draft.text
+    initial_raw_llm_text = processed_draft.raw_llm_output
 
     revision_result = await orchestrator._process_and_revise_draft(
         novel_chapter_number,
@@ -56,7 +58,9 @@ async def run_chapter_pipeline(
     )
     if processed_revision is None:
         return None
-    processed_text, processed_raw_llm, is_flawed = processed_revision
+    processed_text = processed_revision.text
+    processed_raw_llm = processed_revision.raw_llm_output
+    is_flawed = processed_revision.is_flawed
 
     return await orchestrator._finalize_and_log(
         novel_chapter_number, processed_text, processed_raw_llm, is_flawed
