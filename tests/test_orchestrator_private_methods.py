@@ -114,6 +114,17 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         "get_world_building_from_db",
         AsyncMock(return_value={}),
     )
+    await orchestrator.refresh_knowledge_cache()
+    monkeypatch.setattr(
+        character_queries,
+        "get_character_profiles_from_db",
+        AsyncMock(side_effect=Exception("cache not used")),
+    )
+    monkeypatch.setattr(
+        world_queries,
+        "get_world_building_from_db",
+        AsyncMock(side_effect=Exception("cache not used")),
+    )
     monkeypatch.setattr(
         orchestrator.world_continuity_agent,
         "check_scene_plan_consistency",

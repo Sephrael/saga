@@ -1,6 +1,6 @@
 # nana_orchestrator.py
 import time  # For Rich display updates
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
@@ -33,7 +33,13 @@ from ingestion.ingestion_manager import IngestionManager
 from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
-from kg_maintainer.models import EvaluationResult, ProblemDetail, SceneDetail
+from kg_maintainer.models import (
+    CharacterProfile,
+    EvaluationResult,
+    ProblemDetail,
+    SceneDetail,
+    WorldItem,
+)
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from storage.file_manager import FileManager
@@ -54,6 +60,14 @@ class RevisionOutcome:
     text: str | None
     raw_llm_output: str | None
     is_flawed: bool
+
+
+@dataclass
+class KnowledgeCache:
+    """In-memory cache for KG data used during chapter generation."""
+
+    characters: dict[str, CharacterProfile] = field(default_factory=dict)
+    world: dict[str, dict[str, WorldItem]] = field(default_factory=dict)
 
 
 class NANA_Orchestrator:
@@ -79,6 +93,7 @@ class NANA_Orchestrator:
         self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
         self.novel_props_cache: dict[str, Any] = {}
+        self.knowledge_cache = KnowledgeCache()
         self.token_tracker = TokenTracker()
         self.total_tokens_generated_this_run: int = 0
 
@@ -176,6 +191,19 @@ class NANA_Orchestrator:
         else:
             logger.error("Failed to refresh plot outline from DB: %s", result)
 
+    async def refresh_knowledge_cache(self) -> None:
+        """Reload character profiles and world building into the cache."""
+        logger.info("Refreshing knowledge cache from Neo4j...")
+        self.knowledge_cache.characters = (
+            await character_queries.get_character_profiles_from_db()
+        )
+        self.knowledge_cache.world = await world_queries.get_world_building_from_db()
+        logger.info(
+            "Knowledge cache refreshed: %d characters, %d world categories.",
+            len(self.knowledge_cache.characters),
+            len(self.knowledge_cache.world),
+        )
+
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
         self._update_rich_display(step="Initializing Orchestrator")
@@ -205,6 +233,7 @@ class NANA_Orchestrator:
             )
 
         self._update_novel_props_cache()
+        await self.refresh_knowledge_cache()
         logger.info("NANA Orchestrator async_init_orchestrator complete.")
         self._update_rich_display(step="Orchestrator Initialized")
 
@@ -229,6 +258,9 @@ class NANA_Orchestrator:
         logger.info(f"   World Building initialized/loaded (source: {world_source}).")
         self._update_rich_display(step="Genesis State Bootstrapped")
 
+        self.knowledge_cache.characters = character_profiles
+        self.knowledge_cache.world = world_building
+        await self.refresh_knowledge_cache()
         self._update_novel_props_cache()
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
         self._update_rich_display(step="Initial State Saved")
@@ -469,8 +501,8 @@ class NANA_Orchestrator:
 
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
-            await character_queries.get_character_profiles_from_db(),
-            await world_queries.get_world_building_from_db(),
+            self.knowledge_cache.characters,
+            self.knowledge_cache.world,
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
@@ -983,6 +1015,7 @@ class NANA_Orchestrator:
                             )
                             await self.kg_maintainer_agent.heal_and_enrich_kg()
                             await self.refresh_plot_outline()
+                            await self.refresh_knowledge_cache()
                             logger.info(
                                 "--- NANA: KG Healing/Enrichment cycle complete. ---"
                             )
@@ -1053,6 +1086,7 @@ class NANA_Orchestrator:
 
         await manager.ingest(text_file)
         await self.refresh_plot_outline()
+        await self.refresh_knowledge_cache()
         self.chapter_count = await chapter_queries.load_chapter_count_from_db()
         await self.display.stop()
         logger.info("NANA: Ingestion process completed.")
