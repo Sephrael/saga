@@ -1,5 +1,4 @@
 # nana_orchestrator.py
-import asyncio
 import logging
 import logging.handlers
 import os
@@ -24,12 +23,7 @@ from chapter_generation import (
     PrerequisitesService,
     RevisionService,
 )
-from config import (
-    CHAPTER_LOGS_DIR,
-    CHAPTERS_DIR,
-    DEBUG_OUTPUTS_DIR,
-    settings,
-)
+from config import settings
 from core.db_manager import neo4j_manager
 from data_access import (
     chapter_queries,
@@ -50,6 +44,7 @@ from kg_maintainer.models import (
 from processing.context_generator import generate_hybrid_chapter_context_logic
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
+from storage.file_manager import FileManager
 from ui.rich_display import RichDisplayManager
 from utils.ingestion_utils import split_text_into_chapters
 from utils.plot import get_plot_point_info
@@ -83,8 +78,9 @@ class RevisionOutcome:
 
 
 class NANA_Orchestrator:
-    def __init__(self):
+    def __init__(self, file_manager: FileManager | None = None):
         logger.info("Initializing NANA Orchestrator...")
+        self.file_manager = file_manager or FileManager()
         self.planner_agent = PlannerAgent()
         self.drafting_agent = DraftingAgent()
         self.evaluator_agent = ComprehensiveEvaluatorAgent()
@@ -94,11 +90,11 @@ class NANA_Orchestrator:
         self.revision_manager = RevisionManager()
 
         # Chapter generation services
-        self.prerequisites_service = PrerequisitesService(self)
-        self.drafting_service = DraftingService(self)
-        self.evaluation_service = EvaluationService(self)
-        self.revision_service = RevisionService(self)
-        self.finalization_service = FinalizationService(self)
+        self.prerequisites_service = PrerequisitesService(self, self.file_manager)
+        self.drafting_service = DraftingService(self, self.file_manager)
+        self.evaluation_service = EvaluationService(self, self.file_manager)
+        self.revision_service = RevisionService(self, self.file_manager)
+        self.finalization_service = FinalizationService(self, self.file_manager)
 
         self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
@@ -262,14 +258,9 @@ class NANA_Orchestrator:
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: str | None
     ):
-        loop = asyncio.get_running_loop()
         try:
-            await loop.run_in_executor(
-                None,
-                self._save_chapter_files_sync_io,
-                chapter_number,
-                final_text,
-                raw_llm_log or "N/A",
+            await self.file_manager.save_chapter_and_log(
+                chapter_number, final_text, raw_llm_log or "N/A"
             )
             logger.info(
                 f"Saved chapter text and raw LLM log files for ch {chapter_number}."
@@ -280,23 +271,6 @@ class NANA_Orchestrator:
                 exc_info=True,
             )
 
-    def _save_chapter_files_sync_io(
-        self, chapter_number: int, final_text: str, raw_llm_log: str
-    ):
-        chapter_file_path = os.path.join(
-            CHAPTERS_DIR, f"chapter_{chapter_number:04d}.txt"
-        )
-        log_file_path = os.path.join(
-            CHAPTER_LOGS_DIR,
-            f"chapter_{chapter_number:04d}_raw_llm_log.txt",
-        )
-        os.makedirs(os.path.dirname(chapter_file_path), exist_ok=True)
-        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-        with open(chapter_file_path, "w", encoding="utf-8") as f:
-            f.write(final_text)
-        with open(log_file_path, "w", encoding="utf-8") as f:
-            f.write(raw_llm_log)
-
     async def _save_debug_output(
         self, chapter_number: int, stage_description: str, content: Any
     ):
@@ -305,29 +279,18 @@ class NANA_Orchestrator:
         content_str = str(content) if not isinstance(content, str) else content
         if not content_str.strip():
             return
-        loop = asyncio.get_running_loop()
         try:
-            safe_stage_desc = "".join(
-                c if c.isalnum() or c in ["_", "-"] else "_" for c in stage_description
-            )
-            file_name = f"chapter_{chapter_number:04d}_{safe_stage_desc}.txt"
-            file_path = os.path.join(DEBUG_OUTPUTS_DIR, file_name)
-            await loop.run_in_executor(
-                None, self._save_debug_output_sync_io, file_path, content_str
+            await self.file_manager.save_debug_output(
+                chapter_number, stage_description, content_str
             )
             logger.debug(
-                f"Saved debug output for Ch {chapter_number}, Stage '{stage_description}' to {file_path}"
+                f"Saved debug output for Ch {chapter_number}, Stage '{stage_description}' to file system"
             )
         except Exception as e:
             logger.error(
                 f"Failed to save debug output (Ch {chapter_number}, Stage '{stage_description}'): {e}",
                 exc_info=True,
             )
-
-    def _save_debug_output_sync_io(self, file_path: str, content_str: str):
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content_str)
 
     async def perform_deduplication(
         self, text_to_dedup: str, chapter_number: int
@@ -1110,8 +1073,7 @@ class NANA_Orchestrator:
                 )
             await self.kg_maintainer_agent.load_schema_from_db()
 
-        with open(text_file, encoding="utf-8") as f:
-            raw_text = f.read()
+        raw_text = await self.file_manager.read_text(text_file)
 
         chunks = split_text_into_chapters(raw_text)
         plot_outline = {"title": "Ingested Narrative", "plot_points": []}

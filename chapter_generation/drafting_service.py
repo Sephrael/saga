@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
+    from storage.file_manager import FileManager
 
     from models import SceneDetail
 
@@ -22,8 +23,11 @@ class DraftResult:
 class DraftingService:
     """Handle chapter drafting through the DraftingAgent."""
 
-    def __init__(self, orchestrator: NANA_Orchestrator) -> None:
+    def __init__(
+        self, orchestrator: NANA_Orchestrator, file_manager: FileManager
+    ) -> None:
         self.orchestrator = orchestrator
+        self.file_manager = file_manager
 
     async def draft_initial_text(
         self,
