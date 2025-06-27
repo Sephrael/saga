@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import processing.patch as patch_generator
 import pytest
+from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import NoOpPatchValidator, PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
@@ -160,6 +161,88 @@ async def test_revision_manager_full_rewrite(monkeypatch):
 
     assert res[0] == "Rewrite done"
     assert res[2] == []
+
+
+@pytest.mark.asyncio
+async def test_patch_revision_cycle_success(monkeypatch):
+    async def fake_generate_and_apply(*_a, **_k):
+        return "Hi world", [(0, 2)], None
+
+    async def fake_evaluate(*_a, **_k):
+        return {"problems_found": []}, None
+
+    monkeypatch.setattr(
+        patch_generator.PatchGenerator, "generate_and_apply", fake_generate_and_apply
+    )
+    monkeypatch.setattr(
+        ComprehensiveEvaluatorAgent,
+        "evaluate_chapter_draft",
+        AsyncMock(side_effect=fake_evaluate),
+    )
+
+    manager = RevisionManager()
+    patched, spans, flag, usage = await manager._patch_revision_cycle(
+        {"plot_points": ["a"]},
+        {},
+        {},
+        "Hello world",
+        1,
+        [
+            {
+                "issue_category": "style",
+                "problem_description": "d",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "suggested_fix_focus": "fix",
+            }
+        ],
+        "",
+        None,
+        [],
+    )
+
+    assert patched == "Hi world"
+    assert spans == [(0, 2)]
+    assert flag
+    assert usage is None
+
+
+@pytest.mark.asyncio
+async def test_perform_full_rewrite(monkeypatch):
+    async def fake_call_llm(*_a, **_k):
+        return "Rewrite done", None
+
+    monkeypatch.setattr(llm_service, "async_call_llm", fake_call_llm)
+    monkeypatch.setattr(llm_service, "clean_model_response", lambda t: t)
+    monkeypatch.setattr(
+        truncate_text_by_tokens, "__call__", lambda text, *_a, **_k: text, raising=False
+    )
+
+    manager = RevisionManager()
+    text, raw, usage = await manager._perform_full_rewrite(
+        {"plot_points": ["a"]},
+        "Hello world",
+        1,
+        [
+            {
+                "issue_category": "style",
+                "problem_description": "d",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "suggested_fix_focus": "fix",
+            }
+        ],
+        "bad",
+        "ctx",
+        None,
+        False,
+    )
+
+    assert text == "Rewrite done"
+    assert raw == "Rewrite done"
+    assert usage is None
 
 
 @pytest.mark.asyncio
