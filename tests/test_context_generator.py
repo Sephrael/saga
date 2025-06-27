@@ -41,8 +41,8 @@ async def test_immediate_context_added(monkeypatch):
 
     service = ContextService(chapter_queries, llm_service)
     ctx = await service.get_semantic_context({}, 4)
-    assert ctx.startswith("[Immediate Context from Chapter 3")
-    assert ctx.index("[Immediate Context from Chapter 2") < ctx.index(
+    assert ctx.startswith("[Immediate Context from Chapter 2")
+    assert ctx.index("[Immediate Context from Chapter 3") < ctx.index(
         "Semantic Context from Chapter 1"
     )
 

@@ -161,7 +161,7 @@ class ContextService:
                         break
 
         if total_tokens_accumulated >= max_semantic_tokens:
-            final_semantic_context = "\n".join(reversed(immediate_parts)).strip()
+            final_semantic_context = "\n".join(immediate_parts).strip()
             final_tokens_count = count_tokens(
                 final_semantic_context, settings.DRAFTING_MODEL
             )
@@ -233,7 +233,7 @@ class ContextService:
                                 total_tokens_accumulated += remaining_tokens
                             break
             final_semantic_context = "\n".join(
-                immediate_parts + list(reversed(context_parts_list))
+                immediate_parts + context_parts_list
             ).strip()
             final_tokens_count = count_tokens(
                 final_semantic_context, settings.DRAFTING_MODEL
@@ -327,9 +327,7 @@ class ContextService:
                     score_str,
                 )
 
-        final_semantic_context = "\n".join(
-            list(reversed(immediate_parts)) + context_parts_list
-        ).strip()
+        final_semantic_context = "\n".join(immediate_parts + context_parts_list).strip()
         final_tokens_count = count_tokens(
             final_semantic_context, settings.DRAFTING_MODEL
         )
