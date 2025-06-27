@@ -2,9 +2,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 import utils
+from chapter_generation.drafting_service import DraftResult
+from chapter_generation.prerequisites_service import PrerequisiteData
 from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
-from orchestration.nana_orchestrator import NANA_Orchestrator
+from orchestration.nana_orchestrator import NANA_Orchestrator, RevisionOutcome
 
 from models.user_input_models import (
     KeyLocationModel,
@@ -31,19 +33,23 @@ async def test_validate_plot_outline_missing(orchestrator):
 
 @pytest.mark.asyncio
 async def test_process_prereq_result_failure(orchestrator):
-    result = await orchestrator._process_prereq_result(1, (None, -1, None, None))
+    result = await orchestrator._process_prereq_result(
+        1, PrerequisiteData(None, -1, None, None)
+    )
     assert result is None
 
 
 @pytest.mark.asyncio
 async def test_process_initial_draft_failure(orchestrator):
-    result = await orchestrator._process_initial_draft(1, (None, None))
+    result = await orchestrator._process_initial_draft(1, DraftResult(None, None))
     assert result is None
 
 
 @pytest.mark.asyncio
 async def test_process_revision_result_failure(orchestrator):
-    result = await orchestrator._process_revision_result(1, (None, None, False))
+    result = await orchestrator._process_revision_result(
+        1, RevisionOutcome(None, None, False)
+    )
     assert result is None
 
 
@@ -119,4 +125,9 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
     )
 
     result = await orchestrator._prepare_chapter_prerequisites(1)
-    assert result == ("Intro", 0, [{"scene_number": 1}], "ctx")
+    assert result == PrerequisiteData(
+        plot_point_focus="Intro",
+        plot_point_index=0,
+        chapter_plan=[{"scene_number": 1}],
+        hybrid_context_for_draft="ctx",
+    )

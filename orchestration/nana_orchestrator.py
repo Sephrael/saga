@@ -4,6 +4,7 @@ import logging
 import logging.handlers
 import os
 import time  # For Rich display updates
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -16,8 +17,10 @@ from agents.planner_agent import PlannerAgent
 from agents.world_continuity_agent import WorldContinuityAgent
 from chapter_generation import (
     DraftingService,
+    DraftResult,
     EvaluationService,
     FinalizationService,
+    PrerequisiteData,
     PrerequisitesService,
     RevisionService,
 )
@@ -67,6 +70,15 @@ except Exception:  # pragma: no cover - fallback when Rich is missing
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RevisionOutcome:
+    """Final text after processing and whether it is marked flawed."""
+
+    text: str | None
+    raw_llm_output: str | None
+    is_flawed: bool
 
 
 class NANA_Orchestrator:
@@ -525,7 +537,7 @@ class NANA_Orchestrator:
 
     async def _prepare_chapter_prerequisites(
         self, novel_chapter_number: int
-    ) -> tuple[str | None, int, list[SceneDetail] | None, str | None]:
+    ) -> PrerequisiteData:
         """Gather planning and context needed before drafting a chapter."""
         self._update_rich_display(
             step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
@@ -538,7 +550,7 @@ class NANA_Orchestrator:
             logger.error(
                 f"NANA: Ch {novel_chapter_number} prerequisite check failed: no concrete plot point focus (index {plot_point_index})."
             )
-            return None, -1, None, None
+            return PrerequisiteData(None, -1, None, None)
 
         self._update_novel_props_cache()
 
@@ -600,11 +612,11 @@ class NANA_Orchestrator:
             hybrid_context_for_draft,
         )
 
-        return (
-            plot_point_focus,
-            plot_point_index,
-            chapter_plan,
-            hybrid_context_for_draft,
+        return PrerequisiteData(
+            plot_point_focus=plot_point_focus,
+            plot_point_index=plot_point_index,
+            chapter_plan=chapter_plan,
+            hybrid_context_for_draft=hybrid_context_for_draft,
         )
 
     async def _draft_initial_chapter_text(
@@ -613,7 +625,7 @@ class NANA_Orchestrator:
         plot_point_focus: str,
         hybrid_context_for_draft: str,
         chapter_plan: list[SceneDetail] | None,
-    ) -> tuple[str | None, str | None]:
+    ) -> DraftResult:
         self._update_rich_display(
             step=f"Ch {novel_chapter_number} - Drafting Initial Text"
         )
@@ -639,12 +651,12 @@ class NANA_Orchestrator:
                 "initial_draft_fail_raw_llm",
                 initial_raw_llm_text or "Drafting Agent returned None for raw output.",
             )
-            return None, None
+            return DraftResult(text=None, raw_llm_output=None)
 
         await self._save_debug_output(
             novel_chapter_number, "initial_draft", initial_draft_text
         )
-        return initial_draft_text, initial_raw_llm_text
+        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
 
     async def _process_and_revise_draft(
         self,
@@ -655,14 +667,15 @@ class NANA_Orchestrator:
         plot_point_index: int,
         hybrid_context_for_draft: str,
         chapter_plan: list[SceneDetail] | None,
-    ) -> tuple[str | None, str | None, bool]:
+    ) -> RevisionOutcome:
         fast_path_result = await self._handle_no_evaluation_fast_path(
             novel_chapter_number,
             initial_draft_text,
             initial_raw_llm_text,
         )
         if fast_path_result is not None:
-            return fast_path_result
+            text, raw, flawed = fast_path_result
+            return RevisionOutcome(text=text, raw_llm_output=raw, is_flawed=flawed)
 
         current_text_to_process: str | None = initial_draft_text
         current_raw_llm_output: str | None = initial_raw_llm_text
@@ -699,7 +712,7 @@ class NANA_Orchestrator:
             logger.critical(
                 f"NANA: Ch {novel_chapter_number} - current_text_to_process is None after revision loop. Aborting chapter."
             )
-            return None, None, True
+            return RevisionOutcome(text=None, raw_llm_output=None, is_flawed=True)
 
         (
             current_text_to_process,
@@ -710,10 +723,10 @@ class NANA_Orchestrator:
             is_from_flawed_source_for_kg,
         )
 
-        return (
-            current_text_to_process,
-            current_raw_llm_output,
-            is_from_flawed_source_for_kg,
+        return RevisionOutcome(
+            text=current_text_to_process,
+            raw_llm_output=current_raw_llm_output,
+            is_flawed=is_from_flawed_source_for_kg,
         )
 
     async def _finalize_and_save_chapter(
@@ -749,52 +762,57 @@ class NANA_Orchestrator:
     async def _process_prereq_result(
         self,
         novel_chapter_number: int,
-        prereq_result: tuple[str | None, int, list[SceneDetail] | None, str | None],
-    ) -> tuple[str, int, list[SceneDetail] | None, str] | None:
-        (
-            plot_point_focus,
-            plot_point_index,
-            chapter_plan,
-            hybrid_context_for_draft,
-        ) = prereq_result
+        prereq_result: PrerequisiteData,
+    ) -> PrerequisiteData | None:
+        plot_point_focus = prereq_result.plot_point_focus
+        plot_point_index = prereq_result.plot_point_index
+        chapter_plan = prereq_result.chapter_plan
+        hybrid_context_for_draft = prereq_result.hybrid_context_for_draft
 
         if plot_point_focus is None or hybrid_context_for_draft is None:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Prerequisites Incomplete"
             )
             return None
-        return (
-            plot_point_focus,
-            plot_point_index,
-            chapter_plan,
-            hybrid_context_for_draft,
+        return PrerequisiteData(
+            plot_point_focus=plot_point_focus,
+            plot_point_index=plot_point_index,
+            chapter_plan=chapter_plan,
+            hybrid_context_for_draft=hybrid_context_for_draft,
         )
 
     async def _process_initial_draft(
         self,
         novel_chapter_number: int,
-        draft_result: tuple[str | None, str | None],
-    ) -> tuple[str, str | None] | None:
-        initial_draft_text, initial_raw_llm_text = draft_result
+        draft_result: DraftResult,
+    ) -> DraftResult | None:
+        initial_draft_text = draft_result.text
+        initial_raw_llm_text = draft_result.raw_llm_output
         if initial_draft_text is None:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - No Initial Draft"
             )
             return None
-        return initial_draft_text, initial_raw_llm_text
+        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
 
     async def _process_revision_result(
         self,
         novel_chapter_number: int,
-        revision_result: tuple[str | None, str | None, bool],
-    ) -> tuple[str, str | None, bool] | None:
-        processed_text, processed_raw_llm, is_flawed = revision_result
+        revision_result: RevisionOutcome,
+    ) -> RevisionOutcome | None:
+        processed_text = revision_result.text
+        processed_raw_llm = revision_result.raw_llm_output
+        is_flawed = revision_result.is_flawed
         if processed_text is None:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Revision/Processing Error"
             )
             return None
-        return processed_text, processed_raw_llm, is_flawed
+        return RevisionOutcome(
+            text=processed_text,
+            raw_llm_output=processed_raw_llm,
+            is_flawed=is_flawed,
+        )
 
     async def _finalize_and_log(
         self,
