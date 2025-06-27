@@ -103,6 +103,33 @@ generates patch instructions, optionally validates them via the
 re-evaluated and may loop through additional revision cycles up to
 `MAX_REVISION_CYCLES_PER_CHAPTER`.
 
+### Full Revision Flow
+
+1. **Collect Evaluations:** `RevisionManager` receives `EvaluationResult` objects
+   along with the draft text.
+2. **Generate Patch Instructions:** When `ENABLE_PATCH_BASED_REVISION` is
+   enabled, related problems are grouped and sent to `PatchGenerator`. It tries
+   up to `PATCH_GENERATION_ATTEMPTS` times to create a maximum of
+   `MAX_PATCH_INSTRUCTIONS_TO_GENERATE` instructions.
+3. **Validate Patches:** If `AGENT_ENABLE_PATCH_VALIDATION` is true, each
+   instruction is verified by `PatchValidationAgent` before it is applied.
+4. **Apply Patches:** Accepted patches modify the text. The chapter is then
+   re-evaluated. If the remaining problems are at or below
+   `POST_PATCH_PROBLEM_THRESHOLD` and the changes meet the
+   `REVISION_SIMILARITY_ACCEPTANCE` requirement, the revision is accepted.
+5. **Full Rewrite Trigger:** Patching may be skipped when disabled, when the
+   draft is shorter than `MIN_ACCEPTABLE_DRAFT_LENGTH`, or when repeated cycles
+   exceed `MAX_REVISION_CYCLES_PER_CHAPTER`. In these cases `RevisionManager`
+   instructs the `DraftingAgent` to perform a complete rewrite.
+
+```mermaid
+flowchart TD
+    RevisionManager --> PatchGenerator
+    PatchGenerator --> PatchValidationAgent
+    PatchValidationAgent --> RevisionManager
+    RevisionManager -->|full rewrite| DraftingAgent
+```
+
 ### Configuration Highlights
 
 Several options in `config.py` adjust revision behavior:
