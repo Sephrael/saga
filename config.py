@@ -227,7 +227,7 @@ class SagaSettings(BaseSettings):
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
     # Logging & UI
-    LOG_LEVEL_STR: str = Field("INFO", alias="LOG_LEVEL")
+    LOG_LEVEL_STR: str = Field("INFO", alias="AGENT_LOG_LEVEL")
     LOG_FORMAT: str = (
         "%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s"
     )

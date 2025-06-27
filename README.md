@@ -203,7 +203,7 @@ SMALL_MODEL="Qwen3-4B-Q4"    # Used for Summaries
 NARRATOR_MODEL="Qwen3-14B-Q4" # Used for Drafting and a full Revision
 
 # Other important settings in config.py (review defaults)
-# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL, etc.
+# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, AGENT_LOG_LEVEL, etc.
 ```
 
 Refer to `config.py` for a full list of configurable options and their defaults.
