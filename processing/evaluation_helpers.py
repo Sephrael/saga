@@ -1,3 +1,4 @@
+# processing/evaluation_helpers.py
 from typing import Any
 
 import structlog
@@ -79,6 +80,9 @@ async def parse_llm_evaluation_output(
             suggested_fix_focus=problem_dict.get(
                 "suggested_fix_focus", "N/A - Missing suggestion from LLM"
             ),
+            rewrite_instruction=problem_dict.get("rewrite_instruction"),
+            severity=problem_dict.get("severity"),
+            related_spans=problem_dict.get("related_spans"),
         )
 
         if (

@@ -67,6 +67,9 @@ def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDe
             suggested_fix_focus=item.get(
                 "suggested_fix_focus", "N/A - Missing suggestion"
             ),
+            rewrite_instruction=item.get("rewrite_instruction"),
+            severity=item.get("severity"),
+            related_spans=item.get("related_spans"),
         )
         if category:
             prob.issue_category = category

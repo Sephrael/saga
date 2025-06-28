@@ -26,7 +26,7 @@ class SceneDetail(TypedDict, total=False):
 class AgentBaseModel(BaseModel):
     """Base model supporting mapping style access."""
 
-    model_config: ConfigDict = ConfigDict(from_attributes=True, extra="allow")
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
     def __getitem__(self, item: str) -> Any:  # pragma: no cover - convenience
         return getattr(self, item)
@@ -53,6 +53,9 @@ class ProblemDetail(AgentBaseModel):
     sentence_char_start: int | None = None
     sentence_char_end: int | None = None
     suggested_fix_focus: str
+    rewrite_instruction: str | None = None
+    severity: str | None = None
+    related_spans: list[tuple[int, int]] | None = None
 
 
 class EvaluationResult(AgentBaseModel):
