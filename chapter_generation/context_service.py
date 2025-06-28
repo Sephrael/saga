@@ -42,6 +42,31 @@ class ContextService:
             return primary_data.get(secondary_key, default)
         return getattr(primary_data, secondary_key, default)
 
+    @staticmethod
+    def _extract_plot_points(agent_or_props: Any) -> list[str]:
+        """Extract plot points from various outline structures."""
+        if agent_or_props is None:
+            return []
+        if isinstance(agent_or_props, dict):
+            if isinstance(agent_or_props.get("plot_points"), list):
+                return agent_or_props.get("plot_points", [])
+            nested = agent_or_props.get("plot_outline_full") or agent_or_props.get(
+                "plot_outline"
+            )
+            if nested is not None:
+                return ContextService._extract_plot_points(nested)
+        else:
+            if hasattr(agent_or_props, "plot_points") and isinstance(
+                agent_or_props.plot_points, list
+            ):
+                return agent_or_props.plot_points
+            nested = getattr(agent_or_props, "plot_outline_full", None) or getattr(
+                agent_or_props, "plot_outline", None
+            )
+            if nested is not None:
+                return ContextService._extract_plot_points(nested)
+        return []
+
     async def get_semantic_context(
         self, agent_or_props: Any, current_chapter_number: int
     ) -> str:
@@ -53,20 +78,7 @@ class ContextService:
             current_chapter_number,
         )
 
-        if isinstance(agent_or_props, dict):
-            plot_outline_data = agent_or_props.get(
-                "plot_outline_full", agent_or_props.get("plot_outline", {})
-            )
-        else:
-            plot_outline_data = getattr(agent_or_props, "plot_outline_full", None)
-            if not plot_outline_data:
-                plot_outline_data = getattr(agent_or_props, "plot_outline", {})
-
-        plot_points = []
-        if isinstance(plot_outline_data, dict):
-            plot_points = plot_outline_data.get("plot_points", [])
-        else:
-            plot_points = getattr(plot_outline_data, "plot_points", [])
+        plot_points = self._extract_plot_points(agent_or_props)
 
         plot_point_focus = None
         if plot_points and isinstance(plot_points, list) and current_chapter_number > 0:
