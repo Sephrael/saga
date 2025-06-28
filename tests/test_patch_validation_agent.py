@@ -24,3 +24,41 @@ async def test_validation_accepts_at_threshold(monkeypatch):
     agent = PatchValidationAgent()
     ok, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
     assert ok
+
+
+@pytest.mark.asyncio
+async def test_rewrite_instruction_missing_keyword(monkeypatch):
+    async def fake_call(*_a, **_k):
+        return f"{settings.PATCH_VALIDATION_THRESHOLD + 10} good", None
+
+    monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
+    agent = PatchValidationAgent()
+    problems = [
+        {
+            "problem_description": "lacking dragon",
+            "rewrite_instruction": "mention the dragon",
+        }
+    ]
+    ok, _ = await agent.validate_patch(
+        "ctx", {"replace_with": "A hero wins."}, problems
+    )
+    assert not ok
+
+
+@pytest.mark.asyncio
+async def test_rewrite_instruction_keywords_present(monkeypatch):
+    async def fake_call(*_a, **_k):
+        return f"{settings.PATCH_VALIDATION_THRESHOLD + 10} good", None
+
+    monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
+    agent = PatchValidationAgent()
+    problems = [
+        {
+            "problem_description": "lacking dragon",
+            "rewrite_instruction": "mention the dragon",
+        }
+    ]
+    ok, _ = await agent.validate_patch(
+        "ctx", {"replace_with": "The dragon appears."}, problems
+    )
+    assert ok
