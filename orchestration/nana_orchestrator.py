@@ -108,6 +108,8 @@ class NANA_Orchestrator:
         self.token_accountant = TokenAccountant()
         self.total_tokens_generated_this_run: int = 0
 
+        self.next_chapter_context: str | None = None
+
         self.display = RichDisplayManager()
         self.run_start_time: float = 0.0
         utils.load_spacy_model_if_needed()
@@ -275,6 +277,19 @@ class NANA_Orchestrator:
         self._update_novel_props_cache()
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
         self._update_rich_display(step="Initial State Saved")
+
+        await self.refresh_plot_outline()
+        if neo4j_manager.driver is not None:
+            await self.refresh_knowledge_cache()
+        else:
+            logger.warning(
+                "Neo4j driver not initialized. Skipping knowledge cache refresh."
+            )
+        self.next_chapter_context = await self.context_service.build_hybrid_context(
+            self,
+            1,
+            None,
+        )
 
         return True
 
@@ -551,11 +566,22 @@ class NANA_Orchestrator:
                     f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
                 )
 
-        hybrid_context_for_draft = await self.context_service.build_hybrid_context(
-            self,
-            novel_chapter_number,
-            chapter_plan,
-        )
+        hybrid_context_for_draft = self.next_chapter_context
+        if hybrid_context_for_draft is None:
+            await self.refresh_plot_outline()
+            if neo4j_manager.driver is not None:
+                await self.refresh_knowledge_cache()
+            else:
+                logger.warning(
+                    "Neo4j driver not initialized. Skipping knowledge cache refresh."
+                )
+            hybrid_context_for_draft = await self.context_service.build_hybrid_context(
+                self,
+                novel_chapter_number,
+                chapter_plan,
+            )
+        else:
+            self.next_chapter_context = None
 
         if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
@@ -785,6 +811,19 @@ class NANA_Orchestrator:
     ) -> str | None:
         final_text_result = await self._finalize_and_save_chapter(
             novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+        )
+
+        await self.refresh_plot_outline()
+        if neo4j_manager.driver is not None:
+            await self.refresh_knowledge_cache()
+        else:
+            logger.warning(
+                "Neo4j driver not initialized. Skipping knowledge cache refresh."
+            )
+        self.next_chapter_context = await self.context_service.build_hybrid_context(
+            self,
+            novel_chapter_number + 1,
+            None,
         )
 
         if final_text_result:
