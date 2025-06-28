@@ -64,6 +64,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   Otherwise, or if key elements are marked `[Fill-in]`, the `bootstrapper` modules fill in the plot outline, character profiles, and world-building details via targeted LLM calls.
         *   The results are returned as typed models: `PlotOutline`, `CharacterProfile`, and `WorldBuilding` defined in `initialization.models`.
     *   **KG Pre-population:** The `KGMaintainerAgent` performs a full sync of this foundational story data to the Neo4j graph.
+    *   **Initial Context Computation:** Once bootstrapping is complete, SAGA generates a baseline hybrid context from the newly populated KG. This context is stored and used to seed the prerequisites step for Chapter&nbsp;1.
     *   **Reset Neo4j:** To restart from a clean slate, stop the container with `docker-compose down -v` or run `python reset_neo4j.py --force` and then re-run `docker-compose up -d neo4j`.
 
 2.  **Chapter Generation Loop (up to `CHAPTERS_PER_RUN` chapters):**
@@ -89,6 +90,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   It extracts new knowledge (character updates, world-building changes, new KG triples) from the final chapter text and merges these updates into the in-memory state and persists them to Neo4j.
         *   It generates an embedding for the final chapter text.
         *   The final chapter data (text, summary, embedding, provisional status) is saved to Neo4j by `data_access.chapter_queries`.
+        *   These updates recalculate the hybrid context so that the next chapter begins its prerequisites phase with the most current information.
     *   **(F) KG Maintenance (Periodic):**
         *   Every `KG_HEALING_INTERVAL` chapters, the `KGMaintainerAgent.heal_and_enrich_kg()` method is called to perform maintenance like resolving duplicate entities.
 
