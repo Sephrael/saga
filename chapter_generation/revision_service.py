@@ -1,3 +1,4 @@
+# chapter_generation/revision_service.py
 """Service for revising drafted chapters."""
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ class RevisionService:
     ) -> RevisionResult:
         revisions_made = 0
         needs_revision = True
+        last_eval_result: EvaluationResult | None = None
         while (
             needs_revision and revisions_made < settings.MAX_REVISION_CYCLES_PER_CHAPTER
         ):
@@ -97,6 +99,7 @@ class RevisionService:
                 evaluation_result: EvaluationResult = eval_result_obj
             else:
                 evaluation_result = EvaluationResult(**eval_result_obj)
+            last_eval_result = evaluation_result
             await self.orchestrator._save_debug_output(
                 chapter_number,
                 f"evaluation_result_attempt_{attempt}",
@@ -245,6 +248,23 @@ class RevisionService:
                 revisions_made += 1
                 needs_revision = True
                 continue
+
+        if needs_revision and last_eval_result is not None:
+            root_cause = self.orchestrator.revision_manager.identify_root_cause(
+                [
+                    p.to_dict() if hasattr(p, "to_dict") else dict(p)
+                    for p in last_eval_result.problems_found
+                ],
+                self.orchestrator.plot_outline,
+                await character_queries.get_character_profiles_from_db(),
+                await world_queries.get_world_building_from_db(),
+            )
+            if root_cause:
+                logger.warning(
+                    "NANA: Ch %s - Root cause analysis: %s",
+                    chapter_number,
+                    root_cause,
+                )
 
         return RevisionResult(
             text=current_text,
