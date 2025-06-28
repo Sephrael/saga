@@ -39,6 +39,7 @@ async def test_revision_loop_retries_on_failure(monkeypatch):
             [],
             {},
             {},
+            [],
         )
 
     call_counter = {"count": 0}

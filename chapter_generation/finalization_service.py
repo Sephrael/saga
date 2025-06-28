@@ -87,6 +87,8 @@ class FinalizationService:
             chapter_number, final_text_to_process, final_raw_llm_output
         )
 
+        self.orchestrator.repetition_tracker.update_from_text(final_text_to_process)
+
         self.orchestrator.chapter_count = max(
             self.orchestrator.chapter_count, chapter_number
         )

@@ -235,6 +235,11 @@ class SagaSettings(BaseSettings):
     DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
+    # Repetition Tracking
+    REPETITION_TRACKER_NGRAM_SIZE: int = 4
+    REPETITION_TRACKER_THRESHOLD: int = 5
+    REPETITION_STATS_FILE: str = "repetition_stats.json"
+
     # Logging & UI
     LOG_LEVEL_STR: str = Field("INFO", alias="AGENT_LOG_LEVEL")
     LOG_FORMAT: str = (
@@ -394,6 +399,9 @@ WORLD_BUILDER_FILE = os.path.join(settings.BASE_OUTPUT_DIR, settings.WORLD_BUILD
 CHAPTERS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.CHAPTERS_DIR)
 CHAPTER_LOGS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.CHAPTER_LOGS_DIR)
 DEBUG_OUTPUTS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.DEBUG_OUTPUTS_DIR)
+REPETITION_STATS_FILE_PATH = os.path.join(
+    settings.BASE_OUTPUT_DIR, settings.REPETITION_STATS_FILE
+)
 UNHINGED_GENRES_FILE = os.path.join(
     settings.UNHINGED_DATA_DIR, settings.UNHINGED_GENRES_FILE
 )

@@ -10,6 +10,7 @@ import structlog
 from config import settings
 from data_access import character_queries, world_queries
 from kg_maintainer.models import EvaluationResult, ProblemDetail
+from processing.repetition_analyzer import RepetitionAnalyzer
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -26,6 +27,7 @@ class EvaluationCycleResult:
     continuity_problems: list[ProblemDetail]
     eval_usage: dict[str, int] | None
     continuity_usage: dict[str, int] | None
+    repetition_problems: list[ProblemDetail]
 
 
 class EvaluationService:
@@ -36,6 +38,9 @@ class EvaluationService:
     ) -> None:
         self.orchestrator = orchestrator
         self.file_manager = file_manager
+        self.repetition_analyzer = RepetitionAnalyzer(
+            tracker=self.orchestrator.repetition_tracker
+        )
 
     async def run_cycle(
         self,
@@ -103,21 +108,31 @@ class EvaluationService:
         if "continuity" in task_names:
             continuity_problems, continuity_usage = results[result_idx]
 
-        if eval_result_obj is None:
-            eval_result_obj = EvaluationResult(
-                needs_revision=False,
-                reasons=[],
-                problems_found=[],
-                coherence_score=None,
-                consistency_issues=None,
-                plot_deviation_reason=None,
-                thematic_issues=None,
-                narrative_depth_issues=None,
+        if isinstance(eval_result_obj, EvaluationResult):
+            evaluation_result: EvaluationResult = eval_result_obj
+        else:
+            data = eval_result_obj or {}
+            evaluation_result = EvaluationResult(
+                needs_revision=data.get("needs_revision", False),
+                reasons=data.get("reasons", []),
+                problems_found=data.get("problems_found", []),
+                coherence_score=data.get("coherence_score"),
+                consistency_issues=data.get("consistency_issues"),
+                plot_deviation_reason=data.get("plot_deviation_reason"),
+                thematic_issues=data.get("thematic_issues"),
+                narrative_depth_issues=data.get("narrative_depth_issues"),
             )
 
+        repetition_probs = await self.repetition_analyzer.analyze(current_text)
+        evaluation_result.problems_found.extend(repetition_probs)
+        if repetition_probs:
+            evaluation_result.needs_revision = True
+            evaluation_result.reasons.append("Repetition issues detected")
+
         return EvaluationCycleResult(
-            evaluation=eval_result_obj,
+            evaluation=evaluation_result,
             continuity_problems=continuity_problems,
             eval_usage=eval_usage,
             continuity_usage=continuity_usage,
+            repetition_problems=repetition_probs,
         )
