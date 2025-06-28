@@ -906,3 +906,66 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     ]
     final_prompt_parts.extend(unique_facts[:max_total_facts])
     return "\n".join(final_prompt_parts)
+
+
+async def get_kg_reasoning_guidance_for_prompt(
+    plot_outline: dict[str, Any],
+    chapter_number: int,
+    chapter_plan: list[SceneDetail] | None = None,
+    max_guidelines: int = 5,
+) -> str:
+    """Return KG-derived reasoning guidelines for the chapter."""
+
+    if chapter_number <= 0:
+        return "No KG reasoning guidance available for pre-first chapter."
+
+    kg_chapter_limit = (
+        settings.KG_PREPOPULATION_CHAPTER_NUM
+        if chapter_number == 1
+        else chapter_number - 1
+    )
+
+    protagonist = plot_outline.get("protagonist_name")
+    char_names: set[str] = (
+        {protagonist} if protagonist and not utils._is_fill_in(protagonist) else set()
+    )
+
+    if chapter_plan:
+        for scene in chapter_plan:
+            if not isinstance(scene, dict):
+                continue
+            for char in scene.get("characters_involved", []) or []:
+                if (
+                    isinstance(char, str)
+                    and char.strip()
+                    and not utils._is_fill_in(char)
+                ):
+                    char_names.add(char.strip())
+
+    fetch_tasks = [
+        character_queries.get_character_info_for_snippet_from_db(name, kg_chapter_limit)
+        for name in char_names
+    ]
+    results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+    guidelines: list[str] = []
+    for name, info in zip(char_names, results, strict=False):
+        if not isinstance(info, dict):
+            continue
+        traits = [t.lower() for t in info.get("traits", []) if isinstance(t, str)]
+        status = str(info.get("current_status", "")).lower()
+        if "incorporeal" in traits:
+            guidelines.append(
+                f"- {name} is incorporeal. Avoid physical verbs; describe interactions via data streams or remote avatars."
+            )
+        if "dead" in status:
+            guidelines.append(
+                f"- {name} is dead. Present scenes should reference them only indirectly or in memory."
+            )
+
+    if not guidelines:
+        return "No specific KG reasoning guidance identified for this chapter."
+
+    final_guidance = ["**KG Reasoning Guidance:**"]
+    final_guidance.extend(guidelines[:max_guidelines])
+    return "\n".join(final_guidance)

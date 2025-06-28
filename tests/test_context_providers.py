@@ -2,6 +2,7 @@ import pytest
 from chapter_generation.context_providers import (
     ContextRequest,
     KGFactProvider,
+    KGReasoningProvider,
     PlanProvider,
     UserNoteProvider,
 )
@@ -35,3 +36,17 @@ async def test_kg_fact_provider(monkeypatch):
     request = ContextRequest(2, None, {})
     chunk = await provider.get_context(request)
     assert chunk.text == "fact"
+
+
+@pytest.mark.asyncio
+async def test_kg_reasoning_provider(monkeypatch):
+    async def fake_reason(*args, **kwargs):
+        return "guide"
+
+    monkeypatch.setattr(
+        "prompt_data_getters.get_kg_reasoning_guidance_for_prompt", fake_reason
+    )
+    provider = KGReasoningProvider()
+    request = ContextRequest(2, None, {})
+    chunk = await provider.get_context(request)
+    assert chunk.text == "guide"
