@@ -73,6 +73,7 @@ class RevisionService:
                 continuity_problems,
                 eval_usage,
                 continuity_usage,
+                repetition_problems,
             ) = await self.orchestrator._run_evaluation_cycle(
                 chapter_number,
                 attempt,
@@ -106,6 +107,11 @@ class RevisionService:
                 f"continuity_problems_attempt_{attempt}",
                 continuity_problems,
             )
+            await self.orchestrator._save_debug_output(
+                chapter_number,
+                f"repetition_problems_attempt_{attempt}",
+                repetition_problems,
+            )
 
             if continuity_problems:
                 logger.warning(
@@ -122,6 +128,13 @@ class RevisionService:
                     "Continuity issues identified by WorldContinuityAgent."
                 )
                 evaluation_result.reasons = sorted(list(unique_reasons))
+
+            if repetition_problems:
+                evaluation_result.problems_found.extend(repetition_problems)
+                if not evaluation_result.needs_revision:
+                    evaluation_result.needs_revision = True
+                if "Repetition issues detected" not in evaluation_result.reasons:
+                    evaluation_result.reasons.append("Repetition issues detected")
 
             needs_revision = evaluation_result.needs_revision
             if not needs_revision:

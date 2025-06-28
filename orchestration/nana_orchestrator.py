@@ -44,6 +44,7 @@ from kg_maintainer.models import (
     SceneDetail,
     WorldItem,
 )
+from processing.repetition_tracker import RepetitionTracker
 from processing.revision_manager import RevisionManager
 from processing.text_deduplicator import TextDeduplicator
 from storage.file_manager import FileManager
@@ -87,6 +88,7 @@ class NANA_Orchestrator:
         self.pre_flight_agent = PreFlightCheckAgent()
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
         self.revision_manager = RevisionManager()
+        self.repetition_tracker = RepetitionTracker()
 
         # Chapter generation services
         self.prerequisites_service = PrerequisitesService(self, self.file_manager)
@@ -385,6 +387,7 @@ class NANA_Orchestrator:
         list[ProblemDetail],
         dict[str, int] | None,
         dict[str, int] | None,
+        list[ProblemDetail],
     ]:
         result = await self.evaluation_service.run_cycle(
             chapter_number=novel_chapter_number,
@@ -400,6 +403,7 @@ class NANA_Orchestrator:
             result.continuity_problems,
             result.eval_usage,
             result.continuity_usage,
+            result.repetition_problems,
         )
 
     async def _handle_no_evaluation_fast_path(
