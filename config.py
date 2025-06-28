@@ -189,6 +189,7 @@ class SagaSettings(BaseSettings):
     CONTEXT_PROVIDERS: list[str] = [
         "chapter_generation.context_providers.SemanticHistoryProvider",
         "chapter_generation.context_providers.KGFactProvider",
+        "chapter_generation.context_providers.KGReasoningProvider",
         "chapter_generation.context_providers.PlanProvider",
         "chapter_generation.context_providers.UserNoteProvider",
     ]

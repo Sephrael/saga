@@ -87,6 +87,21 @@ class KGFactProvider(ContextProvider):
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
 
 
+class KGReasoningProvider(ContextProvider):
+    """Provide reasoning constraints derived from the KG."""
+
+    source = "kg_reasoning"
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        from prompt_data_getters import get_kg_reasoning_guidance_for_prompt
+
+        text = await get_kg_reasoning_guidance_for_prompt(
+            request.plot_outline, request.chapter_number, request.chapter_plan
+        )
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
 class PlanProvider(ContextProvider):
     """Provide the chapter scene plan."""
 
