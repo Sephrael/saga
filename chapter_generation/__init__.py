@@ -1,5 +1,6 @@
 """Utilities for orchestrating chapter generation steps."""
 
+from .context_orchestrator import ContextOrchestrator, ContextRequest
 from .context_service import ContextService
 from .drafting_service import DraftingService, DraftResult
 from .evaluation_service import EvaluationCycleResult, EvaluationService
@@ -10,6 +11,8 @@ from .revision_service import RevisionResult, RevisionService
 __all__ = [
     "PrerequisitesService",
     "PrerequisiteData",
+    "ContextOrchestrator",
+    "ContextRequest",
     "DraftingService",
     "DraftResult",
     "EvaluationService",

@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
-from chapter_generation.context_service import ContextService
+from chapter_generation.context_orchestrator import ContextOrchestrator, ContextRequest
+from chapter_generation.context_providers import SemanticHistoryProvider
 from core.llm_interface import llm_service
 from data_access import chapter_queries
 
@@ -39,9 +40,11 @@ async def test_immediate_context_added(monkeypatch):
         AsyncMock(side_effect=fake_find_similar),
     )
 
-    service = ContextService(chapter_queries, llm_service)
-    ctx = await service.get_semantic_context({}, 4)
-    assert ctx.startswith("[Immediate Context from Chapter 2")
+    provider = SemanticHistoryProvider(chapter_queries, llm_service)
+    orchestrator = ContextOrchestrator([provider])
+    req = ContextRequest(chapter_number=4, plot_focus=None, plot_outline={})
+    ctx = await orchestrator.build_context(req)
+    assert ctx.startswith("[semantic_history]")
     assert ctx.index("[Immediate Context from Chapter 3") < ctx.index(
         "Semantic Context from Chapter 1"
     )
@@ -91,8 +94,10 @@ async def test_decay_sorting(monkeypatch):
         AsyncMock(side_effect=fake_find_similar),
     )
 
-    service = ContextService(chapter_queries, llm_service)
-    ctx = await service.get_semantic_context({}, 11)
+    provider = SemanticHistoryProvider(chapter_queries, llm_service)
+    orchestrator = ContextOrchestrator([provider])
+    req = ContextRequest(chapter_number=11, plot_focus=None, plot_outline={})
+    ctx = await orchestrator.build_context(req)
     pos8 = ctx.index("Semantic Context from Chapter 8")
     pos5 = ctx.index("Semantic Context from Chapter 5")
     pos1 = ctx.index("Semantic Context from Chapter 1")
