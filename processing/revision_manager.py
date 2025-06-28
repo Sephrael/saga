@@ -1,3 +1,4 @@
+# processing/revision_manager.py
 from typing import Any
 
 import structlog
@@ -27,6 +28,63 @@ logger = structlog.get_logger(__name__)
 
 class RevisionManager:
     """Coordinate chapter revision via patches and rewrites."""
+
+    def identify_root_cause(
+        self,
+        problems: list[dict[str, Any]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
+    ) -> str | None:
+        """Identify a likely root cause for persistent revision issues."""
+
+        search_text = " ".join(
+            str(p.get("problem_description", ""))
+            + " "
+            + str(p.get("quote_from_original_text", ""))
+            for p in problems
+        ).lower()
+
+        def _find_match(names: list[str], template: str) -> str | None:
+            for name in names:
+                if name.lower() in search_text and (
+                    "inconsistent" in search_text or "contradict" in search_text
+                ):
+                    return template.format(name=name)
+            return None
+
+        char_match = _find_match(
+            list(character_profiles.keys()),
+            "The error originates from the conflicting description in {name}'s character profile.",
+        )
+        if char_match:
+            return char_match
+
+        world_names: list[str] = []
+        for category_dict in world_building.values():
+            if not isinstance(category_dict, dict):
+                continue
+            for item in category_dict.values():
+                if getattr(item, "name", None):
+                    world_names.append(item.name)
+
+        world_match = _find_match(
+            world_names,
+            "The error originates from conflicting world element definition for {name}.",
+        )
+        if world_match:
+            return world_match
+
+        plot_points = [str(pp) for pp in plot_outline.get("plot_points", []) if pp]
+        for idx, pp in enumerate(plot_points):
+            if pp.lower() in search_text and (
+                "inconsistent" in search_text or "contradict" in search_text
+            ):
+                return (
+                    f"The error originates from a conflict with plot point {idx + 1}."
+                )
+
+        return None
 
     async def _patch_revision_cycle(
         self,
@@ -190,6 +248,19 @@ class RevisionManager:
             )
         length_instruction = "".join(length_instruction_parts)
 
+        rewrite_instructions_lines: list[str] = []
+        for idx, prob in enumerate(problems_to_fix):
+            instruction = prob.get("rewrite_instruction")
+            if instruction:
+                rewrite_instructions_lines.append(f"  {idx + 1}. {instruction}")
+        rewrite_instructions_str = (
+            "**Explicit Rewrite Guidelines:**\n"
+            + "\n".join(rewrite_instructions_lines)
+            + "\n"
+            if rewrite_instructions_lines
+            else ""
+        )
+
         protagonist_name = plot_outline.get(
             "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
@@ -228,6 +299,7 @@ class RevisionManager:
                 "--- FEEDBACK END ---",
                 all_problem_descriptions_str,
                 deduplication_note,
+                rewrite_instructions_str,
                 length_instruction,
                 plan_focus_section,
                 "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
