@@ -6,6 +6,7 @@ from chapter_generation.drafting_service import DraftResult
 from chapter_generation.prerequisites_service import PrerequisiteData
 from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
+from chapter_generation.finalization_service import FinalizationServiceResult
 from orchestration.nana_orchestrator import NANA_Orchestrator, RevisionOutcome
 
 from models.user_input_models import (
@@ -96,15 +97,11 @@ def test_load_state_from_user_model(orchestrator):
 @pytest.mark.asyncio
 async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
     orchestrator.plot_outline = PlotOutline(plot_points=["Intro"])
+    orchestrator.next_chapter_context = "prefetched"
     monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
 
     async def fake_plan(*_args, **_kwargs):
         return ([{"scene_number": 1}], {"total_tokens": 1})
-
-    async def fake_context(_self, chapter_number: int, plan):
-        assert chapter_number == 1
-        assert plan == [{"scene_number": 1}]
-        return "ctx"
 
     monkeypatch.setattr(
         orchestrator.planner_agent,
@@ -137,10 +134,11 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         "check_scene_plan_consistency",
         AsyncMock(return_value=([], {})),
     )
+    build_ctx_mock = AsyncMock(side_effect=Exception("should not call"))
     monkeypatch.setattr(
         orchestrator.context_service,
         "build_hybrid_context",
-        AsyncMock(side_effect=fake_context),
+        build_ctx_mock,
     )
 
     result = await orchestrator._prepare_chapter_prerequisites(1)
@@ -148,5 +146,51 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         plot_point_focus="Intro",
         plot_point_index=0,
         chapter_plan=[{"scene_number": 1}],
-        hybrid_context_for_draft="ctx",
+        hybrid_context_for_draft="prefetched",
     )
+    assert orchestrator.next_chapter_context is None
+    build_ctx_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_perform_initial_setup_sets_next_context(monkeypatch, orchestrator):
+    plot_outline = PlotOutline(title="T", plot_points=["p"], protagonist_name="Hero")
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.run_genesis_phase",
+        AsyncMock(return_value=(plot_outline, {}, {"source": "w"}, {})),
+    )
+    monkeypatch.setattr(orchestrator, "_accumulate_tokens", lambda *_a, **_k: None)
+    monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
+    ctx_mock = AsyncMock(return_value="ctx0")
+    monkeypatch.setattr(orchestrator.context_service, "build_hybrid_context", ctx_mock)
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.neo4j_manager.driver", None, raising=False
+    )
+
+    result = await orchestrator.perform_initial_setup()
+
+    assert result is True
+    ctx_mock.assert_awaited_once_with(orchestrator, 1, None)
+    assert orchestrator.next_chapter_context == "ctx0"
+
+
+@pytest.mark.asyncio
+async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkeypatch):
+    ctx_mock = AsyncMock(return_value="ctx1")
+    monkeypatch.setattr(orchestrator.context_service, "build_hybrid_context", ctx_mock)
+    monkeypatch.setattr(orchestrator, "refresh_plot_outline", AsyncMock())
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.neo4j_manager.driver", None, raising=False
+    )
+    monkeypatch.setattr(orchestrator, "refresh_knowledge_cache", AsyncMock())
+    monkeypatch.setattr(
+        orchestrator.finalization_service,
+        "finalize_and_save_chapter",
+        AsyncMock(return_value=FinalizationServiceResult(text="done")),
+    )
+
+    result = await orchestrator._finalize_and_log(1, "text", None, False)
+
+    assert result == "done"
+    ctx_mock.assert_awaited_with(orchestrator, 2, None)
+    assert orchestrator.next_chapter_context == "ctx1"
