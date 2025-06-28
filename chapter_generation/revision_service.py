@@ -159,6 +159,7 @@ class RevisionService:
                 chapter_plan,
                 is_from_flawed_source=is_from_flawed_source_for_kg,
                 already_patched_spans=patched_spans,
+                continuity_problems=continuity_problems,
             )
             self.orchestrator._accumulate_tokens(
                 f"Ch{chapter_number}-{Stage.REVISION.value}-Attempt{attempt}",
