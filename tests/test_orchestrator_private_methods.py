@@ -22,6 +22,13 @@ def orchestrator(monkeypatch):
     monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
     orch = NANA_Orchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
+    monkeypatch.setattr(orch, "refresh_plot_outline", AsyncMock())
+    monkeypatch.setattr(orch, "refresh_knowledge_cache", AsyncMock())
+    monkeypatch.setattr(
+        orch.context_service,
+        "build_hybrid_context",
+        AsyncMock(return_value="ctx"),
+    )
     return orch
 
 
