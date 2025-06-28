@@ -1,10 +1,12 @@
+# tests/test_pre_flight_agent.py
 from unittest.mock import AsyncMock
 
 import pytest
 from agents.pre_flight_check_agent import PreFlightCheckAgent
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
-from data_access import character_queries
+from data_access import character_queries, world_queries
+from kg_maintainer.models import WorldItem
 
 
 @pytest.mark.asyncio
@@ -34,5 +36,41 @@ async def test_preflight_resolves_trait(monkeypatch):
         AsyncMock(return_value=('{"trait": "Incorporeal"}', {})),
     )
 
-    await agent.perform_core_checks({"protagonist_name": "Saga"})
+    await agent.perform_core_checks(
+        {"protagonist_name": "Saga"},
+        {"Saga": {}},
+        {},
+    )
     assert removed == {"name": "Saga", "trait": "Corporeal"}
+
+
+@pytest.mark.asyncio
+async def test_preflight_resolves_world_trait(monkeypatch):
+    agent = PreFlightCheckAgent()
+    monkeypatch.setattr(
+        neo4j_manager,
+        "execute_read_query",
+        AsyncMock(return_value=[{"we": "w"}]),
+    )
+
+    removed: dict[str, str] = {}
+
+    async def fake_remove(wid: str, trait: str) -> bool:
+        removed["id"] = wid
+        removed["trait"] = trait
+        return True
+
+    monkeypatch.setattr(
+        world_queries,
+        "remove_world_element_trait_aspect",
+        AsyncMock(side_effect=fake_remove),
+    )
+    monkeypatch.setattr(
+        llm_service,
+        "async_call_llm",
+        AsyncMock(return_value=('{"trait": "Incorporeal"}', {})),
+    )
+
+    world_data = {"loc": {"city": WorldItem(id="city", category="loc", name="city")}}
+    await agent.perform_core_checks({}, {}, world_data)
+    assert removed == {"id": "city", "trait": "Corporeal"}

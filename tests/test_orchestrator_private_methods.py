@@ -1,3 +1,4 @@
+# tests/test_orchestrator_private_methods.py
 from unittest.mock import AsyncMock
 
 import pytest
@@ -173,7 +174,9 @@ async def test_prepare_prerequisites_runs_preflight(orchestrator, monkeypatch):
     await orchestrator.refresh_knowledge_cache()
     preflight_mock = AsyncMock()
     monkeypatch.setattr(
-        orchestrator.pre_flight_agent, "perform_core_checks", preflight_mock
+        orchestrator.pre_flight_agent,
+        "perform_core_checks",
+        preflight_mock,
     )
     monkeypatch.setattr(
         orchestrator.world_continuity_agent,
@@ -181,7 +184,11 @@ async def test_prepare_prerequisites_runs_preflight(orchestrator, monkeypatch):
         AsyncMock(return_value=([], {})),
     )
     await orchestrator._prepare_chapter_prerequisites(1)
-    preflight_mock.assert_awaited()
+    preflight_mock.assert_awaited_with(
+        orchestrator.plot_outline,
+        orchestrator.knowledge_cache.characters,
+        orchestrator.knowledge_cache.world,
+    )
 
 
 @pytest.mark.asyncio

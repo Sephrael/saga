@@ -527,7 +527,11 @@ class NANA_Orchestrator:
 
         self._update_novel_props_cache()
 
-        await self.pre_flight_agent.perform_core_checks(self.plot_outline)
+        await self.pre_flight_agent.perform_core_checks(
+            self.plot_outline,
+            self.knowledge_cache.characters,
+            self.knowledge_cache.world,
+        )
 
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
