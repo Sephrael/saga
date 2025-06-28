@@ -184,6 +184,14 @@ class SagaSettings(BaseSettings):
 
     # Reranking Configuration
     ENABLE_RERANKING: bool = False
+    CONTEXT_CACHE_SIZE: int = 16
+    CONTEXT_CACHE_TTL: float = 600.0
+    CONTEXT_PROVIDERS: list[str] = [
+        "chapter_generation.context_providers.SemanticHistoryProvider",
+        "chapter_generation.context_providers.KGFactProvider",
+        "chapter_generation.context_providers.PlanProvider",
+        "chapter_generation.context_providers.UserNoteProvider",
+    ]
     RERANKER_CANDIDATE_COUNT: int = 15
 
     # Agentic Planning & Prompt Context Snippets

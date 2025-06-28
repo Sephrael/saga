@@ -1,4 +1,5 @@
 # nana_orchestrator.py
+import importlib
 import time  # For Rich display updates
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,7 +13,7 @@ from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
 from agents.world_continuity_agent import WorldContinuityAgent
 from chapter_generation import (
-    ContextService,
+    ContextOrchestrator,
     DraftingService,
     DraftResult,
     EvaluationService,
@@ -91,7 +92,14 @@ class NANA_Orchestrator:
         self.evaluation_service = EvaluationService(self, self.file_manager)
         self.revision_service = RevisionService(self, self.file_manager)
         self.finalization_service = FinalizationService(self, self.file_manager)
-        self.context_service = ContextService()
+
+        provider_instances = []
+        for dotted in settings.CONTEXT_PROVIDERS:
+            module_name, class_name = dotted.rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            provider_cls = getattr(module, class_name)
+            provider_instances.append(provider_cls())
+        self.context_service = ContextOrchestrator(provider_instances)
 
         self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
@@ -544,7 +552,9 @@ class NANA_Orchestrator:
                 )
 
         hybrid_context_for_draft = await self.context_service.build_hybrid_context(
-            self, novel_chapter_number, chapter_plan
+            self,
+            novel_chapter_number,
+            chapter_plan,
         )
 
         if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
