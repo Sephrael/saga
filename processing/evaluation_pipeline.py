@@ -9,7 +9,7 @@ import structlog
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.world_continuity_agent import WorldContinuityAgent
 
-from models import ProblemDetail
+from processing.revision_manager import RevisionManager
 
 from .repetition_analyzer import RepetitionAnalyzer
 
@@ -23,6 +23,7 @@ class EvaluationPipeline:
         self.comp_agent = ComprehensiveEvaluatorAgent()
         self.continuity_agent = WorldContinuityAgent()
         self.repetition_analyzer = RepetitionAnalyzer()
+        self.revision_manager = RevisionManager()
 
     async def run(
         self,
@@ -30,10 +31,9 @@ class EvaluationPipeline:
         draft_text: str,
         chapter_number: int,
         previous_chapters_context: str,
-    ) -> list[ProblemDetail]:
-        """Return consolidated problem list for ``draft_text``."""
+    ) -> tuple[tuple[str, str | None, list[tuple[int, int]]] | None, Any | None]:
+        """Run checks then send problems to the revision manager."""
         logger.info("EvaluationPipeline running", chapter=chapter_number)
-        problems: list[ProblemDetail] = []
         eval_result, _ = await self.comp_agent.evaluate_chapter_draft(
             plot_outline,
             [],
@@ -44,7 +44,6 @@ class EvaluationPipeline:
             0,
             previous_chapters_context,
         )
-        problems.extend(eval_result.problems_found)
 
         continuity_probs, _ = await self.continuity_agent.check_consistency(
             plot_outline,
@@ -52,9 +51,26 @@ class EvaluationPipeline:
             chapter_number,
             previous_chapters_context,
         )
-        problems.extend(continuity_probs)
 
         repetition_probs = await self.repetition_analyzer.analyze(draft_text)
-        problems.extend(repetition_probs)
 
-        return sorted(problems, key=lambda p: p.get("issue_category", ""))
+        eval_result.problems_found.extend(continuity_probs)
+        eval_result.problems_found.extend(repetition_probs)
+        if continuity_probs or repetition_probs:
+            eval_result.needs_revision = True
+            eval_result.reasons.append(
+                "Issues found by continuity or repetition analyzers"
+            )
+
+        return await self.revision_manager.revise_chapter(
+            plot_outline,
+            {},
+            {},
+            draft_text,
+            chapter_number,
+            eval_result,
+            previous_chapters_context,
+            None,
+            continuity_problems=continuity_probs,
+            repetition_problems=repetition_probs,
+        )

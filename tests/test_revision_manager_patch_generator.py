@@ -309,3 +309,81 @@ async def test_noop_validator_always_passes():
     validator = NoOpPatchValidator()
     ok, usage = await validator.validate_patch("ctx", {}, [])
     assert ok and usage is None
+
+
+@pytest.mark.asyncio
+async def test_patch_cycle_receives_extra_problems(monkeypatch):
+    captured: dict[str, list] = {}
+
+    async def fake_generate_and_apply(
+        self,
+        plot_outline,
+        original_text,
+        problems_to_fix,
+        chapter_number,
+        hybrid_context_for_revision,
+        chapter_plan,
+        already_patched_spans,
+        validator,
+    ):
+        captured["problems"] = problems_to_fix
+        return original_text, [], None
+
+    async def fake_evaluate(*_a, **_k):
+        return {"problems_found": []}, None
+
+    monkeypatch.setattr(
+        patch_generator.PatchGenerator, "generate_and_apply", fake_generate_and_apply
+    )
+    monkeypatch.setattr(
+        ComprehensiveEvaluatorAgent,
+        "evaluate_chapter_draft",
+        AsyncMock(side_effect=fake_evaluate),
+    )
+
+    manager = RevisionManager()
+    await manager._patch_revision_cycle(
+        {"plot_points": ["a"]},
+        {},
+        {},
+        "Hello world",
+        1,
+        [
+            {
+                "issue_category": "style",
+                "problem_description": "d",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "suggested_fix_focus": "fix",
+            }
+        ],
+        "",
+        None,
+        [],
+        continuity_problems=[
+            {
+                "issue_category": "consistency",
+                "problem_description": "c",
+                "quote_from_original_text": "Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 5,
+                "suggested_fix_focus": "fix",
+            }
+        ],
+        repetition_problems=[
+            {
+                "issue_category": "repetition_and_redundancy",
+                "problem_description": "r",
+                "quote_from_original_text": "Hello Hello",
+                "sentence_char_start": 0,
+                "sentence_char_end": 11,
+                "suggested_fix_focus": "remove",
+            }
+        ],
+    )
+
+    assert any("consistency" in p["issue_category"] for p in captured["problems"])
+    assert any(
+        "repetition_and_redundancy" in p["issue_category"] for p in captured["problems"]
+    )

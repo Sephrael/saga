@@ -39,6 +39,8 @@ class RevisionManager:
         hybrid_context_for_revision: str,
         chapter_plan: list[SceneDetail] | None,
         already_patched_spans: list[tuple[int, int]],
+        continuity_problems: list[dict[str, Any]] | None = None,
+        repetition_problems: list[dict[str, Any]] | None = None,
     ) -> tuple[str | None, list[tuple[int, int]], bool, TokenUsage | None]:
         """Run one patch generation and evaluation cycle."""
 
@@ -57,11 +59,20 @@ class RevisionManager:
         else:
             validator = NoOpPatchValidator()
 
+        all_problems = list(problems_to_fix)
+        if continuity_problems:
+            all_problems.extend(continuity_problems)
+        if repetition_problems:
+            all_problems.extend(repetition_problems)
+        all_problems = _deduplicate_problems(
+            _consolidate_overlapping_problems(all_problems)
+        )
+
         patcher = PatchGenerator()
         patched_text, spans, patch_usage = await patcher.generate_and_apply(
             plot_outline,
             original_text,
-            problems_to_fix,
+            all_problems,
             chapter_number,
             hybrid_context_for_revision,
             chapter_plan,
@@ -284,6 +295,8 @@ class RevisionManager:
         chapter_plan: list[SceneDetail] | None,
         is_from_flawed_source: bool = False,
         already_patched_spans: list[tuple[int, int]] | None = None,
+        continuity_problems: list[dict[str, Any]] | None = None,
+        repetition_problems: list[dict[str, Any]] | None = None,
     ) -> tuple[tuple[str, str | None, list[tuple[int, int]]] | None, TokenUsage | None]:
         """Revise a chapter draft based on evaluation feedback.
 
@@ -302,6 +315,10 @@ class RevisionManager:
                 generation process.
             already_patched_spans: Spans previously protected from further
                 modification.
+            continuity_problems: Additional continuity issues from
+                ``WorldContinuityAgent``.
+            repetition_problems: Repetition issues from
+                ``RepetitionAnalyzer``.
 
         Returns:
             A tuple containing either the revised text, the raw LLM output, and
@@ -330,6 +347,10 @@ class RevisionManager:
         problems_to_fix: list[dict[str, Any]] = evaluation_result.get(
             "problems_found", []
         )
+        if continuity_problems:
+            problems_to_fix.extend(continuity_problems)
+        if repetition_problems:
+            problems_to_fix.extend(repetition_problems)
         problems_to_fix = _deduplicate_problems(
             _consolidate_overlapping_problems(problems_to_fix)
         )
@@ -375,6 +396,8 @@ class RevisionManager:
                 hybrid_context_for_revision,
                 chapter_plan,
                 already_patched_spans,
+                continuity_problems=continuity_problems,
+                repetition_problems=repetition_problems,
             )
             _add_usage(patch_usage)
         else:
