@@ -1,3 +1,4 @@
+# processing/patch/apply.py
 """Apply generated patch instructions to text."""
 
 import asyncio
@@ -99,6 +100,16 @@ async def locate_patch_targets(
     embeddings: list[tuple[int, int, Any]] | None = None,
 ) -> tuple[int, int] | None:
     """Resolve and return the target offsets for a patch instruction."""
+    start = patch.get("sentence_char_start")
+    end = patch.get("sentence_char_end")
+    if start is not None and end is not None:
+        return start, end
+
+    start = patch.get("quote_char_start")
+    end = patch.get("quote_char_end")
+    if start is not None and end is not None:
+        return start, end
+
     start = patch.get("target_char_start")
     end = patch.get("target_char_end")
     if start is not None and end is not None:
@@ -152,11 +163,24 @@ async def _apply_patches_to_text(
 
         segment_start, segment_end = target_span
 
+        candidate_spans = [(segment_start, segment_end)]
+        for s_key, e_key in [
+            ("sentence_char_start", "sentence_char_end"),
+            ("quote_char_start", "quote_char_end"),
+            ("target_char_start", "target_char_end"),
+        ]:
+            span_start = patch.get(s_key)
+            span_end = patch.get(e_key)
+            if span_start is not None and span_end is not None:
+                candidate_spans.append((span_start, span_end))
+
         is_overlapping = any(
-            max(segment_start, old_start) < min(segment_end, old_end)
+            max(c_start, old_start) < min(c_end, old_end)
+            for c_start, c_end in candidate_spans
             for old_start, old_end in already_patched_spans
         ) or any(
-            max(segment_start, r_start) < min(segment_end, r_end)
+            max(c_start, r_start) < min(c_end, r_end)
+            for c_start, c_end in candidate_spans
             for r_start, r_end, _ in replacements
         )
 
