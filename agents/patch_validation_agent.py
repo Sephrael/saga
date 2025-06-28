@@ -1,9 +1,44 @@
+# agents/patch_validation_agent.py
+
+"""Patch validation agent for SAGA."""
+
+from __future__ import annotations
+
+import string
+
 import structlog
 from config import settings
 from core.llm_interface import llm_service
 from prompt_renderer import render_prompt
 
 from models import PatchInstruction, ProblemDetail
+
+STOPWORDS = {
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "for",
+    "with",
+    "without",
+    "to",
+    "from",
+    "by",
+    "of",
+    "in",
+    "on",
+    "at",
+    "include",
+    "mention",
+    "use",
+    "add",
+    "make",
+    "this",
+    "that",
+    "these",
+    "those",
+}
 
 logger = structlog.get_logger(__name__)
 
@@ -66,6 +101,25 @@ class PatchValidationAgent:
                 score = int(token)
                 break
         is_pass = score >= settings.PATCH_VALIDATION_THRESHOLD
+
+        instruction_keywords: set[str] = set()
+        for prob in problems:
+            instruction = prob.get("rewrite_instruction")
+            if not instruction:
+                continue
+            for word in instruction.lower().split():
+                cleaned = word.strip(string.punctuation)
+                if len(cleaned) <= 3 or cleaned in STOPWORDS:
+                    continue
+                instruction_keywords.add(cleaned)
+
+        if instruction_keywords:
+            patch_text = patch.get("replace_with", "").lower()
+            missing = [kw for kw in instruction_keywords if kw not in patch_text]
+            if missing:
+                logger.info("Patch text missing keywords from instruction: %s", missing)
+                is_pass = False
+
         if not is_pass:
             logger.info("Patch validation score %d below threshold", score)
         return is_pass, usage
