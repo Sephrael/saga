@@ -694,3 +694,27 @@ async def find_thin_characters_for_enrichment() -> list[dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error finding thin characters: {e}", exc_info=True)
         return []
+
+
+async def remove_character_trait(char_name: str, trait_name: str) -> bool:
+    """Remove a trait from a character node."""
+    query = (
+        "MATCH (:Character {name: $char_name})-[r:HAS_TRAIT]->(t:Trait {name: $trait_name})"
+        " DELETE r"
+    )
+    cleanup_query = (
+        "MATCH (t:Trait {name: $trait_name})"
+        " WHERE NOT EXISTS((:Character)-[:HAS_TRAIT]->(t))"
+        " DETACH DELETE t"
+    )
+    try:
+        await neo4j_manager.execute_write_query(
+            query, {"char_name": char_name, "trait_name": trait_name}
+        )
+        await neo4j_manager.execute_write_query(
+            cleanup_query, {"trait_name": trait_name}
+        )
+        return True
+    except Exception as e:  # pragma: no cover - log but return False
+        logger.error(f"Error removing trait '{trait_name}' from '{char_name}': {e}")
+        return False

@@ -11,6 +11,7 @@ from agents.drafting_agent import DraftingAgent
 from agents.finalize_agent import FinalizeAgent
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
+from agents.pre_flight_check_agent import PreFlightCheckAgent
 from agents.world_continuity_agent import WorldContinuityAgent
 from chapter_generation import (
     ContextOrchestrator,
@@ -83,6 +84,7 @@ class NANA_Orchestrator:
         self.evaluator_agent = ComprehensiveEvaluatorAgent()
         self.world_continuity_agent = WorldContinuityAgent()
         self.kg_maintainer_agent = KGMaintainerAgent()
+        self.pre_flight_agent = PreFlightCheckAgent()
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
         self.revision_manager = RevisionManager()
 
@@ -524,6 +526,12 @@ class NANA_Orchestrator:
             return PrerequisiteData(None, -1, None, None)
 
         self._update_novel_props_cache()
+
+        await self.pre_flight_agent.perform_core_checks(
+            self.plot_outline,
+            self.knowledge_cache.characters,
+            self.knowledge_cache.world,
+        )
 
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,

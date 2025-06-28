@@ -881,3 +881,31 @@ async def fix_missing_world_element_core_fields() -> int:
         return 0
 
     return len(statements)
+
+
+async def remove_world_element_trait_aspect(element_id: str, trait_value: str) -> bool:
+    """Remove a trait aspect from a world element."""
+    query = (
+        "MATCH (:WorldElement {id: $we_id})-"
+        "[r:HAS_TRAIT_ASPECT]->(v:ValueNode {type: 'traits', value: $trait})"
+        " DELETE r"
+    )
+    cleanup_query = (
+        "MATCH (v:ValueNode {type: 'traits', value: $trait})"
+        " WHERE NOT EXISTS((:WorldElement)-[:HAS_TRAIT_ASPECT]->(v))"
+        " DETACH DELETE v"
+    )
+    try:
+        await neo4j_manager.execute_write_query(
+            query, {"we_id": element_id, "trait": trait_value}
+        )
+        await neo4j_manager.execute_write_query(cleanup_query, {"trait": trait_value})
+        return True
+    except Exception as exc:  # pragma: no cover - log but return False
+        logger.error(
+            "Error removing trait '%s' from world element %s: %s",
+            trait_value,
+            element_id,
+            exc,
+        )
+        return False
