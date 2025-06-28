@@ -51,6 +51,34 @@ async def test_locate_patch_targets_semantic(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_locate_patch_targets_sentence_offsets():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "sentence_char_start": 2,
+        "sentence_char_end": 7,
+        "target_char_start": 0,
+        "target_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+    res = await locate_patch_targets("A Hello world", patch, None)
+    assert res == (2, 7)
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_quote_offsets():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "quote_char_start": 0,
+        "quote_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+    res = await locate_patch_targets("Hello world", patch, None)
+    assert res == (0, 5)
+
+
+@pytest.mark.asyncio
 async def test_patch_skipped_when_high_similarity(monkeypatch):
     original = "Hello world!"
     patches = [
@@ -231,6 +259,43 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
     result, _ = await _apply_patches_to_text(original, patches, None, None)
     # Only the first patch should be applied because the second overlaps exactly
+    assert result == "Hi world!"
+
+
+@pytest.mark.asyncio
+async def test_overlap_detected_with_derived_spans(monkeypatch):
+    original = "Hello world!"
+    patches = [
+        {
+            "original_problem_quote_text": "Hello",
+            "sentence_char_start": 0,
+            "sentence_char_end": 5,
+            "target_char_start": 6,
+            "target_char_end": 11,
+            "replace_with": "Hi",
+            "reason_for_change": "greeting",
+        },
+        {
+            "original_problem_quote_text": "Hello again",
+            "quote_char_start": 0,
+            "quote_char_end": 5,
+            "replace_with": "Hey",
+            "reason_for_change": "greeting2",
+        },
+    ]
+
+    embeddings = {
+        "Hello": np.array([1.0, 0.0]),
+        "Hi": np.array([0.0, 1.0]),
+        "Hey": np.array([0.0, 1.0]),
+    }
+
+    async def fake_embed(text: str) -> np.ndarray:
+        return embeddings.get(text, np.array([0.0, 0.0]))
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
     assert result == "Hi world!"
 
 
