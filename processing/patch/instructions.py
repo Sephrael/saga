@@ -24,11 +24,27 @@ async def _generate_single_patch_instruction_llm(
     plot_outline: dict[str, Any],
     original_chapter_text_snippet_for_llm: str,
     problem: ProblemDetail,
+    rewrite_instruction: str | None,
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: list[SceneDetail] | None,
 ) -> tuple[PatchInstruction | None, dict[str, int] | None]:
-    """Generate a single patch instruction using the LLM."""
+    """Generate a single patch instruction using the LLM.
+
+    Args:
+        plot_outline: Dictionary containing overall plot information.
+        original_chapter_text_snippet_for_llm: Context window from the original
+            chapter.
+        problem: Structured problem detail from the evaluator.
+        rewrite_instruction: Additional evaluator guidance for the rewrite.
+        chapter_number: Current chapter being revised.
+        hybrid_context_for_revision: Hybrid context string for continuity.
+        chapter_plan: Optional scene plan for the chapter.
+
+    Returns:
+        A ``PatchInstruction`` with replacement text and optional token usage
+        statistics, or ``None`` if generation failed.
+    """
     plan_focus_section_parts: list[str] = []
     plot_point_focus, _ = get_plot_point_info(plot_outline, chapter_number)
     max_plan_tokens_for_patch_prompt = settings.MAX_CONTEXT_TOKENS // 2
@@ -175,6 +191,9 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             f"  - Problem Description: {problem['problem_description']}",
             f'  - Original Quote Illustrating Problem: "{original_quote_text_from_problem}"',
             f"  - Suggested Fix Focus: {problem['suggested_fix_focus']}",
+            f"  - Rewrite Instruction: {rewrite_instruction}"
+            if rewrite_instruction
+            else "",
             "",
             "**Text Snippet from Original Chapter (This is the broader context around the problem. If the quote is 'N/A - General Issue', this is general chapter context to inform your new passage):**",
             "--- BEGIN ORIGINAL TEXT SNIPPET ---",
@@ -515,6 +534,7 @@ async def _generate_patch_instructions_logic(
                 plot_outline,
                 context_snippet,
                 group_problem,
+                group_problem.get("rewrite_instruction"),
                 chapter_number,
                 hybrid_context_for_revision,
                 chapter_plan,
