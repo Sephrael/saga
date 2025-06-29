@@ -10,7 +10,10 @@ logger = structlog.get_logger(__name__)
 
 
 def initialize_new_character_profile(
-    char_name: str, char_update: CharacterProfile, chapter_number: int
+    char_name: str,
+    char_update: CharacterProfile,
+    chapter_number: int,
+    from_flawed_draft: bool = False,
 ) -> CharacterProfile:
     """Create a new ``CharacterProfile`` from parsed updates.
 
@@ -18,6 +21,8 @@ def initialize_new_character_profile(
         char_name: The character's name.
         char_update: Parsed attributes for the character.
         chapter_number: Chapter where the character first appears.
+        from_flawed_draft: Whether the character was extracted from an unrevised
+            draft.
 
     Returns:
         The initialized character profile.
@@ -43,7 +48,9 @@ def initialize_new_character_profile(
             )
         },
     )
-    if provisional_key in data:
+    if from_flawed_draft:
+        new_profile.updates[provisional_key] = "provisional_from_unrevised_draft"
+    elif provisional_key in data:
         new_profile.updates[provisional_key] = data[provisional_key]
     return new_profile
 
@@ -73,7 +80,10 @@ def merge_character_profile_updates(
         dev_key = kg_keys.development_key(chapter_number)
         if name not in profiles:
             profiles[name] = initialize_new_character_profile(
-                name, update, chapter_number
+                name,
+                update,
+                chapter_number,
+                from_flawed_draft=from_flawed_draft,
             )
             continue
         profile = profiles[name]
@@ -136,7 +146,12 @@ def merge_world_item_updates(
             if from_flawed_draft:
                 data[provisional_key] = "provisional_from_unrevised_draft"
             if name not in world[category]:
-                world[category][name] = update
+                world_item = update
+                if from_flawed_draft:
+                    world_item.properties[provisional_key] = (
+                        "provisional_from_unrevised_draft"
+                    )
+                world[category][name] = world_item
                 world[category][name].properties.setdefault(
                     kg_keys.added_key(chapter_number), True
                 )
