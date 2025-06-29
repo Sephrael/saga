@@ -72,7 +72,7 @@ class PatchValidationAgent:
             Sends a prompt to the LLM service and logs diagnostic information.
         """
 
-        issues_list = "\n".join(f"- {p['problem_description']}" for p in problems)
+        issues_list = "\n".join(f"- {p.problem_description}" for p in problems)
         prompt = render_prompt(
             "patch_validation_agent/validate_patch.j2",
             {

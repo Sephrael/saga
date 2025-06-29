@@ -71,13 +71,13 @@ async def _generate_single_patch_instruction_llm(
 
     is_general_expansion_task = False
     length_expansion_instruction_header_parts: list[str] = []
-    original_quote_text_from_problem = problem["quote_from_original_text"]
+    original_quote_text_from_problem = problem.quote_from_original_text
 
-    if problem["issue_category"] == "narrative_depth_and_length" and (
-        "short" in problem["problem_description"].lower()
-        or "length" in problem["problem_description"].lower()
-        or "expand" in problem["suggested_fix_focus"].lower()
-        or "depth" in problem["problem_description"].lower()
+    if problem.issue_category == "narrative_depth_and_length" and (
+        "short" in problem.problem_description.lower()
+        or "length" in problem.problem_description.lower()
+        or "expand" in problem.suggested_fix_focus.lower()
+        or "depth" in problem.problem_description.lower()
         or original_quote_text_from_problem == "N/A - General Issue"
     ):
         length_expansion_instruction_header_parts.append(
@@ -180,10 +180,10 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             "character_arc": plot_outline.get("character_arc", "N/A"),
             "plan_focus_section_str": plan_focus_section_str,
             "hybrid_context_for_revision": hybrid_context_for_revision,
-            "issue_category": problem["issue_category"],
-            "problem_description": problem["problem_description"],
+            "issue_category": problem.issue_category,
+            "problem_description": problem.problem_description,
             "original_quote_text_from_problem": original_quote_text_from_problem,
-            "suggested_fix_focus": problem["suggested_fix_focus"],
+            "suggested_fix_focus": problem.suggested_fix_focus,
             "rewrite_instruction": rewrite_instruction or "",
             "original_chapter_text_snippet_for_llm": original_chapter_text_snippet_for_llm,
             "length_expansion_instruction_header_str": length_expansion_instruction_header_str,
@@ -196,7 +196,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         "Calling LLM (%s) for patch in Ch %s. Problem: '%s...' Quote Text: '%s...' Max Output Tokens: %s",
         settings.PATCH_GENERATION_MODEL,
         chapter_number,
-        problem["problem_description"][:60].replace(chr(10), " "),
+        problem.problem_description[:60].replace(chr(10), " "),
         original_quote_text_from_problem[:50].replace(chr(10), " "),
         max_patch_output_tokens,
     )
@@ -217,7 +217,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         logger.error(
             "Patch LLM call failed and returned None for Ch %s problem: %s",
             chapter_number,
-            problem["problem_description"],
+            problem.problem_description,
         )
         return None, usage_data
 
@@ -225,7 +225,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         logger.info(
             "Patch LLM suggested DELETION (empty output) for Ch %s problem: %s",
             chapter_number,
-            problem["problem_description"],
+            problem.problem_description,
         )
 
     if length_expansion_instruction_header_str:
@@ -240,36 +240,36 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
                     chapter_number,
                     len(replace_with_text_cleaned),
                     len(original_chapter_text_snippet_for_llm),
-                    problem["problem_description"][:60],
+                    problem.problem_description[:60],
                 )
         elif is_general_expansion_task and len(replace_with_text_cleaned) < 500:
             logger.warning(
                 "Patch for Ch %s ('N/A - General Issue' expansion) produced a relatively short new passage (len: %s). Problem: %s",
                 chapter_number,
                 len(replace_with_text_cleaned),
-                problem["problem_description"][:60],
+                problem.problem_description[:60],
             )
 
-    target_start_for_patch: int | None = problem.get("sentence_char_start")
-    target_end_for_patch: int | None = problem.get("sentence_char_end")
+    target_start_for_patch: int | None = problem.sentence_char_start
+    target_end_for_patch: int | None = problem.sentence_char_end
 
     if (
         original_quote_text_from_problem != "N/A - General Issue"
         and (target_start_for_patch is None or target_end_for_patch is None)
         and (
-            problem.get("quote_char_start") is not None
-            and problem.get("quote_char_end") is not None
+            problem.quote_char_start is not None
+            and problem.quote_char_end is not None
         )
     ):
         logger.warning(
             "Patch for Ch %s: Problem '%s' had specific text but no sentence offsets. PatchInstruction will use quote offsets (%s-%s). Application will use semantic search.",
             chapter_number,
             original_quote_text_from_problem[:50],
-            problem.get("quote_char_start"),
-            problem.get("quote_char_end"),
+            problem.quote_char_start,
+            problem.quote_char_end,
         )
-        target_start_for_patch = problem.get("quote_char_start")
-        target_end_for_patch = problem.get("quote_char_end")
+        target_start_for_patch = problem.quote_char_start
+        target_end_for_patch = problem.quote_char_end
     elif original_quote_text_from_problem != "N/A - General Issue" and (
         target_start_for_patch is None or target_end_for_patch is None
     ):
@@ -284,7 +284,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         "target_char_start": target_start_for_patch,
         "target_char_end": target_end_for_patch,
         "replace_with": replace_with_text_cleaned,
-        "reason_for_change": f"Fixing '{problem['issue_category']}': {problem['problem_description']}",
+        "reason_for_change": f"Fixing '{problem.issue_category}': {problem.problem_description}",
     }
     return patch_instruction, usage_data
 
@@ -299,19 +299,19 @@ def _consolidate_overlapping_problems(
     span_problems = [
         p
         for p in problems
-        if p.get("sentence_char_start") is not None
-        and p.get("sentence_char_end") is not None
+        if p.sentence_char_start is not None
+        and p.sentence_char_end is not None
     ]
     general_problems = [
         p
         for p in problems
-        if p.get("sentence_char_start") is None or p.get("sentence_char_end") is None
+        if p.sentence_char_start is None or p.sentence_char_end is None
     ]
 
     if not span_problems:
         return general_problems
 
-    span_problems.sort(key=lambda p: p["sentence_char_start"])
+    span_problems.sort(key=lambda p: p.sentence_char_start)
 
     merged_groups: list[list[ProblemDetail]] = []
     if span_problems:
@@ -320,8 +320,8 @@ def _consolidate_overlapping_problems(
 
         for i in range(1, len(span_problems)):
             next_problem = span_problems[i]
-            next_start = next_problem["sentence_char_start"]
-            next_end = next_problem["sentence_char_end"]
+            next_start = next_problem.sentence_char_start
+            next_end = next_problem.sentence_char_end
 
             if next_start < current_group_end:
                 current_group.append(next_problem)
@@ -340,27 +340,27 @@ def _consolidate_overlapping_problems(
             continue
 
         first_problem = group[0]
-        group_start_offset = min(p["sentence_char_start"] for p in group)
-        group_end_offset = max(p["sentence_char_end"] for p in group)
-        all_categories = sorted(list(set(p["issue_category"] for p in group)))
+        group_start_offset = min(p.sentence_char_start for p in group)
+        group_end_offset = max(p.sentence_char_end for p in group)
+        all_categories = sorted(list(set(p.issue_category for p in group)))
         all_descriptions = "; ".join(
-            f"({p['issue_category']}) {p['problem_description']}" for p in group
+            f"({p.issue_category}) {p.problem_description}" for p in group
         )
         all_fix_foci = "; ".join(
-            f"({p['issue_category']}) {p['suggested_fix_focus']}" for p in group
+            f"({p.issue_category}) {p.suggested_fix_focus}" for p in group
         )
-        representative_quote = first_problem["quote_from_original_text"]
+        representative_quote = first_problem.quote_from_original_text
 
-        consolidated_problem: ProblemDetail = {
-            "issue_category": ", ".join(all_categories),
-            "problem_description": f"Multiple issues in one segment: {all_descriptions}",
-            "quote_from_original_text": representative_quote,
-            "quote_char_start": first_problem.get("quote_char_start"),
-            "quote_char_end": first_problem.get("quote_char_end"),
-            "sentence_char_start": group_start_offset,
-            "sentence_char_end": group_end_offset,
-            "suggested_fix_focus": f"Holistically revise the segment to address all points: {all_fix_foci}",
-        }
+        consolidated_problem = ProblemDetail(
+            issue_category=", ".join(all_categories),
+            problem_description=f"Multiple issues in one segment: {all_descriptions}",
+            quote_from_original_text=representative_quote,
+            quote_char_start=first_problem.quote_char_start,
+            quote_char_end=first_problem.quote_char_end,
+            sentence_char_start=group_start_offset,
+            sentence_char_end=group_end_offset,
+            suggested_fix_focus=f"Holistically revise the segment to address all points: {all_fix_foci}",
+        )
         consolidated_problems.append(consolidated_problem)
         logger.info(
             "Consolidated %s overlapping problems into one targeting span %s-%s.",
@@ -406,23 +406,23 @@ def _group_problems_for_patch_generation(
     span_problems = [
         p
         for p in problems
-        if p.get("sentence_char_start") is not None
-        and p.get("sentence_char_end") is not None
+        if p.sentence_char_start is not None
+        and p.sentence_char_end is not None
     ]
     general_problems = [
         p
         for p in problems
-        if p.get("sentence_char_start") is None or p.get("sentence_char_end") is None
+        if p.sentence_char_start is None or p.sentence_char_end is None
     ]
 
-    span_problems.sort(key=lambda p: p["sentence_char_start"])
+    span_problems.sort(key=lambda p: p.sentence_char_start)
     merged_groups: list[list[ProblemDetail]] = []
     if span_problems:
         current_group = [span_problems[0]]
         current_end = span_problems[0]["sentence_char_end"]
         for prob in span_problems[1:]:
-            start = prob["sentence_char_start"]
-            end = prob["sentence_char_end"]
+            start = prob.sentence_char_start
+            end = prob.sentence_char_end
             if start < current_end:
                 current_group.append(prob)
                 current_end = max(current_end, end)
@@ -436,26 +436,26 @@ def _group_problems_for_patch_generation(
 
     for group in merged_groups:
         first = group[0]
-        group_start = min(p["sentence_char_start"] for p in group)
-        group_end = max(p["sentence_char_end"] for p in group)
-        all_cats = sorted(list(set(p["issue_category"] for p in group)))
+        group_start = min(p.sentence_char_start for p in group)
+        group_end = max(p.sentence_char_end for p in group)
+        all_cats = sorted(list(set(p.issue_category for p in group)))
         all_desc = "; ".join(
-            f"({p['issue_category']}) {p['problem_description']}" for p in group
+            f"({p.issue_category}) {p.problem_description}" for p in group
         )
         all_fix = "; ".join(
-            f"({p['issue_category']}) {p['suggested_fix_focus']}" for p in group
+            f"({p.issue_category}) {p.suggested_fix_focus}" for p in group
         )
         rep_quote = first["quote_from_original_text"]
-        consolidated: ProblemDetail = {
-            "issue_category": ", ".join(all_cats),
-            "problem_description": f"Multiple issues in one segment: {all_desc}",
-            "quote_from_original_text": rep_quote,
-            "quote_char_start": first.get("quote_char_start"),
-            "quote_char_end": first.get("quote_char_end"),
-            "sentence_char_start": group_start,
-            "sentence_char_end": group_end,
-            "suggested_fix_focus": f"Holistically revise the segment to address all points: {all_fix}",
-        }
+        consolidated = ProblemDetail(
+            issue_category=", ".join(all_cats),
+            problem_description=f"Multiple issues in one segment: {all_desc}",
+            quote_from_original_text=rep_quote,
+            quote_char_start=first.get("quote_char_start"),
+            quote_char_end=first.get("quote_char_end"),
+            sentence_char_start=group_start,
+            sentence_char_end=group_end,
+            suggested_fix_focus=f"Holistically revise the segment to address all points: {all_fix}",
+        )
         result.append((consolidated, group))
 
     for p in general_problems:
@@ -508,7 +508,7 @@ async def _generate_patch_instructions_logic(
                 plot_outline,
                 context_snippet,
                 group_problem,
-                group_problem.get("rewrite_instruction"),
+                group_problem.rewrite_instruction,
                 chapter_number,
                 hybrid_context_for_revision,
                 chapter_plan,

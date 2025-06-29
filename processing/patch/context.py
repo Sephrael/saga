@@ -26,7 +26,7 @@ async def _get_context_window_for_patch_llm(
     if not original_doc_text:
         return ""
 
-    quote_text_from_llm = problem["quote_from_original_text"]
+    quote_text_from_llm = problem.quote_from_original_text
     focus_start = problem.get("sentence_char_start")
     focus_end = problem.get("sentence_char_end")
 
