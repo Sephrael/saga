@@ -8,6 +8,7 @@ from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import count_tokens, llm_service
 from core.usage import TokenUsage
+from prompt_renderer import render_prompt
 from utils.plot import get_plot_point_info
 
 from models import PatchInstruction, ProblemDetail, SceneDetail
@@ -28,6 +29,7 @@ async def _generate_single_patch_instruction_llm(
     chapter_number: int,
     hybrid_context_for_revision: str,
     chapter_plan: list[SceneDetail] | None,
+    plot_point_focus: str | None,
 ) -> tuple[PatchInstruction | None, dict[str, int] | None]:
     """Generate a single patch instruction using the LLM.
 
@@ -40,13 +42,13 @@ async def _generate_single_patch_instruction_llm(
         chapter_number: Current chapter being revised.
         hybrid_context_for_revision: Hybrid context string for continuity.
         chapter_plan: Optional scene plan for the chapter.
+        plot_point_focus: Focus of the current plot point for fallback context.
 
     Returns:
         A ``PatchInstruction`` with replacement text and optional token usage
         statistics, or ``None`` if generation failed.
     """
     plan_focus_section_parts: list[str] = []
-    plot_point_focus, _ = get_plot_point_info(plot_outline, chapter_number)
     max_plan_tokens_for_patch_prompt = settings.MAX_CONTEXT_TOKENS // 2
 
     if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
@@ -166,59 +168,29 @@ IF THE PROBLEM WAS:
 A chill traced Elara's spine, not from the crypt's cold, but from the translucent figure coalescing before her. Her breath hitched, a silent scream trapped in her throat as the ghostly visage turned its empty sockets towards her. Every instinct screamed to flee, but her feet felt rooted to the stone floor, a terrifying paralysis gripping her.
 --- End of Example ---"""
 
-    prompt_lines = []
-    if settings.ENABLE_LLM_NO_THINK_DIRECTIVE:
-        prompt_lines.append("/no_think")
-
-    prompt_lines.extend(
-        [
-            f'You are a surgical revision expert generating replacement text for Chapter {chapter_number} of a novel titled "{plot_outline.get("title", "Untitled Novel")}" about {protagonist_name}.',
-            "**Novel Context:**",
-            f"  - Genre: {plot_outline.get('genre', 'N/A')}",
-            f"  - Theme: {plot_outline.get('theme', 'N/A')}",
-            f"  - Protagonist: {protagonist_name} ({plot_outline.get('character_arc', 'N/A')})",
-            "",
-            plan_focus_section_str,
-            "**Hybrid Context from Previous Chapters (for consistency with established canon and narrative flow):**",
-            "--- BEGIN HYBRID CONTEXT ---",
-            hybrid_context_for_revision
-            if hybrid_context_for_revision.strip()
-            else "No previous context.",
-            "--- END HYBRID CONTEXT ---",
-            "",
-            "**Specific Problem to Address in the Chapter:**",
-            f"  - Issue Category: {problem['issue_category']}",
-            f"  - Problem Description: {problem['problem_description']}",
-            f'  - Original Quote Illustrating Problem: "{original_quote_text_from_problem}"',
-            f"  - Suggested Fix Focus: {problem['suggested_fix_focus']}",
-            f"  - Rewrite Instruction: {rewrite_instruction}"
-            if rewrite_instruction
-            else "",
-            "",
-            "**Text Snippet from Original Chapter (This is the broader context around the problem. If the quote is 'N/A - General Issue', this is general chapter context to inform your new passage):**",
-            "--- BEGIN ORIGINAL TEXT SNIPPET ---",
-            original_chapter_text_snippet_for_llm,
-            "--- END ORIGINAL TEXT SNIPPET ---",
-            length_expansion_instruction_header_str,
-            "```plaintext",
-            few_shot_patch_example_str.strip(),
-            "```",
-            "**Instructions for Generating Replacement Text:**",
-            "1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{original_quote_text_from_problem}` within the 'ORIGINAL TEXT SNIPPET'.",
-            "2.  Generate a `replace_with` text according to the following:",
-            prompt_instruction_for_replacement_scope_str,
-            '3.  The `replace_with` text MUST address the "Problem Description" and "Suggested Fix Focus".',
-            "   Follow the 'Suggested Fix Focus' EXACTLY, e.g., 'Rewrite this paragraph so the protagonist thinks before acting, but without using any verbs that imply a physical body.'",
-            "4.  If the best way to fix the problem is to **completely remove** the 'Original Quote' segment (e.g., it is redundant or unnecessary), then you **MUST output an empty string**. Do not write a justification; simply provide no text as the `replace_with` output.",
-            "5.  Maintain the novel's style, tone, and consistency with all provided context (Novel Context, Plan, Hybrid Context).",
-            "6.  Convey thematic elements through subtext, character actions, and metaphorical imagery rather than direct exposition or deus ex machina fixes.",
-            "7.  If `length_expansion_instruction_header_str` is present, ensure substantial expansion as guided for the targeted segment or new passage.",
-            '8.  **Output ONLY the `replace_with` text.** Do NOT include JSON, markdown, explanations, or any "Replace with:" prefixes. Just the raw text intended for replacement/insertion. (See example above for how to format the text).',
-            "",
-            f'--- BEGIN REPLACE_WITH TEXT (for the segment related to "{original_quote_text_from_problem}" or as a new passage if quote is "N/A - General Issue") ---',
-        ]
+    prompt = render_prompt(
+        "patch_generation.j2",
+        {
+            "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "chapter_number": chapter_number,
+            "novel_title": plot_outline.get("title", "Untitled Novel"),
+            "genre": plot_outline.get("genre", "N/A"),
+            "theme": plot_outline.get("theme", "N/A"),
+            "protagonist_name": protagonist_name,
+            "character_arc": plot_outline.get("character_arc", "N/A"),
+            "plan_focus_section_str": plan_focus_section_str,
+            "hybrid_context_for_revision": hybrid_context_for_revision,
+            "issue_category": problem["issue_category"],
+            "problem_description": problem["problem_description"],
+            "original_quote_text_from_problem": original_quote_text_from_problem,
+            "suggested_fix_focus": problem["suggested_fix_focus"],
+            "rewrite_instruction": rewrite_instruction or "",
+            "original_chapter_text_snippet_for_llm": original_chapter_text_snippet_for_llm,
+            "length_expansion_instruction_header_str": length_expansion_instruction_header_str,
+            "few_shot_patch_example_str": few_shot_patch_example_str.strip(),
+            "prompt_instruction_for_replacement_scope_str": prompt_instruction_for_replacement_scope_str,
+        },
     )
-    prompt = "\n".join(prompt_lines)
 
     logger.info(
         "Calling LLM (%s) for patch in Ch %s. Problem: '%s...' Quote Text: '%s...' Max Output Tokens: %s",
@@ -504,6 +476,8 @@ async def _generate_patch_instructions_logic(
     patch_instructions: list[PatchInstruction] = []
     total_usage = TokenUsage()
 
+    plot_point_focus, _ = get_plot_point_info(plot_outline, chapter_number)
+
     grouped = _group_problems_for_patch_generation(problems_to_fix)
 
     groups_to_process = grouped[: settings.MAX_PATCH_INSTRUCTIONS_TO_GENERATE]
@@ -538,6 +512,7 @@ async def _generate_patch_instructions_logic(
                 chapter_number,
                 hybrid_context_for_revision,
                 chapter_plan,
+                plot_point_focus,
             )
             if usage:
                 usage_acc.add(usage)
