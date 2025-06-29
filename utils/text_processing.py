@@ -49,12 +49,12 @@ class SpaCyModelManager:
         if self._nlp is not None:
             return
         try:
-            self._nlp = spacy.load("en_core_web_sm")
-            logger.info("spaCy model 'en_core_web_sm' loaded successfully.")
+            self._nlp = spacy.load("en_core_web_lg")
+            logger.info("spaCy model 'en_core_web_lg' loaded successfully.")
         except OSError:
             logger.error(
                 "spaCy model 'en_core_web_sm' not found. "
-                "Please run: python -m spacy download en_core_web_sm. "
+                "Please run: python -m spacy download en_core_web_lg. "
                 "spaCy dependent features will be disabled."
             )
             self._nlp = None
