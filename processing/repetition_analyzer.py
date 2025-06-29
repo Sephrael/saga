@@ -36,48 +36,67 @@ class RepetitionAnalyzer:
 
     async def analyze(self, text: str) -> list[ProblemDetail]:
         """Return repetition problems found in ``text``."""
-        deduped_text, _ = await utils.deduplicate_text_segments(text, "sentence")
-        tokens = deduped_text.split()
+        if not text.strip():
+            return []
+
+        # 1. Find all overused phrases first (both in-chapter and cross-chapter)
+        tokens = text.split()
         ngrams = [
             " ".join(tokens[i : i + self.n]) for i in range(len(tokens) - self.n + 1)
         ]
         counts = Counter(ngrams)
+
+        overused_in_chapter = {
+            ngram for ngram, count in counts.items() if count >= self.threshold
+        }
+        overused_in_novel = {
+            ngram
+            for ngram in ngrams
+            if self.tracker
+            and self.tracker.phrase_counts.get(ngram, 0) >= self.cross_threshold
+        }
+        all_overused_phrases = overused_in_chapter.union(overused_in_novel)
+
+        if not all_overused_phrases:
+            return []
+
+        # 2. Find the sentences that contain these overused phrases
         problems: list[ProblemDetail] = []
-        for ngram, count in counts.items():
-            if count >= self.threshold:
-                description = f'Phrase repeated {count} times: "{ngram}"'
-                problems.append(
-                    ProblemDetail(
-                        issue_category="repetition_and_redundancy",
-                        problem_description=description,
-                        quote_from_original_text=ngram,
-                        suggested_fix_focus="Rephrase or remove the repeated phrase.",
-                        severity="medium",
-                        related_spans=None,
-                        rewrite_instruction=None,
-                    )
-                )
-            if (
-                self.tracker
-                and self.tracker.phrase_counts.get(ngram, 0) >= self.cross_threshold
-            ):
+        processed_sentence_starts: set[int] = set()
+        # Use our utility to get sentences with character offsets
+        sentence_segments = utils.get_text_segments(text, "sentence")
+
+        for sentence_text, start_char, end_char in sentence_segments:
+            if start_char in processed_sentence_starts:
+                continue
+
+            # Find which overused phrases this sentence contains
+            found_phrases = [
+                f'"{phrase}"'
+                for phrase in all_overused_phrases
+                if phrase in sentence_text
+            ]
+
+            if found_phrases:
                 description = (
-                    f'Phrase "{ngram}" overused across novel '
-                    f"({self.tracker.phrase_counts.get(ngram, 0)} times)"
+                    f"Sentence contains overused phrases: {', '.join(found_phrases)}."
                 )
                 problems.append(
                     ProblemDetail(
                         issue_category="repetition_and_redundancy",
                         problem_description=description,
-                        quote_from_original_text=ngram,
-                        suggested_fix_focus=(
-                            "Replace or rephrase to avoid novel-wide repetition."
-                        ),
-                        severity="low",
-                        related_spans=None,
-                        rewrite_instruction=None,
+                        # The quote is now the full sentence, which is actionable
+                        quote_from_original_text=sentence_text,
+                        # We now have the correct location data
+                        sentence_char_start=start_char,
+                        sentence_char_end=end_char,
+                        suggested_fix_focus="Rephrase this sentence to avoid using the repeated phrases, improving lexical diversity.",
+                        severity="medium",
                     )
                 )
+                # Mark this sentence as processed to avoid creating duplicate problems for it
+                processed_sentence_starts.add(start_char)
+
         if problems:
-            logger.info("RepetitionAnalyzer found %s problems", len(problems))
+            logger.info("RepetitionAnalyzer found %s problematic sentences.", len(problems))
         return problems
