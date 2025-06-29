@@ -36,8 +36,6 @@ class EvaluationPipeline:
         logger.info("EvaluationPipeline running", chapter=chapter_number)
         eval_result, _ = await self.comp_agent.evaluate_chapter_draft(
             plot_outline,
-            [],
-            {},
             draft_text,
             chapter_number,
             None,

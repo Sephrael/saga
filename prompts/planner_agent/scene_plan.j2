@@ -31,13 +31,8 @@ You are an expert novelist, winner of the Pulitzer Prize in Fiction, capable of 
 
 **Supporting Context (from previous chapters and world state):**
 ---
-**Previous Chapter Summary/Ending:**
-{{ context_summary_str if context_summary_str else "This is the first chapter." }}
-
-**Knowledge Graph Context (Characters & World):**
-{{ kg_context_section }}
-{{ character_state_snippet_plain_text }}
-{{ world_state_snippet_plain_text }}
+**Supporting Context:**
+{{ chapter_context }}
 ---
 
 **Ignore the narrative details in the below example. It shows the required format only.**

@@ -6,15 +6,9 @@ from typing import Any
 import structlog
 from config import settings
 from core.llm_interface import llm_service
-from data_access import chapter_queries
-from prompt_data_getters import (
-    get_character_state_snippet_for_prompt,
-    get_reliable_kg_facts_for_drafting_prompt,
-    get_world_state_snippet_for_prompt,
-)
 from prompt_renderer import render_prompt
 
-from models import CharacterProfile, SceneDetail, WorldItem
+from models import SceneDetail
 
 logger = structlog.get_logger(__name__)
 
@@ -151,23 +145,21 @@ class PlannerAgent:
     async def plan_chapter_scenes(
         self,
         plot_outline: dict[str, Any],
-        character_profiles: dict[str, CharacterProfile],
-        world_building: dict[str, dict[str, WorldItem]],
         chapter_number: int,
         plot_point_focus: str | None,
         plot_point_index: int,
         plot_point_progress_chapter: int,
+        chapter_context: str,
     ) -> tuple[list[SceneDetail] | None, dict[str, int] | None]:
         """Generate a detailed scene plan for a chapter.
 
         Args:
             plot_outline: Full plot outline for the novel.
-            character_profiles: Character data keyed by name.
-            world_building: World-building data.
             chapter_number: The sequential chapter number.
             plot_point_focus: The active major plot point.
             plot_point_index: Index of the active plot point in the outline.
             plot_point_progress_chapter: Chapter count within the current plot point span (1-based).
+            chapter_context: Context string for planning.
 
         Returns:
             The planned scenes and token usage data.
@@ -187,50 +179,10 @@ class PlannerAgent:
             )
             return None, None
 
-        context_summary_parts: list[str] = []
-        if chapter_number > 1:
-            prev_chap_data = await chapter_queries.get_chapter_data_from_db(
-                chapter_number - 1
-            )
-            if prev_chap_data:
-                prev_summary = prev_chap_data.get("summary")
-                prev_is_provisional = prev_chap_data.get("is_provisional", False)
-                summary_prefix = (
-                    "[Provisional Summary from Prev Ch] "
-                    if prev_is_provisional and prev_summary
-                    else "[Summary from Prev Ch] "
-                )
-                if prev_summary:
-                    context_summary_parts.append(
-                        f"{summary_prefix}({chapter_number - 1}):\n{prev_summary[:1000].strip()}...\n"
-                    )
-                else:
-                    prev_text = prev_chap_data.get("text", "")
-                    text_prefix = (
-                        "[Provisional Text Snippet from Prev Ch] "
-                        if prev_is_provisional and prev_text
-                        else "[Text Snippet from Prev Ch] "
-                    )
-                    if prev_text:
-                        context_summary_parts.append(
-                            f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
-                        )
-
-        context_summary_str = "".join(context_summary_parts)
+        context_summary_str = chapter_context
 
         protagonist_name = plot_outline.get(
             "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
-        )
-        kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
-            plot_outline, chapter_number, None
-        )
-        character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(
-                character_profiles, plot_outline, chapter_number
-            )
-        )
-        world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
-            world_building, chapter_number
         )
 
         future_plot_context_parts: list[str] = []
@@ -322,10 +274,7 @@ class PlannerAgent:
                 "plot_point_chapter_span": settings.PLOT_POINT_CHAPTER_SPAN,
                 "plot_point_focus": plot_point_focus,
                 "future_plot_context_str": future_plot_context_str,
-                "context_summary_str": context_summary_str,
-                "kg_context_section": kg_context_section,
-                "character_state_snippet_plain_text": character_state_snippet_plain_text,
-                "world_state_snippet_plain_text": world_state_snippet_plain_text,
+                "chapter_context": context_summary_str,
                 "few_shot_scene_plan_example_str": few_shot_scene_plan_example_str,
             },
         )

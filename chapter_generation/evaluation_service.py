@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import structlog
 from config import settings
-from data_access import character_queries, world_queries
 from kg_maintainer.models import EvaluationResult, ProblemDetail
 from processing.repetition_analyzer import RepetitionAnalyzer
 
@@ -59,19 +58,12 @@ class EvaluationService:
         tasks_to_run: list[asyncio.Future] = []
         task_names: list[str] = []
 
-        character_names = await character_queries.get_all_character_names()
-        world_item_ids_by_category = (
-            await world_queries.get_all_world_item_ids_by_category()
-        )
-
         ignore_spans = patched_spans
 
         if settings.ENABLE_COMPREHENSIVE_EVALUATION:
             tasks_to_run.append(
                 self.orchestrator.evaluator_agent.evaluate_chapter_draft(
                     self.orchestrator.plot_outline,
-                    character_names,
-                    world_item_ids_by_category,
                     current_text,
                     chapter_number,
                     plot_point_focus,

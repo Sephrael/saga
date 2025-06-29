@@ -34,7 +34,7 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         return "Hi world", [(0, 5)]
 
     async def fake_evaluate(*args, **kwargs):
-        assert args[2] == {"Places": [world_item.id]}
+        assert args[5] == "ctx"
         return {"problems_found": []}, None
 
     monkeypatch.setattr(
@@ -55,7 +55,7 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         "Hello world",
         1,
         eval_result,
-        "",
+        "ctx",
         None,
     )
     assert res is not None

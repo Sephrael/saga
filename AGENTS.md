@@ -25,7 +25,7 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   └── llm_interface.py             # LLM API abstraction
 ├── data_access/                     # Database access layer
 │   ├── chapter_queries.py           # Chapter-related database operations
-│   └── prompt_data_getters.py       # Context retrieval from KG
+│   └── world_queries.py             # World data queries
 ├── orchestration/                   # Main orchestration
 │   ├── nana_orchestrator.py         # Primary orchestrator
 │   └── chapter_flow.py              # Chapter generation flow
@@ -34,7 +34,8 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── patch_generator.py           # Generates targeted patches
 │   └── text_deduplicator.py         # Reduces repetitive content
 ├── chapter_generation/              # Chapter generation services
-│   └── context_service.py           # Hybrid context assembly
+│   ├── context_orchestrator.py      # Provider-based context system
+│   └── context_kg_utils.py          # KG context helpers
 ├── initialization/                  # Story setup and genesis
 │   ├── genesis.py                   # Initial story generation
 │   ├── models.py                    # Story element models

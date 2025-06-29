@@ -27,13 +27,11 @@ class ComprehensiveEvaluatorAgent:
     async def evaluate_chapter_draft(
         self,
         plot_outline: dict[str, Any],
-        character_names: list[str],
-        world_item_ids_by_category: dict[str, list[str]],
         draft_text: str,
         chapter_number: int,
         plot_point_focus: str | None,
         plot_point_index: int,
-        previous_chapters_context: str,
+        chapter_context: str,
         ignore_spans: list[tuple[int, int]] | None | None = None,
     ) -> tuple[EvaluationResult, dict[str, int] | None]:
         processed_text = utils.remove_spans_from_text(draft_text, ignore_spans or [])
@@ -126,13 +124,11 @@ class ComprehensiveEvaluatorAgent:
             llm_usage,
         ) = await perform_llm_comprehensive_evaluation(
             plot_outline,
-            character_names,
-            world_item_ids_by_category,
             processed_text,
             chapter_number,
             plot_point_focus,
             plot_point_index,
-            previous_chapters_context,
+            chapter_context,
             self.model_name,
         )
         if llm_usage:

@@ -73,7 +73,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   **Planning (if enabled):** The `PlannerAgent` creates a detailed scene-by-scene plan.
         *   **Context Generation:** `chapter_generation.context_orchestrator.ContextOrchestrator` assembles a "hybrid context" string by:
             *   Querying Neo4j for semantically similar past chapter summaries/text snippets (vector search).
-            *   Fetching key reliable facts from the Knowledge Graph via `prompt_data_getters`.
+            *   Fetching key reliable facts from the Knowledge Graph via context providers.
     *   **(B) Drafting:**
         *   The `DraftingAgent` writes the initial draft, guided by the scene plan (if available), plot point focus, and hybrid context.
     *   **(C) De-duplication & Evaluation:**

@@ -537,14 +537,20 @@ class NANA_Orchestrator:
             self.knowledge_cache.world,
         )
 
+        planning_context = self.next_chapter_context
+        if planning_context is None:
+            planning_context = await self.context_service.build_hybrid_context(
+                self,
+                novel_chapter_number,
+                None,
+            )
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
-            self.knowledge_cache.characters,
-            self.knowledge_cache.world,
             novel_chapter_number,
             plot_point_focus,
             plot_point_index,
             (novel_chapter_number - 1) % settings.PLOT_POINT_CHAPTER_SPAN + 1,
+            planning_context,
         )
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.CHAPTER_PLANNING.value}", plan_usage

@@ -30,7 +30,8 @@ async def test_kg_fact_provider(monkeypatch):
         return "fact"
 
     monkeypatch.setattr(
-        "prompt_data_getters.get_reliable_kg_facts_for_drafting_prompt", fake_get
+        "chapter_generation.context_kg_utils.get_reliable_kg_facts_for_drafting_prompt",
+        fake_get,
     )
     provider = KGFactProvider()
     request = ContextRequest(2, None, {})
@@ -44,7 +45,8 @@ async def test_kg_reasoning_provider(monkeypatch):
         return "guide"
 
     monkeypatch.setattr(
-        "prompt_data_getters.get_kg_reasoning_guidance_for_prompt", fake_reason
+        "chapter_generation.context_kg_utils.get_kg_reasoning_guidance_for_prompt",
+        fake_reason,
     )
     provider = KGReasoningProvider()
     request = ContextRequest(2, None, {})
