@@ -8,12 +8,6 @@ from orchestration.nana_orchestrator import RevisionOutcome
 class DummyOrchestrator:
     def __init__(self):
         self.values = {}
-        self.prerequisites_service = type(
-            "P", (), {"prepare": self._prepare_chapter_prerequisites}
-        )()
-        self.drafting_service = type(
-            "D", (), {"draft_initial_text": self._draft_initial_chapter_text}
-        )()
 
     async def _update_rich_display(self, **kwargs):
         pass

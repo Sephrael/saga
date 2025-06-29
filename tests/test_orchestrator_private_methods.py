@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 import pytest
 import utils
 from chapter_generation.drafting_service import DraftResult
-from chapter_generation.finalization_service import FinalizationServiceResult
 from chapter_generation.prerequisites_service import PrerequisiteData
 from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
@@ -223,13 +222,13 @@ async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkey
     )
     monkeypatch.setattr(orchestrator, "refresh_knowledge_cache", AsyncMock())
     monkeypatch.setattr(
-        orchestrator.finalization_service,
-        "finalize_and_save_chapter",
-        AsyncMock(return_value=FinalizationServiceResult(text="done")),
+        orchestrator,
+        "_finalize_and_save_chapter",
+        AsyncMock(return_value="text"),
     )
 
     result = await orchestrator._finalize_and_log(1, "text", None, False)
 
-    assert result == "done"
+    assert result == "text"
     ctx_mock.assert_awaited_with(orchestrator, 2, None)
     assert orchestrator.next_chapter_context == "ctx1"

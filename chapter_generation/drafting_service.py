@@ -4,13 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover - type hint import
-    from orchestration.nana_orchestrator import NANA_Orchestrator
-    from storage.file_manager import FileManager
-
-    from models import SceneDetail
 
 
 @dataclass
@@ -24,28 +17,3 @@ class DraftResult:
         """Allow tuple-style unpacking of the draft result."""
         yield self.text
         yield self.raw_llm_output
-
-
-class DraftingService:
-    """Handle chapter drafting through the DraftingAgent."""
-
-    def __init__(
-        self, orchestrator: NANA_Orchestrator, file_manager: FileManager
-    ) -> None:
-        self.orchestrator = orchestrator
-        self.file_manager = file_manager
-
-    async def draft_initial_text(
-        self,
-        chapter_number: int,
-        plot_point_focus: str,
-        hybrid_context_for_draft: str,
-        chapter_plan: list[SceneDetail] | None,
-    ) -> DraftResult:
-        draft_result = await self.orchestrator._draft_initial_chapter_text(
-            chapter_number,
-            plot_point_focus,
-            hybrid_context_for_draft,
-            chapter_plan,
-        )
-        return draft_result
