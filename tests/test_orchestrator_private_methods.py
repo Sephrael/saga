@@ -131,7 +131,7 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         AsyncMock(side_effect=Exception("cache not used")),
     )
     monkeypatch.setattr(
-        orchestrator.world_continuity_agent,
+        orchestrator.evaluator_agent,
         "check_scene_plan_consistency",
         AsyncMock(return_value=([], {})),
     )
@@ -179,7 +179,7 @@ async def test_prepare_prerequisites_runs_preflight(orchestrator, monkeypatch):
         preflight_mock,
     )
     monkeypatch.setattr(
-        orchestrator.world_continuity_agent,
+        orchestrator.evaluator_agent,
         "check_scene_plan_consistency",
         AsyncMock(return_value=([], {})),
     )

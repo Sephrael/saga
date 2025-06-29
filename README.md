@@ -22,7 +22,6 @@ SAGA, with its NANA engine, is an ambitious project designed to autonomously cra
 *   **`agents.PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression and incorporating directorial elements like pacing and scene type.
 *   **`agents.DraftingAgent`:** Weaves the initial prose for chapters, guided by the planner's blueprints and rich contextual information. It can operate scene-by-scene or draft a whole chapter in a single pass.
 *   **`agents.ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality, generating structured `ProblemDetail` feedback.
-*   **`agents.WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories by querying the knowledge graph.
 *   **`processing.revision_manager.RevisionManager`:** Coordinates revisions based on evaluation feedback, orchestrating patch-based fixes or full chapter rewrites.
 *   **`agents.PatchValidationAgent`:** Verifies generated patch instructions to ensure they resolve the identified problems before being applied.
 *   **`agents.KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, extracts new knowledge from final text, and performs periodic "healing" cycles to resolve duplicates and enrich sparse data.
@@ -78,7 +77,7 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   The `DraftingAgent` writes the initial draft, guided by the scene plan (if available), plot point focus, and hybrid context.
     *   **(C) De-duplication & Evaluation:**
         *   The draft undergoes de-duplication via `processing.text_deduplicator` to reduce repetitiveness.
-        *   The `ComprehensiveEvaluatorAgent` and `WorldContinuityAgent` run in parallel to assess the draft against multiple criteria.
+        *   The `ComprehensiveEvaluatorAgent` evaluates the draft against multiple criteria, including world continuity.
     *   **(D) Revision (if `needs_revision` is true):**
         *   `processing.revision_manager.RevisionManager` attempts to fix identified issues.
         *   If `ENABLE_PATCH_BASED_REVISION` is true, it generates and applies targeted text patches. A patch suggesting deletion is now handled as an empty string replacement.

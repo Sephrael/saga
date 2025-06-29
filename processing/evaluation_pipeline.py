@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
-from agents.world_continuity_agent import WorldContinuityAgent
 
 from processing.revision_manager import RevisionManager
 
@@ -21,7 +20,6 @@ class EvaluationPipeline:
 
     def __init__(self) -> None:
         self.comp_agent = ComprehensiveEvaluatorAgent()
-        self.continuity_agent = WorldContinuityAgent()
         self.repetition_analyzer = RepetitionAnalyzer()
         self.revision_manager = RevisionManager()
 
@@ -43,22 +41,12 @@ class EvaluationPipeline:
             previous_chapters_context,
         )
 
-        continuity_probs, _ = await self.continuity_agent.check_consistency(
-            plot_outline,
-            draft_text,
-            chapter_number,
-            previous_chapters_context,
-        )
-
         repetition_probs = await self.repetition_analyzer.analyze(draft_text)
 
-        eval_result.problems_found.extend(continuity_probs)
         eval_result.problems_found.extend(repetition_probs)
-        if continuity_probs or repetition_probs:
+        if repetition_probs:
             eval_result.needs_revision = True
-            eval_result.reasons.append(
-                "Issues found by continuity or repetition analyzers"
-            )
+            eval_result.reasons.append("Issues found by repetition analyzer")
 
         return await self.revision_manager.revise_chapter(
             plot_outline,
@@ -69,6 +57,6 @@ class EvaluationPipeline:
             eval_result,
             previous_chapters_context,
             None,
-            continuity_problems=continuity_probs,
-            repetition_problems=repetition_probs,
+            continuity_problems=[],
+            repetition_problems=cast(list[dict[str, Any]], repetition_probs),
         )
