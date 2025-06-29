@@ -711,10 +711,7 @@ class NANA_Orchestrator:
 
         if needs_revision and last_eval_result is not None:
             root_cause = self.revision_manager.identify_root_cause(
-                [
-                    p.to_dict() if hasattr(p, "to_dict") else dict(p)
-                    for p in last_eval_result.problems_found
-                ],
+                [p.model_dump() for p in last_eval_result.problems_found],
                 self.plot_outline,
                 await character_queries.get_character_profiles_from_db(),
                 await world_queries.get_world_building_from_db(),

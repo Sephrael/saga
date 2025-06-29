@@ -12,6 +12,7 @@ from utils.plot import get_plot_point_info
 from models import (
     CharacterProfile,
     EvaluationResult,
+    ProblemDetail,
     SceneDetail,
     WorldItem,
 )
@@ -93,12 +94,12 @@ class RevisionManager:
         world_building: dict[str, dict[str, WorldItem]],
         original_text: str,
         chapter_number: int,
-        problems_to_fix: list[dict[str, Any]],
+        problems_to_fix: list[ProblemDetail],
         hybrid_context_for_revision: str,
         chapter_plan: list[SceneDetail] | None,
         already_patched_spans: list[tuple[int, int]],
-        continuity_problems: list[dict[str, Any]] | None = None,
-        repetition_problems: list[dict[str, Any]] | None = None,
+        continuity_problems: list[ProblemDetail] | None = None,
+        repetition_problems: list[ProblemDetail] | None = None,
     ) -> tuple[str | None, list[tuple[int, int]], bool, TokenUsage | None]:
         """Run one patch generation and evaluation cycle."""
 
@@ -165,7 +166,7 @@ class RevisionManager:
                 hybrid_context_for_revision,
             )
             add_usage(post_usage)
-            remaining = len(post_eval.get("problems_found", []))
+            remaining = len(post_eval.problems_found)
             if remaining <= settings.POST_PATCH_PROBLEM_THRESHOLD:
                 use_patched_text_as_final = True
 
@@ -181,7 +182,7 @@ class RevisionManager:
         plot_outline: dict[str, Any],
         original_text: str,
         chapter_number: int,
-        problems_to_fix: list[dict[str, Any]],
+        problems_to_fix: list[ProblemDetail],
         revision_reason_str: str,
         hybrid_context_for_revision: str,
         chapter_plan: list[SceneDetail] | None,
@@ -221,12 +222,12 @@ class RevisionManager:
         length_instruction_parts: list[str] = []
         needs_expansion = any(
             (
-                p["issue_category"] == "narrative_depth_and_length"
+                p.issue_category == "narrative_depth_and_length"
                 and (
-                    "short" in p["problem_description"].lower()
-                    or "length" in p["problem_description"].lower()
-                    or "expand" in p["suggested_fix_focus"].lower()
-                    or "depth" in p["problem_description"].lower()
+                    "short" in p.problem_description.lower()
+                    or "length" in p.problem_description.lower()
+                    or "expand" in p.suggested_fix_focus.lower()
+                    or "depth" in p.problem_description.lower()
                 )
             )
             for p in problems_to_fix
@@ -243,7 +244,7 @@ class RevisionManager:
 
         rewrite_instructions_lines: list[str] = []
         for idx, prob in enumerate(problems_to_fix):
-            instruction = prob.get("rewrite_instruction")
+            instruction = prob.rewrite_instruction
             if instruction:
                 rewrite_instructions_lines.append(f"  {idx + 1}. {instruction}")
         rewrite_instructions_str = (
@@ -266,10 +267,10 @@ class RevisionManager:
             for prob_idx, prob_item in enumerate(problems_to_fix):
                 all_problem_descriptions_parts.extend(
                     [
-                        f"  {prob_idx + 1}. Category: {prob_item['issue_category']}",
-                        f"     Description: {prob_item['problem_description']}",
-                        f'     Quote Ref: "{prob_item["quote_from_original_text"][:100].replace(chr(10), " ")}..."',
-                        f"     Fix Focus: {prob_item['suggested_fix_focus']}\n",
+                        f"  {prob_idx + 1}. Category: {prob_item.issue_category}",
+                        f"     Description: {prob_item.problem_description}",
+                        f'     Quote Ref: "{prob_item.quote_from_original_text[:100].replace(chr(10), " ")}..."',
+                        f"     Fix Focus: {prob_item.suggested_fix_focus}\n",
                     ]
                 )
             all_problem_descriptions_parts.append("---\n")
@@ -360,8 +361,8 @@ class RevisionManager:
         chapter_plan: list[SceneDetail] | None,
         is_from_flawed_source: bool = False,
         already_patched_spans: list[tuple[int, int]] | None = None,
-        continuity_problems: list[dict[str, Any]] | None = None,
-        repetition_problems: list[dict[str, Any]] | None = None,
+        continuity_problems: list[ProblemDetail] | None = None,
+        repetition_problems: list[ProblemDetail] | None = None,
     ) -> tuple[tuple[str, str | None, list[tuple[int, int]]] | None, TokenUsage | None]:
         """Revise a chapter draft based on evaluation feedback.
 
@@ -409,9 +410,7 @@ class RevisionManager:
             )
             return None, None
 
-        problems_to_fix: list[dict[str, Any]] = evaluation_result.get(
-            "problems_found", []
-        )
+        problems_to_fix: list[ProblemDetail] = evaluation_result.problems_found
         if continuity_problems:
             problems_to_fix.extend(continuity_problems)
         if repetition_problems:
@@ -419,7 +418,7 @@ class RevisionManager:
         problems_to_fix = _deduplicate_problems(
             _consolidate_overlapping_problems(problems_to_fix)
         )
-        if not problems_to_fix and evaluation_result.get("needs_revision"):
+        if not problems_to_fix and evaluation_result.needs_revision:
             logger.warning(
                 "Revision for ch %s explicitly requested, but no specific problems were itemized.",
                 chapter_number,
@@ -431,7 +430,7 @@ class RevisionManager:
             )
             return (original_text, "No revision performed.", []), None
 
-        revision_reason_str_list = evaluation_result.get("reasons", [])
+        revision_reason_str_list = evaluation_result.reasons
         revision_reason_str = (
             "\n- ".join(revision_reason_str_list)
             if revision_reason_str_list
@@ -479,7 +478,7 @@ class RevisionManager:
                 "Ch %s: Using patched text as the revised version.", chapter_number
             )
 
-        if not final_revised_text and evaluation_result.get("needs_revision"):
+        if not final_revised_text and evaluation_result.needs_revision:
             logger.info(
                 "Proceeding with full chapter rewrite for Ch %s as patching was ineffective or disabled.",
                 chapter_number,

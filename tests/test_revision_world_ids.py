@@ -6,24 +6,27 @@ from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from kg_maintainer.models import WorldItem
 from processing.revision_manager import RevisionManager
 
+from models import EvaluationResult, ProblemDetail
+
 
 @pytest.mark.asyncio
 async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
     world_item = WorldItem.from_dict("Places", "City", {"description": "d"})
     world_building = {"Places": {"City": world_item}}
-    eval_result = {
-        "needs_revision": True,
-        "problems_found": [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+    eval_result = EvaluationResult(
+        needs_revision=True,
+        reasons=[],
+        problems_found=[
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
-    }
+    )
 
     async def fake_generate(*_args, **_kwargs):
         return [
@@ -35,7 +38,9 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
 
     async def fake_evaluate(*args, **kwargs):
         assert args[5] == "ctx"
-        return {"problems_found": []}, None
+        return EvaluationResult(
+            needs_revision=False, reasons=[], problems_found=[]
+        ), None
 
     monkeypatch.setattr(
         patch_generator, "_generate_patch_instructions_logic", fake_generate

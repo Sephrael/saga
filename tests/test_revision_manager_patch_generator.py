@@ -8,6 +8,8 @@ from config import settings
 from core.llm_interface import llm_service, truncate_text_by_tokens
 from processing.revision_manager import RevisionManager
 
+from models import EvaluationResult, ProblemDetail
+
 
 @pytest.mark.asyncio
 async def test_patch_generator_successful_application(monkeypatch):
@@ -36,14 +38,14 @@ async def test_patch_generator_successful_application(monkeypatch):
         {"plot_points": ["a"]},
         "Hello world",
         [
-            {
-                "issue_category": "c",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "f",
-            }
+            ProblemDetail(
+                issue_category="c",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="f",
+            )
         ],
         1,
         "",
@@ -91,14 +93,14 @@ async def test_patch_generator_failed_validation(monkeypatch):
         {"plot_points": ["a"]},
         "Hello world",
         [
-            {
-                "issue_category": "c",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "f",
-            }
+            ProblemDetail(
+                issue_category="c",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="f",
+            )
         ],
         1,
         "",
@@ -133,20 +135,20 @@ async def test_revision_manager_full_rewrite(monkeypatch):
     )
 
     manager = RevisionManager()
-    eval_result = {
-        "needs_revision": True,
-        "reasons": ["bad"],
-        "problems_found": [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+    eval_result = EvaluationResult(
+        needs_revision=True,
+        reasons=["bad"],
+        problems_found=[
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
-    }
+    )
 
     res, _ = await manager.revise_chapter(
         {"plot_points": ["a"]},
@@ -169,7 +171,9 @@ async def test_patch_revision_cycle_success(monkeypatch):
         return "Hi world", [(0, 2)], None
 
     async def fake_evaluate(*_a, **_k):
-        return {"problems_found": []}, None
+        return EvaluationResult(
+            needs_revision=False, reasons=[], problems_found=[]
+        ), None
 
     monkeypatch.setattr(
         patch_generator.PatchGenerator, "generate_and_apply", fake_generate_and_apply
@@ -188,14 +192,14 @@ async def test_patch_revision_cycle_success(monkeypatch):
         "Hello world",
         1,
         [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
         "",
         None,
@@ -225,14 +229,14 @@ async def test_perform_full_rewrite(monkeypatch):
         "Hello world",
         1,
         [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
         "bad",
         "ctx",
@@ -276,19 +280,20 @@ async def test_revision_manager_uses_noop_validator(monkeypatch):
     )
 
     manager = RevisionManager()
-    eval_result = {
-        "needs_revision": True,
-        "problems_found": [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+    eval_result = EvaluationResult(
+        needs_revision=True,
+        reasons=[],
+        problems_found=[
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
-    }
+    )
 
     await manager.revise_chapter(
         {"plot_points": ["a"]},
@@ -330,7 +335,9 @@ async def test_patch_cycle_receives_extra_problems(monkeypatch):
         return original_text, [], None
 
     async def fake_evaluate(*_a, **_k):
-        return {"problems_found": []}, None
+        return EvaluationResult(
+            needs_revision=False, reasons=[], problems_found=[]
+        ), None
 
     monkeypatch.setattr(
         patch_generator.PatchGenerator, "generate_and_apply", fake_generate_and_apply
@@ -349,41 +356,47 @@ async def test_patch_cycle_receives_extra_problems(monkeypatch):
         "Hello world",
         1,
         [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
         "",
         None,
         [],
         continuity_problems=[
-            {
-                "issue_category": "consistency",
-                "problem_description": "c",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+            ProblemDetail(
+                issue_category="consistency",
+                problem_description="c",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
         repetition_problems=[
-            {
-                "issue_category": "repetition_and_redundancy",
-                "problem_description": "r",
-                "quote_from_original_text": "Hello Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 11,
-                "suggested_fix_focus": "remove",
-            }
+            ProblemDetail(
+                issue_category="repetition_and_redundancy",
+                problem_description="r",
+                quote_from_original_text="Hello Hello",
+                sentence_char_start=0,
+                sentence_char_end=11,
+                suggested_fix_focus="remove",
+            )
         ],
     )
 
-    assert any("consistency" in p["issue_category"] for p in captured["problems"])
     assert any(
-        "repetition_and_redundancy" in p["issue_category"] for p in captured["problems"]
+        "consistency"
+        in (p["issue_category"] if isinstance(p, dict) else p.issue_category)
+        for p in captured["problems"]
+    )
+    assert any(
+        "repetition_and_redundancy"
+        in (p["issue_category"] if isinstance(p, dict) else p.issue_category)
+        for p in captured["problems"]
     )
