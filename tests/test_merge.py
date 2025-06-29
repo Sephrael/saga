@@ -50,7 +50,9 @@ def test_merge_character_profile_updates_new_from_flawed():
     merge_character_profile_updates(profiles, updates, 1, True)
     prof = profiles["Zoe"]
     assert prof.traits == ["kind"]
-    assert "source_quality_chapter_1" not in prof.updates
+    assert (
+        prof.updates["source_quality_chapter_1"] == "provisional_from_unrevised_draft"
+    )
 
 
 def test_merge_world_item_updates_new_item_flawed():
@@ -59,7 +61,10 @@ def test_merge_world_item_updates_new_item_flawed():
     merge_world_item_updates(current, updates, 3, True)
     item = current["Things"]["Book"]
     assert item.properties["added_in_chapter_3"]
-    assert "source_quality_chapter_3" not in item.properties
+    assert (
+        item.properties["source_quality_chapter_3"]
+        == "provisional_from_unrevised_draft"
+    )
 
 
 def test_merge_world_item_updates_merge_complex():
