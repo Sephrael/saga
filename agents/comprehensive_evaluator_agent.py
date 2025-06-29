@@ -1,4 +1,5 @@
 # comprehensive_evaluator_agent.py
+import json
 from typing import Any
 
 import structlog
@@ -10,8 +11,10 @@ from processing.evaluation_helpers import (
     parse_llm_evaluation_output,
     perform_llm_comprehensive_evaluation,
 )
+from processing.problem_parser import parse_problem_list
+from prompt_renderer import render_prompt
 
-from models import EvaluationResult, ProblemDetail
+from models import EvaluationResult, ProblemDetail, SceneDetail
 
 logger = structlog.get_logger(__name__)
 
@@ -222,3 +225,135 @@ class ComprehensiveEvaluatorAgent:
         return final_eval_result, total_usage_data if total_usage_data[
             "total_tokens"
         ] > 0 else None
+
+    async def _parse_llm_consistency_output(
+        self, json_text: str, chapter_number: int, original_draft_text: str
+    ) -> list[ProblemDetail]:
+        """Parse LLM JSON output for consistency problems."""
+        problems = parse_problem_list(json_text, category="consistency")
+        if not problems:
+            logger.info(
+                f"Consistency check for Ch {chapter_number} yielded no problems."
+            )
+            return []
+
+        for i, prob in enumerate(problems):
+            quote_text = prob["quote_from_original_text"]
+            if (
+                "N/A - General Issue" in quote_text
+                or not quote_text.strip()
+                or quote_text == "N/A"
+            ):
+                prob["quote_from_original_text"] = "N/A - General Issue"
+            elif utils.spacy_manager.nlp is not None and original_draft_text.strip():
+                offsets = await utils.find_quote_and_sentence_offsets_with_spacy(
+                    original_draft_text, quote_text
+                )
+                if offsets:
+                    q_start, q_end, s_start, s_end = offsets
+                    prob["quote_char_start"] = q_start
+                    prob["quote_char_end"] = q_end
+                    prob["sentence_char_start"] = s_start
+                    prob["sentence_char_end"] = s_end
+                else:
+                    logger.warning(
+                        f"Ch {chapter_number} consistency problem {i + 1}: Could not find quote via spaCy: '{quote_text[:50]}...'"
+                    )
+            elif not original_draft_text.strip():
+                logger.warning(
+                    f"Ch {chapter_number} consistency problem {i + 1}: Original draft text is empty. Cannot find offsets for quote: '{quote_text[:50]}...'"
+                )
+            else:
+                logger.info(
+                    f"Ch {chapter_number} consistency problem {i + 1}: spaCy not available, quote offsets not determined for: '{quote_text[:50]}...'"
+                )
+
+        return problems
+
+    async def check_scene_plan_consistency(
+        self,
+        plot_outline: dict[str, Any],
+        scene_plan: list[SceneDetail],
+        chapter_number: int,
+        chapter_context: str,
+    ) -> tuple[list[ProblemDetail], dict[str, int] | None]:
+        """Validate a scene plan before drafting begins."""
+
+        if not scene_plan:
+            logger.warning(
+                "ComprehensiveEvaluatorAgent: Scene plan consistency check skipped for Ch %s: empty plan.",
+                chapter_number,
+            )
+            return [], None
+
+        protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
+
+        plot_points_summary_lines = (
+            [
+                f"- PP {i + 1}: {pp[:100]}..."
+                for i, pp in enumerate(plot_outline.get("plot_points", []))
+            ]
+            if plot_outline.get("plot_points")
+            else ["  - Not available"]
+        )
+        plot_points_summary_str = "\n".join(plot_points_summary_lines)
+
+        few_shot_consistency_example_str = """**Ignore the narrative details in this example. It shows the required format only.**
+[
+  {
+    "issue_category": "consistency",
+    "problem_description": "The 'Sunstone' is described as glowing blue in this chapter, but the world building notes explicitly state all Sunstones are crimson red.",
+    "quote_from_original_text": "She admired the brilliant blue glow of the Sunstone clutched in her hand.",
+    "suggested_fix_focus": "Change the Sunstone's color to 'crimson red' to align with established world canon."
+  },
+  {
+    "issue_category": "consistency",
+    "problem_description": "Character Kael claims to have never met Elara before, but Previous Chapter Context (KG Fact) states \"Kael | mentored | Elara (Ch: 3)\".",
+    "quote_from_original_text": "\"I do not believe we have crossed paths before, young one,\" Kael said, peering at Elara.",
+    "suggested_fix_focus": "Adjust Kael's dialogue to acknowledge his prior mentorship of Elara, or introduce a reason for his feigned ignorance (e.g., memory loss, testing her)."
+  }
+]"""
+
+        prompt = render_prompt(
+            "world_continuity_agent/plan_consistency_check.j2",
+            {
+                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "novel_title": plot_outline.get("title", "Untitled Novel"),
+                "protagonist_name_str": protagonist_name_str,
+                "novel_genre": plot_outline.get("genre", "N/A"),
+                "novel_theme": plot_outline.get("theme", "N/A"),
+                "novel_protagonist": plot_outline.get("protagonist_name", "N/A"),
+                "protagonist_arc": plot_outline.get("character_arc", "N/A"),
+                "logline": plot_outline.get("logline", "N/A"),
+                "plot_points_summary_str": plot_points_summary_str,
+                "chapter_context": chapter_context,
+                "scene_plan_json": json.dumps(scene_plan, ensure_ascii=False, indent=2),
+                "few_shot_consistency_example_str": few_shot_consistency_example_str,
+            },
+        )
+
+        logger.info(
+            "Calling LLM (%s) for scene plan consistency check of chapter %s (expecting JSON)...",
+            self.model_name,
+            chapter_number,
+        )
+        cleaned_consistency_text, usage_data = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=prompt,
+            temperature=settings.TEMPERATURE_CONSISTENCY_CHECK,
+            allow_fallback=True,
+            stream_to_disk=False,
+            auto_clean_response=True,
+        )
+
+        consistency_problems = await self._parse_llm_consistency_output(
+            cleaned_consistency_text, chapter_number, json.dumps(scene_plan)
+        )
+
+        logger.info(
+            "Scene plan consistency check for Ch %s found %s problems.",
+            chapter_number,
+            len(consistency_problems),
+        )
+        return consistency_problems, usage_data

@@ -12,7 +12,6 @@ from agents.finalize_agent import FinalizeAgent
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
 from agents.pre_flight_check_agent import PreFlightCheckAgent
-from agents.world_continuity_agent import WorldContinuityAgent
 from chapter_generation import (
     ContextOrchestrator,
     DraftingService,
@@ -83,7 +82,6 @@ class NANA_Orchestrator:
         self.planner_agent = PlannerAgent()
         self.drafting_agent = DraftingAgent()
         self.evaluator_agent = ComprehensiveEvaluatorAgent()
-        self.world_continuity_agent = WorldContinuityAgent()
         self.kg_maintainer_agent = KGMaintainerAgent()
         self.pre_flight_agent = PreFlightCheckAgent()
         self.finalize_agent = FinalizeAgent(self.kg_maintainer_agent)
@@ -566,10 +564,11 @@ class NANA_Orchestrator:
             (
                 plan_problems,
                 usage,
-            ) = await self.world_continuity_agent.check_scene_plan_consistency(
+            ) = await self.evaluator_agent.check_scene_plan_consistency(
                 self.plot_outline,
                 chapter_plan,
                 novel_chapter_number,
+                planning_context,
             )
             self._accumulate_tokens(
                 f"Ch{novel_chapter_number}-{Stage.PLAN_CONSISTENCY.value}", usage

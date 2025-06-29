@@ -1,5 +1,5 @@
 import pytest
-from agents.world_continuity_agent import WorldContinuityAgent
+from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from processing.evaluation_helpers import parse_llm_evaluation_output
 
 
@@ -19,6 +19,6 @@ async def test_eval_agent_parsing_empty():
 
 @pytest.mark.asyncio
 async def test_consistency_agent_parsing_invalid(monkeypatch):
-    agent = WorldContinuityAgent()
+    agent = ComprehensiveEvaluatorAgent()
     problems = await agent._parse_llm_consistency_output("notjson", 1, "text")
     assert problems[0]["issue_category"] == "consistency"

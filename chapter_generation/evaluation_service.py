@@ -74,18 +74,6 @@ class EvaluationService:
             )
             task_names.append("evaluation")
 
-        if settings.ENABLE_WORLD_CONTINUITY_CHECK:
-            tasks_to_run.append(
-                self.orchestrator.world_continuity_agent.check_consistency(
-                    self.orchestrator.plot_outline,
-                    current_text,
-                    chapter_number,
-                    hybrid_context_for_draft,
-                    ignore_spans=ignore_spans,
-                )
-            )
-            task_names.append("continuity")
-
         results = await asyncio.gather(*tasks_to_run)
 
         eval_result_obj: EvaluationResult | None = None
@@ -96,9 +84,6 @@ class EvaluationService:
         result_idx = 0
         if "evaluation" in task_names:
             eval_result_obj, eval_usage = results[result_idx]
-            result_idx += 1
-        if "continuity" in task_names:
-            continuity_problems, continuity_usage = results[result_idx]
 
         if isinstance(eval_result_obj, EvaluationResult):
             evaluation_result: EvaluationResult = eval_result_obj

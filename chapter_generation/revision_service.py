@@ -118,7 +118,7 @@ class RevisionService:
 
             if continuity_problems:
                 logger.warning(
-                    "NANA: Ch %s (Attempt %s) - World Continuity Agent found %s issues.",
+                    "NANA: Ch %s (Attempt %s) - Consistency checker found %s issues.",
                     chapter_number,
                     attempt,
                     len(continuity_problems),
@@ -127,9 +127,7 @@ class RevisionService:
                 if not evaluation_result.needs_revision:
                     evaluation_result.needs_revision = True
                 unique_reasons = set(evaluation_result.reasons)
-                unique_reasons.add(
-                    "Continuity issues identified by WorldContinuityAgent."
-                )
+                unique_reasons.add("Continuity issues detected")
                 evaluation_result.reasons = sorted(list(unique_reasons))
 
             if repetition_problems:

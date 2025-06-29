@@ -29,19 +29,10 @@ async def test_ignore_spans_all_attempts(orchestrator, monkeypatch):
         received.setdefault("eval", []).append(ignore_spans)
         return {"needs_revision": False, "problems_found": []}, {}
 
-    async def fake_consistency(*args, ignore_spans=None, **kwargs):
-        received.setdefault("continuity", []).append(ignore_spans)
-        return [], {}
-
     monkeypatch.setattr(
         orchestrator.evaluator_agent,
         "evaluate_chapter_draft",
         AsyncMock(side_effect=fake_eval),
-    )
-    monkeypatch.setattr(
-        orchestrator.world_continuity_agent,
-        "check_consistency",
-        AsyncMock(side_effect=fake_consistency),
     )
 
     patched_spans = [(0, 5)]
@@ -67,4 +58,3 @@ async def test_ignore_spans_all_attempts(orchestrator, monkeypatch):
     )
 
     assert received["eval"] == [patched_spans, patched_spans]
-    assert received["continuity"] == [patched_spans, patched_spans]

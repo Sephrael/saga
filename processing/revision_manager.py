@@ -381,7 +381,7 @@ class RevisionManager:
             already_patched_spans: Spans previously protected from further
                 modification.
             continuity_problems: Additional continuity issues from
-                ``WorldContinuityAgent``.
+                the consistency checker.
             repetition_problems: Repetition issues from
                 ``RepetitionAnalyzer``.
 

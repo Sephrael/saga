@@ -16,7 +16,6 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── planner_agent.py             # Scene-by-scene planning
 │   ├── drafting_agent.py            # Initial prose generation
 │   ├── comprehensive_evaluator_agent.py  # Draft evaluation
-│   ├── world_continuity_agent.py    # Consistency checking
 │   ├── patch_validation_agent.py    # Patch instruction validation
 │   ├── kg_maintainer_agent.py       # Knowledge graph management
 │   └── finalize_agent.py            # Chapter finalization
