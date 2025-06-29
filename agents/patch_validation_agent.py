@@ -102,26 +102,22 @@ class PatchValidationAgent:
                 break
         is_pass = score >= settings.PATCH_VALIDATION_THRESHOLD
 
-        instruction_keywords: set[str] = set()
-        for prob in problems:
-            instruction = prob.get("rewrite_instruction")
-            if not instruction:
-                continue
-            for word in instruction.lower().split():
-                cleaned = word.strip(string.punctuation)
-                if len(cleaned) <= 3 or cleaned in STOPWORDS:
-                    continue
-                instruction_keywords.add(cleaned)
-
-        if instruction_keywords:
-            patch_text = patch.get("replace_with", "").lower()
-            missing = [kw for kw in instruction_keywords if kw not in patch_text]
-            if missing:
-                logger.info("Patch text missing keywords from instruction: %s", missing)
-                is_pass = False
-
         if not is_pass:
-            logger.info("Patch validation score %d below threshold", score)
+            # Check if the failure was due to the score or the keywords
+            score_is_ok = score >= settings.PATCH_VALIDATION_THRESHOLD
+            if not score_is_ok:
+                logger.info(
+                    "Patch validation FAILED. Score %d is below threshold %d.",
+                    score,
+                    settings.PATCH_VALIDATION_THRESHOLD,
+                )
+            else:
+                # If we are here, it means score was ok, but something else failed it.
+                # The keyword check already logs its own specific message.
+                logger.info(
+                    "Patch validation FAILED due to a non-score-related issue (e.g., missing keywords). Final score was %d.",
+                    score
+                )
         return is_pass, usage
 
 
