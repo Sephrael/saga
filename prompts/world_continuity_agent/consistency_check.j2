@@ -18,18 +18,10 @@ Your SOLE TASK is to identify specific CONSISTENCY issues in the **Complete Chap
   Key Plot Points (summary):
   {{ plot_points_summary_str }}
   ```
-  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**
+  **Context Information:**
   ```text
-  {{ char_profiles_plain_text }}
+  {{ chapter_context }}
   ```
-  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**
-  ```text
-  {{ world_building_plain_text }}
-  ```
-  **Previous Chapters Context (Includes Semantic Flow & Key Reliable KG Facts for Canon):**
-  --- PREVIOUS CONTEXT ---
-  {{ previous_chapters_context if previous_chapters_context.strip() else 'N/A (e.g., Chapter 1 or context retrieval failed).' }}
-  --- END PREVIOUS CONTEXT ---
 
 **Complete Chapter {{ chapter_number }} Text (to analyze for consistency):**
 --- BEGIN COMPLETE CHAPTER TEXT ---

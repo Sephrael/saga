@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
-from chapter_generation.context_service import ContextService
+from chapter_generation.context_providers import ContextRequest, SemanticHistoryProvider
 from core.llm_interface import llm_service
 from data_access import chapter_queries
 from initialization.models import PlotOutline
@@ -26,7 +26,8 @@ async def test_plot_point_focus_used(monkeypatch):
         chapter_queries, "get_chapter_data_from_db", AsyncMock(return_value=None)
     )
 
-    service = ContextService(chapter_queries, llm_service)
+    provider = SemanticHistoryProvider(chapter_queries, llm_service)
     outline = PlotOutline(plot_points=["PP1", "PP2", "PP3"])
-    await service.get_semantic_context(outline, 2)
+    request = ContextRequest(chapter_number=2, plot_focus=None, plot_outline=outline)
+    await provider.get_context(request)
     assert captured["text"] == "PP2"

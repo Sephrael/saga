@@ -155,16 +155,9 @@ class RevisionManager:
         use_patched_text_as_final = False
         if patched_text is not None and patched_text != original_text:
             evaluator = ComprehensiveEvaluatorAgent()
-            world_ids = {
-                cat: [item.id for item in items.values() if isinstance(item, WorldItem)]
-                for cat, items in world_building.items()
-                if isinstance(items, dict)
-            }
             plot_focus, plot_idx = get_plot_point_info(plot_outline, chapter_number)
             post_eval, post_usage = await evaluator.evaluate_chapter_draft(
                 plot_outline,
-                list(character_profiles.keys()),
-                world_ids,
                 patched_text,
                 chapter_number,
                 plot_focus,

@@ -62,12 +62,48 @@ class SemanticHistoryProvider(ContextProvider):
         self.llm_service = llm_service_instance or default_llm_service
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        from chapter_generation.context_service import ContextService
-
-        service = ContextService(self.chapter_queries, self.llm_service)
-        text = await service.get_semantic_context(
-            request.plot_outline, request.chapter_number
+        plot_points = request.plot_outline.get("plot_points", [])
+        plot_focus = None
+        if isinstance(plot_points, list) and 0 < request.chapter_number <= len(
+            plot_points
+        ):
+            plot_focus = plot_points[request.chapter_number - 1]
+        query_text = (
+            str(plot_focus)
+            if plot_focus is not None
+            else f"Narrative context relevant to events leading up to chapter {request.chapter_number}."
         )
+        embedding = await self.llm_service.async_get_embedding(query_text)
+        similar = await self.chapter_queries.find_similar_chapters_in_db(
+            embedding,
+            5,
+            request.chapter_number,
+        )
+
+        lines: list[str] = []
+        start = max(1, request.chapter_number - 2)
+        for i in range(start, request.chapter_number):
+            chap = await self.chapter_queries.get_chapter_data_from_db(i)
+            if chap:
+                content = chap.get("summary") or chap.get("text", "")
+                lines.append(f"[Immediate Context from Chapter {i}]:\n{content}\n---\n")
+
+        if similar:
+            for item in sorted(
+                similar,
+                key=lambda x: x.get("score", 0.0)
+                * (0.95 ** (request.chapter_number - int(x.get("chapter_number", 0)))),
+                reverse=True,
+            ):
+                num = item.get("chapter_number")
+                content = item.get("summary") or item.get("text", "")
+                if num and content:
+                    score = item.get("score", 0)
+                    lines.append(
+                        f"[Semantic Context from Chapter {num} (Similarity: {score})]:\n{content}\n---\n"
+                    )
+
+        text = "".join(lines).strip()
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
 
@@ -78,7 +114,7 @@ class KGFactProvider(ContextProvider):
     source = "kg_facts"
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        from prompt_data_getters import get_reliable_kg_facts_for_drafting_prompt
+        from .context_kg_utils import get_reliable_kg_facts_for_drafting_prompt
 
         text = await get_reliable_kg_facts_for_drafting_prompt(
             request.plot_outline, request.chapter_number, request.chapter_plan
@@ -93,7 +129,7 @@ class KGReasoningProvider(ContextProvider):
     source = "kg_reasoning"
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        from prompt_data_getters import get_kg_reasoning_guidance_for_prompt
+        from .context_kg_utils import get_kg_reasoning_guidance_for_prompt
 
         text = await get_kg_reasoning_guidance_for_prompt(
             request.plot_outline, request.chapter_number, request.chapter_plan
@@ -132,3 +168,44 @@ class UserNoteProvider(ContextProvider):
         return ContextChunk(
             text=notes, tokens=tokens, provenance={}, source=self.source
         )
+
+
+class CharacterStateProvider(ContextProvider):
+    """Provide character state summaries."""
+
+    source = "character_state"
+
+    def __init__(self, queries_module: Any | None = None) -> None:
+        from data_access import character_queries as default_character_queries
+
+        self.character_queries = queries_module or default_character_queries
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        profiles = await self.character_queries.get_character_profiles_from_db()
+        lines = [f"- {name}" for name in sorted(profiles.keys())]
+        text = "\n".join(lines)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
+class WorldStateProvider(ContextProvider):
+    """Provide world state summaries."""
+
+    source = "world_state"
+
+    def __init__(self, queries_module: Any | None = None) -> None:
+        from data_access import world_queries as default_world_queries
+
+        self.world_queries = queries_module or default_world_queries
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        world = await self.world_queries.get_world_building_from_db()
+        lines: list[str] = []
+        for category, items in world.items():
+            if category.startswith("_"):
+                continue
+            for name in items:
+                lines.append(f"- {name}")
+        text = "\n".join(lines)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)

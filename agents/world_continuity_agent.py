@@ -6,12 +6,8 @@ import structlog
 import utils
 from config import settings
 from core.llm_interface import llm_service
-from data_access import character_queries, kg_queries, world_queries
+from data_access import kg_queries
 from processing.problem_parser import parse_problem_list
-from prompt_data_getters import (
-    get_filtered_character_profiles_for_prompt_plain_text,
-    get_filtered_world_data_for_prompt_plain_text,
-)
 from prompt_renderer import render_prompt
 
 from models import ProblemDetail, SceneDetail
@@ -81,7 +77,7 @@ class WorldContinuityAgent:
         plot_outline: dict[str, Any],
         draft_text: str,
         chapter_number: int,
-        previous_chapters_context: str,
+        chapter_context: str,
         ignore_spans: list[tuple[int, int]] | None | None = None,
     ) -> tuple[list[ProblemDetail], dict[str, int] | None]:
         if not draft_text:
@@ -96,20 +92,6 @@ class WorldContinuityAgent:
         )
 
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
-        characters = await character_queries.get_character_profiles_from_db()
-        world_item_ids_by_category = (
-            await world_queries.get_all_world_item_ids_by_category()
-        )
-        char_profiles_plain_text = (
-            await get_filtered_character_profiles_for_prompt_plain_text(
-                characters,
-                chapter_number - 1,
-            )
-        )
-        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            world_item_ids_by_category,
-            chapter_number - 1,
-        )
 
         plot_points_summary_lines = (
             [
@@ -167,9 +149,7 @@ class WorldContinuityAgent:
                 "protagonist_arc": plot_outline.get("character_arc", "N/A"),
                 "logline": plot_outline.get("logline", "N/A"),
                 "plot_points_summary_str": plot_points_summary_str,
-                "char_profiles_plain_text": char_profiles_plain_text,
-                "world_building_plain_text": world_building_plain_text,
-                "previous_chapters_context": previous_chapters_context,
+                "chapter_context": chapter_context,
                 "draft_text": processed_text,
                 "few_shot_consistency_example_str": few_shot_consistency_example_str,
             },
@@ -206,6 +186,7 @@ class WorldContinuityAgent:
         plot_outline: dict[str, Any],
         scene_plan: list[SceneDetail],
         chapter_number: int,
+        chapter_context: str,
     ) -> tuple[list[ProblemDetail], dict[str, int] | None]:
         """Validate a scene plan before drafting begins."""
 
@@ -217,20 +198,6 @@ class WorldContinuityAgent:
             return [], None
 
         protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
-        characters = await character_queries.get_character_profiles_from_db()
-        world_item_ids_by_category = (
-            await world_queries.get_all_world_item_ids_by_category()
-        )
-        char_profiles_plain_text = (
-            await get_filtered_character_profiles_for_prompt_plain_text(
-                characters,
-                chapter_number - 1,
-            )
-        )
-        world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-            world_item_ids_by_category,
-            chapter_number - 1,
-        )
 
         plot_points_summary_lines = (
             [
@@ -282,8 +249,7 @@ class WorldContinuityAgent:
                 "protagonist_arc": plot_outline.get("character_arc", "N/A"),
                 "logline": plot_outline.get("logline", "N/A"),
                 "plot_points_summary_str": plot_points_summary_str,
-                "char_profiles_plain_text": char_profiles_plain_text,
-                "world_building_plain_text": world_building_plain_text,
+                "chapter_context": chapter_context,
                 "scene_plan_json": json.dumps(scene_plan, ensure_ascii=False, indent=2),
                 "few_shot_consistency_example_str": few_shot_consistency_example_str,
             },

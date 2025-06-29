@@ -5,11 +5,6 @@ import structlog
 import utils
 from config import settings
 from core.llm_interface import llm_service
-from prompt_data_getters import (
-    get_filtered_character_profiles_for_prompt_plain_text,
-    get_filtered_world_data_for_prompt_plain_text,
-    get_reliable_kg_facts_for_drafting_prompt,
-)
 from prompt_renderer import render_prompt
 
 from models import ProblemDetail
@@ -141,13 +136,11 @@ async def parse_llm_evaluation_output(
 
 async def perform_llm_comprehensive_evaluation(
     plot_outline: dict[str, Any],
-    character_names: list[str],
-    world_item_ids_by_category: dict[str, list[str]],
     draft_text: str,
     chapter_number: int,
     plot_point_focus: str | None,
     plot_point_index: int,
-    previous_chapters_context: str,
+    chapter_context: str,
     model_name: str,
 ) -> tuple[dict[str, Any], dict[str, int] | None]:
     """Call the LLM to evaluate a chapter draft."""
@@ -171,20 +164,6 @@ async def perform_llm_comprehensive_evaluation(
         )
 
     protagonist_name_str = plot_outline.get("protagonist_name", "The Protagonist")
-
-    char_profiles_plain_text = (
-        await get_filtered_character_profiles_for_prompt_plain_text(
-            character_names,
-            chapter_number - 1,
-        )
-    )
-    world_building_plain_text = await get_filtered_world_data_for_prompt_plain_text(
-        world_item_ids_by_category,
-        chapter_number - 1,
-    )
-    kg_check_results_text = await get_reliable_kg_facts_for_drafting_prompt(
-        plot_outline, chapter_number, None
-    )
 
     plot_points_summary_lines = (
         [
@@ -244,10 +223,7 @@ async def perform_llm_comprehensive_evaluation(
             "protagonist_arc": plot_outline.get("character_arc", "N/A"),
             "logline": plot_outline.get("logline", "N/A"),
             "plot_points_summary_str": plot_points_summary_str,
-            "char_profiles_plain_text": char_profiles_plain_text,
-            "world_building_plain_text": world_building_plain_text,
-            "kg_check_results_text": kg_check_results_text,
-            "previous_chapters_context": previous_chapters_context,
+            "chapter_context": chapter_context,
             "draft_text": draft_text,
             "few_shot_eval_example_str": few_shot_eval_example_str,
         },
