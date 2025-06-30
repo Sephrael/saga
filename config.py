@@ -86,10 +86,10 @@ class SagaSettings(BaseSettings):
     NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
     # Base Model Definitions
-    LARGE_MODEL: str = "Qwen3-14B-Q4"
-    MEDIUM_MODEL: str = "Qwen3-8B-Q4"
-    SMALL_MODEL: str = "Qwen3-4B-Q4"
-    NARRATOR_MODEL: str = "Qwen3-14B-Q4"
+    LARGE_MODEL: str = "Qwen3-14B"
+    MEDIUM_MODEL: str = "Qwen3-8B"
+    SMALL_MODEL: str = "Qwen3-4B"
+    NARRATOR_MODEL: str = "Qwen3-14B"
 
     # Temperature Settings
     TEMPERATURE_INITIAL_SETUP: float = 0.8
@@ -217,7 +217,7 @@ class SagaSettings(BaseSettings):
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 5
     PATCH_GENERATION_ATTEMPTS: int = 1
     ENABLE_STRATEGIC_REWRITES: bool = True
-    REWRITE_TRIGGER_PROBLEM_COUNT: int = 5
+    REWRITE_TRIGGER_PROBLEM_COUNT: int = 6
     MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 16384
     PATCH_VALIDATION_THRESHOLD: int = 70
     REVISION_COHERENCE_THRESHOLD: float = 0.60
