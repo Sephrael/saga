@@ -8,6 +8,10 @@ Your task is to produce a single, compelling value for a specific field in a cha
 3.  Output a single, valid JSON object with one key: `{{ field_name }}`.
 4.  Do not include any other text or markdown.
 5.  If the context provides little information for this field, invent a reasonable detail consistent with the character's role and the novel's genre.
+6.  {% set descriptive_fields = ['description', 'summary', 'details', 'notes', 'background', 'appearance', 'personality', 'motivations', 'flaws', 'history', 'goals'] %}
+    {% if field_name.lower() in descriptive_fields %}
+    **For Descriptive Content:** When generating text for `{{ field_name }}`, ensure it is engaging and avoids repetitive phrasing or clichés. Use vivid language.
+    {% endif %}
 
 ---
 **NOVEL CONTEXT:**
