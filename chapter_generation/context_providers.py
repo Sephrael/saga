@@ -138,6 +138,34 @@ class KGReasoningProvider(ContextProvider):
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
 
 
+class CanonProvider(ContextProvider):
+    """Provide canonical truths to avoid contradictions."""
+
+    source = "canon"
+
+    def __init__(self, db_manager_instance: Any | None = None) -> None:
+        from core.db_manager import neo4j_manager as default_manager
+
+        self.neo4j = db_manager_instance or default_manager
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        query = (
+            "MATCH (c:Character)-[:HAS_TRAIT]->"
+            "(t:Trait {is_canonical_truth: true}) "
+            "RETURN c.name AS name, t.name AS trait"
+        )
+        records = await self.neo4j.execute_read_query(query)
+        lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
+        for rec in records:
+            name = rec.get("name")
+            trait = rec.get("trait")
+            if name and trait:
+                lines.append(f"- {name} is {trait}")
+        text = "\n".join(lines)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
 class PlanProvider(ContextProvider):
     """Provide the chapter scene plan."""
 

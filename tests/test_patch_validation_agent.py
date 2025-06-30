@@ -11,7 +11,7 @@ async def test_validation_rejects_below_threshold(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
     agent = PatchValidationAgent()
-    ok, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok, reason, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
     assert not ok
 
 
@@ -22,7 +22,7 @@ async def test_validation_accepts_at_threshold(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
     agent = PatchValidationAgent()
-    ok, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok, reason, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
     assert ok
 
 
@@ -39,7 +39,7 @@ async def test_rewrite_instruction_missing_keyword(monkeypatch):
             "rewrite_instruction": "mention the dragon",
         }
     ]
-    ok, _ = await agent.validate_patch(
+    ok, reason, _ = await agent.validate_patch(
         "ctx", {"replace_with": "A hero wins."}, problems
     )
     assert not ok
@@ -58,7 +58,7 @@ async def test_rewrite_instruction_keywords_present(monkeypatch):
             "rewrite_instruction": "mention the dragon",
         }
     ]
-    ok, _ = await agent.validate_patch(
+    ok, reason, _ = await agent.validate_patch(
         "ctx", {"replace_with": "The dragon appears."}, problems
     )
     assert ok

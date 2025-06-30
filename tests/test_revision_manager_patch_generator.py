@@ -69,7 +69,7 @@ async def test_patch_generator_failed_validation(monkeypatch):
             "replace_with": "Hi",
             "reason_for_change": "greet",
         }
-        ok, _ = await validator.validate_patch("", patch, problems)
+        ok, _reason, _ = await validator.validate_patch("", patch, problems)
         return ([patch] if ok else []), None
 
     async def fake_apply(orig, instr, *_args, **_kwargs):
@@ -78,7 +78,7 @@ async def test_patch_generator_failed_validation(monkeypatch):
 
     class FakeValidator:
         async def validate_patch(self, *_a, **_k):
-            return False, None
+            return False, None, None
 
     monkeypatch.setattr(
         patch_generator, "_generate_patch_instructions_logic", fake_generate
@@ -312,8 +312,8 @@ async def test_revision_manager_uses_noop_validator(monkeypatch):
 @pytest.mark.asyncio
 async def test_noop_validator_always_passes():
     validator = NoOpPatchValidator()
-    ok, usage = await validator.validate_patch("ctx", {}, [])
-    assert ok and usage is None
+    ok, reason, usage = await validator.validate_patch("ctx", {}, [])
+    assert ok and usage is None and reason is None
 
 
 @pytest.mark.asyncio

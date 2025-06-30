@@ -308,7 +308,7 @@ async def test_patch_validation_toggle(monkeypatch):
     async def fake_validate(*_args, **_kwargs):
         nonlocal called
         called = True
-        return True, None
+        return True, None, None
 
     monkeypatch.setattr(PatchValidationAgent, "validate_patch", fake_validate)
 
@@ -377,7 +377,7 @@ async def test_patch_validation_scores(monkeypatch):
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
 
     agent = PatchValidationAgent()
-    ok, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok, reason, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
     assert ok
 
     async def fake_call_low(*_args, **_kwargs):
@@ -385,7 +385,7 @@ async def test_patch_validation_scores(monkeypatch):
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call_low)
     agent2 = PatchValidationAgent()
-    ok2, _ = await agent2.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok2, reason2, _ = await agent2.validate_patch("ctx", {"replace_with": "x"}, [])
     assert not ok2
 
 
@@ -473,7 +473,7 @@ async def test_patch_generation_concurrent(monkeypatch):
         )
 
     async def fake_validate(*_args, **_kwargs):
-        return True, None
+        return True, None, None
 
     monkeypatch.setattr(
         patch_generator,

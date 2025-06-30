@@ -99,6 +99,11 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
     orchestrator.plot_outline = PlotOutline(plot_points=["Intro"])
     orchestrator.next_chapter_context = "prefetched"
     monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
+    monkeypatch.setattr(
+        orchestrator.pre_flight_agent,
+        "perform_core_checks",
+        AsyncMock(),
+    )
 
     async def fake_plan(*_args, **_kwargs):
         return ([{"scene_number": 1}], {"total_tokens": 1})

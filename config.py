@@ -188,6 +188,7 @@ class SagaSettings(BaseSettings):
     CONTEXT_CACHE_TTL: float = 600.0
     CONTEXT_PROVIDERS: list[str] = [
         "chapter_generation.context_providers.SemanticHistoryProvider",
+        "chapter_generation.context_providers.CanonProvider",
         "chapter_generation.context_providers.KGFactProvider",
         "chapter_generation.context_providers.KGReasoningProvider",
         "chapter_generation.context_providers.PlanProvider",
@@ -215,6 +216,8 @@ class SagaSettings(BaseSettings):
     AGENT_ENABLE_PATCH_VALIDATION: bool = True
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 5
     PATCH_GENERATION_ATTEMPTS: int = 1
+    ENABLE_STRATEGIC_REWRITES: bool = True
+    REWRITE_TRIGGER_PROBLEM_COUNT: int = 5
     MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 16384
     PATCH_VALIDATION_THRESHOLD: int = 70
     REVISION_COHERENCE_THRESHOLD: float = 0.60
@@ -233,7 +236,7 @@ class SagaSettings(BaseSettings):
 
     # De-duplication Configuration
     DEDUPLICATION_USE_SEMANTIC: bool = True
-    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85
+    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.80
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
     # Repetition Tracking

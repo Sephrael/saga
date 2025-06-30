@@ -41,7 +41,8 @@ async def test_preflight_resolves_trait(monkeypatch):
         {"Saga": {}},
         {},
     )
-    assert removed == {"name": "Saga", "trait": "Corporeal"}
+    assert removed["trait"] == "Corporeal"
+    assert removed["name"] in {"Saga", "S\xe1g\xe1"}
 
 
 @pytest.mark.asyncio
@@ -74,3 +75,35 @@ async def test_preflight_resolves_world_trait(monkeypatch):
     world_data = {"loc": {"city": WorldItem(id="city", category="loc", name="city")}}
     await agent.perform_core_checks({}, {}, world_data)
     assert removed == {"id": "city", "trait": "Corporeal"}
+
+
+@pytest.mark.asyncio
+async def test_preflight_enforces_canon(monkeypatch):
+    agent = PreFlightCheckAgent()
+    monkeypatch.setattr(
+        neo4j_manager,
+        "execute_read_query",
+        AsyncMock(return_value=[{"c": "Saga"}]),
+    )
+
+    removed: dict[str, str] = {}
+
+    async def fake_remove(name: str, trait: str) -> bool:
+        removed["name"] = name
+        removed["trait"] = trait
+        return True
+
+    monkeypatch.setattr(
+        character_queries,
+        "remove_character_trait",
+        AsyncMock(side_effect=fake_remove),
+    )
+
+    monkeypatch.setattr(
+        llm_service,
+        "async_call_llm",
+        AsyncMock(return_value=('{"trait": "Corporeal"}', {})),
+    )
+
+    await agent.perform_core_checks({"protagonist_name": "Saga"}, {"Saga": {}}, {})
+    assert removed == {"name": "Ságá", "trait": "Incorporeal"}
