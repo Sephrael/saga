@@ -16,6 +16,11 @@ logger = structlog.get_logger(__name__)
 
 CONTRADICTORY_TRAIT_PAIRS = [("Incorporeal", "Corporeal")]
 
+# Canonical facts that must always hold true
+CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = [
+    {"name": "Ságá", "trait": "Corporeal", "conflicts_with": "Incorporeal"}
+]
+
 
 class PreFlightCheckAgent:
     """Performs core contradiction checks before drafting."""
@@ -134,6 +139,18 @@ class PreFlightCheckAgent:
             for trait1, trait2 in CONTRADICTORY_TRAIT_PAIRS:
                 if await self._character_has_conflict(char_name, trait1, trait2):
                     await self._resolve_trait_conflict(char_name, trait1, trait2)
+
+        for fact in CANONICAL_FACTS_TO_ENFORCE:
+            if await self._character_has_conflict(
+                fact["name"], fact["trait"], fact["conflicts_with"]
+            ):
+                logger.warning(
+                    "Pre-flight check found canonical conflict for %s.",
+                    fact["name"],
+                )
+                await self._resolve_trait_conflict(
+                    fact["name"], fact["trait"], fact["conflicts_with"]
+                )
 
         if not world:
             return

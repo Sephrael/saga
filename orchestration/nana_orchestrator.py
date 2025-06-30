@@ -517,6 +517,26 @@ class NANA_Orchestrator:
         patched_spans: list[tuple[int, int]],
         is_from_flawed_source_for_kg: bool,
     ) -> tuple[str | None, str | None, bool, list[tuple[int, int]]]:
+        """Iteratively revise a chapter draft until it passes evaluation.
+
+        De-duplicates text at the start of each cycle, performs evaluation,
+        and applies patches or rewrites as needed.
+
+        Args:
+            novel_chapter_number: Sequential chapter number being processed.
+            current_text: Text to revise.
+            current_raw_llm_output: Raw LLM output for the current text.
+            plot_point_focus: Plot point focus for the chapter.
+            plot_point_index: Index of the plot point within the outline.
+            hybrid_context_for_draft: Combined contextual information for prompts.
+            chapter_plan: Optional plan for scenes in the chapter.
+            patched_spans: Already patched ranges to avoid re-editing.
+            is_from_flawed_source_for_kg: Whether the text is marked flawed.
+
+        Returns:
+            Tuple containing the revised text, raw output, flaw flag, and
+            patched spans.
+        """
         revisions_made = 0
         needs_revision = True
         last_eval_result: EvaluationResult | None = None
@@ -531,6 +551,19 @@ class NANA_Orchestrator:
                     attempt,
                 )
                 return None, None, True, patched_spans
+
+            (
+                current_text,
+                removed_chars,
+            ) = await self.perform_deduplication(current_text, novel_chapter_number)
+
+            if removed_chars > 0:
+                logger.info(
+                    "Ch %s Rev-Loop: De-duplication removed %s chars before evaluation.",
+                    novel_chapter_number,
+                    removed_chars,
+                )
+                is_from_flawed_source_for_kg = True
 
             (
                 eval_result_obj,

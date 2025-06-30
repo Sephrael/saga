@@ -882,6 +882,13 @@ class LLMService:
                     flags=re.IGNORECASE | re.MULTILINE,
                 ).strip()
 
+        cleaned_text = re.sub(
+            r"^\s*\*?\s*replace_with\s*:\s*",
+            "",
+            cleaned_text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        ).strip()
+
         final_text = cleaned_text.strip()
         final_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", final_text)
         final_text = re.sub(r"\n{3,}", "\n\n", final_text)

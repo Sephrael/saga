@@ -25,6 +25,7 @@
 ```plaintext
 {{ few_shot_patch_example_str }}
 ```
+{% if validation_failure_reason %}**Previous Attempt Failed Validation:** {{ validation_failure_reason }}. Please generate a new patch that corrects this.{% endif %}
 **Instructions for Generating Replacement Text:**
 1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{{ original_quote_text_from_problem }}` within the 'ORIGINAL TEXT SNIPPET'.
 2.  Generate a `replace_with` text according to the following:

@@ -72,7 +72,10 @@ class PatchValidationAgent:
             Sends a prompt to the LLM service and logs diagnostic information.
         """
 
-        issues_list = "\n".join(f"- {p.problem_description}" for p in problems)
+        issues_list = "\n".join(
+            f"- {getattr(p, 'problem_description', p.get('problem_description', ''))}"
+            for p in problems
+        )
         prompt = render_prompt(
             "patch_validation_agent/validate_patch.j2",
             {
@@ -102,23 +105,46 @@ class PatchValidationAgent:
                 break
         is_pass = score >= settings.PATCH_VALIDATION_THRESHOLD
 
+        failure_reason: str | None = None
         if not is_pass:
-            # Check if the failure was due to the score or the keywords
             score_is_ok = score >= settings.PATCH_VALIDATION_THRESHOLD
             if not score_is_ok:
+                failure_reason = f"Score {score} below threshold {settings.PATCH_VALIDATION_THRESHOLD}"
                 logger.info(
                     "Patch validation FAILED. Score %d is below threshold %d.",
                     score,
                     settings.PATCH_VALIDATION_THRESHOLD,
                 )
             else:
-                # If we are here, it means score was ok, but something else failed it.
-                # The keyword check already logs its own specific message.
+                failure_reason = (
+                    first_line.split(" ", 1)[1]
+                    if " " in first_line
+                    else "Validation failed"
+                )
                 logger.info(
                     "Patch validation FAILED due to a non-score-related issue (e.g., missing keywords). Final score was %d.",
-                    score
+                    score,
                 )
-        return is_pass, usage
+        patch_text_lower = patch.get("replace_with", "").lower()
+        keywords: list[str] = []
+        for p in problems:
+            instr = getattr(p, "rewrite_instruction", p.get("rewrite_instruction", ""))
+            for word in instr.split():
+                clean = word.strip(string.punctuation).lower()
+                if clean and clean not in STOPWORDS:
+                    keywords.append(clean)
+
+        missing_keywords = [kw for kw in keywords if kw not in patch_text_lower]
+        if missing_keywords:
+            logger.info(
+                "Patch validation FAILED due to missing keywords: %s",
+                ", ".join(missing_keywords),
+            )
+            is_pass = False
+            if failure_reason is None:
+                failure_reason = "missing required keywords"
+
+        return is_pass, failure_reason, usage
 
 
 class NoOpPatchValidator(PatchValidationAgent):
@@ -133,7 +159,7 @@ class NoOpPatchValidator(PatchValidationAgent):
         context_snippet: str,
         patch: PatchInstruction,
         problems: list[ProblemDetail],
-    ) -> tuple[bool, None]:
+    ) -> tuple[bool, None, None]:
         """Approve patches without validation.
 
         Args:
@@ -148,4 +174,4 @@ class NoOpPatchValidator(PatchValidationAgent):
         Side Effects:
             None.
         """
-        return True, None
+        return True, None, None

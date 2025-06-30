@@ -314,7 +314,9 @@ class RevisionManager:
                 "4.  Ensure seamless narrative flow with the **Hybrid Context**. Pay close attention to any `KEY RELIABLE KG FACTS` mentioned.",
                 f"5.  Maintain the novel's established tone, style, and genre ('{plot_outline.get('genre', 'story')}').",
                 f"6.  Target a substantial chapter length, aiming for at least {settings.MIN_ACCEPTABLE_DRAFT_LENGTH} characters of narrative text.",
-                '7.  Output ONLY the rewritten chapter text.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.',
+                "7.  **Show, Don't Tell:** Convert abstract statements from the original draft into concrete scenes. For example, instead of saying S\xe1g\xe1 felt a conflict, describe an action it takes and then immediately regrets, or a moment of hesitation before interacting with an object.",
+                '8.  **Avoid Lexical Repetition:** Do not overuse key thematic words (e.g., "purpose", "legacy", "silence", "unspoken"). If a concept must be revisited, express it through different phrasing, actions, or dialogue.',
+                '9.  Output ONLY the rewritten chapter text.** Do NOT include "Chapter X" headers, titles, author commentary, or any meta-discussion.',
                 "",
                 f"--- BEGIN REVISED CHAPTER {chapter_number} TEXT ---",
             ]
@@ -418,6 +420,12 @@ class RevisionManager:
         problems_to_fix = _deduplicate_problems(
             _consolidate_overlapping_problems(problems_to_fix)
         )
+
+        is_deeply_flawed = len(
+            problems_to_fix
+        ) > settings.REWRITE_TRIGGER_PROBLEM_COUNT or any(
+            p.issue_category == "narrative_depth_and_length" for p in problems_to_fix
+        )
         if not problems_to_fix and evaluation_result.needs_revision:
             logger.warning(
                 "Revision for ch %s explicitly requested, but no specific problems were itemized.",
@@ -441,6 +449,28 @@ class RevisionManager:
             chapter_number,
             revision_reason_str,
         )
+
+        if is_deeply_flawed and settings.ENABLE_STRATEGIC_REWRITES:
+            logger.info(
+                "Deeply flawed draft detected. Proceeding directly to full chapter rewrite."
+            )
+            final_text, final_raw, rewrite_usage = await self._perform_full_rewrite(
+                plot_outline,
+                original_text,
+                chapter_number,
+                problems_to_fix,
+                revision_reason_str,
+                hybrid_context_for_revision,
+                chapter_plan,
+                is_from_flawed_source,
+            )
+            _add_usage(rewrite_usage)
+            return (
+                (final_text, final_raw, []),
+                cumulative_usage_data
+                if cumulative_usage_data.total_tokens > 0
+                else None,
+            )
 
         patched_text: str | None = None
         all_spans_in_patched_text: list[tuple[int, int]] = list(already_patched_spans)

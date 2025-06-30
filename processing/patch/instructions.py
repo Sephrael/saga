@@ -30,6 +30,7 @@ async def _generate_single_patch_instruction_llm(
     hybrid_context_for_revision: str,
     chapter_plan: list[SceneDetail] | None,
     plot_point_focus: str | None,
+    validation_failure_reason: str | None = None,
 ) -> tuple[PatchInstruction | None, dict[str, int] | None]:
     """Generate a single patch instruction using the LLM.
 
@@ -43,6 +44,8 @@ async def _generate_single_patch_instruction_llm(
         hybrid_context_for_revision: Hybrid context string for continuity.
         chapter_plan: Optional scene plan for the chapter.
         plot_point_focus: Focus of the current plot point for fallback context.
+        validation_failure_reason: Feedback describing why the previous patch
+            attempt failed validation.
 
     Returns:
         A ``PatchInstruction`` with replacement text and optional token usage
@@ -189,6 +192,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             "length_expansion_instruction_header_str": length_expansion_instruction_header_str,
             "few_shot_patch_example_str": few_shot_patch_example_str.strip(),
             "prompt_instruction_for_replacement_scope_str": prompt_instruction_for_replacement_scope_str,
+            "validation_failure_reason": validation_failure_reason,
         },
     )
 
@@ -257,8 +261,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         original_quote_text_from_problem != "N/A - General Issue"
         and (target_start_for_patch is None or target_end_for_patch is None)
         and (
-            problem.quote_char_start is not None
-            and problem.quote_char_end is not None
+            problem.quote_char_start is not None and problem.quote_char_end is not None
         )
     ):
         logger.warning(
@@ -299,8 +302,7 @@ def _consolidate_overlapping_problems(
     span_problems = [
         p
         for p in problems
-        if p.sentence_char_start is not None
-        and p.sentence_char_end is not None
+        if p.sentence_char_start is not None and p.sentence_char_end is not None
     ]
     general_problems = [
         p
@@ -403,26 +405,30 @@ def _group_problems_for_patch_generation(
     if not problems:
         return []
 
+    def _get(problem: ProblemDetail, field: str) -> Any:
+        return getattr(problem, field, problem.get(field))
+
     span_problems = [
         p
         for p in problems
-        if p.sentence_char_start is not None
-        and p.sentence_char_end is not None
+        if _get(p, "sentence_char_start") is not None
+        and _get(p, "sentence_char_end") is not None
     ]
     general_problems = [
         p
         for p in problems
-        if p.sentence_char_start is None or p.sentence_char_end is None
+        if _get(p, "sentence_char_start") is None
+        or _get(p, "sentence_char_end") is None
     ]
 
-    span_problems.sort(key=lambda p: p.sentence_char_start)
+    span_problems.sort(key=lambda p: _get(p, "sentence_char_start"))
     merged_groups: list[list[ProblemDetail]] = []
     if span_problems:
         current_group = [span_problems[0]]
-        current_end = span_problems[0]["sentence_char_end"]
+        current_end = _get(span_problems[0], "sentence_char_end")
         for prob in span_problems[1:]:
-            start = prob.sentence_char_start
-            end = prob.sentence_char_end
+            start = _get(prob, "sentence_char_start")
+            end = _get(prob, "sentence_char_end")
             if start < current_end:
                 current_group.append(prob)
                 current_end = max(current_end, end)
@@ -436,22 +442,24 @@ def _group_problems_for_patch_generation(
 
     for group in merged_groups:
         first = group[0]
-        group_start = min(p.sentence_char_start for p in group)
-        group_end = max(p.sentence_char_end for p in group)
-        all_cats = sorted(list(set(p.issue_category for p in group)))
+        group_start = min(_get(p, "sentence_char_start") for p in group)
+        group_end = max(_get(p, "sentence_char_end") for p in group)
+        all_cats = sorted(list(set(_get(p, "issue_category") for p in group)))
         all_desc = "; ".join(
-            f"({p.issue_category}) {p.problem_description}" for p in group
+            f"({_get(p, 'issue_category')}) {_get(p, 'problem_description')}"
+            for p in group
         )
         all_fix = "; ".join(
-            f"({p.issue_category}) {p.suggested_fix_focus}" for p in group
+            f"({_get(p, 'issue_category')}) {_get(p, 'suggested_fix_focus')}"
+            for p in group
         )
-        rep_quote = first["quote_from_original_text"]
+        rep_quote = _get(first, "quote_from_original_text")
         consolidated = ProblemDetail(
             issue_category=", ".join(all_cats),
             problem_description=f"Multiple issues in one segment: {all_desc}",
             quote_from_original_text=rep_quote,
-            quote_char_start=first.get("quote_char_start"),
-            quote_char_end=first.get("quote_char_end"),
+            quote_char_start=_get(first, "quote_char_start"),
+            quote_char_end=_get(first, "quote_char_end"),
             sentence_char_start=group_start,
             sentence_char_end=group_end,
             suggested_fix_focus=f"Holistically revise the segment to address all points: {all_fix}",
@@ -502,6 +510,7 @@ async def _generate_patch_instructions_logic(
 
         patch_instr: PatchInstruction | None = None
         usage_acc = TokenUsage()
+        validation_reason: str | None = None
 
         for _ in range(settings.PATCH_GENERATION_ATTEMPTS):
             patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
@@ -513,6 +522,7 @@ async def _generate_patch_instructions_logic(
                 hybrid_context_for_revision,
                 chapter_plan,
                 plot_point_focus,
+                validation_failure_reason=validation_reason,
             )
             if usage:
                 usage_acc.add(usage)
@@ -521,7 +531,7 @@ async def _generate_patch_instructions_logic(
             if not settings.AGENT_ENABLE_PATCH_VALIDATION:
                 patch_instr = patch_instr_tmp
                 break
-            valid, val_usage = await validator.validate_patch(
+            valid, validation_reason, val_usage = await validator.validate_patch(
                 context_snippet, patch_instr_tmp, group_members
             )
             if val_usage:

@@ -1,5 +1,8 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from chapter_generation.context_providers import (
+    CanonProvider,
     ContextRequest,
     KGFactProvider,
     KGReasoningProvider,
@@ -52,3 +55,20 @@ async def test_kg_reasoning_provider(monkeypatch):
     request = ContextRequest(2, None, {})
     chunk = await provider.get_context(request)
     assert chunk.text == "guide"
+
+
+@pytest.mark.asyncio
+async def test_canon_provider(monkeypatch):
+    async def fake_query(*_args, **_kwargs):
+        return [{"name": "S\xe1g\xe1", "trait": "Corporeal"}]
+
+    monkeypatch.setattr(
+        "core.db_manager.neo4j_manager.execute_read_query",
+        AsyncMock(side_effect=fake_query),
+    )
+
+    provider = CanonProvider()
+    request = ContextRequest(1, None, {})
+    chunk = await provider.get_context(request)
+    assert "CANONICAL TRUTHS" in chunk.text
+    assert "S\xe1g\xe1" in chunk.text

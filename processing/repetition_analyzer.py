@@ -98,5 +98,7 @@ class RepetitionAnalyzer:
                 processed_sentence_starts.add(start_char)
 
         if problems:
-            logger.info("RepetitionAnalyzer found %s problematic sentences.", len(problems))
+            logger.info(
+                "RepetitionAnalyzer found %s problematic sentences.", len(problems)
+            )
         return problems

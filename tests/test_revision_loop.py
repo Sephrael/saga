@@ -66,3 +66,75 @@ async def test_revision_loop_retries_on_failure(monkeypatch):
     )
     assert result[0].startswith("fixed")
     assert call_counter["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_revision_loop_deduplicates_each_cycle(monkeypatch):
+    orch = DummyOrchestrator()
+    monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(orch, "_save_debug_output", _noop)
+    monkeypatch.setattr(orch, "_accumulate_tokens", lambda *a, **k: None)
+    monkeypatch.setattr(
+        character_queries,
+        "get_character_profiles_from_db",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(
+        world_queries,
+        "get_world_building_from_db",
+        AsyncMock(return_value={}),
+    )
+
+    eval_calls = {"count": 0}
+
+    async def fake_eval(*_args, **_kwargs):
+        eval_calls["count"] += 1
+        if eval_calls["count"] == 1:
+            return (
+                {"needs_revision": True, "problems_found": [], "reasons": ["bad"]},
+                [],
+                {},
+                {},
+                [],
+            )
+        return (
+            {"needs_revision": False, "problems_found": [], "reasons": []},
+            [],
+            {},
+            {},
+            [],
+        )
+
+    async def fake_revise(*_a, **_k):
+        return ("revised", None, []), {}
+
+    dedup_calls: list[str] = []
+
+    async def fake_dedup(text: str, _num: int) -> tuple[str, int]:
+        dedup_calls.append(text)
+        return text + "_d", 1
+
+    monkeypatch.setattr(
+        orch, "perform_deduplication", AsyncMock(side_effect=fake_dedup)
+    )
+    monkeypatch.setattr(orch, "_run_evaluation_cycle", fake_eval)
+    monkeypatch.setattr(orch.revision_manager, "revise_chapter", fake_revise)
+
+    result = await orch._run_revision_loop(
+        1,
+        "start",
+        "raw",
+        "focus",
+        0,
+        "ctx",
+        None,
+        [],
+        False,
+    )
+    assert result[0].endswith("_d")
+    assert result[2]
+    assert len(dedup_calls) == 2
