@@ -20,6 +20,12 @@ Your task is to produce a single, compelling value for a specific field in a wor
 {{ context.world_item | tojson(indent=2) }}
 ```
 ---
+{% if context.exclusion_list and field_name == 'name' %}
+**CRITICAL INSTRUCTION: NAME GENERATION**
+You have already generated the following names in this session. You **MUST NOT** use any of these names again. Provide a completely new and different name.
+**Forbidden Names:** `{{ context.exclusion_list | join(', ') }}`
+{% endif %}
+---
 
 **FIELD TO GENERATE:** `{{ field_name }}` for world item `{{ context.world_item.name }}` in category `{{ context.world_item.category }}`
 

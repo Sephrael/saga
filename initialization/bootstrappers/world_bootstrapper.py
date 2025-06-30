@@ -118,101 +118,64 @@ async def bootstrap_world(
                 else:
                     overview_item_obj.properties["source"] = "descr_bootstrapped"
 
-    # Stage 1: Bootstrap names for [Fill-in] items
-    name_bootstrap_tasks: dict[tuple[str, str], Coroutine] = {}
+    # Stage 1: Bootstrap names for [Fill-in] items (NEW SEQUENTIAL LOGIC)
+    logger.info("Starting sequential name bootstrapping to prevent duplicates...")
+    generated_names_this_run: list[str] = []
+    items_to_rename: list[dict] = []
+
     for category, items_dict in world_building.items():
         if not isinstance(items_dict, dict) or category == "_overview_":
             continue
-        for item_name, item_obj in items_dict.items():
-            if isinstance(item_obj, WorldItem) and utils._is_fill_in(item_obj.name):
-                logger.info(
-                    "Identified item for name bootstrapping in category '%s': Current name '%s'",
-                    category,
-                    item_name,
-                )
-                task_key = (category, item_name)
-                context_data = {
-                    "world_item": item_obj.to_dict(),
-                    "plot_outline": plot_outline,
-                    "target_category": category,
-                }
-                name_bootstrap_tasks[task_key] = bootstrap_field(
-                    "name", context_data, "bootstrapper/fill_world_item_field.j2"
-                )
+        # Find all fill-in items for this category
+        fill_in_keys = [
+            item_name
+            for item_name, item_obj in items_dict.items()
+            if isinstance(item_obj, WorldItem) and utils._is_fill_in(item_obj.name)
+        ]
+        
+        for fill_in_key in fill_in_keys:
+            item_obj = items_dict[fill_in_key]
+            logger.info(f"Bootstrapping name for item in category '{category}'...")
+            
+            context_data = {
+                "world_item": item_obj.to_dict(),
+                "plot_outline": plot_outline,
+                "target_category": category,
+                "exclusion_list": generated_names_this_run, # Pass the list of used names
+            }
 
-    if name_bootstrap_tasks:
-        logger.info(
-            "Found %d items requiring name bootstrapping.", len(name_bootstrap_tasks)
-        )
-        name_results_list = await asyncio.gather(*name_bootstrap_tasks.values())
-        name_task_keys = list(name_bootstrap_tasks.keys())
-
-        new_items_to_add_stage1: dict[str, dict[str, WorldItem]] = {}
-        items_to_remove_stage1: dict[str, list[str]] = {}
-
-        for i, (new_name_value, name_usage) in enumerate(name_results_list):
+            new_name_value, name_usage = await bootstrap_field(
+                "name", context_data, "bootstrapper/fill_world_item_field.j2"
+            )
             _accumulate_usage(name_usage)
-            original_category, original_fill_in_name = name_task_keys[i]
 
-            if (
-                new_name_value
-                and isinstance(new_name_value, str)
-                and not utils._is_fill_in(new_name_value)
-                and new_name_value != settings.FILL_IN
-            ):
-                original_item_obj = world_building[original_category][
-                    original_fill_in_name
-                ]
-
-                if new_name_value in world_building[
-                    original_category
-                ] or new_name_value in new_items_to_add_stage1.get(
-                    original_category, {}
-                ):
-                    logger.warning(
-                        "Name bootstrap for '%s/%s' resulted in a duplicate name '%s'. Skipping this item.",
-                        original_category,
-                        original_fill_in_name,
-                        new_name_value,
-                    )
-                    continue
-
-                logger.info(
-                    "Successfully bootstrapped name for '%s/%s': New name is '%s'",
-                    original_category,
-                    original_fill_in_name,
-                    new_name_value,
-                )
-                new_item_renamed = WorldItem.from_dict(
-                    original_category, new_name_value, original_item_obj.properties
-                )
-                new_item_renamed.properties["source"] = "bootstrapped_name"
-
-                new_items_to_add_stage1.setdefault(original_category, {})[
-                    new_name_value
-                ] = new_item_renamed
-                items_to_remove_stage1.setdefault(original_category, []).append(
-                    original_fill_in_name
-                )
+            if new_name_value and isinstance(new_name_value, str) and not utils._is_fill_in(new_name_value):
+                logger.info(f"Generated new name '{new_name_value}' for category '{category}'.")
+                generated_names_this_run.append(new_name_value)
+                items_to_rename.append({
+                    "category": category,
+                    "old_name": fill_in_key,
+                    "new_name": new_name_value,
+                    "item_obj": item_obj
+                })
             else:
-                logger.warning(
-                    "Name bootstrapping failed for item in category '%s' (original key: '%s'). Received: '%s'",
-                    original_category,
-                    original_fill_in_name,
-                    new_name_value,
-                )
+                logger.warning(f"Failed to bootstrap a valid name for item in category '{category}'.")
 
-        for cat, names_to_remove in items_to_remove_stage1.items():
-            for name_key in names_to_remove:
-                if name_key in world_building[cat]:
-                    del world_building[cat][name_key]
-        for cat, new_items_map in new_items_to_add_stage1.items():
-            if cat not in world_building:
-                world_building[cat] = {}
-            world_building[cat].update(new_items_map)
-        logger.info(
-            "Finished applying name changes from Stage 1 to world_building structure."
-        )
+    # Now, apply the renames after the loop
+    for rename_op in items_to_rename:
+        cat = rename_op["category"]
+        old_name = rename_op["old_name"]
+        new_name = rename_op["new_name"]
+        item_obj = rename_op["item_obj"]
+
+        # Remove the old placeholder
+        if old_name in world_building[cat]:
+            del world_building[cat][old_name]
+        
+        # Add the new, named item
+        new_item = WorldItem.from_dict(cat, new_name, item_obj.properties)
+        new_item.properties["source"] = "bootstrapped_name"
+        world_building[cat][new_name] = new_item
 
     # Stage 2: Bootstrap properties for all items (excluding _overview_ top-level)
     property_bootstrap_tasks: dict[tuple[str, str, str], Coroutine] = {}
