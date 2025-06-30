@@ -56,7 +56,7 @@ class DraftingAgent:
             prompt = render_prompt(
                 "drafting_agent/draft_chapter_from_plot_point.j2",
                 {
-                    "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                    "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                     "chapter_number": chapter_number,
                     "novel_title": plot_outline.get("title", "Untitled Novel"),
                     "novel_genre": plot_outline.get("genre", "Unknown Genre"),
@@ -131,7 +131,7 @@ class DraftingAgent:
                 prompt = render_prompt(
                     "drafting_agent/draft_scene.j2",
                     {
-                        "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                        "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                         "chapter_number": chapter_number,
                         "novel_title": novel_title,
                         "novel_genre": novel_genre,

@@ -212,7 +212,7 @@ async def perform_llm_comprehensive_evaluation(
     prompt = render_prompt(
         "comprehensive_evaluator_agent/evaluate_chapter.j2",
         {
-            "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
             "chapter_number": chapter_number,
             "novel_title": plot_outline.get("title", "Untitled Novel"),
             "protagonist_name_str": protagonist_name_str,

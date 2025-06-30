@@ -36,7 +36,7 @@ async def _llm_summarize_full_chapter_text(
     prompt = render_prompt(
         "kg_maintainer_agent/chapter_summary.j2",
         {
-            "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
             "chapter_number": chapter_number,
             "chapter_text": chapter_text,
         },
@@ -267,7 +267,7 @@ class KGMaintainerAgent:
         prompt = render_prompt(
             "kg_maintainer_agent/extract_updates.j2",
             {
-                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "protagonist": protagonist,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
