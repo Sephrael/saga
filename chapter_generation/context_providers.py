@@ -64,50 +64,61 @@ class SemanticHistoryProvider(ContextProvider):
         self.llm_service = llm_service_instance or default_llm_service
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        plot_points = request.plot_outline.get("plot_points", [])
-        plot_focus = None
-        if isinstance(plot_points, list) and 0 < request.chapter_number <= len(
-            plot_points
-        ):
-            plot_focus = plot_points[request.chapter_number - 1]
-        query_text = (
-            str(plot_focus)
-            if plot_focus is not None
-            else f"Narrative context relevant to events leading up to chapter {request.chapter_number}."
-        )
-        embedding = await self.llm_service.async_get_embedding(query_text)
-        similar = await self.chapter_queries.find_similar_chapters_in_db(
-            embedding,
-            5,
-            request.chapter_number,
-        )
-
-        lines: list[str] = []
-        start = max(1, request.chapter_number - 2)
-        for i in range(start, request.chapter_number):
-            chap = await self.chapter_queries.get_chapter_data_from_db(i)
-            if chap:
-                content = chap.get("summary") or chap.get("text", "")
-                lines.append(f"[Immediate Context from Chapter {i}]:\n{content}\n---\n")
-
-        if similar:
-            for item in sorted(
-                similar,
-                key=lambda x: x.get("score", 0.0)
-                * (0.95 ** (request.chapter_number - int(x.get("chapter_number", 0)))),
-                reverse=True,
+        try:
+            plot_points = request.plot_outline.get("plot_points", [])
+            plot_focus = None
+            if isinstance(plot_points, list) and 0 < request.chapter_number <= len(
+                plot_points
             ):
-                num = item.get("chapter_number")
-                content = item.get("summary") or item.get("text", "")
-                if num and content:
-                    score = item.get("score", 0)
+                plot_focus = plot_points[request.chapter_number - 1]
+            query_text = (
+                str(plot_focus)
+                if plot_focus is not None
+                else f"Narrative context relevant to events leading up to chapter {request.chapter_number}."
+            )
+            embedding = await self.llm_service.async_get_embedding(query_text)
+            similar = await self.chapter_queries.find_similar_chapters_in_db(
+                embedding,
+                5,
+                request.chapter_number,
+            )
+
+            lines: list[str] = []
+            start = max(1, request.chapter_number - 2)
+            for i in range(start, request.chapter_number):
+                chap = await self.chapter_queries.get_chapter_data_from_db(i)
+                if chap:
+                    content = chap.get("summary") or chap.get("text", "")
                     lines.append(
-                        f"[Semantic Context from Chapter {num} (Similarity: {score})]:\n{content}\n---\n"
+                        f"[Immediate Context from Chapter {i}]:\n{content}\n---\n"
                     )
 
-        text = "".join(lines).strip()
-        tokens = count_tokens(text, "dummy")
-        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+            if similar:
+                for item in sorted(
+                    similar,
+                    key=lambda x: x.get("score", 0.0)
+                    * (
+                        0.95
+                        ** (request.chapter_number - int(x.get("chapter_number", 0)))
+                    ),
+                    reverse=True,
+                ):
+                    num = item.get("chapter_number")
+                    content = item.get("summary") or item.get("text", "")
+                    if num and content:
+                        score = item.get("score", 0)
+                        lines.append(
+                            f"[Semantic Context from Chapter {num} (Similarity: {score})]:\n{content}\n---\n"
+                        )
+
+            text = "".join(lines).strip()
+            tokens = count_tokens(text, "dummy")
+            return ContextChunk(
+                text=text, tokens=tokens, provenance={}, source=self.source
+            )
+        except Exception as exc:  # pragma: no cover - log and return empty
+            logger.error("SemanticHistoryProvider failed", error=exc, exc_info=True)
+            return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
 
 
 class KGFactProvider(ContextProvider):
@@ -284,7 +295,16 @@ class StateContextProvider(ContextProvider):
         prev_chapter = request.chapter_number - 1
         if prev_chapter <= 0:
             return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
-        data = await self.chapter_queries.get_chapter_data_from_db(prev_chapter)
+        try:
+            data = await self.chapter_queries.get_chapter_data_from_db(prev_chapter)
+        except Exception as exc:  # pragma: no cover - log and return empty
+            logger.error(
+                "StateContextProvider failed to load chapter",
+                chapter=prev_chapter,
+                error=exc,
+                exc_info=True,
+            )
+            return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
         if not data or not data.get("end_state_json"):
             return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
         try:
