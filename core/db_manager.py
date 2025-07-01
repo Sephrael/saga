@@ -1,4 +1,4 @@
-# core_db/base_db_manager.py
+# core_db/db_manager.py
 from typing import Any
 
 import numpy as np
