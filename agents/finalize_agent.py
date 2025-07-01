@@ -78,9 +78,12 @@ class FinalizeAgent:
             final_text,
             from_flawed_draft,
         )
+        end_state_task = self.kg_agent.generate_chapter_end_state(
+            final_text, chapter_number
+        )
 
-        (summary_data, embedding, kg_usage) = await asyncio.gather(
-            summary_task, embedding_task, kg_task
+        (summary_data, embedding, kg_usage, end_state) = await asyncio.gather(
+            summary_task, embedding_task, kg_task, end_state_task
         )
         summary, summary_usage = summary_data
 
@@ -91,6 +94,7 @@ class FinalizeAgent:
             summary,
             embedding,
             from_flawed_draft,
+            end_state.model_dump(),
         )
 
         return {

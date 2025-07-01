@@ -25,6 +25,8 @@ from parsing_utils import (
 )
 from prompt_renderer import render_prompt
 
+from models.agent_models import ChapterEndState
+
 logger = structlog.get_logger(__name__)
 
 
@@ -231,6 +233,38 @@ class KGMaintainerAgent:
                 exc_info=True,
             )
             return None, None
+
+    async def generate_chapter_end_state(
+        self, chapter_text: str, chapter_number: int
+    ) -> ChapterEndState:
+        """Generate a structured snapshot of the chapter's final state."""
+
+        prompt = render_prompt(
+            "kg_maintainer_agent/chapter_end_state.j2",
+            {
+                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "chapter_text": chapter_text,
+            },
+        )
+        try:
+            response, _ = await llm_service.async_call_llm(
+                model_name=settings.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_KG_EXTRACTION,
+                max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
+                auto_clean_response=True,
+            )
+            data = json.loads(response)
+            return ChapterEndState.model_validate(data)
+        except Exception as exc:  # pragma: no cover - heavy I/O
+            logger.error(
+                "Failed to generate chapter end state for ch %s: %s",
+                chapter_number,
+                exc,
+                exc_info=True,
+            )
+            raise
 
     def _extract_character_names_from_text(self, text: str) -> list[str]:
         """Return a list of probable character names from ``text``."""

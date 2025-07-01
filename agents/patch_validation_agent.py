@@ -73,7 +73,7 @@ class PatchValidationAgent:
         """
 
         issues_list = "\n".join(
-            f"- {getattr(p, 'problem_description', p.problem_description, '')}"
+            f"- {p.get('problem_description', '') if isinstance(p, dict) else p.problem_description}"
             for p in problems
         )
         prompt = render_prompt(
@@ -128,7 +128,11 @@ class PatchValidationAgent:
         patch_text_lower = patch.get("replace_with", "").lower()
         keywords: list[str] = []
         for p in problems:
-            instr = getattr(p, "rewrite_instruction", p.rewrite_instruction, "")
+            instr = (
+                p.get("rewrite_instruction", "")
+                if isinstance(p, dict)
+                else p.rewrite_instruction
+            )
             for word in instr.split():
                 clean = word.strip(string.punctuation).lower()
                 if clean and clean not in STOPWORDS:
