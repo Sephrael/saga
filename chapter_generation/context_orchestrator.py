@@ -7,6 +7,8 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
+import json
+
 import structlog
 from config import settings
 from core.llm_interface import count_tokens, truncate_text_by_tokens
@@ -52,10 +54,19 @@ class ContextOrchestrator:
 
     async def build_context(self, request: ContextRequest) -> str:
         """Return an ordered context string for the request."""
+        agent_key = None
+        if request.agent_hints:
+            try:
+                agent_key = json.dumps(request.agent_hints, sort_keys=True, default=str)
+            except Exception as exc:  # pragma: no cover - log and continue
+                logger.warning(
+                    "Failed to serialize agent hints for cache key", error=exc
+                )
+
         cache_key = (
             request.chapter_number,
             request.plot_focus,
-            tuple(sorted(request.agent_hints.items())) if request.agent_hints else None,
+            agent_key,
         )
         cached = self.cache.get(cache_key)
         if cached:
