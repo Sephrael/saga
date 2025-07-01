@@ -25,3 +25,17 @@ async def test_orchestrator_truncates(monkeypatch):
     out = await orch.build_context(req)
     assert "A" in out
     assert "B" not in out or "defghij" not in out
+
+
+@pytest.mark.asyncio
+async def test_agent_hints_cache_key():
+    orch = ContextOrchestrator([DummyProvider("abc", "A")])
+    req = ContextRequest(
+        1,
+        None,
+        {},
+        agent_hints={"notes": ["a", {"b": 1}]},
+    )
+    out1 = await orch.build_context(req)
+    out2 = await orch.build_context(req)
+    assert out1 == out2
