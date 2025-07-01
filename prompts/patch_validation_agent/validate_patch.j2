@@ -1,13 +1,10 @@
 /no_think
-You are a meticulous editor checking whether a proposed patch resolves all listed issues without harming continuity.
+You are a meticulous editor. Does the "Proposed Replacement Text" successfully fix the "Identified Problem"?
+Analyze the problem description, the quote, and the proposed replacement.
 
-**Context Snippet:**
-{{ context_snippet }}
+**Identified Problem:** {{ problem.problem_description if problem else "" }}
+**Original Quote from Text:** "{{ problem.quote_from_original_text if problem else "" }}"
+**Proposed Replacement Text:** "{{ patch.replace_with }}"
 
-**Patch Text:**
-{{ patch_text }}
-
-**Issues to Resolve:**
-{{ issues_list }}
-
-Respond with a single line beginning with a number from 0-100 indicating how well the patch resolves the issues (100 = fully resolved). Optionally add a brief reason after the number.
+Respond with a single word on the first line: YES or NO.
+On the second line, provide a one-sentence justification for your answer.

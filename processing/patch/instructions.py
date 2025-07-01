@@ -1,3 +1,4 @@
+# processing/patch/instructions.py
 """Patch instruction generation utilities."""
 
 import asyncio
@@ -192,7 +193,12 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
             "length_expansion_instruction_header_str": length_expansion_instruction_header_str,
             "few_shot_patch_example_str": few_shot_patch_example_str.strip(),
             "prompt_instruction_for_replacement_scope_str": prompt_instruction_for_replacement_scope_str,
-            "validation_failure_reason": validation_failure_reason,
+            "validation_failure_reason": (
+                f"The previous attempt to fix this issue failed validation for the following reason: '{validation_failure_reason}'. "
+                "Your new `replace_with` text MUST address this feedback directly."
+                if validation_failure_reason
+                else None
+            ),
         },
     )
 
