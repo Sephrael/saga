@@ -4,121 +4,151 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from collections.abc import Iterable
-from typing import Any
+from typing import Dict, List, Optional
 
-import structlog
-from config import settings
-from core.llm_interface import count_tokens, truncate_text_by_tokens
+from core.db_manager import DBManager
+from core.llm_interface import LLMInterface
+from data_access.character_queries import CharacterQueries
+from data_access.plot_queries import PlotQueries
+from data_access.world_queries import WorldQueries
+from models.agent_models import ChapterInfo
+from models.user_input_models import UserInput
+from processing.repetition_tracker import RepetitionTracker
+from prompt_renderer import PromptRenderer
+from utils.logging import get_logger
 
-from models.agent_models import SceneDetail
+from .context_providers import (
+    BaseContextProvider,
+    CanonicalContextProvider,
+    CharacterContextProvider,
+    PlotContextProvider,
+    PreviousSceneContextProvider,
+    RepetitionContextProvider,
+    WorldContextProvider,
+)
 
-from .context_providers import ContextChunk, ContextProvider, ContextRequest
-
-logger = structlog.get_logger(__name__)
-
-
-class TTLCache:
-    """Simple TTL-based LRU cache."""
-
-    def __init__(self, maxsize: int, ttl: float) -> None:
-        self.maxsize = maxsize
-        self.ttl = ttl
-        self._data: dict[tuple, tuple[float, str]] = {}
-
-    def get(self, key: tuple) -> str | None:
-        item = self._data.get(key)
-        if not item:
-            return None
-        ts, value = item
-        if time.time() - ts > self.ttl:
-            del self._data[key]
-            return None
-        return value
-
-    def set(self, key: tuple, value: str) -> None:
-        if len(self._data) >= self.maxsize:
-            oldest = sorted(self._data.items(), key=lambda x: x[1][0])[0][0]
-            del self._data[oldest]
-        self._data[key] = (time.time(), value)
+logger = get_logger(__name__)
 
 
 class ContextOrchestrator:
-    """Gather and merge context from configured providers."""
+    """Orchestrates the gathering of context from various providers."""
 
-    def __init__(self, providers: Iterable[ContextProvider]) -> None:
-        self.providers = list(providers)
-        self.cache = TTLCache(settings.CONTEXT_CACHE_SIZE, settings.CONTEXT_CACHE_TTL)
-
-    async def build_context(self, request: ContextRequest) -> str:
-        """Return an ordered context string for the request."""
-        cache_key = (
-            request.chapter_number,
-            request.plot_focus,
-            tuple(sorted(request.agent_hints.items())) if request.agent_hints else None,
-        )
-        cached = self.cache.get(cache_key)
-        if cached:
-            logger.debug("Context cache hit", key=cache_key)
-            return cached
-
-        tasks = [p.get_context(request) for p in self.providers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        chunks: list[ContextChunk] = []
-        for res in results:
-            if isinstance(res, ContextChunk):
-                chunks.append(res)
-            else:
-                logger.warning("Context provider error", error=res)
-
-        merged: list[str] = []
-        token_total = 0
-        for chunk in chunks:
-            if not chunk.text:
-                continue
-            prefix = f"[{chunk.source}]\n"
-            part = prefix + chunk.text
-            tokens = count_tokens(part, settings.DRAFTING_MODEL)
-            if token_total + tokens > settings.MAX_CONTEXT_TOKENS:
-                remaining = settings.MAX_CONTEXT_TOKENS - token_total
-                if remaining <= 0:
-                    break
-                part = truncate_text_by_tokens(part, settings.DRAFTING_MODEL, remaining)
-                merged.append(part)
-                token_total += remaining
-                break
-            merged.append(part)
-            token_total += tokens
-
-        final_context = "\n---\n".join(merged)
-        self.cache.set(cache_key, final_context)
-        logger.info("Built context", tokens=token_total)
-        return final_context
-
-    async def build_hybrid_context(
+    def __init__(
         self,
-        agent_or_props: Any,
-        current_chapter_number: int,
-        chapter_plan: list[SceneDetail] | None,
-    ) -> str:
-        """Backward compatible wrapper for build_context."""
-        if isinstance(agent_or_props, dict):
-            plot_outline = agent_or_props.get(
-                "plot_outline_full", agent_or_props.get("plot_outline", {})
-            )
-            plot_focus = None
-        else:
-            plot_outline = getattr(
-                agent_or_props, "plot_outline_full", None
-            ) or getattr(agent_or_props, "plot_outline", {})
-            plot_focus = getattr(agent_or_props, "plot_point_focus", None)
+        db_manager: DBManager,
+        user_input: UserInput,
+        repetition_tracker: RepetitionTracker,
+    ):
+        """
+        Initializes the ContextOrchestrator.
 
-        request = ContextRequest(
-            chapter_number=current_chapter_number,
-            plot_focus=plot_focus,
-            plot_outline=plot_outline,
-            chapter_plan=chapter_plan,
+        Args:
+            db_manager: An instance of DBManager.
+            user_input: An instance of UserInput.
+            repetition_tracker: An instance of RepetitionTracker.
+        """
+        self.db_manager = db_manager
+        self.user_input = user_input
+        self.repetition_tracker = repetition_tracker
+        self.prompt_renderer = PromptRenderer()
+        self.plot_queries = PlotQueries(db_manager)
+        self.character_queries = CharacterQueries(db_manager)
+        self.world_queries = WorldQueries(db_manager)
+
+    async def get_context_for_drafting(
+        self, chapter_info: ChapterInfo, previous_chapter_text: Optional[str] = None
+    ) -> str:
+        """Orchestrates fetching all context needed for drafting."""
+        logger.info("Orchestrating context for drafting...")
+
+        providers = self._get_context_providers(chapter_info, previous_chapter_text)
+        context_data = {}
+
+        logger.debug(f"Using {len(providers)} context providers.")
+
+        tasks = [provider.get_context() for provider in providers]
+        results = await asyncio.gather(*tasks)
+
+        for provider, result in zip(providers, results):
+            if result:
+                context_data[provider.name] = result
+
+        hybrid_context_for_draft = self._generate_hybrid_context(context_data)
+        log_file_path = (
+            self.user_input.story_file_path.parent
+            / "logs"
+            / f"hybrid_context_for_draft_ch_{chapter_info.chapter_number}.txt"
         )
-        return await self.build_context(request)
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file_path, "w") as f:
+            f.write(hybrid_context_for_draft)
+        logger.info(f"Hybrid context for draft saved to {log_file_path}")
+
+        return hybrid_context_for_draft
+
+    def _get_context_providers(
+        self, chapter_info: ChapterInfo, previous_chapter_text: Optional[str] = None
+    ) -> List[BaseContextProvider]:
+        """Initializes and returns a list of context providers."""
+        logger.debug("Initializing context providers...")
+        providers = [
+            CanonicalContextProvider(self.prompt_renderer, self.user_input),
+            PreviousSceneContextProvider(
+                self.prompt_renderer, previous_chapter_text
+            ),
+        ]
+
+        if chapter_info:
+            providers.extend(
+                [
+                    PlotContextProvider(
+                        self.prompt_renderer,
+                        self.db_manager,
+                        chapter_info,
+                        self.plot_queries,
+                    ),
+                    CharacterContextProvider(
+                        self.prompt_renderer,
+                        self.db_manager,
+                        chapter_info,
+                        self.character_queries,
+                    ),
+                    WorldContextProvider(
+                        self.prompt_renderer,
+                        self.db_manager,
+                        chapter_info,
+                        self.world_queries,
+                    ),
+                ]
+            )
+
+        providers.append(
+            RepetitionContextProvider(
+                self.prompt_renderer, self.repetition_tracker
+            )
+        )
+
+        logger.debug(f"Initialized {len(providers)} context providers.")
+        return providers
+
+    def _generate_hybrid_context(self, context_data: Dict[str, str]) -> str:
+        """Generates a hybrid context string from the collected data."""
+        # This is a simplified approach. You might want a more sophisticated
+        # template-based approach in the future.
+        context_parts = []
+        # Define the desired order of context sections
+        order = [
+            "canon",
+            "previous_scene",
+            "plot",
+            "characters",
+            "world",
+            "repetition",
+        ]
+
+        for key in order:
+            if key in context_data:
+                context_parts.append(context_data[key])
+
+        return "\n\n".join(context_parts)
+
