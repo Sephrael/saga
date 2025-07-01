@@ -1,5 +1,5 @@
-/no_think
-You are a world-building expert.
+{% if enable_no_think %}/no_think
+{% endif %}You are a world-building expert.
 Your task is to produce a single, compelling value for a specific field in a world element's profile using the provided context.
 
 **Instructions:**
@@ -8,6 +8,10 @@ Your task is to produce a single, compelling value for a specific field in a wor
 3.  Output a single, valid JSON object with one key: `{{ field_name }}`.
 4.  Do not include any other text or markdown.
 5.  If details are sparse, craft a value that plausibly expands on the world item's role.
+6.  {% set descriptive_fields = ['description', 'summary', 'details', 'notes', 'lore', 'appearance', 'atmosphere', 'properties', 'history', 'function', 'purpose', 'significance'] %}
+    {% if field_name.lower() in descriptive_fields and field_name.lower() != 'name' %}
+    **For Descriptive Content:** When generating text for `{{ field_name }}`, ensure it is evocative, detailed, and avoids repetitive phrasing or clichés. Use vivid and specific language to bring the world item to life.
+    {% endif %}
 
 ---
 **NOVEL CONTEXT:**

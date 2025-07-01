@@ -259,7 +259,7 @@ class PlannerAgent:
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
             {
-                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "target_scenes_min": settings.TARGET_SCENES_MIN,
                 "target_scenes_max": settings.TARGET_SCENES_MAX,
                 "chapter_number": chapter_number,

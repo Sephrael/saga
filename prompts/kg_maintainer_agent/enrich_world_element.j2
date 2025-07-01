@@ -1,5 +1,5 @@
-/no_think
-You are a knowledge graph enrichment expert for a creative writing project. You have been given a world element flagged as "thin" in the knowledge graph, meaning it lacks a core description.
+{% if enable_no_think %}/no_think
+{% endif %}You are a knowledge graph enrichment expert for a creative writing project. You have been given a world element flagged as "thin" in the knowledge graph, meaning it lacks a core description.
 
 Your task is to analyze the provided chapter context where this element appears and write a concise, canonical description for it.
 
@@ -24,7 +24,7 @@ No specific chapter context was found for this element. Base your description on
 
 **Instructions:**
 1. Based on the context, deduce the element's purpose, appearance, or key attributes.
-2. Write a single, concise, in-universe description for this world element.
+2. Write a single, concise, in-universe description for this world element. Ensure the description uses evocative language and avoids clichés or overly generic phrasing.
 3. Output a single, valid JSON object with one key: "description". Do not include any other text or markdown.
 
 **Ignore the narrative details in the below example. It shows the required format only.**

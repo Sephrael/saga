@@ -317,7 +317,7 @@ class ComprehensiveEvaluatorAgent:
         prompt = render_prompt(
             "world_continuity_agent/plan_consistency_check.j2",
             {
-                "no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "protagonist_name_str": protagonist_name_str,

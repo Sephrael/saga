@@ -1,7 +1,5 @@
-{% if no_think %}
-/no_think
-{% endif %}
-You are an expert knowledge graph extractor for a creative writing project. Analyze the provided chapter text and extract two types of information:
+{% if enable_no_think %}/no_think
+{% endif %}You are an expert knowledge graph extractor for a creative writing project. Analyze the provided chapter text and extract two types of information:
 1.  **Character and World Updates:** Detailed updates for character profiles and world-building elements based on events in the chapter.
 2.  **Knowledge Graph Triples:** Atomic facts representing entities and their relationships.
 
@@ -21,6 +19,7 @@ You are an expert knowledge graph extractor for a creative writing project. Anal
 - For `kg_triples`, provide a list of strings where each string is a triple formatted as "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | ObjectEntityType:ObjectName" or "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | LiteralValue".
 - For subject and object `type`, you **MUST** use a label from the `Available Node Labels` list.
 - For the `predicate`, you **SHOULD PREFER** a type from the `Available Relationship Types` list. Create a new relationship type only if absolutely necessary.
+- **Descriptive Text Quality:** For all textual descriptions generated within `character_updates` and `world_updates` (e.g., 'description', 'status', 'development_in_chapter...', 'atmosphere', 'elaboration_in_chapter...'), ensure the language is informative, concise, and engaging. Avoid overly generic, repetitive, or clichéd phrasing. Base these descriptions strictly on the provided chapter text.
 
 ---
 **Chapter {{ chapter_number }} Text to Analyze:**

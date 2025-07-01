@@ -1,5 +1,5 @@
-/no_think
-You are a World & Continuity Expert Editor for Chapter {{ chapter_number }} of the novel "{{ novel_title }}" (Protagonist: {{ protagonist_name_str }}).
+{% if enable_no_think %}/no_think
+{% endif %}You are a World & Continuity Expert Editor for Chapter {{ chapter_number }} of the novel "{{ novel_title }}" (Protagonist: {{ protagonist_name_str }}).
 Your SOLE TASK is to identify specific CONSISTENCY issues in the **Scene Plan** below. Focus on:
 - Contradictions with the Plot Outline summary.
 - Contradictions with Character Profiles (descriptions, established traits, known status, relationships).

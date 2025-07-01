@@ -1,6 +1,5 @@
-/no_think
-
-You are an expert novelist, winner of the Pulitzer Prize in Fiction, capable of crafting a novel in any style or genre, drawing on extensive literary knowledge and techniques to generate creative, engaging narratives that has been tasked with writing a single scene.
+{% if enable_no_think %}/no_think
+{% endif %}You are an expert novelist, winner of the Pulitzer Prize in Fiction, capable of crafting a novel in any style or genre, drawing on extensive literary knowledge and techniques to generate creative, engaging narratives that has been tasked with writing a single scene.
 
 **Novel Details:**
 - Title: {{ novel_title }}
@@ -27,10 +26,12 @@ You are an expert novelist, winner of the Pulitzer Prize in Fiction, capable of 
 3. Weave the provided KG facts and world details seamlessly into the scene.
    Ignoring or contradicting them will result in a penalty, while subtle,
    "show, don't tell" usage is rewarded.
-4. Aim for at least {{ min_length_per_scene }} characters of text.
-5. Let the scene's themes emerge through action, subtext, and metaphorical imagery rather than direct exposition or deus ex machina.
-6. **Writing Style Guide:** Focus on "showing, not telling." Instead of stating an emotion (e.g., "Ságá was confused"), describe the physical actions, sensory details, or internal thoughts that imply the emotion. Ground abstract concepts in concrete descriptions.
-7. **Avoid Lexical Repetition:** Do not overuse key thematic words (e.g., "purpose", "legacy", "silence", "unspoken"). If a concept must be revisited, express it through different phrasing, actions, or dialogue.
-8. Output ONLY the scene text.
+4. Aim for at least {{ min_length_per_scene }} characters of high-quality prose. Text that appears padded or unduly repetitive to meet length goals will be penalized.
+5. Let the scene's themes emerge through action, subtext, and metaphorical imagery. Avoid direct exposition, deus ex machina, or lengthy monologues.
+6. **Writing Style and Anti-Repetition Guidelines (Adherence is CRITICAL):**
+    *   **Show, Don't Tell:** This is paramount. Instead of stating an emotion (e.g., "Ságá was confused"), describe physical actions, sensory details, dialogue, or internal thoughts that *imply* the emotion. Ground abstract concepts in concrete descriptions. Direct telling of emotions or unearned exposition will be penalized.
+    *   **Avoid Thematic and Linguistic Repetition:** Do not overuse key thematic words (e.g., "purpose", "legacy", "silence", "unspoken"), phrases, or sentence structures. If a concept must be revisited, express it through *varied* phrasing, character actions, or dialogue. Repetitive patterns in language or theme will be penalized.
+    *   **Dynamic Prose:** Ensure the writing is engaging and avoids monotony. Vary sentence length and structure.
+7. Output ONLY the scene text.
 
 --- BEGIN SCENE {{ scene_detail.scene_number }} TEXT ---
