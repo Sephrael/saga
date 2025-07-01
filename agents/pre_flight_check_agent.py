@@ -161,9 +161,70 @@ class PreFlightCheckAgent:
         self, plot_outline: dict[str, Any]
     ) -> list[dict[str, str]]:
         """Return canonical facts that must remain consistent."""
+        query = (
+            "MATCH (c:Character:Entity)-[:HAS_TRAIT]->"
+            "(t:Trait:Entity {is_canonical_truth: true}) "
+            "RETURN c.name AS name, t.name AS trait"
+        )
 
-        # Placeholder for KG queries; can be patched in tests.
-        return []
+        try:
+            records = await neo4j_manager.execute_read_query(query)
+        except Exception as exc:  # pragma: no cover - log but continue
+            logger.error(
+                "PreFlightCheckAgent failed to load canonical facts",
+                error=exc,
+                exc_info=True,
+            )
+            return []
+
+        facts: list[dict[str, str]] = []
+        for rec in records:
+            name = rec.get("name")
+            trait = rec.get("trait")
+            if name and trait:
+                facts.append({"name": str(name), "trait": str(trait)})
+
+        if not facts:
+            return []
+
+        prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
+        prompt_context = {"plot_outline": plot_outline, "canonical_facts": facts}
+        prompt = (
+            prefix
+            + "For each canonical_facts item, provide a trait that directly contradicts "
+            "the listed trait. Respond with JSON as [{'conflicts_with': 'Trait'}, ...] in the same order."
+        )
+
+        text, _ = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=json.dumps(prompt_context, ensure_ascii=False) + "\n" + prompt,
+            temperature=0.0,
+            max_tokens=200,
+            auto_clean_response=True,
+            allow_fallback=True,
+        )
+
+        conflicts: list[str] = []
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and item.get("conflicts_with"):
+                        conflicts.append(str(item["conflicts_with"]))
+                    elif isinstance(item, str):
+                        conflicts.append(item)
+        except json.JSONDecodeError:
+            logger.warning(
+                "PreFlightCheckAgent: could not parse canonical fact conflicts"
+            )
+
+        final: list[dict[str, str]] = []
+        for fact, conflict in zip(facts, conflicts, strict=False):
+            if conflict:
+                fact["conflicts_with"] = conflict
+                final.append(fact)
+
+        return final
 
     async def perform_core_checks(
         self,

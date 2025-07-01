@@ -1,4 +1,5 @@
 # tests/test_pre_flight_agent.py
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -137,3 +138,28 @@ async def test_preflight_enforces_canon(monkeypatch):
 
     await agent.perform_core_checks({"protagonist_name": "Saga"}, {"Saga": {}}, {})
     assert removed == {"name": "Ságá", "trait": "Incorporeal"}
+
+
+@pytest.mark.asyncio
+async def test_gather_canonical_facts(monkeypatch):
+    agent = PreFlightCheckAgent()
+
+    async def fake_query(query: str, params: dict[str, Any] | None = None):
+        assert "is_canonical_truth" in query
+        return [{"name": "Saga", "trait": "Corporeal"}]
+
+    monkeypatch.setattr(
+        neo4j_manager,
+        "execute_read_query",
+        AsyncMock(side_effect=fake_query),
+    )
+    monkeypatch.setattr(
+        llm_service,
+        "async_call_llm",
+        AsyncMock(return_value=('[{"conflicts_with": "Incorporeal"}]', {})),
+    )
+
+    facts = await agent._gather_canonical_facts({"title": "T"})
+    assert facts == [
+        {"name": "Saga", "trait": "Corporeal", "conflicts_with": "Incorporeal"}
+    ]
