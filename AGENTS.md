@@ -6,7 +6,7 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 
 **SAGA** is an autonomous, agentic creative-writing system designed to generate entire novels. Powered by the NANA engine, SAGA leverages Large Language Models (LLMs), narrative context through embeddings, and a Neo4j graph database to create rich, coherent, and evolving narratives.
 
-**Core Technologies**: Python 3.9+, Neo4j (Graph Database), Cypher (Query Language), OpenAI-compatible LLM APIs, Ollama (Embeddings), Docker, Pydantic (Configuration)
+**Core Technologies**: Python 3.10+, Neo4j (Graph Database), Cypher (Query Language), OpenAI-compatible LLM APIs, Ollama (Embeddings), Jinja2, Rich, Docker, Pydantic (Configuration)
 
 ## Project Structure
 
@@ -18,39 +18,83 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── comprehensive_evaluator_agent.py  # Draft evaluation
 │   ├── patch_validation_agent.py    # Patch instruction validation
 │   ├── kg_maintainer_agent.py       # Knowledge graph management
-│   └── finalize_agent.py            # Chapter finalization
-├── core/                            # Core infrastructure
-│   ├── db_manager.py                # Neo4j database management
-│   └── llm_interface.py             # LLM API abstraction
-├── data_access/                     # Database access layer
-│   ├── chapter_queries.py           # Chapter-related database operations
-│   └── world_queries.py             # World data queries
-├── orchestration/                   # Main orchestration
-│   ├── nana_orchestrator.py         # Primary orchestrator
-│   └── chapter_flow.py              # Chapter generation flow
-├── processing/                      # Text processing pipeline
-│   ├── revision_manager.py          # Coordinates revisions
-│   ├── patch_generator.py           # Generates targeted patches
-│   └── text_deduplicator.py         # Reduces repetitive content
+│   ├── finalize_agent.py            # Chapter finalization
+│   └── pre_flight_check_agent.py    # LLM readiness checks
 ├── chapter_generation/              # Chapter generation services
 │   ├── context_orchestrator.py      # Provider-based context system
-│   └── context_kg_utils.py          # KG context helpers
+│   ├── context_kg_utils.py          # KG context helpers
+│   ├── context_providers.py         # Data providers for context
+│   ├── drafting_service.py          # Draft generation service
+│   ├── evaluation_service.py        # Draft evaluation service
+│   ├── revision_service.py          # Handles patch-based revision
+│   ├── finalization_service.py      # Finalize chapter artifacts
+│   └── prerequisites_service.py     # Pre-chapter setup tasks
+├── core/                            # Core infrastructure
+│   ├── db_manager.py                # Neo4j database management
+│   ├── llm_interface.py             # LLM API abstraction
+│   └── usage.py                     # Token accounting utilities
+├── data_access/                     # Database access layer
+│   ├── chapter_queries.py           # Chapter-related database operations
+│   ├── character_queries.py         # Character-related operations
+│   ├── kg_queries.py                # Knowledge graph queries
+│   ├── plot_queries.py              # Plot outline queries
+│   ├── world_queries.py             # World data queries
+│   └── cypher_builders/             # Query construction helpers
+├── ingestion/                       # Text ingestion & healing
+│   └── ingestion_manager.py         # Import existing text into KG
 ├── initialization/                  # Story setup and genesis
 │   ├── genesis.py                   # Initial story generation
 │   ├── models.py                    # Story element models
 │   └── bootstrapper/                # Plot/character/world generation
-├── config.py                       # Pydantic configuration management
-├── main.py                         # Entry point
-├── user_story_elements.yaml         # User-provided story elements
+├── kg_maintainer/                   # KG merge utilities
+│   ├── merge.py
+│   ├── models.py
+│   └── parsing.py
+├── models/                          # Shared pydantic models
+│   ├── agent_models.py
+│   ├── kg_models.py
+│   └── user_input_models.py
+├── orchestration/                   # Main orchestration
+│   ├── nana_orchestrator.py         # Primary orchestrator
+│   ├── chapter_flow.py              # Chapter generation flow
+│   ├── chapter_generation_runner.py # End-to-end runner
+│   └── token_accountant.py          # Token usage tracking
+├── processing/                      # Text processing pipeline
+│   ├── context_generator.py         # Semantic context assembly
+│   ├── evaluation_pipeline.py       # Evaluation & revision cycle
+│   ├── problem_parser.py            # Parse evaluation feedback
+│   ├── revision_manager.py          # Coordinates revisions
+│   ├── repetition_analyzer.py       # Detects repeating text
+│   ├── repetition_tracker.py        # Tracks duplication statistics
+│   ├── evaluation_helpers.py        # Helper functions for eval
+│   ├── text_deduplicator.py         # Reduces repetitive content
+│   └── patch/                       # Patch application utilities
+├── storage/                         # File I/O utilities
+│   └── file_manager.py
+├── ui/                              # Optional Rich CLI
+│   └── rich_display.py
+├── utils/                           # Misc helpers and similarity
+│   ├── helpers.py
+│   ├── ingestion_utils.py
+│   ├── kg_property_keys.py
+│   ├── plot.py
+│   ├── similarity.py
+│   └── text_processing.py
+├── prompts/                         # Jinja2 prompt templates
+├── prompt_renderer.py               # Render prompts from templates
+├── kg_constants.py                  # KG schema constants
+├── config.py                        # Pydantic configuration management
+├── main.py                          # Entry point
+├── user_story_elements.yaml.example # User-provided story elements
 ├── requirements.txt                 # Python dependencies
-├── docker-compose.yml              # Neo4j container setup
-└── .env                            # Environment configuration
+├── docker-compose.yml               # Neo4j container setup
+└── .env                             # Environment configuration
 ```
 
 ## Coding Standards
 
 ### Python Conventions
-- **Python Version**: 3.9+ required
+- **Python Version**: 3.10+ required
 - **File Headers**: All source files must include their relative path as a comment at the top (e.g., `# agents/drafting_agent.py`)
 - **Code Style**: Use `ruff` for formatting and linting (replaces Black/flake8)
 - **Type Hints**: Mandatory for all function parameters and return values
