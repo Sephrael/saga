@@ -119,32 +119,7 @@ class PatchValidationAgent:
                     if " " in first_line
                     else "Validation failed"
                 )
-                logger.info(
-                    "Patch validation FAILED due to a non-score-related issue (e.g., missing keywords). Final score was %d.",
-                    score,
-                )
         patch_text_lower = patch.get("replace_with", "").lower()
-        keywords: list[str] = []
-        for p in problems:
-            instr = (
-                p.get("rewrite_instruction", "")
-                if isinstance(p, dict)
-                else p.rewrite_instruction
-            )
-            for word in instr.split():
-                clean = word.strip(string.punctuation).lower()
-                if clean and clean not in STOPWORDS:
-                    keywords.append(clean)
-
-        missing_keywords = [kw for kw in keywords if kw not in patch_text_lower]
-        if missing_keywords:
-            logger.info(
-                "Patch validation FAILED due to missing keywords: %s",
-                ", ".join(missing_keywords),
-            )
-            is_pass = False
-            if failure_reason is None:
-                failure_reason = "missing required keywords"
 
         return is_pass, failure_reason, usage
 

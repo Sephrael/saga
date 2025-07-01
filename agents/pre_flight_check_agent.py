@@ -14,10 +14,13 @@ from data_access import character_queries, world_queries
 
 logger = structlog.get_logger(__name__)
 
-CONTRADICTORY_TRAIT_PAIRS = []
+# Trait combinations that cannot coexist.
+CONTRADICTORY_TRAIT_PAIRS = [("Incorporeal", "Corporeal")]
 
-# Canonical facts that must always hold true
-CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = []
+# Canonical facts that must always hold true.
+CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = [
+    {"name": "Ságá", "trait": "Corporeal", "conflicts_with": "Incorporeal"}
+]
 
 
 class PreFlightCheckAgent:
@@ -58,8 +61,7 @@ class PreFlightCheckAgent:
     ) -> None:
         prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
         prompt = (
-            prefix
-            + f"A world element with id {element_id} has both traits "
+            prefix + f"A world element with id {element_id} has both traits "
             f"'{trait1}' and '{trait2}'. Choose the canonical trait. "
             'Respond with JSON {"trait": "chosen"}.'
         )
