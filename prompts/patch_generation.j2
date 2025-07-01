@@ -25,7 +25,7 @@ You are a surgical revision expert generating replacement text for Chapter {{ ch
 ```plaintext
 {{ few_shot_patch_example_str }}
 ```
-{% if validation_failure_reason %}**Previous Attempt Failed Validation:** {{ validation_failure_reason }}. Please generate a new patch that corrects this.{% endif %}
+{% if validation_failure_reason %}**Previous Attempt Failed Validation:** The previous attempt to fix this issue failed validation for the following reason: '{{ validation_failure_reason }}'. Your new `replace_with` text MUST address this feedback directly.{% endif %}
 **Instructions for Generating Replacement Text:**
 1.  Focus EXCLUSIVELY on the problem described, particularly relating to the conceptual area highlighted by: `{{ original_quote_text_from_problem }}` within the 'ORIGINAL TEXT SNIPPET'.
 2.  Generate a `replace_with` text according to the following:

@@ -11,33 +11,6 @@ from prompt_renderer import render_prompt
 
 from models import PatchInstruction, ProblemDetail
 
-STOPWORDS = {
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "for",
-    "with",
-    "without",
-    "to",
-    "from",
-    "by",
-    "of",
-    "in",
-    "on",
-    "at",
-    "include",
-    "mention",
-    "use",
-    "add",
-    "make",
-    "this",
-    "that",
-    "these",
-    "those",
-}
-
 logger = structlog.get_logger(__name__)
 
 
@@ -55,6 +28,10 @@ class PatchValidationAgent:
         problems: list[ProblemDetail],
     ) -> tuple[bool, str | None, dict[str, int] | None]:
         """Validate a single patch via an LLM call.
+
+        The LLM prompt asks whether the replacement text resolves the identified
+        problem. The response must begin with ``YES`` or ``NO`` on the first
+        line, followed by an optional justification on the second line.
 
         Args:
             context_snippet: Unused snippet of surrounding text.
