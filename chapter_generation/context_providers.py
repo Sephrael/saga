@@ -146,10 +146,18 @@ class CanonProvider(ContextProvider):
     source = "canon"
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        from .context_kg_utils import get_canonical_truths_from_kg
-
-        records = await get_canonical_truths_from_kg()
-        lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"] + records
+        query = (
+            "MATCH (c:Character)-[:HAS_TRAIT]->"
+            "(t:Trait {is_canonical_truth: true}) "
+            "RETURN c.name AS name, t.name AS trait"
+        )
+        records = await self.neo4j.execute_read_query(query)
+        lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
+        for rec in records:
+            name = rec.get("name")
+            trait = rec.get("trait")
+            if name and trait:
+                lines.append(f"- {name} is {trait}")
 
         if len(lines) == 1:
             prompt = (
