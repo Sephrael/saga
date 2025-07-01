@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections.abc import Iterable
 from typing import Any
@@ -63,16 +62,22 @@ class ContextOrchestrator:
             logger.debug("Context cache hit", key=cache_key)
             return cached
 
-        tasks = [p.get_context(request) for p in self.providers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
         chunks: list[ContextChunk] = []
-        for provider, res in zip(self.providers, results, strict=True):
+        for provider in self.providers:
+            try:
+                res = await provider.get_context(request)
+            except Exception as exc:  # pragma: no cover - log and skip
+                logger.warning(
+                    "Context provider error", provider=provider.source, error=exc
+                )
+                continue
             if isinstance(res, ContextChunk):
                 chunks.append(res)
             else:
                 logger.warning(
-                    "Context provider error", provider=provider.source, error=res
+                    "Invalid context provider result",
+                    provider=provider.source,
+                    result_type=type(res).__name__,
                 )
 
         merged: list[str] = []
