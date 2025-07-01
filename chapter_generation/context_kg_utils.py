@@ -7,13 +7,13 @@ import json
 from typing import Any
 
 import structlog
-
 from agents.pre_flight_check_agent import CANONICAL_FACTS_TO_ENFORCE
 from config import settings
 from core.llm_interface import llm_service
 from data_access import character_queries, world_queries
 
 logger = structlog.get_logger(__name__)
+
 
 async def get_canonical_truths_from_kg() -> list[str]:
     """Return canonical truths stored in the knowledge graph."""
@@ -49,6 +49,7 @@ async def get_canonical_truths_from_kg() -> list[str]:
                 lines.append(line)
 
     return lines
+
 
 async def get_reliable_kg_facts_for_drafting_prompt(
     plot_outline: dict[str, Any],

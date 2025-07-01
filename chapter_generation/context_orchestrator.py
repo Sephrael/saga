@@ -67,11 +67,13 @@ class ContextOrchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         chunks: list[ContextChunk] = []
-        for res in results:
+        for provider, res in zip(self.providers, results, strict=True):
             if isinstance(res, ContextChunk):
                 chunks.append(res)
             else:
-                logger.warning("Context provider error", error=res)
+                logger.warning(
+                    "Context provider error", provider=provider.source, error=res
+                )
 
         merged: list[str] = []
         token_total = 0
