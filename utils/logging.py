@@ -1,6 +1,6 @@
 # utils/logging.py
 
-"""Logging helpers for the Saga system."""
+"""Logging helpers for the SAGA system."""
 
 from __future__ import annotations
 

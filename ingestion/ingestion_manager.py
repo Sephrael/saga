@@ -19,7 +19,7 @@ logger = structlog.get_logger(__name__)
 
 
 class IngestionManager:
-    """Handle ingestion of plain text into the Saga knowledge graph."""
+    """Handle ingestion of plain text into the SAGA knowledge graph."""
 
     def __init__(
         self,

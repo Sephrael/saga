@@ -1,4 +1,4 @@
-"""General utility functions for the Saga Novel Generation system."""
+"""General utility functions for the SAGA Novel Generation system."""
 
 from __future__ import annotations
 
