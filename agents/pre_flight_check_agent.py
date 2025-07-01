@@ -58,9 +58,10 @@ class PreFlightCheckAgent:
     async def _resolve_world_trait_conflict(
         self, element_id: str, trait1: str, trait2: str
     ) -> None:
+        prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
         prompt = (
-            "/no_think\n"
-            f"A world element with id {element_id} has both traits "
+            prefix
+            + f"A world element with id {element_id} has both traits "
             f"'{trait1}' and '{trait2}'. Choose the canonical trait. "
             'Respond with JSON {"trait": "chosen"}.'
         )
@@ -93,9 +94,10 @@ class PreFlightCheckAgent:
     async def _resolve_trait_conflict(
         self, name: str, trait1: str, trait2: str
     ) -> None:
+        prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
         prompt = (
-            "/no_think\n"
-            f"A character named {name} has both traits '{trait1}' and '{trait2}'. "
+            prefix
+            + f"A character named {name} has both traits '{trait1}' and '{trait2}'. "
             "Choose the single trait that should remain canonical. "
             'Respond with JSON {"trait": "chosen"}.'
         )

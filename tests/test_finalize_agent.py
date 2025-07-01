@@ -6,6 +6,8 @@ from agents.finalize_agent import FinalizeAgent
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from kg_maintainer.models import CharacterProfile, WorldItem
 
+from models import ChapterEndState, CharacterState
+
 
 class DummyKGAgent(KGMaintainerAgent):
     pass
@@ -28,6 +30,16 @@ async def test_finalize_chapter_success(monkeypatch):
             {"total_tokens": 2},
         )
 
+    async def fake_state(*_args, **_kwargs):
+        return ChapterEndState(
+            chapter_number=1,
+            character_states=[
+                CharacterState(name="Alice", status="Alive", location="Town")
+            ],
+            unresolved_cliffhanger=None,
+            key_world_changes={},
+        )
+
     save_mock = asyncio.Future()
     save_mock.set_result(None)
 
@@ -36,6 +48,7 @@ async def test_finalize_chapter_success(monkeypatch):
         "core.llm_interface.llm_service.async_get_embedding", fake_embedding
     )
     monkeypatch.setattr(kg_agent, "_llm_extract_updates", fake_extract)
+    monkeypatch.setattr(kg_agent, "generate_chapter_end_state", fake_state)
     monkeypatch.setattr(kg_agent, "persist_profiles", lambda *a, **k: save_mock)
     monkeypatch.setattr(kg_agent, "persist_world", lambda *a, **k: save_mock)
     monkeypatch.setattr(
@@ -68,6 +81,14 @@ async def test_finalize_chapter_validation_failure(monkeypatch):
             {"total_tokens": 2},
         )
 
+    async def fake_state(*_args, **_kwargs):
+        return ChapterEndState(
+            chapter_number=1,
+            character_states=[],
+            unresolved_cliffhanger=None,
+            key_world_changes={},
+        )
+
     save_mock = asyncio.Future()
     save_mock.set_result(None)
 
@@ -76,6 +97,7 @@ async def test_finalize_chapter_validation_failure(monkeypatch):
         "core.llm_interface.llm_service.async_get_embedding", fake_embedding
     )
     monkeypatch.setattr(kg_agent, "_llm_extract_updates", fake_extract)
+    monkeypatch.setattr(kg_agent, "generate_chapter_end_state", fake_state)
     profiles_called: dict[str, CharacterProfile] = {}
     world_called: dict[str, dict[str, WorldItem]] = {}
 

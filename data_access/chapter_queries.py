@@ -1,4 +1,5 @@
 # data_access/chapter_queries.py
+import json
 from typing import Any
 
 import numpy as np
@@ -33,6 +34,7 @@ async def save_chapter_data_to_db(
     summary: str | None,
     embedding_array: np.ndarray | None,
     is_provisional: bool = False,
+    end_state: dict[str, Any] | None = None,
 ):
     """Save chapter text, raw output, and embedding to Neo4j.
 
@@ -63,6 +65,7 @@ async def save_chapter_data_to_db(
         c.raw_llm_output = $raw_llm_output_param,
         c.summary = $summary_param,
         c.is_provisional = $is_provisional_param,
+        c.end_state_json = $end_state_param,
         c.{settings.NEO4J_VECTOR_PROPERTY_NAME} = $text_embedding_param,
         c.last_updated = timestamp()
     """
@@ -72,6 +75,7 @@ async def save_chapter_data_to_db(
         "raw_llm_output_param": raw_llm_output,
         "summary_param": summary if summary is not None else "",
         "is_provisional_param": is_provisional,
+        "end_state_param": json.dumps(end_state) if end_state is not None else "",
         "text_embedding_param": embedding_list,
     }
     try:
@@ -93,7 +97,11 @@ async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None
         return None
     query = f"""
     MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL} {{number: $chapter_number_param}})
-    RETURN c.text AS text, c.raw_llm_output AS raw_llm_output, c.summary AS summary, c.is_provisional AS is_provisional
+    RETURN c.text AS text,
+           c.raw_llm_output AS raw_llm_output,
+           c.summary AS summary,
+           c.is_provisional AS is_provisional,
+           c.end_state_json AS end_state_json
     """
     try:
         result = await neo4j_manager.execute_read_query(
@@ -106,6 +114,7 @@ async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None
                 "summary": result[0].get("summary"),
                 "is_provisional": result[0].get("is_provisional", False),
                 "raw_llm_output": result[0].get("raw_llm_output"),
+                "end_state_json": result[0].get("end_state_json"),
             }
         logger.debug(f"Neo4j: No data found for chapter {chapter_number}.")
         return None

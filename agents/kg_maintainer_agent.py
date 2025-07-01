@@ -25,6 +25,8 @@ from parsing_utils import (
 )
 from prompt_renderer import render_prompt
 
+from models.agent_models import ChapterEndState
+
 logger = structlog.get_logger(__name__)
 
 
@@ -63,7 +65,7 @@ async def _llm_summarize_full_chapter_text(
 
 
 # Prompt template for entity resolution, embedded to avoid new file dependency
-ENTITY_RESOLUTION_PROMPT_TEMPLATE = """/no_think
+ENTITY_RESOLUTION_PROMPT_TEMPLATE = """{% if enable_no_think %}/no_think{% endif %}
 You are an expert knowledge graph analyst for a creative writing project. Determine if two entities from the narrative's knowledge graph refer to the same canonical thing based on their names, properties, and relationships.
 
 **Entity 1 Details:**
@@ -107,7 +109,7 @@ Output only JSON, with no other text or markdown. Your entire response must be a
 """
 
 # Prompt template for dynamic relationship resolution
-DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """/no_think
+DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """{% if enable_no_think %}/no_think{% endif %}
 You analyze a relationship from the novel's knowledge graph and provide a
 single canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
 relationship between the subject and object.
@@ -231,6 +233,38 @@ class KGMaintainerAgent:
                 exc_info=True,
             )
             return None, None
+
+    async def generate_chapter_end_state(
+        self, chapter_text: str, chapter_number: int
+    ) -> ChapterEndState:
+        """Generate a structured snapshot of the chapter's final state."""
+
+        prompt = render_prompt(
+            "kg_maintainer_agent/chapter_end_state.j2",
+            {
+                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "chapter_number": chapter_number,
+                "chapter_text": chapter_text,
+            },
+        )
+        try:
+            response, _ = await llm_service.async_call_llm(
+                model_name=settings.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_KG_EXTRACTION,
+                max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
+                auto_clean_response=True,
+            )
+            data = json.loads(response)
+            return ChapterEndState.model_validate(data)
+        except Exception as exc:  # pragma: no cover - heavy I/O
+            logger.error(
+                "Failed to generate chapter end state for ch %s: %s",
+                chapter_number,
+                exc,
+                exc_info=True,
+            )
+            raise
 
     def _extract_character_names_from_text(self, text: str) -> list[str]:
         """Return a list of probable character names from ``text``."""
@@ -685,7 +719,11 @@ class KGMaintainerAgent:
                 )
                 continue
 
-            prompt = jinja_template.render(entity1=context1, entity2=context2)
+            prompt = jinja_template.render(
+                enable_no_think=settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                entity1=context1,
+                entity2=context2,
+            )
             llm_response, _ = await llm_service.async_call_llm(
                 model_name=settings.KNOWLEDGE_UPDATE_MODEL,
                 prompt=prompt,
@@ -747,7 +785,10 @@ class KGMaintainerAgent:
             return
         jinja_template = Template(DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE)
         for rel in dyn_rels:
-            prompt = jinja_template.render(rel)
+            prompt = jinja_template.render(
+                **rel,
+                enable_no_think=settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            )
             new_type_raw, _ = await llm_service.async_call_llm(
                 model_name=settings.MEDIUM_MODEL,
                 prompt=prompt,

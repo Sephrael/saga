@@ -9,7 +9,7 @@ from typing import Any
 import structlog
 from core.llm_interface import count_tokens
 
-from models.agent_models import SceneDetail
+from models.agent_models import ChapterEndState, SceneDetail
 
 logger = structlog.get_logger(__name__)
 
@@ -234,6 +234,56 @@ class WorldStateProvider(ContextProvider):
                 continue
             for name in items:
                 lines.append(f"- {name}")
+        text = "\n".join(lines)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
+class StateContextProvider(ContextProvider):
+    """Provide the exact state at the end of the previous chapter."""
+
+    source = "chapter_end_state"
+
+    def __init__(self, queries_module: Any | None = None) -> None:
+        from data_access import chapter_queries as default_chapter_queries
+
+        self.chapter_queries = queries_module or default_chapter_queries
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        prev_chapter = request.chapter_number - 1
+        if prev_chapter <= 0:
+            return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
+        data = await self.chapter_queries.get_chapter_data_from_db(prev_chapter)
+        if not data or not data.get("end_state_json"):
+            return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
+        try:
+            state = ChapterEndState.model_validate_json(data["end_state_json"])
+        except Exception:
+            logger.error(
+                "Failed to parse end state JSON for chapter %s",
+                prev_chapter,
+                exc_info=True,
+            )
+            return ContextChunk(text="", tokens=0, provenance={}, source=self.source)
+
+        lines = [
+            "**CRITICAL STATE CONTINUITY - DO NOT CONTRADICT:**",
+            f"At the end of Chapter {prev_chapter}:",
+        ]
+        for char in state.character_states:
+            detail = f"- {char.name} was in {char.location} and {char.status}."
+            if char.immediate_goal:
+                detail += f" Immediate goal: {char.immediate_goal}."
+            lines.append(detail)
+        if state.key_world_changes:
+            lines.append("Key world changes:")
+            for loc, change in state.key_world_changes.items():
+                lines.append(f"- {loc}: {change}")
+        if state.unresolved_cliffhanger:
+            lines.append(
+                f"The unresolved cliffhanger is: {state.unresolved_cliffhanger}"
+            )
+
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)

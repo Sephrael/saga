@@ -188,6 +188,7 @@ class SagaSettings(BaseSettings):
     CONTEXT_CACHE_TTL: float = 600.0
     CONTEXT_PROVIDERS: list[str] = [
         "chapter_generation.context_providers.SemanticHistoryProvider",
+        "chapter_generation.context_providers.StateContextProvider",
         "chapter_generation.context_providers.CanonProvider",
         "chapter_generation.context_providers.KGFactProvider",
         "chapter_generation.context_providers.KGReasoningProvider",

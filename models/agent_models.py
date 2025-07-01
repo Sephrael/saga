@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SceneDetail(TypedDict, total=False):
@@ -79,3 +79,21 @@ class PatchInstruction(AgentBaseModel):
     target_char_end: int | None = None
     replace_with: str
     reason_for_change: str
+
+
+class CharacterState(AgentBaseModel):
+    """State information for a character at chapter end."""
+
+    name: str
+    status: str
+    location: str
+    immediate_goal: str | None = None
+
+
+class ChapterEndState(AgentBaseModel):
+    """Snapshot of the world at the end of a chapter."""
+
+    chapter_number: int
+    character_states: list[CharacterState]
+    unresolved_cliffhanger: str | None = None
+    key_world_changes: dict[str, str] = Field(default_factory=dict)
