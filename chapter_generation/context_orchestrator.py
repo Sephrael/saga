@@ -133,6 +133,14 @@ class ContextOrchestrator:
             ) or getattr(agent_or_props, "plot_outline", {})
             plot_focus = getattr(agent_or_props, "plot_point_focus", None)
 
+        if hasattr(plot_outline, "model_dump"):
+            try:
+                plot_outline = plot_outline.model_dump(exclude_none=True)
+            except Exception as exc:  # pragma: no cover - log and continue
+                logger.warning(
+                    "Failed to dump plot outline to dict", error=exc, exc_info=True
+                )
+
         request = ContextRequest(
             chapter_number=current_chapter_number,
             plot_focus=plot_focus,
