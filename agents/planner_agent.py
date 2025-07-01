@@ -259,7 +259,7 @@ class PlannerAgent:
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
             {
-                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": True,
                 "target_scenes_min": settings.TARGET_SCENES_MIN,
                 "target_scenes_max": settings.TARGET_SCENES_MAX,
                 "chapter_number": chapter_number,
@@ -295,8 +295,6 @@ class PlannerAgent:
             max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True,
-            frequency_penalty=settings.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=settings.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
 
@@ -353,8 +351,6 @@ class PlannerAgent:
             max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=settings.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=settings.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
         try:

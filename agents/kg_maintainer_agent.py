@@ -38,7 +38,7 @@ async def _llm_summarize_full_chapter_text(
     prompt = render_prompt(
         "kg_maintainer_agent/chapter_summary.j2",
         {
-            "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "enable_no_think": True,
             "chapter_number": chapter_number,
             "chapter_text": chapter_text,
         },
@@ -49,8 +49,6 @@ async def _llm_summarize_full_chapter_text(
         temperature=settings.TEMPERATURE_SUMMARY,
         max_tokens=settings.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
         stream_to_disk=False,
-        frequency_penalty=settings.FREQUENCY_PENALTY_SUMMARY,
-        presence_penalty=settings.PRESENCE_PENALTY_SUMMARY,
         auto_clean_response=True,
     )
     summary_text = summary.strip()
@@ -242,7 +240,7 @@ class KGMaintainerAgent:
         prompt = render_prompt(
             "kg_maintainer_agent/chapter_end_state.j2",
             {
-                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": True,
                 "chapter_number": chapter_number,
                 "chapter_text": chapter_text,
             },
@@ -301,7 +299,7 @@ class KGMaintainerAgent:
         prompt = render_prompt(
             "kg_maintainer_agent/extract_updates.j2",
             {
-                "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": True,
                 "protagonist": protagonist,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
@@ -321,8 +319,6 @@ class KGMaintainerAgent:
                 max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=False,
-                frequency_penalty=settings.FREQUENCY_PENALTY_KG_EXTRACTION,
-                presence_penalty=settings.PRESENCE_PENALTY_KG_EXTRACTION,
                 auto_clean_response=True,
             )
             return text, usage

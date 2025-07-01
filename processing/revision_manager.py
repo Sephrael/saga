@@ -337,8 +337,6 @@ class RevisionManager:
             max_tokens=None,
             allow_fallback=True,
             stream_to_disk=True,
-            frequency_penalty=settings.FREQUENCY_PENALTY_REVISION,
-            presence_penalty=settings.PRESENCE_PENALTY_REVISION,
             auto_clean_response=False,
         )
 

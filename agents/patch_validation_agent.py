@@ -92,8 +92,6 @@ class PatchValidationAgent:
             max_tokens=1024,
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=settings.FREQUENCY_PENALTY_EVALUATION,
-            presence_penalty=settings.PRESENCE_PENALTY_EVALUATION,
             auto_clean_response=True,
         )
 

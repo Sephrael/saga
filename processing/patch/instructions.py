@@ -174,7 +174,7 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
     prompt = render_prompt(
         "patch_generation.j2",
         {
-            "enable_no_think": settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "enable_no_think": True,
             "chapter_number": chapter_number,
             "novel_title": plot_outline.get("title", "Untitled Novel"),
             "genre": plot_outline.get("genre", "N/A"),
@@ -212,8 +212,6 @@ A chill traced Elara's spine, not from the crypt's cold, but from the translucen
         max_tokens=max_patch_output_tokens,
         allow_fallback=True,
         stream_to_disk=False,
-        frequency_penalty=settings.FREQUENCY_PENALTY_PATCH,
-        presence_penalty=settings.PRESENCE_PENALTY_PATCH,
         auto_clean_response=True,
     )
 
