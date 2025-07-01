@@ -13,6 +13,12 @@ from kg_maintainer.models import WorldItem
 async def test_preflight_resolves_trait(monkeypatch):
     agent = PreFlightCheckAgent()
     monkeypatch.setattr(
+        agent,
+        "_identify_contradictory_pairs",
+        AsyncMock(return_value=[("Incorporeal", "Corporeal")]),
+    )
+    monkeypatch.setattr(agent, "_gather_canonical_facts", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
         neo4j_manager,
         "execute_read_query",
         AsyncMock(return_value=[{"c": "Saga"}]),
@@ -49,6 +55,12 @@ async def test_preflight_resolves_trait(monkeypatch):
 async def test_preflight_resolves_world_trait(monkeypatch):
     agent = PreFlightCheckAgent()
     monkeypatch.setattr(
+        agent,
+        "_identify_contradictory_pairs",
+        AsyncMock(return_value=[("Incorporeal", "Corporeal")]),
+    )
+    monkeypatch.setattr(agent, "_gather_canonical_facts", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
         neo4j_manager,
         "execute_read_query",
         AsyncMock(return_value=[{"we": "w"}]),
@@ -80,6 +92,24 @@ async def test_preflight_resolves_world_trait(monkeypatch):
 @pytest.mark.asyncio
 async def test_preflight_enforces_canon(monkeypatch):
     agent = PreFlightCheckAgent()
+    monkeypatch.setattr(
+        agent,
+        "_identify_contradictory_pairs",
+        AsyncMock(return_value=[("Incorporeal", "Corporeal")]),
+    )
+    monkeypatch.setattr(
+        agent,
+        "_gather_canonical_facts",
+        AsyncMock(
+            return_value=[
+                {
+                    "name": "Ságá",
+                    "trait": "Corporeal",
+                    "conflicts_with": "Incorporeal",
+                }
+            ]
+        ),
+    )
     monkeypatch.setattr(
         neo4j_manager,
         "execute_read_query",

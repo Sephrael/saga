@@ -119,6 +119,7 @@ class ContextOrchestrator:
         agent_or_props: Any,
         current_chapter_number: int,
         chapter_plan: list[SceneDetail] | None,
+        agent_hints: dict[str, Any] | None = None,
     ) -> str:
         """Backward compatible wrapper for build_context."""
         if isinstance(agent_or_props, dict):
@@ -137,5 +138,6 @@ class ContextOrchestrator:
             plot_focus=plot_focus,
             plot_outline=plot_outline,
             chapter_plan=chapter_plan,
+            agent_hints=agent_hints,
         )
         return await self.build_context(request)

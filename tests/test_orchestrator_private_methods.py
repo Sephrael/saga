@@ -214,7 +214,7 @@ async def test_perform_initial_setup_sets_next_context(monkeypatch, orchestrator
     result = await orchestrator.perform_initial_setup()
 
     assert result is True
-    ctx_mock.assert_awaited_once_with(orchestrator, 1, None)
+    ctx_mock.assert_awaited_once_with(orchestrator, 1, None, None)
     assert orchestrator.next_chapter_context == "ctx0"
 
 
@@ -252,6 +252,12 @@ async def test_perform_initial_setup_loads_ch0_state(monkeypatch, orchestrator):
 
     assert result is True
     get_mock.assert_awaited_once_with(0)
+    ctx_mock.assert_awaited_once_with(
+        orchestrator,
+        1,
+        None,
+        {"chapter_zero_end_state": orchestrator.chapter_zero_end_state},
+    )
 
 
 @pytest.mark.asyncio
@@ -272,5 +278,5 @@ async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkey
     result = await orchestrator._finalize_and_log(1, "text", None, False)
 
     assert result == "text"
-    ctx_mock.assert_awaited_with(orchestrator, 2, None)
+    ctx_mock.assert_awaited_with(orchestrator, 2, None, None)
     assert orchestrator.next_chapter_context == "ctx1"

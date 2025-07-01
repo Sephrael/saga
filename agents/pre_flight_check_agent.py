@@ -14,19 +14,11 @@ from data_access import character_queries, world_queries
 
 logger = structlog.get_logger(__name__)
 
-# Trait combinations that cannot coexist.
-CONTRADICTORY_TRAIT_PAIRS = [("Incorporeal", "Corporeal")]
-
-# Canonical facts that must always hold true.
-CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = [
-    {"name": "Ságá", "trait": "Corporeal", "conflicts_with": "Incorporeal"}
-]
-
 
 class PreFlightCheckAgent:
     """Performs core contradiction checks before drafting."""
 
-    def __init__(self, model_name: str = settings.KNOWLEDGE_UPDATE_MODEL) -> None:
+    def __init__(self, model_name: str = settings.SMALL_MODEL) -> None:
         self.model_name = model_name
         logger.info("PreFlightCheckAgent initialized")
 
@@ -55,6 +47,45 @@ class PreFlightCheckAgent:
             query, {"we_id": element_id, "t1": trait1, "t2": trait2}
         )
         return bool(results)
+
+    async def _identify_contradictory_pairs(
+        self,
+        plot_outline: dict[str, Any],
+        characters: dict[str, Any] | None,
+        world: dict[str, dict[str, Any]] | None,
+    ) -> list[tuple[str, str]]:
+        """Use the LLM to detect contradictory trait pairs."""
+
+        prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
+        context_json = json.dumps(
+            {
+                "plot": plot_outline,
+                "characters": characters or {},
+                "world": world or {},
+            },
+            ensure_ascii=False,
+        )
+        prompt = (
+            prefix
+            + "Given this story context, list any pairs of character traits that "
+            "cannot logically coexist. Respond with JSON like [['A','B'], ...]."
+        )
+        text, _ = await llm_service.async_call_llm(
+            model_name=self.model_name,
+            prompt=context_json + "\n" + prompt,
+            temperature=0.0,
+            max_tokens=200,
+            auto_clean_response=True,
+        )
+        try:
+            data = json.loads(text)
+            pairs = [tuple(p) for p in data if isinstance(p, list) and len(p) == 2]
+        except json.JSONDecodeError:
+            logger.warning(
+                "PreFlightCheckAgent: could not parse contradictory trait pairs"
+            )
+            pairs = []
+        return pairs
 
     async def _resolve_world_trait_conflict(
         self, element_id: str, trait1: str, trait2: str
@@ -126,6 +157,14 @@ class PreFlightCheckAgent:
             to_remove,
         )
 
+    async def _gather_canonical_facts(
+        self, plot_outline: dict[str, Any]
+    ) -> list[dict[str, str]]:
+        """Return canonical facts that must remain consistent."""
+
+        # Placeholder for KG queries; can be patched in tests.
+        return []
+
     async def perform_core_checks(
         self,
         plot_outline: dict[str, Any],
@@ -137,12 +176,16 @@ class PreFlightCheckAgent:
         if protagonist:
             char_names.add(protagonist)
 
+        trait_pairs = await self._identify_contradictory_pairs(
+            plot_outline, characters, world
+        )
+
         for char_name in char_names:
-            for trait1, trait2 in CONTRADICTORY_TRAIT_PAIRS:
+            for trait1, trait2 in trait_pairs:
                 if await self._character_has_conflict(char_name, trait1, trait2):
                     await self._resolve_trait_conflict(char_name, trait1, trait2)
 
-        for fact in CANONICAL_FACTS_TO_ENFORCE:
+        for fact in await self._gather_canonical_facts(plot_outline):
             if await self._character_has_conflict(
                 fact["name"], fact["trait"], fact["conflicts_with"]
             ):
@@ -164,7 +207,7 @@ class PreFlightCheckAgent:
                 if not item or not getattr(item, "id", None):
                     continue
                 element_id = item.id
-                for trait1, trait2 in CONTRADICTORY_TRAIT_PAIRS:
+                for trait1, trait2 in trait_pairs:
                     if await self._world_element_has_conflict(
                         element_id, trait1, trait2
                     ):

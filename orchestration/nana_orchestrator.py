@@ -292,6 +292,9 @@ class NANA_Orchestrator:
             self,
             1,
             None,
+            {"chapter_zero_end_state": self.chapter_zero_end_state}
+            if self.chapter_zero_end_state
+            else None,
         )
 
         return True
@@ -839,6 +842,7 @@ class NANA_Orchestrator:
                 self,
                 novel_chapter_number,
                 None,
+                None,
             )
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
@@ -894,6 +898,7 @@ class NANA_Orchestrator:
                 self,
                 novel_chapter_number,
                 chapter_plan,
+                None,
             )
         else:
             self.next_chapter_context = None
@@ -1179,6 +1184,7 @@ class NANA_Orchestrator:
         self.next_chapter_context = await self.context_service.build_hybrid_context(
             self,
             novel_chapter_number + 1,
+            None,
             None,
         )
 
