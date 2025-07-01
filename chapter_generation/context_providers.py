@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from core.llm_interface import count_tokens
+from config import settings
+from core.llm_interface import count_tokens, llm_service
 
 from models.agent_models import ChapterEndState, SceneDetail
 
@@ -143,24 +145,27 @@ class CanonProvider(ContextProvider):
 
     source = "canon"
 
-    def __init__(self, db_manager_instance: Any | None = None) -> None:
-        from core.db_manager import neo4j_manager as default_manager
-
-        self.neo4j = db_manager_instance or default_manager
-
     async def get_context(self, request: ContextRequest) -> ContextChunk:
-        query = (
-            "MATCH (c:Character)-[:HAS_TRAIT]->"
-            "(t:Trait {is_canonical_truth: true}) "
-            "RETURN c.name AS name, t.name AS trait"
-        )
-        records = await self.neo4j.execute_read_query(query)
-        lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
-        for rec in records:
-            name = rec.get("name")
-            trait = rec.get("trait")
-            if name and trait:
-                lines.append(f"- {name} is {trait}")
+        from .context_kg_utils import get_canonical_truths_from_kg
+
+        records = await get_canonical_truths_from_kg()
+        lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"] + records
+
+        if len(lines) == 1:
+            prompt = (
+                "List three short canonical truths about the story based on this "
+                f"plot outline:\n{json.dumps(request.plot_outline)}"
+            )
+            fallback, _ = await llm_service.async_call_llm(
+                model_name=settings.SMALL_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_SUMMARY,
+                max_tokens=settings.MAX_SUMMARY_TOKENS,
+                allow_fallback=True,
+            )
+            if fallback.strip():
+                lines.append(fallback.strip())
+
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
@@ -173,11 +178,29 @@ class PlanProvider(ContextProvider):
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
         plan = request.chapter_plan or []
-        lines = []
+        lines: list[str] = []
         for scene in plan:
             summary = scene.get("summary")
             if summary:
                 lines.append(f"- {summary}")
+
+        if not lines:
+            prompt = (
+                "Provide a short three bullet scene outline for the next chapter."
+                f"\nPlot focus: {request.plot_focus}\nPlot outline: {json.dumps(request.plot_outline)}"
+            )
+            fallback, _ = await llm_service.async_call_llm(
+                model_name=settings.SMALL_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_PLANNING,
+                max_tokens=settings.MAX_SUMMARY_TOKENS,
+                allow_fallback=True,
+            )
+            for line in fallback.splitlines():
+                cleaned = line.strip(" -*")
+                if cleaned:
+                    lines.append(f"- {cleaned}")
+
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)

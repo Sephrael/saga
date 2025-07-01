@@ -59,12 +59,9 @@ async def test_kg_reasoning_provider(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_canon_provider(monkeypatch):
-    async def fake_query(*_args, **_kwargs):
-        return [{"name": "S\xe1g\xe1", "trait": "Corporeal"}]
-
     monkeypatch.setattr(
-        "core.db_manager.neo4j_manager.execute_read_query",
-        AsyncMock(side_effect=fake_query),
+        "chapter_generation.context_kg_utils.get_canonical_truths_from_kg",
+        AsyncMock(return_value=["- S\xe1g\xe1 is Corporeal"]),
     )
 
     provider = CanonProvider()
@@ -72,3 +69,31 @@ async def test_canon_provider(monkeypatch):
     chunk = await provider.get_context(request)
     assert "CANONICAL TRUTHS" in chunk.text
     assert "S\xe1g\xe1" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_canon_provider_llm_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "chapter_generation.context_kg_utils.get_canonical_truths_from_kg",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_call_llm",
+        AsyncMock(return_value=("fallback canon", {})),
+    )
+    provider = CanonProvider()
+    request = ContextRequest(1, None, {"title": "T"})
+    chunk = await provider.get_context(request)
+    assert "fallback canon" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_plan_provider_llm_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_call_llm",
+        AsyncMock(return_value=("- a\n- b", {})),
+    )
+    provider = PlanProvider()
+    request = ContextRequest(1, "intro", {"plot_points": ["intro"]})
+    chunk = await provider.get_context(request)
+    assert "a" in chunk.text
