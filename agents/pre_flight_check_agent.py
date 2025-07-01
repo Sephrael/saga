@@ -15,10 +15,12 @@ from data_access import character_queries, world_queries
 logger = structlog.get_logger(__name__)
 
 # Trait combinations that cannot coexist.
-CONTRADICTORY_TRAIT_PAIRS = []
+CONTRADICTORY_TRAIT_PAIRS = [("Incorporeal", "Corporeal")]
 
 # Canonical facts that must always hold true.
-CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = []
+CANONICAL_FACTS_TO_ENFORCE: list[dict[str, str]] = [
+    {"name": "Ságá", "trait": "Corporeal", "conflicts_with": "Incorporeal"}
+]
 
 
 class PreFlightCheckAgent:

@@ -9,6 +9,7 @@ from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator, RevisionOutcome
 
+from models.agent_models import ChapterEndState
 from models.user_input_models import (
     KeyLocationModel,
     NovelConceptModel,
@@ -215,6 +216,42 @@ async def test_perform_initial_setup_sets_next_context(monkeypatch, orchestrator
     assert result is True
     ctx_mock.assert_awaited_once_with(orchestrator, 1, None)
     assert orchestrator.next_chapter_context == "ctx0"
+
+
+@pytest.mark.asyncio
+async def test_perform_initial_setup_loads_ch0_state(monkeypatch, orchestrator):
+    plot_outline = PlotOutline(title="T", plot_points=["p"], protagonist_name="Hero")
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.run_genesis_phase",
+        AsyncMock(return_value=(plot_outline, {}, {"source": "w"}, {})),
+    )
+    monkeypatch.setattr(orchestrator, "_accumulate_tokens", lambda *_a, **_k: None)
+    monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
+    ctx_mock = AsyncMock(return_value="ctx0")
+    monkeypatch.setattr(orchestrator.context_service, "build_hybrid_context", ctx_mock)
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.neo4j_manager.driver", None, raising=False
+    )
+
+    ch0_data = {"end_state_json": "{}"}
+    get_mock = AsyncMock(return_value=ch0_data)
+    monkeypatch.setattr(
+        "data_access.chapter_queries.get_chapter_data_from_db", get_mock
+    )
+    monkeypatch.setattr(
+        "models.agent_models.ChapterEndState.model_validate_json",
+        lambda *_a, **_k: ChapterEndState(
+            chapter_number=0,
+            character_states=[],
+            unresolved_cliffhanger=None,
+            key_world_changes={},
+        ),
+    )
+
+    result = await orchestrator.perform_initial_setup()
+
+    assert result is True
+    get_mock.assert_awaited_once_with(0)
 
 
 @pytest.mark.asyncio
