@@ -11,8 +11,22 @@ from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from data_access import character_queries, world_queries
+from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
+
+
+def _outline_to_dict(outline: Any) -> dict[str, Any]:
+    """Return a dictionary representation of the plot outline."""
+
+    if isinstance(outline, dict):
+        return outline
+    if hasattr(outline, "model_dump"):
+        try:
+            return outline.model_dump(exclude_none=True)
+        except Exception as exc:  # pragma: no cover - log and continue
+            logger.warning("Failed to convert plot outline", error=exc)
+    return {}
 
 
 class PreFlightCheckAgent:
@@ -50,16 +64,17 @@ class PreFlightCheckAgent:
 
     async def _identify_contradictory_pairs(
         self,
-        plot_outline: dict[str, Any],
+        plot_outline: BaseModel | dict[str, Any],
         characters: dict[str, Any] | None,
         world: dict[str, dict[str, Any]] | None,
     ) -> list[tuple[str, str]]:
         """Use the LLM to detect contradictory trait pairs."""
 
         prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
+        outline_dict = _outline_to_dict(plot_outline)
         context_json = json.dumps(
             {
-                "plot": plot_outline,
+                "plot": outline_dict,
                 "characters": characters or {},
                 "world": world or {},
             },
@@ -158,7 +173,7 @@ class PreFlightCheckAgent:
         )
 
     async def _gather_canonical_facts(
-        self, plot_outline: dict[str, Any]
+        self, plot_outline: BaseModel | dict[str, Any]
     ) -> list[dict[str, str]]:
         """Return canonical facts that must remain consistent."""
         query = (
@@ -187,8 +202,9 @@ class PreFlightCheckAgent:
         if not facts:
             return []
 
+        outline_dict = _outline_to_dict(plot_outline)
         prefix = "/no_think\n" if settings.ENABLE_LLM_NO_THINK_DIRECTIVE else ""
-        prompt_context = {"plot_outline": plot_outline, "canonical_facts": facts}
+        prompt_context = {"plot_outline": outline_dict, "canonical_facts": facts}
         prompt = (
             prefix
             + "For each canonical_facts item, provide a trait that directly contradicts "
@@ -228,17 +244,18 @@ class PreFlightCheckAgent:
 
     async def perform_core_checks(
         self,
-        plot_outline: dict[str, Any],
+        plot_outline: BaseModel | dict[str, Any],
         characters: dict[str, Any] | None,
         world: dict[str, dict[str, Any]] | None,
     ) -> None:
-        protagonist = plot_outline.get("protagonist_name")
+        outline_dict = _outline_to_dict(plot_outline)
+        protagonist = outline_dict.get("protagonist_name")
         char_names = set(characters.keys()) if characters else set()
         if protagonist:
             char_names.add(protagonist)
 
         trait_pairs = await self._identify_contradictory_pairs(
-            plot_outline, characters, world
+            outline_dict, characters, world
         )
 
         for char_name in char_names:
@@ -246,7 +263,7 @@ class PreFlightCheckAgent:
                 if await self._character_has_conflict(char_name, trait1, trait2):
                     await self._resolve_trait_conflict(char_name, trait1, trait2)
 
-        for fact in await self._gather_canonical_facts(plot_outline):
+        for fact in await self._gather_canonical_facts(outline_dict):
             if await self._character_has_conflict(
                 fact["name"], fact["trait"], fact["conflicts_with"]
             ):
