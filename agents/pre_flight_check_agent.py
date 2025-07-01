@@ -89,7 +89,7 @@ class PreFlightCheckAgent:
             model_name=self.model_name,
             prompt=context_json + "\n" + prompt,
             temperature=0.0,
-            max_tokens=200,
+            max_tokens=4096,
             auto_clean_response=True,
         )
         try:
@@ -115,7 +115,7 @@ class PreFlightCheckAgent:
             model_name=self.model_name,
             prompt=prompt,
             temperature=0.0,
-            max_tokens=40,
+            max_tokens=2048,
             auto_clean_response=True,
         )
         chosen = trait1
