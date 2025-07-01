@@ -72,3 +72,31 @@ async def test_canon_provider(monkeypatch):
     chunk = await provider.get_context(request)
     assert "CANONICAL TRUTHS" in chunk.text
     assert "S\xe1g\xe1" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_canon_provider_llm_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "core.db_manager.neo4j_manager.execute_read_query",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_call_llm",
+        AsyncMock(return_value=("fallback canon", {})),
+    )
+    provider = CanonProvider()
+    request = ContextRequest(1, None, {"title": "T"})
+    chunk = await provider.get_context(request)
+    assert "fallback canon" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_plan_provider_llm_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_call_llm",
+        AsyncMock(return_value=("- a\n- b", {})),
+    )
+    provider = PlanProvider()
+    request = ContextRequest(1, "intro", {"plot_points": ["intro"]})
+    chunk = await provider.get_context(request)
+    assert "a" in chunk.text
