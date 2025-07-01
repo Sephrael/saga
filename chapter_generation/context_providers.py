@@ -145,11 +145,6 @@ class CanonProvider(ContextProvider):
 
     source = "canon"
 
-    def __init__(self, db_manager_instance: Any | None = None) -> None:
-        from core.db_manager import neo4j_manager as default_manager
-
-        self.neo4j = db_manager_instance or default_manager
-
     async def get_context(self, request: ContextRequest) -> ContextChunk:
         query = (
             "MATCH (c:Character)-[:HAS_TRAIT]->"

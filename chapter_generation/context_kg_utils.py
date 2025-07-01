@@ -7,12 +7,48 @@ import json
 from typing import Any
 
 import structlog
+
+from agents.pre_flight_check_agent import CANONICAL_FACTS_TO_ENFORCE
 from config import settings
 from core.llm_interface import llm_service
 from data_access import character_queries, world_queries
 
 logger = structlog.get_logger(__name__)
 
+async def get_canonical_truths_from_kg() -> list[str]:
+    """Return canonical truths stored in the knowledge graph."""
+
+    lines: list[str] = []
+    query = (
+        "MATCH (c:Character:Entity)-[:HAS_TRAIT]->"
+        "(t:Trait:Entity {is_canonical_truth: true}) "
+        "RETURN c.name AS name, t.name AS trait"
+    )
+    try:
+        records = await character_queries.neo4j_manager.execute_read_query(query)
+    except Exception as exc:  # pragma: no cover - DB failures logged
+        logger.error("Failed to load canonical truths: %s", exc, exc_info=True)
+        records = []
+
+    for rec in records:
+        name = rec.get("name")
+        trait = rec.get("trait")
+        if name and trait:
+            line = f"- {name} is {trait}"
+            if line not in lines:
+                lines.append(line)
+
+    if not lines:
+        for fact in CANONICAL_FACTS_TO_ENFORCE:
+            name = fact.get("name")
+            trait = fact.get("trait")
+            if not name or not trait:
+                continue
+            line = f"- {name} is {trait}"
+            if line not in lines:
+                lines.append(line)
+
+    return lines
 
 async def get_reliable_kg_facts_for_drafting_prompt(
     plot_outline: dict[str, Any],

@@ -59,12 +59,9 @@ async def test_kg_reasoning_provider(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_canon_provider(monkeypatch):
-    async def fake_query(*_args, **_kwargs):
-        return [{"name": "S\xe1g\xe1", "trait": "Corporeal"}]
-
     monkeypatch.setattr(
-        "core.db_manager.neo4j_manager.execute_read_query",
-        AsyncMock(side_effect=fake_query),
+        "chapter_generation.context_kg_utils.get_canonical_truths_from_kg",
+        AsyncMock(return_value=["- S\xe1g\xe1 is Corporeal"]),
     )
 
     provider = CanonProvider()
@@ -77,7 +74,7 @@ async def test_canon_provider(monkeypatch):
 @pytest.mark.asyncio
 async def test_canon_provider_llm_fallback(monkeypatch):
     monkeypatch.setattr(
-        "core.db_manager.neo4j_manager.execute_read_query",
+        "chapter_generation.context_kg_utils.get_canonical_truths_from_kg",
         AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
