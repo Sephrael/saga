@@ -372,7 +372,7 @@ async def test_patch_validation_toggle(monkeypatch):
 @pytest.mark.asyncio
 async def test_patch_validation_scores(monkeypatch):
     async def fake_call(*_args, **_kwargs):
-        return "85 good", None
+        return "YES\nok", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
 
@@ -381,7 +381,7 @@ async def test_patch_validation_scores(monkeypatch):
     assert ok
 
     async def fake_call_low(*_args, **_kwargs):
-        return "60 needs work", None
+        return "NO\nbad", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call_low)
     agent2 = PatchValidationAgent()

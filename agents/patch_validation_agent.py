@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import string
-
 import structlog
 from config import settings
 from core.llm_interface import llm_service
@@ -55,33 +53,26 @@ class PatchValidationAgent:
         context_snippet: str,
         patch: PatchInstruction,
         problems: list[ProblemDetail],
-    ) -> tuple[bool, dict[str, int] | None]:
-        """Validate a single patch against reported problems.
+    ) -> tuple[bool, str | None, dict[str, int] | None]:
+        """Validate a single patch via an LLM call.
 
         Args:
-            context_snippet: Portion of chapter text surrounding the problem.
-            patch: Proposed patch instruction to validate.
-            problems: Collection of issues the patch should address.
+            context_snippet: Unused snippet of surrounding text.
+            patch: Proposed patch instruction.
+            problems: List of problems the patch should solve. The first problem
+                is used for validation.
 
         Returns:
-            A tuple where the first element indicates whether the patch passed
-            validation and the second contains optional token usage data from the
-            LLM call.
-
-        Side Effects:
-            Sends a prompt to the LLM service and logs diagnostic information.
+            Tuple ``(is_valid, failure_reason, usage)`` where ``is_valid`` is
+            ``True`` if the LLM affirms the patch fixes the problem.
         """
 
-        issues_list = "\n".join(
-            f"- {p.get('problem_description', '') if isinstance(p, dict) else p.problem_description}"
-            for p in problems
-        )
+        problem: ProblemDetail | None = problems[0] if problems else None
         prompt = render_prompt(
             "patch_validation_agent/validate_patch.j2",
             {
-                "context_snippet": context_snippet,
-                "patch_text": patch.get("replace_with", ""),
-                "issues_list": issues_list,
+                "problem": problem,
+                "patch": patch,
             },
         )
 
@@ -89,37 +80,18 @@ class PatchValidationAgent:
             model_name=self.model_name,
             prompt=prompt,
             temperature=settings.TEMPERATURE_EVALUATION,
-            max_tokens=1024,
+            max_tokens=256,
             allow_fallback=True,
             stream_to_disk=False,
             auto_clean_response=True,
         )
 
-        first_line = response_text.splitlines()[0].strip().lower()
-        score = 0
-        for token in first_line.split():
-            if token.isdigit():
-                score = int(token)
-                break
-        is_pass = score >= settings.PATCH_VALIDATION_THRESHOLD
-
+        lines = response_text.splitlines()
+        first_line = lines[0].strip().upper() if lines else ""
+        is_pass = first_line.startswith("YES")
         failure_reason: str | None = None
-        if not is_pass:
-            score_is_ok = score >= settings.PATCH_VALIDATION_THRESHOLD
-            if not score_is_ok:
-                failure_reason = f"Score {score} below threshold {settings.PATCH_VALIDATION_THRESHOLD}"
-                logger.info(
-                    "Patch validation FAILED. Score %d is below threshold %d.",
-                    score,
-                    settings.PATCH_VALIDATION_THRESHOLD,
-                )
-            else:
-                failure_reason = (
-                    first_line.split(" ", 1)[1]
-                    if " " in first_line
-                    else "Validation failed"
-                )
-        patch_text_lower = patch.get("replace_with", "").lower()
+        if not is_pass and len(lines) > 1:
+            failure_reason = lines[1].strip()
 
         return is_pass, failure_reason, usage
 

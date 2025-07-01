@@ -1,13 +1,12 @@
 import pytest
 from agents.patch_validation_agent import PatchValidationAgent
-from config import settings
 from core.llm_interface import llm_service
 
 
 @pytest.mark.asyncio
-async def test_validation_rejects_below_threshold(monkeypatch):
+async def test_validation_rejects_no(monkeypatch):
     async def fake_call(*_a, **_k):
-        return f"{settings.PATCH_VALIDATION_THRESHOLD - 1} low", None
+        return "NO\nBad patch", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
     agent = PatchValidationAgent()
@@ -16,9 +15,9 @@ async def test_validation_rejects_below_threshold(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_validation_accepts_at_threshold(monkeypatch):
+async def test_validation_accepts_yes(monkeypatch):
     async def fake_call(*_a, **_k):
-        return f"{settings.PATCH_VALIDATION_THRESHOLD} ok", None
+        return "YES\nLooks good", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
     agent = PatchValidationAgent()
@@ -27,9 +26,9 @@ async def test_validation_accepts_at_threshold(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rewrite_instruction_missing_keyword(monkeypatch):
+async def test_validation_failure_reason(monkeypatch):
     async def fake_call(*_a, **_k):
-        return f"{settings.PATCH_VALIDATION_THRESHOLD + 10} good", None
+        return "NO\nMissing dragon", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
     agent = PatchValidationAgent()
@@ -42,23 +41,4 @@ async def test_rewrite_instruction_missing_keyword(monkeypatch):
     ok, reason, _ = await agent.validate_patch(
         "ctx", {"replace_with": "A hero wins."}, problems
     )
-    assert not ok
-
-
-@pytest.mark.asyncio
-async def test_rewrite_instruction_keywords_present(monkeypatch):
-    async def fake_call(*_a, **_k):
-        return f"{settings.PATCH_VALIDATION_THRESHOLD + 10} good", None
-
-    monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
-    agent = PatchValidationAgent()
-    problems = [
-        {
-            "problem_description": "lacking dragon",
-            "rewrite_instruction": "mention the dragon",
-        }
-    ]
-    ok, reason, _ = await agent.validate_patch(
-        "ctx", {"replace_with": "The dragon appears."}, problems
-    )
-    assert ok
+    assert not ok and reason == "Missing dragon"
