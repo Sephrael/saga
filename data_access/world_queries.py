@@ -612,24 +612,32 @@ async def get_world_building_from_db(
             utils._normalize_for_id("_overview_")  # Should be wc_id_param
         )
 
-    # Load WorldElements and their details with chapter limit
-    we_query_parts = ["MATCH (we:WorldElement:Entity)"]
     we_params: dict[str, Any] = {}
-
-    base_conditions = ["(we.is_deleted IS NULL OR we.is_deleted = FALSE)"]
+    chapter_filter = ""
     if chapter_limit is not None:
-        base_conditions.append(
-            f"(we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)"
-        )
-        we_params["chapter_limit_param"] = chapter_limit
+        chapter_filter = f"AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $limit)"
+        we_params["limit"] = chapter_limit
 
-    if base_conditions:
-        we_query_parts.append("WHERE " + " AND ".join(base_conditions))
+    query = f"""
+    MATCH (we:WorldElement:Entity)
+    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
+    OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
+    OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
+    OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
+    OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
+    OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+      WHERE $limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit
+    WITH we,
+         collect(DISTINCT goal.value) AS goals,
+         collect(DISTINCT rule.value) AS rules,
+         collect(DISTINCT kelem.value) AS key_elements,
+         collect(DISTINCT trait.value) AS traits,
+         collect(DISTINCT {{chapter: elab.{KG_NODE_CHAPTER_UPDATED}, summary: elab.summary, prov: elab.{KG_IS_PROVISIONAL}}}) AS elaborations
+    RETURN we, goals, rules, key_elements, traits, elaborations
+    ORDER BY we.category, we.name
+    """
 
-    we_query_parts.append("RETURN we")
-    we_results = await neo4j_manager.execute_read_query(
-        " ".join(we_query_parts), we_params
-    )
+    we_results = await neo4j_manager.execute_read_query(query, we_params or None)
 
     if not we_results:
         logger.info(
@@ -667,16 +675,12 @@ async def get_world_building_from_db(
         item_detail_dict.pop("created_ts", None)
         item_detail_dict.pop("updated_ts", None)
 
-        # created_chapter is already used in the main query filter if chapter_limit is present
         created_chapter_num = item_detail_dict.pop(
             KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
         item_detail_dict["created_chapter"] = int(created_chapter_num)
-        item_detail_dict[kg_keys.added_key(created_chapter_num)] = (
-            True  # Mark as added in its creation chapter
-        )
+        item_detail_dict[kg_keys.added_key(created_chapter_num)] = True
 
-        # Provisional status based on its own flag or chapter-specific source quality
         is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
         item_detail_dict["is_provisional"] = is_provisional_at_creation
         if is_provisional_at_creation:
@@ -684,64 +688,28 @@ async def get_world_building_from_db(
                 "provisional_from_unrevised_draft"
             )
 
-        # List properties (goals, rules, etc.) are fetched if the parent WE is included.
-        # No separate chapter filtering for these ValueNode relationships themselves.
-        list_prop_map = {
-            "goals": "HAS_GOAL",
-            "rules": "HAS_RULE",
-            "key_elements": "HAS_KEY_ELEMENT",
-            "traits": "HAS_TRAIT_ASPECT",
-        }
-        for list_prop_key, rel_name_internal in list_prop_map.items():
-            list_values_query = f"""
-            MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:{rel_name_internal}]->(v:ValueNode:Entity {{type: $value_node_type_param}})
-            RETURN v.value AS item_value ORDER BY v.value ASC
-            """
-            list_val_res = await neo4j_manager.execute_read_query(
-                list_values_query,
-                {"we_id_param": we_id, "value_node_type_param": list_prop_key},
-            )
-            item_detail_dict[list_prop_key] = sorted(
-                [
-                    res["item_value"]
-                    for res in list_val_res
-                    if res and res.get("item_value") is not None
-                ]
-            )
-
-        # Fetch elaborations with chapter limit
-        elab_query_parts = [
-            "MATCH (:WorldElement:Entity {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)"
-        ]
-        elab_params: dict[str, Any] = {"we_id_param": we_id}
-        if chapter_limit is not None:
-            elab_query_parts.append(
-                f"WHERE elab.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param"
-            )
-            elab_params["chapter_limit_param"] = chapter_limit
-        elab_query_parts.append(
-            f"RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS is_provisional"
+        item_detail_dict["goals"] = sorted(
+            [v for v in record.get("goals", []) if v is not None]
         )
-        elab_query_parts.append("ORDER BY elab.chapter_updated ASC")
-
-        elab_results = await neo4j_manager.execute_read_query(
-            " ".join(elab_query_parts), elab_params
+        item_detail_dict["rules"] = sorted(
+            [v for v in record.get("rules", []) if v is not None]
+        )
+        item_detail_dict["key_elements"] = sorted(
+            [v for v in record.get("key_elements", []) if v is not None]
+        )
+        item_detail_dict["traits"] = sorted(
+            [v for v in record.get("traits", []) if v is not None]
         )
 
         actual_elaborations_count = 0
-        if elab_results:
-            for elab_rec in elab_results:
-                chapter_val = elab_rec.get("chapter")
-                summary_val = elab_rec.get("summary")
-                # Ensure elaboration is within chapter_limit (query should handle this, but good to be safe)
-                if (
-                    chapter_val is not None
-                    and summary_val is not None
-                    and (chapter_limit is None or chapter_val <= chapter_limit)
-                ):
+        for elab_rec in record.get("elaborations", []):
+            chapter_val = elab_rec.get("chapter")
+            summary_val = elab_rec.get("summary")
+            if chapter_val is not None and summary_val is not None:
+                if chapter_limit is None or chapter_val <= chapter_limit:
                     elab_key = kg_keys.elaboration_key(chapter_val)
                     item_detail_dict[elab_key] = summary_val
-                    if elab_rec.get(KG_IS_PROVISIONAL):
+                    if elab_rec.get("prov"):
                         item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
                             "provisional_from_unrevised_draft"
                         )
