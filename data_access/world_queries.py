@@ -456,7 +456,7 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
         return False
 
 
-@alru_cache(maxsize=128)
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
 async def get_world_item_by_id(item_id: str) -> WorldItem | None:
     """Retrieve a single ``WorldItem`` from Neo4j by its ID or fall back to name."""
     logger.info("Loading world item '%s' from Neo4j...", item_id)
@@ -549,7 +549,7 @@ async def get_world_item_by_id(item_id: str) -> WorldItem | None:
     return WorldItem.from_dict(category, item_name, item_detail)
 
 
-@alru_cache(maxsize=128)
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
 async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
     """Return all world item IDs grouped by category."""
     query = (
