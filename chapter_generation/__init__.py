@@ -8,11 +8,11 @@ from .context_models import (
     ProviderSettings,
 )
 from .context_orchestrator import ContextOrchestrator, create_from_settings
-from .drafting_service import DraftResult
-from .evaluation_service import EvaluationCycleResult
-from .finalization_service import FinalizationServiceResult
+from .drafting_service import DraftingService, DraftResult
+from .evaluation_service import EvaluationCycleResult, EvaluationService
+from .finalization_service import FinalizationService, FinalizationServiceResult
 from .prerequisites_service import PrerequisiteData
-from .revision_service import RevisionResult
+from .revision_service import RevisionResult, RevisionService
 
 __all__ = [
     "PrerequisiteData",
@@ -24,7 +24,11 @@ __all__ = [
     "ProfileConfiguration",
     "create_from_settings",
     "DraftResult",
+    "DraftingService",
     "EvaluationCycleResult",
+    "EvaluationService",
     "RevisionResult",
+    "RevisionService",
     "FinalizationServiceResult",
+    "FinalizationService",
 ]

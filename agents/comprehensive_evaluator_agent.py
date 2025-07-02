@@ -1,4 +1,6 @@
-# comprehensive_evaluator_agent.py
+# agents/comprehensive_evaluator_agent.py
+"""Agent for analyzing chapter drafts and generating revision feedback."""
+
 import json
 from typing import Any
 
@@ -20,6 +22,8 @@ logger = structlog.get_logger(__name__)
 
 
 class ComprehensiveEvaluatorAgent:
+    """Evaluate chapter drafts and identify issues."""
+
     def __init__(self, model_name: str = settings.EVALUATION_MODEL):
         self.model_name = model_name
         logger.info(

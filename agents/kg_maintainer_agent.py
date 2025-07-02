@@ -1,4 +1,6 @@
-# kg_maintainer_agent.py
+# agents/kg_maintainer_agent.py
+"""Manage Neo4j updates and knowledge extraction."""
+
 import asyncio
 import json
 import re

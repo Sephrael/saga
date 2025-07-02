@@ -59,8 +59,6 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── chapter_generation_runner.py # End-to-end runner
 │   └── token_accountant.py          # Token usage tracking
 ├── processing/                      # Text processing pipeline
-│   ├── context_generator.py         # Semantic context assembly
-│   ├── evaluation_pipeline.py       # Evaluation & revision cycle
 │   ├── problem_parser.py            # Parse evaluation feedback
 │   ├── revision_manager.py          # Coordinates revisions
 │   ├── repetition_analyzer.py       # Detects repeating text
@@ -182,6 +180,14 @@ def process_chapter_draft(
         context_keys=list(context_data.keys())
     )
 ```
+
+### Agent Responsibilities
+- **PlannerAgent**: Generate plot points and scene plans.
+- **DraftingAgent**: Produce initial chapter drafts from context.
+- **ComprehensiveEvaluatorAgent**: Analyze drafts and provide detailed revision feedback.
+- **PatchValidationAgent**: Validate patch instructions during revision cycles.
+- **KGMaintainerAgent**: Persist and enrich knowledge graph entries.
+- **FinalizeAgent**: Summarize chapters and store final artifacts.
 
 ### Neo4j/Cypher Best Practices
 - **Query Organization**: Store complex queries in the `data_access/` module
