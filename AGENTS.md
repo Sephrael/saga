@@ -183,6 +183,14 @@ def process_chapter_draft(
     )
 ```
 
+### Agent Responsibilities
+- **PlannerAgent**: Generate plot points and scene plans.
+- **DraftingAgent**: Produce initial chapter drafts from context.
+- **ComprehensiveEvaluatorAgent**: Analyze drafts and provide detailed revision feedback.
+- **PatchValidationAgent**: Validate patch instructions during revision cycles.
+- **KGMaintainerAgent**: Persist and enrich knowledge graph entries.
+- **FinalizeAgent**: Summarize chapters and store final artifacts.
+
 ### Neo4j/Cypher Best Practices
 - **Query Organization**: Store complex queries in the `data_access/` module
 - **Parameter Binding**: Always use parameterized queries (`$parameter_name`)

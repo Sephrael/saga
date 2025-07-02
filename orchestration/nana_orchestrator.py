@@ -52,6 +52,7 @@ from models.agent_models import ChapterEndState
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
 from orchestration.chapter_generation_runner import ChapterGenerationRunner
+from orchestration.service_layer import ChapterServiceLayer
 from orchestration.token_accountant import Stage, TokenAccountant
 
 logger = structlog.get_logger(__name__)
@@ -86,6 +87,12 @@ class NANA_Orchestrator:
         self.revision_manager = RevisionManager()
         self.repetition_tracker = RepetitionTracker()
         self.repetition_analyzer = RepetitionAnalyzer(tracker=self.repetition_tracker)
+        self.service_layer = ChapterServiceLayer(
+            drafting_agent=self.drafting_agent,
+            evaluator_agent=self.evaluator_agent,
+            revision_manager=self.revision_manager,
+            finalize_agent=self.finalize_agent,
+        )
 
         self.context_service = create_context_service()
 
@@ -929,17 +936,15 @@ class NANA_Orchestrator:
         self._update_rich_display(
             step=f"Ch {novel_chapter_number} - Drafting Initial Text"
         )
-        (
-            initial_draft_text,
-            initial_raw_llm_text,
-            draft_usage,
-        ) = await self.drafting_agent.draft_chapter(
+        result = await self.service_layer.draft_chapter(
             self.plot_outline,
             novel_chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
             chapter_plan,
         )
+        initial_draft_text, initial_raw_llm_text = result
+        draft_usage = None
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.DRAFTING.value}", draft_usage
         )

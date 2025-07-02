@@ -1,3 +1,6 @@
+# agents/finalize_agent.py
+"""Finalize chapter text and update the knowledge graph."""
+
 import asyncio
 from typing import Any, TypedDict
 

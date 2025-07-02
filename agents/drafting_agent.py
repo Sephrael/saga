@@ -1,4 +1,6 @@
-# drafting_agent.py
+# agents/drafting_agent.py
+"""Generate initial chapter drafts."""
+
 from typing import Any
 
 import structlog
