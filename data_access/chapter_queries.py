@@ -44,6 +44,13 @@ async def get_chapter_data_from_db(chapter_number: int) -> dict[str, Any] | None
     return await chapter_repository.get_chapter_data(chapter_number)
 
 
+async def get_chapters_data_from_db(
+    start_number: int, end_number: int
+) -> list[dict[str, Any]]:
+    """Return data for chapters ``start_number`` through ``end_number - 1``."""
+    return await chapter_repository.get_chapter_data_range(start_number, end_number)
+
+
 async def get_embedding_from_db(chapter_number: int) -> np.ndarray | None:
     """Return the text embedding for ``chapter_number`` if present."""
     return await chapter_repository.get_embedding(chapter_number)

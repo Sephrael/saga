@@ -5,6 +5,7 @@
 from .chapter_queries import (
     find_similar_chapters_in_db,
     get_chapter_data_from_db,
+    get_chapters_data_from_db,
     get_embedding_from_db,
     load_chapter_count_from_db,
     save_chapter_data_to_db,
@@ -69,6 +70,7 @@ __all__ = [
     "load_chapter_count_from_db",
     "save_chapter_data_to_db",
     "get_chapter_data_from_db",
+    "get_chapters_data_from_db",
     "get_embedding_from_db",
     "find_similar_chapters_in_db",
     "add_kg_triples_batch_to_db",

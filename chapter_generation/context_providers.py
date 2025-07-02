@@ -69,13 +69,17 @@ class SemanticHistoryProvider(ContextProvider):
 
             lines: list[str] = []
             start = max(1, request.chapter_number - 2)
-            for i in range(start, request.chapter_number):
-                chap = await self.chapter_queries.get_chapter_data_from_db(i)
-                if chap:
-                    content = chap.get("summary") or chap.get("text", "")
-                    lines.append(
-                        f"[Immediate Context from Chapter {i}]:\n{content}\n---\n"
-                    )
+            recent = await self.chapter_queries.get_chapters_data_from_db(
+                start, request.chapter_number
+            )
+            for chap in recent:
+                num = chap.get("number")
+                if num is None:
+                    continue
+                content = chap.get("summary") or chap.get("text", "")
+                lines.append(
+                    f"[Immediate Context from Chapter {num}]:\n{content}\n---\n"
+                )
 
             if similar:
                 for item in sorted(

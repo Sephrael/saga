@@ -24,7 +24,7 @@ async def test_plot_point_focus_used(monkeypatch):
         chapter_queries, "find_similar_chapters_in_db", AsyncMock(return_value=[])
     )
     monkeypatch.setattr(
-        chapter_queries, "get_chapter_data_from_db", AsyncMock(return_value=None)
+        chapter_queries, "get_chapters_data_from_db", AsyncMock(return_value=[])
     )
 
     provider = SemanticHistoryProvider(chapter_queries, llm_service)

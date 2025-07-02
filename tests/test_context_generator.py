@@ -16,8 +16,11 @@ from data_access import chapter_queries
 
 @pytest.mark.asyncio
 async def test_immediate_context_added(monkeypatch):
-    async def fake_get_chapter_data(num):
-        return {"summary": f"sum{num}", "is_provisional": False}
+    async def fake_get_range(start, end):
+        return [
+            {"number": i, "summary": f"sum{i}", "is_provisional": False}
+            for i in range(start, end)
+        ]
 
     async def fake_embedding(_):
         return np.array([0.1], dtype=np.float32)
@@ -34,8 +37,8 @@ async def test_immediate_context_added(monkeypatch):
 
     monkeypatch.setattr(
         chapter_queries,
-        "get_chapter_data_from_db",
-        AsyncMock(side_effect=fake_get_chapter_data),
+        "get_chapters_data_from_db",
+        AsyncMock(side_effect=fake_get_range),
     )
     monkeypatch.setattr(
         llm_service, "async_get_embedding", AsyncMock(side_effect=fake_embedding)
@@ -64,8 +67,11 @@ async def test_immediate_context_added(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_decay_sorting(monkeypatch):
-    async def fake_get_chapter_data(num):
-        return {"summary": f"sum{num}", "is_provisional": False}
+    async def fake_get_range(start, end):
+        return [
+            {"number": i, "summary": f"sum{i}", "is_provisional": False}
+            for i in range(start, end)
+        ]
 
     async def fake_embedding(_):
         return np.array([0.1], dtype=np.float32)
@@ -94,8 +100,8 @@ async def test_decay_sorting(monkeypatch):
 
     monkeypatch.setattr(
         chapter_queries,
-        "get_chapter_data_from_db",
-        AsyncMock(side_effect=fake_get_chapter_data),
+        "get_chapters_data_from_db",
+        AsyncMock(side_effect=fake_get_range),
     )
     monkeypatch.setattr(
         llm_service, "async_get_embedding", AsyncMock(side_effect=fake_embedding)
