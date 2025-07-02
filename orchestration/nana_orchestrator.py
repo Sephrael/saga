@@ -1,4 +1,6 @@
 # orchestration/nana_orchestrator.py
+"""Primary orchestrator coordinating all SAGA agent interactions."""
+
 import asyncio
 import time  # For Rich display updates
 from dataclasses import dataclass, field
@@ -523,6 +525,22 @@ class NANA_Orchestrator:
         )
         return text, False
 
+    async def _prepare_text_for_evaluation(
+        self, novel_chapter_number: int, text: str, is_flawed: bool
+    ) -> tuple[str, bool]:
+        """Deduplicate text before evaluation and update flaw flag."""
+        deduped_text, removed_chars = await self.perform_deduplication(
+            text, novel_chapter_number
+        )
+        if removed_chars > 0:
+            logger.info(
+                "Ch %s Rev-Loop: De-duplication removed %s chars before evaluation.",
+                novel_chapter_number,
+                removed_chars,
+            )
+            is_flawed = True
+        return deduped_text, is_flawed
+
     async def _run_revision_loop(
         self,
         novel_chapter_number: int,
@@ -572,16 +590,12 @@ class NANA_Orchestrator:
 
             (
                 current_text,
-                removed_chars,
-            ) = await self.perform_deduplication(current_text, novel_chapter_number)
-
-            if removed_chars > 0:
-                logger.info(
-                    "Ch %s Rev-Loop: De-duplication removed %s chars before evaluation.",
-                    novel_chapter_number,
-                    removed_chars,
-                )
-                is_from_flawed_source_for_kg = True
+                is_from_flawed_source_for_kg,
+            ) = await self._prepare_text_for_evaluation(
+                novel_chapter_number,
+                current_text,
+                is_from_flawed_source_for_kg,
+            )
 
             (
                 eval_result_obj,
