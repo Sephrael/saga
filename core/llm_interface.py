@@ -383,7 +383,7 @@ class LLMService:
                 f"{prefix}{stream_prefix}LLM ('{model_name}') response missing 'usage' information or 'usage' was not a dictionary."
             )
 
-    async def async_call_llm(
+    async def _async_call_llm(
         self,
         model_name: str,
         prompt: str,
@@ -785,6 +785,31 @@ class LLMService:
                 final_text_response = self.clean_model_response(final_text_response)
 
             return final_text_response, current_usage_data
+
+    @alru_cache(maxsize=settings.LLM_CALL_CACHE_SIZE)
+    async def async_call_llm(
+        self,
+        model_name: str,
+        prompt: str,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        allow_fallback: bool = False,
+        stream_to_disk: bool = False,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        auto_clean_response: bool = True,
+    ) -> tuple[str, dict[str, int] | None]:
+        return await self._async_call_llm(
+            model_name=model_name,
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            allow_fallback=allow_fallback,
+            stream_to_disk=stream_to_disk,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            auto_clean_response=auto_clean_response,
+        )
 
     def clean_model_response(self, text: str) -> str:
         """Cleans common artifacts from LLM text responses, including content within <think> tags and normalizes newlines."""
