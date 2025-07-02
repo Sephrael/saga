@@ -72,8 +72,25 @@ class ContextOrchestrator:
                     "Failed to serialize agent hints for cache key", error=exc
                 )
 
+        profile = self.profiles.get(
+            request.profile_name, self.profiles.get(ContextProfileName.DEFAULT)
+        )
+        if profile is None:
+            raise ValueError(f"Unknown context profile: {request.profile_name}")
+
+        provider_conf = tuple(
+            (
+                type(ps.provider).__module__,
+                type(ps.provider).__qualname__,
+                ps.max_tokens,
+                ps.detail_level,
+            )
+            for ps in profile.providers
+        )
+
         cache_key = (
             request.profile_name.value,
+            provider_conf,
             request.chapter_number,
             request.plot_focus,
             agent_key,
@@ -82,12 +99,6 @@ class ContextOrchestrator:
         if cached:
             logger.debug("Context cache hit", key=cache_key)
             return cached
-
-        profile = self.profiles.get(
-            request.profile_name, self.profiles.get(ContextProfileName.DEFAULT)
-        )
-        if profile is None:
-            raise ValueError(f"Unknown context profile: {request.profile_name}")
 
         chunks: list[ContextChunk] = []
         tasks = [ps.provider.get_context(request, ps) for ps in profile.providers]

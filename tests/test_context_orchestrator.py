@@ -1,3 +1,4 @@
+# tests/test_context_orchestrator.py
 import asyncio
 
 import pytest
@@ -56,6 +57,21 @@ class ConfigAwareProvider(ContextProvider):
             text = text[: settings.max_tokens]
         return ContextChunk(
             text=text, tokens=len(text), provenance={}, source=self.source
+        )
+
+
+class CountingProvider(ContextProvider):
+    def __init__(self, text: str, source: str) -> None:
+        self.text = text
+        self.source = source
+        self.call_count = 0
+
+    async def get_context(
+        self, request: ContextRequest, settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        self.call_count += 1
+        return ContextChunk(
+            text=self.text, tokens=len(self.text), provenance={}, source=self.source
         )
 
 
@@ -162,3 +178,47 @@ async def test_provider_settings_passed():
     req = ContextRequest(1, None, {})
     await orch.build_context(req)
     assert provider.last_setting == 5
+
+
+@pytest.mark.asyncio
+async def test_cache_miss_on_profile_change():
+    p1 = CountingProvider("a", "A")
+    p2 = CountingProvider("b", "B")
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(p1)],
+            max_tokens=50,
+        ),
+        ContextProfileName.ALTERNATE: ProfileConfiguration(
+            providers=[ProviderSettings(p2)],
+            max_tokens=50,
+        ),
+    }
+    orch = ContextOrchestrator(profiles)
+    req = ContextRequest(1, None, {}, profile_name=ContextProfileName.DEFAULT)
+    await orch.build_context(req)
+    assert p1.call_count == 1
+    req.profile_name = ContextProfileName.ALTERNATE
+    await orch.build_context(req)
+    assert p2.call_count == 1
+    req.profile_name = ContextProfileName.DEFAULT
+    await orch.build_context(req)
+    assert p1.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_miss_on_provider_setting_change():
+    provider = CountingProvider("abc", "A")
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(provider, max_tokens=5)],
+            max_tokens=50,
+        )
+    }
+    orch = ContextOrchestrator(profiles)
+    req = ContextRequest(1, None, {})
+    await orch.build_context(req)
+    assert provider.call_count == 1
+    profiles[ContextProfileName.DEFAULT].providers[0].max_tokens = 6
+    await orch.build_context(req)
+    assert provider.call_count == 2
