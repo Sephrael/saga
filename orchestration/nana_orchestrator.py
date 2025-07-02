@@ -1,6 +1,5 @@
 # nana_orchestrator.py
 import asyncio
-import importlib
 import time  # For Rich display updates
 from dataclasses import dataclass, field
 from typing import Any
@@ -13,9 +12,12 @@ from agents.finalize_agent import FinalizationResult, FinalizeAgent
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
 from chapter_generation import (
-    ContextOrchestrator,
+    ContextProfileName,
     DraftResult,
     PrerequisiteData,
+)
+from chapter_generation import (
+    create_from_settings as create_context_service,
 )
 from config import settings
 from core.db_manager import neo4j_manager
@@ -85,13 +87,7 @@ class NANA_Orchestrator:
         self.repetition_tracker = RepetitionTracker()
         self.repetition_analyzer = RepetitionAnalyzer(tracker=self.repetition_tracker)
 
-        provider_instances = []
-        for dotted in settings.CONTEXT_PROVIDERS:
-            module_name, class_name = dotted.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            provider_cls = getattr(module, class_name)
-            provider_instances.append(provider_cls())
-        self.context_service = ContextOrchestrator(provider_instances)
+        self.context_service = create_context_service()
 
         self.plot_outline: PlotOutline = PlotOutline()
         self.chapter_count: int = 0
@@ -293,6 +289,7 @@ class NANA_Orchestrator:
             {"chapter_zero_end_state": self.chapter_zero_end_state}
             if self.chapter_zero_end_state
             else None,
+            profile_name=ContextProfileName.DEFAULT,
         )
 
         return True
@@ -838,6 +835,7 @@ class NANA_Orchestrator:
                 novel_chapter_number,
                 None,
                 None,
+                profile_name=ContextProfileName.DEFAULT,
             )
         chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
             self.plot_outline,
@@ -894,6 +892,7 @@ class NANA_Orchestrator:
                 novel_chapter_number,
                 chapter_plan,
                 None,
+                profile_name=ContextProfileName.DEFAULT,
             )
         else:
             self.next_chapter_context = None
@@ -1181,6 +1180,7 @@ class NANA_Orchestrator:
             novel_chapter_number + 1,
             None,
             None,
+            profile_name=ContextProfileName.DEFAULT,
         )
 
         if final_text_result:

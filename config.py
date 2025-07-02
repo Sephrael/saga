@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 import structlog
 from dotenv import load_dotenv
@@ -186,15 +187,20 @@ class SagaSettings(BaseSettings):
     ENABLE_RERANKING: bool = False
     CONTEXT_CACHE_SIZE: int = 16
     CONTEXT_CACHE_TTL: float = 600.0
-    CONTEXT_PROVIDERS: list[str] = [
-        "chapter_generation.context_providers.SemanticHistoryProvider",
-        "chapter_generation.context_providers.StateContextProvider",
-        "chapter_generation.context_providers.CanonProvider",
-        "chapter_generation.context_providers.KGFactProvider",
-        "chapter_generation.context_providers.KGReasoningProvider",
-        "chapter_generation.context_providers.PlanProvider",
-        "chapter_generation.context_providers.UserNoteProvider",
-    ]
+    CONTEXT_PROFILES: dict[str, dict[str, Any]] = {
+        "default": {
+            "max_tokens": 40960,
+            "providers": [
+                "chapter_generation.context_providers.SemanticHistoryProvider",
+                "chapter_generation.context_providers.StateContextProvider",
+                "chapter_generation.context_providers.CanonProvider",
+                "chapter_generation.context_providers.KGFactProvider",
+                "chapter_generation.context_providers.KGReasoningProvider",
+                "chapter_generation.context_providers.PlanProvider",
+                "chapter_generation.context_providers.UserNoteProvider",
+            ],
+        }
+    }
     RERANKER_CANDIDATE_COUNT: int = 15
 
     # Agentic Planning & Prompt Context Snippets
