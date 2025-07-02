@@ -1,4 +1,5 @@
-from utils import kg_property_keys as keys
+# tests/test_kg_property_keys.py
+import kg_constants as keys
 
 
 def test_key_generation():

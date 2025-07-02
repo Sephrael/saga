@@ -2,6 +2,7 @@
 import contextlib
 from typing import Any
 
+import kg_constants as kg_keys
 import structlog
 import utils
 from async_lru import alru_cache  # type: ignore
@@ -10,7 +11,6 @@ from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
-from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.character_cypher import (
     TRAIT_NAME_TO_CANONICAL,
@@ -484,9 +484,7 @@ async def get_character_profiles_from_db(
         ]
         traits_params: dict[str, Any] = {"char_name": char_name}
         if chapter_limit is not None:
-            traits_query_parts.append(
-                "WHERE r.chapter_added <= $chapter_limit_param"
-            )
+            traits_query_parts.append("WHERE r.chapter_added <= $chapter_limit_param")
             traits_params["chapter_limit_param"] = chapter_limit
         traits_query_parts.append("RETURN t.name AS trait_name")
         trait_results = await neo4j_manager.execute_read_query(
@@ -560,9 +558,9 @@ async def get_character_profiles_from_db(
                         dev_key = kg_keys.development_key(chapter_num)
                         profile_dict[dev_key] = summary
                         if dev_rec.get(KG_IS_PROVISIONAL):
-                            profile_dict[
-                                kg_keys.source_quality_key(chapter_num)
-                            ] = "provisional_from_unrevised_draft"
+                            profile_dict[kg_keys.source_quality_key(chapter_num)] = (
+                                "provisional_from_unrevised_draft"
+                            )
 
         # Only add character to profiles_data if it has any relevant data within the chapter_limit
         # Relevant data: traits, relationships, or development events. Or if no chapter_limit is set.
@@ -578,7 +576,10 @@ async def get_character_profiles_from_db(
                     if key.startswith(kg_keys.DEVELOPMENT_PREFIX):
                         try:
                             dev_chapter_num = kg_keys.parse_development_key(key)
-                            if dev_chapter_num is not None and dev_chapter_num <= chapter_limit:
+                            if (
+                                dev_chapter_num is not None
+                                and dev_chapter_num <= chapter_limit
+                            ):
                                 has_relevant_data = True
                                 break
                         except (ValueError, IndexError):

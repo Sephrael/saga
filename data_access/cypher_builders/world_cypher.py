@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+import kg_constants as kg_keys
 import structlog
 from config import settings
 from kg_constants import (
@@ -8,7 +9,6 @@ from kg_constants import (
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem
-from utils import kg_property_keys as kg_keys
 
 logger = structlog.get_logger(__name__)
 

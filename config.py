@@ -86,6 +86,19 @@ class SagaSettings(BaseSettings):
     NEO4J_VECTOR_DIMENSIONS: int = 768
     NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
+    # Knowledge Graph Property Names
+    KG_REL_CHAPTER_ADDED: str = "chapter_added"
+    KG_NODE_CREATED_CHAPTER: str = "created_chapter"
+    KG_NODE_CHAPTER_UPDATED: str = "chapter_updated"
+    KG_IS_PROVISIONAL: str = "is_provisional"
+
+    # Chapter-based Property Prefixes
+    ELABORATION_PREFIX: str = "elaboration_in_chapter_"
+    DEVELOPMENT_PREFIX: str = "development_in_chapter_"
+    SOURCE_QUALITY_PREFIX: str = "source_quality_chapter_"
+    ADDED_PREFIX: str = "added_in_chapter_"
+    UPDATED_PREFIX: str = "updated_in_chapter_"
+
     # Base Model Definitions
     LARGE_MODEL: str = "Qwen3-14B"
     MEDIUM_MODEL: str = "Qwen3-8B"
