@@ -41,19 +41,23 @@ class RepetitionAnalyzer:
 
         # 1. Find all overused phrases first (both in-chapter and cross-chapter)
         tokens = text.split()
-        ngrams = [
-            " ".join(tokens[i : i + self.n]) for i in range(len(tokens) - self.n + 1)
-        ]
-        counts = Counter(ngrams)
+        counts: Counter[tuple[str, ...]] = Counter()
+        overused_in_novel: set[str] = set()
+
+        for i in range(len(tokens) - self.n + 1):
+            ngram_tokens = tuple(tokens[i : i + self.n])
+            counts[ngram_tokens] += 1
+            if (
+                self.tracker
+                and self.tracker.phrase_counts.get(" ".join(ngram_tokens), 0)
+                >= self.cross_threshold
+            ):
+                overused_in_novel.add(" ".join(ngram_tokens))
 
         overused_in_chapter = {
-            ngram for ngram, count in counts.items() if count >= self.threshold
-        }
-        overused_in_novel = {
-            ngram
-            for ngram in ngrams
-            if self.tracker
-            and self.tracker.phrase_counts.get(ngram, 0) >= self.cross_threshold
+            " ".join(ngram)
+            for ngram, count in counts.items()
+            if count >= self.threshold
         }
         all_overused_phrases = overused_in_chapter.union(overused_in_novel)
 
