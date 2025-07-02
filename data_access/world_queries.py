@@ -698,7 +698,7 @@ async def get_world_building_from_db(
 
         # Fetch elaborations with chapter limit
         elab_query_parts = [
-            f"MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)"
+            "MATCH (:WorldElement:Entity {id: $we_id_param})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)"
         ]
         elab_params: dict[str, Any] = {"we_id_param": we_id}
         if chapter_limit is not None:

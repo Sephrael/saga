@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Iterable
@@ -73,12 +74,12 @@ class ContextOrchestrator:
             return cached
 
         chunks: list[ContextChunk] = []
-        for provider in self.providers:
-            try:
-                res = await provider.get_context(request)
-            except Exception as exc:  # pragma: no cover - log and skip
+        tasks = [provider.get_context(request) for provider in self.providers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for provider, res in zip(self.providers, results, strict=True):
+            if isinstance(res, Exception):  # pragma: no cover - log and skip
                 logger.warning(
-                    "Context provider error", provider=provider.source, error=exc
+                    "Context provider error", provider=provider.source, error=res
                 )
                 continue
             if isinstance(res, ContextChunk):
