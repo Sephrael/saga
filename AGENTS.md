@@ -652,6 +652,8 @@ except Neo4jConnectionError as e:
 - **Lazy Loading**: Load context data only when needed
 - **Memory Management**: Clear large objects after processing
 - **Async Operations**: Use async/await for I/O bound operations
+- **Vectorized Similarity**: Use `batch_cosine_similarity` when comparing many
+  embeddings to a single query
 
 ## Security and Data Management
 
