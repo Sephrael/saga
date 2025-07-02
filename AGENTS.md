@@ -59,8 +59,6 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── chapter_generation_runner.py # End-to-end runner
 │   └── token_accountant.py          # Token usage tracking
 ├── processing/                      # Text processing pipeline
-│   ├── context_generator.py         # Semantic context assembly
-│   ├── evaluation_pipeline.py       # Evaluation & revision cycle
 │   ├── problem_parser.py            # Parse evaluation feedback
 │   ├── revision_manager.py          # Coordinates revisions
 │   ├── repetition_analyzer.py       # Detects repeating text
