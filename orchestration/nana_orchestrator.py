@@ -399,9 +399,12 @@ class NANA_Orchestrator:
         ignore_spans = patched_spans
 
         if settings.ENABLE_COMPREHENSIVE_EVALUATION:
+            scoped_outline = utils.get_scoped_plot_outline(
+                self.plot_outline, novel_chapter_number
+            )
             tasks_to_run.append(
                 self.evaluator_agent.evaluate_chapter_draft(
-                    self.plot_outline,
+                    scoped_outline,
                     current_text,
                     novel_chapter_number,
                     plot_point_focus,

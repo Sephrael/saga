@@ -42,3 +42,18 @@ def get_plot_point_info(
         chapter_number,
     )
     return None, -1
+
+
+def get_scoped_plot_outline(
+    plot_outline: dict[str, Any], chapter_number: int, scope: int = 2
+) -> dict[str, Any]:
+    """Return a copy of the outline scoped to plot points near the chapter."""
+
+    plot_points = plot_outline.get("plot_points")
+    if not isinstance(plot_points, list) or scope <= 0:
+        return dict(plot_outline)
+
+    plot_point_index = max((chapter_number - 1) // settings.PLOT_POINT_CHAPTER_SPAN, 0)
+    scoped = dict(plot_outline)
+    scoped["plot_points"] = plot_points[plot_point_index : plot_point_index + scope]
+    return scoped
