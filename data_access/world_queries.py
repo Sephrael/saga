@@ -567,10 +567,15 @@ async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
     return mapping
 
 
-async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
-    """Load all world elements grouped by category from Neo4j."""
+async def get_world_building_from_db(
+    chapter_limit: int | None = None,
+) -> dict[str, dict[str, WorldItem]]:
+    """Load all world elements grouped by category from Neo4j, optionally up to a chapter limit."""
 
-    logger.info("Loading decomposed world building data from Neo4j...")
+    logger.info(
+        "Loading decomposed world building data from Neo4j%s...",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
+    )
     world_data: dict[str, dict[str, WorldItem]] = {}
     wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID
 
@@ -578,46 +583,61 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
 
     WORLD_NAME_TO_ID.clear()
 
-    # Load WorldContainer (_overview_)
+    # Load WorldContainer (_overview_) - typically not chapter-limited, but check properties if needed
     overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc"
     overview_res_list = await neo4j_manager.execute_read_query(
         overview_query, {"wc_id_param": wc_id_param}
     )
     if overview_res_list and overview_res_list[0] and overview_res_list[0].get("wc"):
         wc_node = overview_res_list[0]["wc"]
-        overview_data = dict(wc_node)
-        overview_data.pop("created_ts", None)
-        overview_data.pop("updated_ts", None)
-        if overview_data.get(KG_IS_PROVISIONAL):
-            overview_data[
+        overview_data_dict = dict(wc_node)
+        overview_data_dict.pop("created_ts", None)
+        overview_data_dict.pop("updated_ts", None)
+
+        # Note: Overview provisional status might be more complex if it aggregates chapter-specific info.
+        # For now, assume its KG_IS_PROVISIONAL is a general flag.
+        if overview_data_dict.get(KG_IS_PROVISIONAL):
+            # If overview itself can be provisional based on a chapter, this logic might need adjustment.
+            # Defaulting to KG_PREPOPULATION_CHAPTER_NUM for source_quality key.
+            overview_data_dict[
                 kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
             ] = "provisional_from_unrevised_draft"
+
         world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
             "_overview_",
             "_overview_",
-            overview_data,
+            overview_data_dict,
         )
         WORLD_NAME_TO_ID[utils._normalize_for_id("_overview_")] = (
-            utils._normalize_for_id("_overview_")
+            utils._normalize_for_id("_overview_") # Should be wc_id_param
         )
 
-    # Load WorldElements and their details
-    we_query = (
-        "MATCH (we:WorldElement:Entity)"
-        " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
-        " RETURN we"
-    )
-    we_results = await neo4j_manager.execute_read_query(we_query)
+
+    # Load WorldElements and their details with chapter limit
+    we_query_parts = ["MATCH (we:WorldElement:Entity)"]
+    we_params: dict[str, Any] = {}
+
+    base_conditions = ["(we.is_deleted IS NULL OR we.is_deleted = FALSE)"]
+    if chapter_limit is not None:
+        base_conditions.append(
+            f"(we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)"
+        )
+        we_params["chapter_limit_param"] = chapter_limit
+
+    if base_conditions:
+        we_query_parts.append("WHERE " + " AND ".join(base_conditions))
+
+    we_query_parts.append("RETURN we")
+    we_results = await neo4j_manager.execute_read_query(" ".join(we_query_parts), we_params)
+
 
     if not we_results:
-        logger.info("No WorldElements found in Neo4j.")
+        logger.info(
+            "No WorldElements found in Neo4j%s.",
+            f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
+        )
         standard_categories = [
-            "locations",
-            "society",
-            "systems",
-            "lore",
-            "history",
-            "factions",
+            "locations", "society", "systems", "lore", "history", "factions"
         ]
         for cat_key in standard_categories:
             world_data.setdefault(cat_key, {})
@@ -628,7 +648,6 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
         if not we_node:
             continue
 
-        # These are the display/canonical versions from the node
         category = we_node.get("category")
         item_name = we_node.get("name")
         we_id = we_node.get("id")
@@ -639,83 +658,99 @@ async def get_world_building_from_db() -> dict[str, dict[str, WorldItem]]:
             )
             continue
 
-        world_data.setdefault(category, {})
+        item_detail_dict = dict(we_node)
+        item_detail_dict.pop("created_ts", None)
+        item_detail_dict.pop("updated_ts", None)
 
-        item_detail = dict(we_node)
-        item_detail.pop("created_ts", None)
-        item_detail.pop("updated_ts", None)
-
-        created_chapter_num = item_detail.pop(
-            KG_NODE_CREATED_CHAPTER,
-            settings.KG_PREPOPULATION_CHAPTER_NUM,
+        # created_chapter is already used in the main query filter if chapter_limit is present
+        created_chapter_num = item_detail_dict.pop(
+            KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
-        item_detail["created_chapter"] = int(
-            created_chapter_num
-        )  # Ensure it's int and under standard key
-        item_detail[kg_keys.added_key(created_chapter_num)] = True
+        item_detail_dict["created_chapter"] = int(created_chapter_num)
+        item_detail_dict[kg_keys.added_key(created_chapter_num)] = True # Mark as added in its creation chapter
 
-        if item_detail.pop(KG_IS_PROVISIONAL, False):
-            item_detail["is_provisional"] = True  # Ensure under standard key
-            item_detail[kg_keys.source_quality_key(created_chapter_num)] = (
+        # Provisional status based on its own flag or chapter-specific source quality
+        is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
+        item_detail_dict["is_provisional"] = is_provisional_at_creation
+        if is_provisional_at_creation:
+            item_detail_dict[kg_keys.source_quality_key(created_chapter_num)] = (
                 "provisional_from_unrevised_draft"
             )
-        else:
-            item_detail["is_provisional"] = False
 
+        # List properties (goals, rules, etc.) are fetched if the parent WE is included.
+        # No separate chapter filtering for these ValueNode relationships themselves.
         list_prop_map = {
-            "goals": "HAS_GOAL",
-            "rules": "HAS_RULE",
-            "key_elements": "HAS_KEY_ELEMENT",
-            "traits": "HAS_TRAIT_ASPECT",
+            "goals": "HAS_GOAL", "rules": "HAS_RULE",
+            "key_elements": "HAS_KEY_ELEMENT", "traits": "HAS_TRAIT_ASPECT",
         }
         for list_prop_key, rel_name_internal in list_prop_map.items():
             list_values_query = f"""
             MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:{rel_name_internal}]->(v:ValueNode:Entity {{type: $value_node_type_param}})
-            RETURN v.value AS item_value
-            ORDER BY v.value ASC
+            RETURN v.value AS item_value ORDER BY v.value ASC
             """
             list_val_res = await neo4j_manager.execute_read_query(
                 list_values_query,
                 {"we_id_param": we_id, "value_node_type_param": list_prop_key},
             )
-            item_detail[list_prop_key] = sorted(
-                [
-                    res_item["item_value"]
-                    for res_item in list_val_res
-                    if res_item and res_item["item_value"] is not None
-                ]
+            item_detail_dict[list_prop_key] = sorted(
+                [res["item_value"] for res in list_val_res if res and res.get("item_value") is not None]
             )
 
-        elab_query = f"""
-        MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-        RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS is_provisional
-        ORDER BY elab.chapter_updated ASC
-        """
-        elab_results = await neo4j_manager.execute_read_query(
-            elab_query, {"we_id_param": we_id}
+        # Fetch elaborations with chapter limit
+        elab_query_parts = [
+            f"MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)"
+        ]
+        elab_params: dict[str, Any] = {"we_id_param": we_id}
+        if chapter_limit is not None:
+            elab_query_parts.append(
+                f"WHERE elab.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param"
+            )
+            elab_params["chapter_limit_param"] = chapter_limit
+        elab_query_parts.append(
+            f"RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS is_provisional"
         )
+        elab_query_parts.append("ORDER BY elab.chapter_updated ASC")
+
+        elab_results = await neo4j_manager.execute_read_query(" ".join(elab_query_parts), elab_params)
+
+        actual_elaborations_count = 0
         if elab_results:
             for elab_rec in elab_results:
                 chapter_val = elab_rec.get("chapter")
                 summary_val = elab_rec.get("summary")
-                if chapter_val is not None and summary_val is not None:
+                # Ensure elaboration is within chapter_limit (query should handle this, but good to be safe)
+                if chapter_val is not None and summary_val is not None and \
+                   (chapter_limit is None or chapter_val <= chapter_limit):
                     elab_key = kg_keys.elaboration_key(chapter_val)
-                    item_detail[elab_key] = summary_val
+                    item_detail_dict[elab_key] = summary_val
                     if elab_rec.get(KG_IS_PROVISIONAL):
-                        item_detail[kg_keys.source_quality_key(chapter_val)] = (
+                        item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
                             "provisional_from_unrevised_draft"
                         )
+                    actual_elaborations_count +=1
 
-        item_detail["id"] = we_id  # Add the canonical ID from the DB
-        world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
-            category,
-            item_name,
-            item_detail,
-        )
-        WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
+        item_detail_dict["id"] = we_id
 
+        # Add to world_data if it's not filtered out by chapter_limit on its creation
+        # (The main query for we_results already handles this if chapter_limit is set)
+        # OR if it has elaborations within the chapter_limit.
+        if chapter_limit is None or \
+           (created_chapter_num is not None and created_chapter_num <= chapter_limit) or \
+           actual_elaborations_count > 0:
+            world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
+                category, item_name, item_detail_dict
+            )
+            WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
+        elif not (created_chapter_num is not None and created_chapter_num <= chapter_limit) and \
+             actual_elaborations_count == 0 and chapter_limit is not None:
+            logger.debug(f"WorldElement '{item_name}' (id: {we_id}) created in chapter {created_chapter_num} "
+                         f"with no elaborations up to chapter {chapter_limit}, excluding.")
+
+
+    num_elements_loaded = sum(len(items) for cat, items in world_data.items() if cat != "_overview_")
     logger.info(
-        f"Successfully loaded and recomposed world building data ({len(we_results)} elements) from Neo4j."
+        f"Successfully loaded and recomposed world building data ({num_elements_loaded} elements) from Neo4j%s.",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     return world_data
 

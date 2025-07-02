@@ -14,19 +14,33 @@ from data_access import character_queries, world_queries
 logger = structlog.get_logger(__name__)
 
 
-async def get_canonical_truths_from_kg() -> list[str]:
-    """Return canonical truths stored in the knowledge graph."""
+async def get_canonical_truths_from_kg(
+    chapter_limit: int | None = None,
+) -> list[str]:
+    """Return canonical truths stored in the knowledge graph, up to a chapter limit."""
 
     lines: list[str] = []
-    query = (
-        "MATCH (c:Character:Entity)-[:HAS_TRAIT]->"
-        "(t:Trait:Entity {is_canonical_truth: true}) "
-        "RETURN c.name AS name, t.name AS trait"
-    )
+    query_parts = [
+        "MATCH (c:Character:Entity)-[r:HAS_TRAIT]->(t:Trait:Entity {is_canonical_truth: true})"
+    ]
+    params: dict[str, Any] = {}
+
+    if chapter_limit is not None:
+        query_parts.append("WHERE r.chapter_added <= $chapter_limit")
+        params["chapter_limit"] = chapter_limit
+
+    query_parts.append("RETURN c.name AS name, t.name AS trait")
+    query = " ".join(query_parts)
+
     try:
-        records = await character_queries.neo4j_manager.execute_read_query(query)
+        records = await character_queries.neo4j_manager.execute_read_query(query, params)
     except Exception as exc:  # pragma: no cover - DB failures logged
-        logger.error("Failed to load canonical truths: %s", exc, exc_info=True)
+        logger.error(
+            "Failed to load canonical truths (limit: %s): %s",
+            chapter_limit,
+            exc,
+            exc_info=True
+        )
         records = []
 
     for rec in records:
@@ -53,10 +67,20 @@ async def get_reliable_kg_facts_for_drafting_prompt(
     """
 
     try:
-        characters = await character_queries.get_character_profiles_from_db()
-        world = await world_queries.get_world_building_from_db()
+        # Pass chapter_number as chapter_limit to the underlying queries
+        characters = await character_queries.get_character_profiles_from_db(
+            chapter_limit=chapter_number
+        )
+        world = await world_queries.get_world_building_from_db(
+            chapter_limit=chapter_number
+        )
     except Exception as exc:  # pragma: no cover - DB failures logged
-        logger.error("Failed to retrieve KG facts: %s", exc, exc_info=True)
+        logger.error(
+            "Failed to retrieve KG facts for chapter %s: %s",
+            chapter_number,
+            exc,
+            exc_info=True,
+        )
         characters = {}
         world = {}
 
