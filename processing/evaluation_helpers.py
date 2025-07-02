@@ -5,10 +5,10 @@ import structlog
 import utils
 from config import settings
 from core.llm_interface import llm_service
+from parsing import parse_problem_list
 from prompt_renderer import render_prompt
 
 from models import ProblemDetail
-from processing.problem_parser import parse_problem_list
 
 logger = structlog.get_logger(__name__)
 

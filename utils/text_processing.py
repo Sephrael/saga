@@ -1,9 +1,14 @@
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from config import settings
+
+from .text_utils import _is_fill_in
+
+__all__ = ["_is_fill_in", "settings"]
 
 import spacy
 import structlog
-from config import settings
 from rapidfuzz.fuzz import partial_ratio_alignment
 
 logger = structlog.get_logger(__name__)
@@ -67,11 +72,6 @@ class SpaCyModelManager:
 
 
 spacy_manager = SpaCyModelManager()
-
-
-def _is_fill_in(value: Any) -> bool:
-    """Return True if ``value`` is the fill-in placeholder."""
-    return isinstance(value, str) and value.strip() == settings.FILL_IN
 
 
 def load_spacy_model_if_needed() -> None:

@@ -9,11 +9,11 @@ import utils
 from config import settings
 from core.llm_interface import llm_service
 from data_access import chapter_repository
+from parsing import parse_problem_list
 from processing.evaluation_helpers import (
     parse_llm_evaluation_output,
     perform_llm_comprehensive_evaluation,
 )
-from processing.problem_parser import parse_problem_list
 from prompt_renderer import render_prompt
 
 from models import EvaluationResult, ProblemDetail, SceneDetail

@@ -1,4 +1,4 @@
-from kg_maintainer.parsing import (
+from parsing import (
     CHAR_UPDATE_KEY_MAP,
     CHAR_UPDATE_LIST_INTERNAL_KEYS,
     _normalize_attributes,
