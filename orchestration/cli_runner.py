@@ -14,6 +14,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def _run(orchestrator: NANA_Orchestrator, ingest: str | None) -> None:
+    """Dispatch to the appropriate orchestrator operation."""
     if ingest:
         await orchestrator.run_ingestion_process(ingest)
     else:

@@ -57,6 +57,7 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── nana_orchestrator.py         # Primary orchestrator
 │   ├── chapter_flow.py              # Chapter generation flow
 │   ├── chapter_generation_runner.py # End-to-end runner
+│   ├── cli_runner.py                # CLI management and shutdown handling
 │   └── token_accountant.py          # Token usage tracking
 ├── processing/                      # Text processing pipeline
 │   ├── problem_parser.py            # Parse evaluation feedback
@@ -81,7 +82,7 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 ├── prompt_renderer.py               # Render prompts from templates
 ├── kg_constants.py                  # KG schema constants
 ├── config.py                        # Pydantic configuration management
-├── main.py                          # Entry point
+├── main.py                          # CLI entry that delegates to `cli_runner`
 ├── user_story_elements.yaml.example # User-provided story elements
 ├── requirements.txt                 # Python dependencies
 ├── docker-compose.yml               # Neo4j container setup
