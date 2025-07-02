@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
-from chapter_generation.context_providers import ContextRequest, SemanticHistoryProvider
+from chapter_generation.context_models import ContextRequest
+from chapter_generation.context_providers import SemanticHistoryProvider
 from core.llm_interface import llm_service
 from data_access import chapter_queries
 from initialization.models import PlotOutline

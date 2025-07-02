@@ -2,7 +2,13 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
-from chapter_generation.context_orchestrator import ContextOrchestrator, ContextRequest
+from chapter_generation.context_models import (
+    ContextProfileName,
+    ContextRequest,
+    ProfileConfiguration,
+    ProviderSettings,
+)
+from chapter_generation.context_orchestrator import ContextOrchestrator
 from chapter_generation.context_providers import SemanticHistoryProvider
 from core.llm_interface import llm_service
 from data_access import chapter_queries
@@ -41,7 +47,13 @@ async def test_immediate_context_added(monkeypatch):
     )
 
     provider = SemanticHistoryProvider(chapter_queries, llm_service)
-    orchestrator = ContextOrchestrator([provider])
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(provider)],
+            max_tokens=100,
+        )
+    }
+    orchestrator = ContextOrchestrator(profiles)
     req = ContextRequest(chapter_number=4, plot_focus=None, plot_outline={})
     ctx = await orchestrator.build_context(req)
     assert ctx.startswith("[semantic_history]")
@@ -95,7 +107,13 @@ async def test_decay_sorting(monkeypatch):
     )
 
     provider = SemanticHistoryProvider(chapter_queries, llm_service)
-    orchestrator = ContextOrchestrator([provider])
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(provider)],
+            max_tokens=100,
+        )
+    }
+    orchestrator = ContextOrchestrator(profiles)
     req = ContextRequest(chapter_number=11, plot_focus=None, plot_outline={})
     ctx = await orchestrator.build_context(req)
     pos8 = ctx.index("Semantic Context from Chapter 8")

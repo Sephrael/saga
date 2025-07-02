@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import importlib
 from typing import Any
 
-from chapter_generation import ContextOrchestrator, ContextRequest
-from config import settings
+from chapter_generation import (
+    ContextRequest,
+)
+from chapter_generation import (
+    create_from_settings as create_context_service,
+)
 
 from models import SceneDetail
 
-provider_instances = []
-for dotted in settings.CONTEXT_PROVIDERS:
-    module_name, class_name = dotted.rsplit(".", 1)
-    module = importlib.import_module(module_name)
-    cls = getattr(module, class_name)
-    provider_instances.append(cls())
-context_service = ContextOrchestrator(provider_instances)
+context_service = create_context_service()
 
 
 async def _generate_semantic_chapter_context_logic(

@@ -4,37 +4,17 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import Any
 
 import structlog
 from config import settings
 from core.llm_interface import count_tokens, llm_service
 
-from models.agent_models import ChapterEndState, SceneDetail
+from models.agent_models import ChapterEndState
+
+from .context_models import ContextChunk, ContextRequest
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass
-class ContextRequest:
-    """Parameters describing the desired context."""
-
-    chapter_number: int
-    plot_focus: str | None
-    plot_outline: dict[str, Any]
-    chapter_plan: list[SceneDetail] | None = None
-    agent_hints: dict[str, Any] | None = None
-
-
-@dataclass
-class ContextChunk:
-    """A chunk of context returned by a provider."""
-
-    text: str
-    tokens: int
-    provenance: dict[str, Any]
-    source: str
 
 
 class ContextProvider:

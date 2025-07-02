@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import time
-from collections.abc import Iterable
+from collections.abc import Mapping
 from typing import Any
 
 import structlog
@@ -15,7 +16,13 @@ from core.llm_interface import count_tokens, truncate_text_by_tokens
 
 from models.agent_models import SceneDetail
 
-from .context_providers import ContextChunk, ContextProvider, ContextRequest
+from .context_models import (
+    ContextChunk,
+    ContextProfileName,
+    ContextRequest,
+    ProfileConfiguration,
+    ProviderSettings,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -48,8 +55,10 @@ class TTLCache:
 class ContextOrchestrator:
     """Gather and merge context from configured providers."""
 
-    def __init__(self, providers: Iterable[ContextProvider]) -> None:
-        self.providers = list(providers)
+    def __init__(
+        self, profiles: Mapping[ContextProfileName, ProfileConfiguration]
+    ) -> None:
+        self.profiles = profiles
         self.cache = TTLCache(settings.CONTEXT_CACHE_SIZE, settings.CONTEXT_CACHE_TTL)
 
     async def build_context(self, request: ContextRequest) -> str:
@@ -64,6 +73,7 @@ class ContextOrchestrator:
                 )
 
         cache_key = (
+            request.profile_name.value,
             request.chapter_number,
             request.plot_focus,
             agent_key,
@@ -73,10 +83,18 @@ class ContextOrchestrator:
             logger.debug("Context cache hit", key=cache_key)
             return cached
 
+        profile = self.profiles.get(
+            request.profile_name, self.profiles.get(ContextProfileName.DEFAULT)
+        )
+        if profile is None:
+            raise ValueError(f"Unknown context profile: {request.profile_name}")
+
+        providers = [ps.provider for ps in profile.providers]
+
         chunks: list[ContextChunk] = []
-        tasks = [provider.get_context(request) for provider in self.providers]
+        tasks = [provider.get_context(request) for provider in providers]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for provider, res in zip(self.providers, results, strict=True):
+        for provider, res in zip(providers, results, strict=True):
             if isinstance(res, Exception):  # pragma: no cover - log and skip
                 logger.warning(
                     "Context provider error", provider=provider.source, error=res
@@ -93,14 +111,15 @@ class ContextOrchestrator:
 
         merged: list[str] = []
         token_total = 0
+        max_tokens = profile.max_tokens
         for chunk in chunks:
             if not chunk.text:
                 continue
             prefix = f"[{chunk.source}]\n"
             part = prefix + chunk.text
             tokens = count_tokens(part, settings.DRAFTING_MODEL)
-            if token_total + tokens > settings.MAX_CONTEXT_TOKENS:
-                remaining = settings.MAX_CONTEXT_TOKENS - token_total
+            if token_total + tokens > max_tokens:
+                remaining = max_tokens - token_total
                 if remaining <= 0:
                     break
                 part = truncate_text_by_tokens(part, settings.DRAFTING_MODEL, remaining)
@@ -121,6 +140,7 @@ class ContextOrchestrator:
         current_chapter_number: int,
         chapter_plan: list[SceneDetail] | None,
         agent_hints: dict[str, Any] | None = None,
+        profile_name: ContextProfileName = ContextProfileName.DEFAULT,
     ) -> str:
         """Backward compatible wrapper for build_context."""
         if isinstance(agent_or_props, dict):
@@ -148,5 +168,26 @@ class ContextOrchestrator:
             plot_outline=plot_outline,
             chapter_plan=chapter_plan,
             agent_hints=agent_hints,
+            profile_name=profile_name,
         )
         return await self.build_context(request)
+
+
+def create_from_settings() -> ContextOrchestrator:
+    """Instantiate an orchestrator using provider config in settings."""
+    profiles: dict[ContextProfileName, ProfileConfiguration] = {}
+    for name, conf in settings.CONTEXT_PROFILES.items():
+        provider_instances = []
+        for dotted in conf.get("providers", []):
+            module_name, class_name = dotted.rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            provider_cls = getattr(module, class_name)
+            provider_instances.append(provider_cls())
+
+        providers = [ProviderSettings(provider=p) for p in provider_instances]
+        max_tokens = conf.get("max_tokens", settings.MAX_CONTEXT_TOKENS)
+        profiles[ContextProfileName(name)] = ProfileConfiguration(
+            providers=providers,
+            max_tokens=max_tokens,
+        )
+    return ContextOrchestrator(profiles)
