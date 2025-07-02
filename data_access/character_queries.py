@@ -174,11 +174,14 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
                 UNWIND $current_traits_list AS trait_name_val
                 MERGE (t:Trait:Entity {name: trait_name_val})
                     ON CREATE SET t.created_ts = timestamp()
-                MERGE (c)-[:HAS_TRAIT]->(t)
+                MERGE (c)-[r:HAS_TRAIT]->(t)
+                ON CREATE SET r.chapter_added = $prepopulation_chapter_num
+                ON MATCH SET r.chapter_added = COALESCE(r.chapter_added, $prepopulation_chapter_num)
                 """,
                     {
                         "char_name_val": char_name,
                         "current_traits_list": list(current_profile_traits),
+                        "prepopulation_chapter_num": settings.KG_PREPOPULATION_CHAPTER_NUM,
                     },
                 )
             )
@@ -438,12 +441,18 @@ async def get_all_character_names() -> list[str]:
     return [record["name"] for record in results if record.get("name")]
 
 
-async def get_character_profiles_from_db() -> dict[str, CharacterProfile]:
-    """Load all character profiles from Neo4j."""
+async def get_character_profiles_from_db(
+    chapter_limit: int | None = None,
+) -> dict[str, CharacterProfile]:
+    """Load all character profiles from Neo4j, optionally up to a chapter limit."""
 
-    logger.info("Loading decomposed character profiles from Neo4j...")
+    logger.info(
+        "Loading decomposed character profiles from Neo4j%s...",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
+    )
     profiles_data: dict[str, CharacterProfile] = {}
 
+    # Base query for characters. Filtering applied when fetching associated data.
     char_query = (
         "MATCH (c:Character:Entity)"
         " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
@@ -463,30 +472,46 @@ async def get_character_profiles_from_db() -> dict[str, CharacterProfile]:
         if not char_name:
             continue
 
-        CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
+        # Initialize profile dict with base character properties
+        profile_dict: dict[str, Any] = dict(char_node)
+        profile_dict.pop("name", None)  # Will be added by CharacterProfile.from_dict
+        profile_dict.pop("created_ts", None)
+        profile_dict.pop("updated_ts", None)
 
-        profile = dict(char_node)
-        profile.pop("name", None)
-        profile.pop("created_ts", None)
-        profile.pop("updated_ts", None)
-
-        traits_query = "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait:Entity) RETURN t.name AS trait_name"
+        # Fetch traits with chapter limit
+        traits_query_parts = [
+            "MATCH (:Character:Entity {name: $char_name})-[r:HAS_TRAIT]->(t:Trait:Entity)"
+        ]
+        traits_params: dict[str, Any] = {"char_name": char_name}
+        if chapter_limit is not None:
+            traits_query_parts.append(
+                "WHERE r.chapter_added <= $chapter_limit_param"
+            )
+            traits_params["chapter_limit_param"] = chapter_limit
+        traits_query_parts.append("RETURN t.name AS trait_name")
         trait_results = await neo4j_manager.execute_read_query(
-            traits_query, {"char_name": char_name}
+            " ".join(traits_query_parts), traits_params
         )
-        profile["traits"] = sorted(
-            [tr["trait_name"] for tr in trait_results if tr and tr["trait_name"]]
+        profile_dict["traits"] = sorted(
+            [tr["trait_name"] for tr in trait_results if tr and tr.get("trait_name")]
         )
 
-        rels_query = """
-        MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Entity)
-        WHERE r.source_profile_managed = TRUE
-        RETURN target.name AS target_name, properties(r) AS rel_props
-        """
-        rel_results = await neo4j_manager.execute_read_query(
-            rels_query, {"char_name": char_name}
+        # Fetch relationships with chapter limit
+        rels_query_parts = [
+            "MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Entity)",
+            "WHERE r.source_profile_managed = TRUE",
+        ]
+        rels_params: dict[str, Any] = {"char_name": char_name}
+        if chapter_limit is not None:
+            rels_query_parts.append("AND r.chapter_added <= $chapter_limit_param")
+            rels_params["chapter_limit_param"] = chapter_limit
+        rels_query_parts.append(
+            "RETURN target.name AS target_name, properties(r) AS rel_props"
         )
-        relationships = {}
+        rel_results = await neo4j_manager.execute_read_query(
+            " ".join(rels_query_parts), rels_params
+        )
+        relationships: dict[str, Any] = {}
         if rel_results:
             for rel_rec in rel_results:
                 target_name = rel_rec.get("target_name")
@@ -499,42 +524,75 @@ async def get_character_profiles_from_db() -> dict[str, CharacterProfile]:
                         "created_ts",
                         "updated_ts",
                         "source_profile_managed",
-                        "chapter_added",
+                        # "chapter_added" is kept as it's relevant
                     ]
                 }
-                if "type" in rel_props_full:
-                    rel_props_cleaned["type"] = rel_props_full["type"]
-                if "chapter_added" in rel_props_full:
-                    rel_props_cleaned["chapter_added"] = rel_props_full["chapter_added"]
-
+                # Type is already part of properties(r)
                 if target_name:
                     relationships[target_name] = rel_props_cleaned
-        profile["relationships"] = relationships
+        profile_dict["relationships"] = relationships
 
-        dev_query = (
-            "MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)\n"
-            f"RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id\n"
-            "ORDER BY dev.chapter_updated ASC"
+        # Fetch development events with chapter limit
+        dev_query_parts = [
+            "MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)"
+        ]
+        dev_params: dict[str, Any] = {"char_name": char_name}
+        if chapter_limit is not None:
+            dev_query_parts.append(
+                f"WHERE dev.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param"
+            )
+            dev_params["chapter_limit_param"] = chapter_limit
+        dev_query_parts.append(
+            f"RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id"
         )
+        dev_query_parts.append("ORDER BY dev.chapter_updated ASC")
+
         dev_results = await neo4j_manager.execute_read_query(
-            dev_query, {"char_name": char_name}
+            " ".join(dev_query_parts), dev_params
         )
         if dev_results:
             for dev_rec in dev_results:
                 chapter_num = dev_rec.get("chapter")
                 summary = dev_rec.get("summary")
                 if chapter_num is not None and summary is not None:
-                    dev_key = kg_keys.development_key(chapter_num)
-                    profile[dev_key] = summary
-                    if dev_rec.get(KG_IS_PROVISIONAL):
-                        profile[kg_keys.source_quality_key(chapter_num)] = (
-                            "provisional_from_unrevised_draft"
-                        )
+                    # Only add if chapter_num is within limit (double check, though query should handle it)
+                    if chapter_limit is None or chapter_num <= chapter_limit:
+                        dev_key = kg_keys.development_key(chapter_num)
+                        profile_dict[dev_key] = summary
+                        if dev_rec.get(KG_IS_PROVISIONAL):
+                            profile_dict[
+                                kg_keys.source_quality_key(chapter_num)
+                            ] = "provisional_from_unrevised_draft"
 
-        profiles_data[char_name] = CharacterProfile.from_dict(char_name, profile)
+        # Only add character to profiles_data if it has any relevant data within the chapter_limit
+        # Relevant data: traits, relationships, or development events. Or if no chapter_limit is set.
+        has_relevant_data = False
+        if chapter_limit is None:
+            has_relevant_data = True
+        else:
+            if profile_dict["traits"] or profile_dict["relationships"]:
+                has_relevant_data = True
+            else:
+                # Check if any development keys (e.g. "development_chapter_1") exist for chapters <= chapter_limit
+                for key in profile_dict:
+                    if key.startswith(kg_keys.DEVELOPMENT_PREFIX):
+                        try:
+                            dev_chapter_num = kg_keys.parse_development_key(key)
+                            if dev_chapter_num is not None and dev_chapter_num <= chapter_limit:
+                                has_relevant_data = True
+                                break
+                        except (ValueError, IndexError):
+                            continue
+
+        if has_relevant_data:
+            CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
+            profiles_data[char_name] = CharacterProfile.from_dict(
+                char_name, profile_dict
+            )
 
     logger.info(
-        f"Successfully loaded and recomposed {len(profiles_data)} character profiles from Neo4j."
+        f"Successfully loaded and recomposed {len(profiles_data)} character profiles from Neo4j%s.",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     return profiles_data
 

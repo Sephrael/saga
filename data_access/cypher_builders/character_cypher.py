@@ -100,10 +100,12 @@ def generate_character_node_cypher(
                             MERGE (t:Trait:Entity {name: $trait_name})
                                 ON CREATE SET t.created_ts = timestamp()
                             MERGE (c)-[:HAS_TRAIT]->(t)
+                            SET r.chapter_added = $chapter_number_for_delta
                             """,
                             {
                                 "name": profile.name,
                                 "trait_name": canonical,
+                                "chapter_number_for_delta": chapter_number_for_delta,
                             },
                         )
                     )

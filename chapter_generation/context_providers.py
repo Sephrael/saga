@@ -161,9 +161,17 @@ class CanonProvider(ContextProvider):
 
         lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
         try:
-            records = await get_canonical_truths_from_kg()
+            # Pass chapter_number as chapter_limit
+            records = await get_canonical_truths_from_kg(
+                chapter_limit=request.chapter_number
+            )
         except Exception as exc:  # pragma: no cover - log and fall back
-            logger.error("Failed to get canonical truths", error=exc, exc_info=True)
+            logger.error(
+                "Failed to get canonical truths for chapter %s: %s",
+                request.chapter_number,
+                exc,
+                exc_info=True,
+            )
             records = []
 
         for line in records:
