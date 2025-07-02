@@ -22,9 +22,7 @@ from jinja2 import Template
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
-from parsing_utils import (
-    parse_rdf_triples_with_rdflib,
-)
+from parsing import parse_rdf_triples_with_rdflib
 from prompt_renderer import render_prompt
 
 from models.agent_models import ChapterEndState

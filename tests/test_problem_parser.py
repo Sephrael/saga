@@ -1,6 +1,6 @@
 import json
 
-from processing.problem_parser import parse_problem_list
+from parsing import parse_problem_list
 
 
 def test_parse_problem_list_valid():

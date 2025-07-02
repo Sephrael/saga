@@ -11,7 +11,6 @@ import numpy as np
 from config import settings
 from core.llm_interface import count_tokens, llm_service
 
-from .helpers import _is_fill_in
 from .logging import setup_logging_nana
 from .plot import get_plot_point_info, get_scoped_plot_outline
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
@@ -25,6 +24,7 @@ from .text_processing import (
     normalize_trait_name,
     spacy_manager,
 )
+from .text_utils import _is_fill_in
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from kg_maintainer.models import SceneDetail

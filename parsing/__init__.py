@@ -1,49 +1,137 @@
-# kg_maintainer/parsing.py
+# parsing/__init__.py
+"""Common parsing utilities for SAGA."""
+
+from __future__ import annotations
+
 import json
+import logging
 from typing import Any
 
 import kg_constants as kg_keys
 import structlog
 import utils
+from kg_maintainer.models import CharacterProfile, WorldItem
 
-from .models import CharacterProfile, WorldItem
+from models import ProblemDetail
 
 logger = structlog.get_logger(__name__)
 
-CHAR_UPDATE_KEY_MAP = {
-    "desc": "description",
-    "description": "description",
-    "traits": "traits",
-    "relationships": "relationships",
-    "status": "status",
-    "modification proposal": "modification_proposal",
-    # Add other keys LLM might produce, mapping to CharacterProfile fields
-    # e.g. "aliases": "aliases" if LLM provides aliases as a list
-}
 
-CHAR_UPDATE_LIST_INTERNAL_KEYS = [
-    "traits",
-    "relationships",
-    "aliases",
-]
+class ParseError(Exception):
+    """Custom exception for parsing errors."""
 
-WORLD_UPDATE_DETAIL_KEY_MAP = {
-    # Ensure these keys match what LLM will produce in JSON
-    "desc": "description",
-    "description": "description",
-    "atmosphere": "atmosphere",
-    "goals": "goals",
-    "rules": "rules",
-    "key elements": "key_elements",
-    "traits": "traits",  # Ensure this is a list if LLM provides a string
-    "modification proposal": "modification_proposal",
-}
-WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = [
-    "goals",
-    "rules",
-    "key_elements",
-    "traits",
-]  # Ensure these are lists
+
+def _get_entity_type_and_name_from_text(entity_text: str) -> dict[str, str | None]:
+    """Parse ``EntityType:EntityName`` or just ``EntityName`` strings."""
+    name_part = entity_text
+    type_part: str | None = None
+    if ":" in entity_text:
+        parts = entity_text.split(":", 1)
+        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+            type_part = parts[0].strip()
+            name_part = parts[1].strip()
+        elif parts[0].strip():
+            type_part = parts[0].strip()
+            name_part = parts[1].strip() if len(parts) > 1 else ""
+    return {
+        "type": type_part if type_part else None,
+        "name": name_part.strip() if name_part else None,
+    }
+
+
+def parse_rdf_triples_with_rdflib(
+    text_block: str,
+    rdf_format: str = "turtle",
+    base_uri: str = "http://example.org/saga/",
+) -> list[dict[str, Any]]:
+    """Parse plain text triples into structured dictionaries."""
+    logger_func = logging.getLogger(__name__)
+    triples_list: list[dict[str, Any]] = []
+    if not text_block or not text_block.strip():
+        return triples_list
+
+    lines = text_block.strip().splitlines()
+    for line_num, line in enumerate(lines):
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("//"):
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 3:
+            logger_func.warning(
+                "Line %s: Malformed triple (expected 3 parts): '%s'",
+                line_num + 1,
+                line,
+            )
+            continue
+
+        subject_text, predicate_text, object_text = parts[:3]
+        if len(parts) > 3:
+            logger_func.debug(
+                "Line %s: extra parts ignored: '%s' from '%s'",
+                line_num + 1,
+                " | ".join(parts[3:]),
+                line,
+            )
+
+        subject_details = _get_entity_type_and_name_from_text(subject_text)
+        predicate_str = predicate_text.strip().upper().replace(" ", "_")
+        if not subject_details.get("name") or not predicate_str:
+            logger_func.warning(
+                "Line %s: Missing subject name or predicate: S='%s', P='%s'",
+                line_num + 1,
+                subject_text,
+                predicate_text,
+            )
+            continue
+
+        object_entity_payload: dict[str, str | None] | None = None
+        object_literal_payload: str | None = None
+        is_literal_object = True
+        if ":" in object_text:
+            obj_parts_check = object_text.split(":", 1)
+            if (
+                len(obj_parts_check) == 2
+                and obj_parts_check[0].strip()
+                and obj_parts_check[1].strip()
+            ):
+                potential_obj_type = obj_parts_check[0].strip()
+                if potential_obj_type[0].isupper() and " " not in potential_obj_type:
+                    object_entity_payload = _get_entity_type_and_name_from_text(
+                        object_text
+                    )
+                    is_literal_object = False
+        if is_literal_object:
+            object_literal_payload = object_text.strip()
+            if object_literal_payload.startswith(
+                '"'
+            ) and object_literal_payload.endswith('"'):
+                object_literal_payload = object_literal_payload[1:-1]
+            if object_literal_payload.startswith(
+                "'"
+            ) and object_literal_payload.endswith("'"):
+                object_literal_payload = object_literal_payload[1:-1]
+        if not is_literal_object and (
+            not object_entity_payload or not object_entity_payload.get("name")
+        ):
+            logger_func.debug(
+                "Line %s: Object '%s' looked like entity but parsed no name. Reverting to literal.",
+                line_num + 1,
+                object_text,
+            )
+            object_literal_payload = object_text.strip()
+            is_literal_object = True
+            object_entity_payload = None
+
+        triples_list.append(
+            {
+                "subject": subject_details,
+                "predicate": predicate_str,
+                "object_entity": object_entity_payload,
+                "object_literal": object_literal_payload,
+                "is_literal_object": is_literal_object,
+            }
+        )
+    return triples_list
 
 
 def _normalize_attributes(
@@ -54,18 +142,13 @@ def _normalize_attributes(
     normalized_attrs: dict[str, Any] = {}
     if not isinstance(attributes_dict, dict):
         logger.warning(
-            "Input to _normalize_attributes was not a dict: %s",
-            type(attributes_dict),
+            "Input to _normalize_attributes was not a dict: %s", type(attributes_dict)
         )
         return {}
 
     for key, value in attributes_dict.items():
-        # Normalize the key from LLM JSON for matching against key_map
         normalized_llm_key = key.lower().replace(" ", "_")
-        mapped_key = key_map.get(
-            normalized_llm_key, normalized_llm_key
-        )  # Use normalized if not in map
-
+        mapped_key = key_map.get(normalized_llm_key, normalized_llm_key)
         if mapped_key in list_keys:
             if isinstance(value, list | dict):
                 normalized_attrs[mapped_key] = value
@@ -80,7 +163,6 @@ def _normalize_attributes(
         else:
             normalized_attrs[mapped_key] = value
 
-    # Ensure all list_keys are present and are lists in the final output
     for l_key in list_keys:
         if l_key not in normalized_attrs:
             normalized_attrs[l_key] = []
@@ -98,17 +180,39 @@ def _normalize_attributes(
     return normalized_attrs
 
 
+CHAR_UPDATE_KEY_MAP = {
+    "desc": "description",
+    "description": "description",
+    "traits": "traits",
+    "relationships": "relationships",
+    "status": "status",
+    "modification proposal": "modification_proposal",
+}
+
+CHAR_UPDATE_LIST_INTERNAL_KEYS = ["traits", "relationships", "aliases"]
+
+WORLD_UPDATE_DETAIL_KEY_MAP = {
+    "desc": "description",
+    "description": "description",
+    "atmosphere": "atmosphere",
+    "goals": "goals",
+    "rules": "rules",
+    "key elements": "key_elements",
+    "traits": "traits",
+    "modification proposal": "modification_proposal",
+}
+
+WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits"]
+
+
 def parse_unified_character_updates(
     json_text_block: str, chapter_number: int
 ) -> dict[str, CharacterProfile]:
-    """Parse character update JSON provided by LLM."""
+    """Parse character update JSON provided by the LLM."""
     char_updates: dict[str, CharacterProfile] = {}
     if not json_text_block.strip():
         return char_updates
-
     try:
-        # LLM is expected to output a dict where keys are character names
-        # and values are dicts of their attributes.
         parsed_data = json.loads(json_text_block)
         if not isinstance(parsed_data, dict):
             logger.error(
@@ -127,20 +231,18 @@ def parse_unified_character_updates(
     for char_name, char_attributes_llm in parsed_data.items():
         if not char_name or not isinstance(char_attributes_llm, dict):
             logger.warning(
-                "Skipping character with invalid name or attributes: Name='%s',"
-                " Attrs_Type='%s'",
+                "Skipping character with invalid name or attributes: Name='%s', Attrs_Type='%s'",
                 char_name,
                 type(char_attributes_llm),
             )
             continue
 
-        # Normalize keys from LLM (e.g. "desc" to "description")
-        # and ensure list types
         processed_char_attributes = _normalize_attributes(
-            char_attributes_llm, CHAR_UPDATE_KEY_MAP, CHAR_UPDATE_LIST_INTERNAL_KEYS
+            char_attributes_llm,
+            CHAR_UPDATE_KEY_MAP,
+            CHAR_UPDATE_LIST_INTERNAL_KEYS,
         )
 
-        # Canonicalize trait names for consistency
         traits_val = processed_char_attributes.get("traits", [])
         if isinstance(traits_val, list):
             processed_char_attributes["traits"] = [
@@ -149,10 +251,6 @@ def parse_unified_character_updates(
                 if isinstance(t, str) and utils.normalize_trait_name(t)
             ]
 
-        # Handle relationships if they need structuring from list to dict
-        # Assuming LLM provides relationships as a list of strings
-        # like "Target: Detail" or just "Target"
-        # Or ideally, as a dict: {"Target": "Detail"}
         rels_val = processed_char_attributes.get("relationships")
         if isinstance(rels_val, list):
             rels_list = rels_val
@@ -163,13 +261,11 @@ def parse_unified_character_updates(
                         parts = rel_entry.split(":", 1)
                         if len(parts) == 2 and parts[0].strip() and parts[1].strip():
                             rels_dict[parts[0].strip()] = parts[1].strip()
-                        elif parts[0].strip():  # If only name is there before colon
+                        elif parts[0].strip():
                             rels_dict[parts[0].strip()] = "related"
-                    elif rel_entry.strip():  # No colon, just a name
+                    elif rel_entry.strip():
                         rels_dict[rel_entry.strip()] = "related"
-                elif isinstance(
-                    rel_entry, dict
-                ):  # If LLM sends [{"name": "X", "detail": "Y"}]
+                elif isinstance(rel_entry, dict):
                     target_name = rel_entry.get("name")
                     detail = rel_entry.get("detail", "related")
                     if (
@@ -178,18 +274,15 @@ def parse_unified_character_updates(
                         and target_name.strip()
                     ):
                         rels_dict[target_name] = detail
-
             processed_char_attributes["relationships"] = rels_dict
         elif isinstance(rels_val, dict):
             processed_char_attributes["relationships"] = {
                 str(k): str(v) for k, v in rels_val.items()
             }
-        else:  # Ensure it's always a dict
+        else:
             processed_char_attributes["relationships"] = {}
 
         dev_key_standard = kg_keys.development_key(chapter_number)
-        # If LLM includes this key (even with different casing/spacing), it will be normalized by _normalize_attributes
-        # if dev_key_standard is in CHAR_UPDATE_KEY_MAP. For now, handle it explicitly.
         specific_dev_key_from_llm = next(
             (
                 k
@@ -198,13 +291,11 @@ def parse_unified_character_updates(
             ),
             None,
         )
-
         if specific_dev_key_from_llm and specific_dev_key_from_llm != dev_key_standard:
             processed_char_attributes[dev_key_standard] = processed_char_attributes.pop(
                 specific_dev_key_from_llm
             )
 
-        # Add default development note if no specific one and other attributes exist
         has_other_meaningful_attrs = any(
             k not in ["modification_proposal", dev_key_standard] and v
             for k, v in processed_char_attributes.items()
@@ -223,33 +314,35 @@ def parse_unified_character_updates(
             )
         except Exception as e:
             logger.error(
-                f"Error creating CharacterProfile for '{char_name}': {e}. Attributes: {processed_char_attributes}",
+                "Error creating CharacterProfile for '%s': %s. Attributes: %s",
+                char_name,
+                e,
+                processed_char_attributes,
                 exc_info=True,
             )
-
     return char_updates
 
 
 def parse_unified_world_updates(
     json_text_block: str, chapter_number: int
 ) -> dict[str, dict[str, WorldItem]]:
-    """Parse world update JSON provided by LLM."""
+    """Parse world update JSON provided by the LLM."""
     world_updates: dict[str, dict[str, WorldItem]] = {}
     if not json_text_block.strip():
         return world_updates
-
     try:
-        # LLM is expected to output a dict where keys are category display names (e.g., "Locations")
-        # and values are dicts of item names to their attribute dicts.
         parsed_data = json.loads(json_text_block)
         if not isinstance(parsed_data, dict):
             logger.error(
-                f"World updates JSON was not a dictionary. Received: {type(parsed_data)}"
+                "World updates JSON was not a dictionary. Received: %s",
+                type(parsed_data),
             )
             return world_updates
     except json.JSONDecodeError as e:
         logger.error(
-            f"Failed to parse world updates JSON: {e}. Input: {json_text_block[:500]}..."
+            "Failed to parse world updates JSON: %s. Input: %s...",
+            e,
+            json_text_block[:500],
         )
         return world_updates
 
@@ -257,35 +350,26 @@ def parse_unified_world_updates(
     for category_name_llm, items_llm in parsed_data.items():
         if not isinstance(items_llm, dict):
             logger.warning(
-                f"Skipping category '{category_name_llm}' as its content is not a dictionary of items."
+                "Skipping category '%s' as its content is not a dictionary of items.",
+                category_name_llm,
             )
             continue
-
-        # category_name_llm is e.g. "Locations", "Faction Alpha". This is used as the .category for WorldItem
-        # The WorldItem model itself might normalize this for ID generation.
 
         category_dict_by_item_name: dict[str, WorldItem] = {}
         elaboration_key_standard = kg_keys.elaboration_key(chapter_number)
 
-        if (
-            category_name_llm.lower() == "overview"
-            or category_name_llm.lower() == "_overview_"
-        ):
-            # Overview is a single item, its details are directly in items_llm
+        if category_name_llm.lower() in {"overview", "_overview_"}:
             processed_overview_details = _normalize_attributes(
                 items_llm,
                 WORLD_UPDATE_DETAIL_KEY_MAP,
                 WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
             )
             if any(k != "modification_proposal" for k in processed_overview_details):
-                # check if any meaningful data
-                # Add default elaboration if not present
                 if not processed_overview_details.get(elaboration_key_standard):
                     processed_overview_details[elaboration_key_standard] = (
                         f"Overall world overview updated in Chapter {chapter_number}."
                     )
                 try:
-                    # For overview, item_name is fixed (e.g., "_overview_")
                     overview_item = WorldItem.from_dict(
                         category_name_llm,
                         "_overview_",
@@ -301,17 +385,13 @@ def parse_unified_world_updates(
                         e,
                         exc_info=True,
                     )
-        else:  # Regular category with multiple items
-            # If the category itself appears to describe a single item with
-            # attributes (values are not dicts), treat it as that item's name.
+        else:
             if all(not isinstance(v, dict) for v in items_llm.values()):
                 items_llm = {category_name_llm: items_llm}
-
             for item_name_llm, item_attributes_llm in items_llm.items():
                 if not item_name_llm or not isinstance(item_attributes_llm, dict):
                     logger.warning(
-                        "Skipping item with invalid name or attributes in "
-                        "category '%s': Name='%s'",
+                        "Skipping item with invalid name or attributes in category '%s': Name='%s'",
                         category_name_llm,
                         item_name_llm,
                     )
@@ -322,16 +402,8 @@ def parse_unified_world_updates(
                     WORLD_UPDATE_DETAIL_KEY_MAP,
                     WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
                 )
-
-                # Add default elaboration if not present and other
-                # attributes exist
                 has_other_meaningful_item_attrs = any(
-                    k
-                    not in [
-                        "modification_proposal",
-                        elaboration_key_standard,
-                    ]
-                    and v
+                    k not in ["modification_proposal", elaboration_key_standard] and v
                     for k, v in processed_item_details.items()
                 )
                 if (
@@ -339,22 +411,14 @@ def parse_unified_world_updates(
                     and has_other_meaningful_item_attrs
                 ):
                     processed_item_details[elaboration_key_standard] = (
-                        f"Item '{item_name_llm}' in category '{category_name_llm}' "
-                        f"updated in Chapter {chapter_number}."
+                        f"Item '{item_name_llm}' in category '{category_name_llm}' updated in Chapter {chapter_number}."
                     )
-
                 try:
-                    # item_name_llm is the display name from JSON key.
-                    # WorldItem stores this as .name and normalizes it for .id
-                    # along with category_name_llm.
                     world_item_instance = WorldItem.from_dict(
                         category_name_llm,
                         item_name_llm,
                         processed_item_details,
                     )
-
-                    # Store in this category's dictionary using the item's display name as key.
-                    # If LLM provides duplicate item names within the same category, last one wins.
                     category_dict_by_item_name[world_item_instance.name] = (
                         world_item_instance
                     )
@@ -366,8 +430,64 @@ def parse_unified_world_updates(
                         e,
                         exc_info=True,
                     )
-
             if category_dict_by_item_name:
                 results[category_name_llm] = category_dict_by_item_name
-
     return results
+
+
+def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDetail]:
+    """Parse a JSON list of problem details."""
+    if not text or not text.strip():
+        return []
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            if "status" in data and "no significant" in str(data["status"]).lower():
+                return []
+            if "problems" in data and isinstance(data["problems"], list):
+                data = data["problems"]
+        if not isinstance(data, list):
+            raise ValueError("LLM output was not a list of problems")
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to decode JSON: %s", exc)
+        return [
+            ProblemDetail(
+                issue_category=category or "meta",
+                problem_description=f"Invalid JSON from LLM: {exc}",
+                quote_from_original_text="N/A - Invalid JSON",
+                quote_char_start=None,
+                quote_char_end=None,
+                sentence_char_start=None,
+                sentence_char_end=None,
+                suggested_fix_focus="Ensure LLM outputs valid JSON.",
+            )
+        ]
+
+    problems: list[ProblemDetail] = []
+    for item in data:
+        if not isinstance(item, dict):
+            logger.warning("Problem item is not a dict: %s", item)
+            continue
+        prob = ProblemDetail(
+            issue_category=item.get("issue_category", category or "meta"),
+            problem_description=item.get(
+                "problem_description", "N/A - Missing description"
+            ),
+            quote_from_original_text=item.get(
+                "quote_from_original_text", "N/A - General Issue"
+            ),
+            quote_char_start=None,
+            quote_char_end=None,
+            sentence_char_start=None,
+            sentence_char_end=None,
+            suggested_fix_focus=item.get(
+                "suggested_fix_focus", "N/A - Missing suggestion"
+            ),
+            rewrite_instruction=item.get("rewrite_instruction"),
+            severity=item.get("severity"),
+            related_spans=item.get("related_spans"),
+        )
+        if category:
+            prob.issue_category = category
+        problems.append(prob)
+    return problems
