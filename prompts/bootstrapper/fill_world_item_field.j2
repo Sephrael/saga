@@ -10,7 +10,14 @@ Your task is to produce a single, compelling value for a specific field in a wor
 5.  If details are sparse, craft a value that plausibly expands on the world item's role.
 6.  {% set descriptive_fields = ['description', 'summary', 'details', 'notes', 'lore', 'appearance', 'atmosphere', 'properties', 'history', 'function', 'purpose', 'significance'] %}
     {% if field_name.lower() in descriptive_fields and field_name.lower() != 'name' %}
-    **For Descriptive Content:** When generating text for `{{ field_name }}`, ensure it is evocative, detailed, and avoids repetitive phrasing or clichés. Use vivid and specific language to bring the world item to life.
+    **For Descriptive Content (Field: `{{ field_name }}`):**
+    Your task is to imbue this world item with a sense of reality and significance within the novel's universe. The description should be rich and engaging.
+    -   **Sensory Richness:** Go beyond visual description. Consider how the item might feel, sound, smell, or even taste (if applicable). What is the ambient quality it projects (e.g., an aura of dread, a soothing presence)?
+    -   **Evocative Language:** Use precise and vivid words that paint a clear, multi-faceted picture. Avoid generic terms; instead of "old," describe *how* it's old (e.g., "worn smooth by centuries of handling," "covered in a fine patina of age and disuse").
+    -   **Contextual Detail:** Weave in details that hint at its history, purpose, or connection to the novel's lore and plot, as appropriate for the field.
+    -   **Unique Characteristics:** Highlight what makes this item distinct. Does it have unusual properties, a peculiar appearance, or a strange effect on its surroundings or those who interact with it?
+    -   **Avoid Clichés:** Strive for originality in your descriptions. Find fresh ways to convey its attributes.
+    -   **Maintain Consistency:** Ensure the generated details are congruent with the existing `WORLD ITEM` profile and the overall `NOVEL CONTEXT`, including its established lore and magical systems (if any).
     {% endif %}
 
 ---
