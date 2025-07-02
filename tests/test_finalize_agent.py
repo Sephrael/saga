@@ -55,7 +55,7 @@ async def test_finalize_chapter_success(monkeypatch):
         "data_access.kg_queries.add_kg_triples_batch_to_db", lambda *a, **k: save_mock
     )
     monkeypatch.setattr(
-        "data_access.chapter_queries.save_chapter_data_to_db", lambda *a, **k: save_mock
+        "data_access.chapter_repository.save_chapter_data", lambda *a, **k: save_mock
     )
 
     result = await agent.finalize_chapter({}, {}, {}, 1, "text", "raw")
@@ -113,7 +113,7 @@ async def test_finalize_chapter_validation_failure(monkeypatch):
         "data_access.kg_queries.add_kg_triples_batch_to_db", lambda *a, **k: save_mock
     )
     monkeypatch.setattr(
-        "data_access.chapter_queries.save_chapter_data_to_db", lambda *a, **k: save_mock
+        "data_access.chapter_repository.save_chapter_data", lambda *a, **k: save_mock
     )
 
     result = await agent.finalize_chapter({}, {}, {}, 1, "text", None)

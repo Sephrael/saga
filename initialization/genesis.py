@@ -3,7 +3,7 @@ import json
 import structlog
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from config import settings
-from data_access import chapter_queries, plot_queries
+from data_access import chapter_repository, plot_queries
 from kg_maintainer.models import WorldItem
 
 from .bootstrappers.character_bootstrapper import (
@@ -107,7 +107,7 @@ async def run_genesis_phase() -> tuple[
         bootstrap_state_text,
         0,
     )
-    await chapter_queries.save_chapter_data_to_db(
+    await chapter_repository.save_chapter_data(
         0,
         bootstrap_state_text,
         bootstrap_state_text,

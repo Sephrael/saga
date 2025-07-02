@@ -195,9 +195,7 @@ async def test_perform_initial_setup_loads_ch0_state(monkeypatch, orchestrator):
 
     ch0_data = {"end_state_json": "{}"}
     get_mock = AsyncMock(return_value=ch0_data)
-    monkeypatch.setattr(
-        "data_access.chapter_queries.get_chapter_data_from_db", get_mock
-    )
+    monkeypatch.setattr("data_access.chapter_repository.get_chapter_data", get_mock)
     monkeypatch.setattr(
         "models.agent_models.ChapterEndState.model_validate_json",
         lambda *_a, **_k: ChapterEndState(

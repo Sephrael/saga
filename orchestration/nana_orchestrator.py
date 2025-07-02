@@ -24,7 +24,7 @@ from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from core.usage import TokenUsage
 from data_access import (
-    chapter_queries,
+    chapter_repository,
     character_queries,
     plot_queries,
     world_queries,
@@ -137,7 +137,7 @@ class NANA_Orchestrator:
         summaries: list[str] = []
         start = max(1, self.chapter_count - settings.CONTEXT_CHAPTER_COUNT + 1)
         for i in range(start, self.chapter_count + 1):
-            chap = await chapter_queries.get_chapter_data_from_db(i)
+            chap = await chapter_repository.get_chapter_data(i)
             if chap and (chap.get("summary") or chap.get("text")):
                 summaries.append((chap.get("summary") or chap.get("text", "")).strip())
 
@@ -216,7 +216,7 @@ class NANA_Orchestrator:
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
         self._update_rich_display(step="Initializing Orchestrator")
-        self.chapter_count = await chapter_queries.load_chapter_count_from_db()
+        self.chapter_count = await chapter_repository.load_chapter_count()
         logger.info(f"Loaded chapter count from Neo4j: {self.chapter_count}")
         await plot_queries.ensure_novel_info()
         result = await plot_queries.get_plot_outline_from_db()
@@ -282,7 +282,7 @@ class NANA_Orchestrator:
                 "Neo4j driver not initialized. Skipping knowledge cache refresh."
             )
         try:
-            data = await chapter_queries.get_chapter_data_from_db(0)
+            data = await chapter_repository.get_chapter_data(0)
             if data and data.get("end_state_json"):
                 self.chapter_zero_end_state = ChapterEndState.model_validate_json(
                     data["end_state_json"]
@@ -1300,9 +1300,7 @@ class NANA_Orchestrator:
             runner = ChapterGenerationRunner(self)
             await runner.run()
 
-            final_chapter_count_from_db = (
-                await chapter_queries.load_chapter_count_from_db()
-            )
+            final_chapter_count_from_db = await chapter_repository.load_chapter_count()
             logger.info("\n--- NANA: Novel writing process finished for this run ---")
             logger.info(
                 f"NANA: Successfully processed {runner.chapters_written} chapter(s) in this run."
@@ -1355,7 +1353,7 @@ class NANA_Orchestrator:
                 "Neo4j driver not initialized. Skipping knowledge cache refresh."
             )
 
-        self.chapter_count = await chapter_queries.load_chapter_count_from_db()
+        self.chapter_count = await chapter_repository.load_chapter_count()
         await self.display.stop()
         await self.shutdown()
         logger.info("NANA: Ingestion process completed.")

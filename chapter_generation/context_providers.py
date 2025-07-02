@@ -36,13 +36,13 @@ class SemanticHistoryProvider(ContextProvider):
 
     def __init__(
         self,
-        chapter_queries_module: Any | None = None,
+        chapter_repo: Any | None = None,
         llm_service_instance: Any | None = None,
     ) -> None:
         from core.llm_interface import llm_service as default_llm_service
-        from data_access import chapter_queries as default_chapter_queries
+        from data_access import chapter_repository as default_repo
 
-        self.chapter_queries = chapter_queries_module or default_chapter_queries
+        self.chapter_queries = chapter_repo or default_repo
         self.llm_service = llm_service_instance or default_llm_service
 
     async def get_context(
@@ -297,9 +297,9 @@ class StateContextProvider(ContextProvider):
     source = "chapter_end_state"
 
     def __init__(self, queries_module: Any | None = None) -> None:
-        from data_access import chapter_queries as default_chapter_queries
+        from data_access import chapter_repository as default_repo
 
-        self.chapter_queries = queries_module or default_chapter_queries
+        self.chapter_queries = queries_module or default_repo
 
     async def get_context(
         self, request: ContextRequest, provider_settings: ProviderSettings | None = None
