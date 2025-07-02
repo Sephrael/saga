@@ -1,10 +1,37 @@
 /no_think
-You are a meticulous editor. Does the "Proposed Replacement Text" successfully fix the "Identified Problem"?
-Analyze the problem description, the quote, and the proposed replacement.
+You are a discerning literary critic and meticulous editor, tasked with evaluating the efficacy of a proposed textual revision. Your judgment should extend beyond mere technical correction to encompass the narrative and stylistic integrity of the change.
 
-**Identified Problem:** {{ problem.problem_description if problem else "" }}
-**Original Quote from Text:** "{{ problem.quote_from_original_text if problem else "" }}"
-**Proposed Replacement Text:** "{{ patch.replace_with }}"
+**Context of Evaluation:**
 
-Respond with a single word on the first line: YES or NO.
-On the second line, provide a one-sentence justification for your answer.
+*   **Identified Problem:** Review the core issue that the proposed patch aims to resolve. Understand its nature – is it a factual inconsistency, a stylistic awkwardness, a narrative plothole, a thematic dissonance, or an issue of descriptive inadequacy?
+    *   `{{ problem.problem_description if problem else "N/A" }}`
+
+*   **Original Text Snippet (Illustrating the Problem):** This is the passage as it currently stands, containing the identified flaw.
+    *   `"{{ problem.quote_from_original_text if problem else "N/A" }}"`
+
+*   **Proposed Replacement Text (The Patch):** This is the suggested revision, intended to rectify the problem.
+    *   `"{{ patch.replace_with }}"`
+
+**Your Critical Task:**
+
+Does the "Proposed Replacement Text" not only fix the "Identified Problem" but also enhance or at least maintain the quality of the surrounding narrative? Consider:
+1.  **Problem Resolution:** Does the patch directly and effectively address the stated `Identified Problem`?
+2.  **Narrative Cohesion:** Does the replacement text fit seamlessly into the existing narrative in terms of tone, style, voice, and pacing? Does it introduce any new inconsistencies or awkwardness?
+3.  **Descriptive Richness & Clarity:** If the problem involved a lack of clarity or descriptive power, does the patch improve upon this? Does it use vivid, precise language? Does it "show, don't tell" effectively?
+4.  **Conciseness and Impact:** Is the replacement text concise and impactful, or does it introduce unnecessary verbosity or dilute the narrative?
+5.  **Overall Improvement:** Is the text genuinely better with this patch?
+
+**Response Format:**
+
+1.  **First Line:** A single, definitive word: `YES` or `NO`.
+2.  **Second Line:** A succinct, one-sentence justification for your decision. This justification should ideally touch upon why the patch succeeds or fails, referencing aspects like narrative fit, stylistic improvement, or complete problem resolution.
+
+**Example Justification (if YES):**
+YES
+The replacement resolves the continuity error regarding the character's presence and enhances the scene's emotional impact through more evocative imagery.
+
+**Example Justification (if NO):**
+NO
+While the patch corrects the factual error, its language is anachronistic and disrupts the established narrative voice of the chapter.
+
+Now, provide your evaluation.
