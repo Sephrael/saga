@@ -253,6 +253,7 @@ python main.py
 *   **First Run:** SAGA will perform initial setup (plot, world, characters based on `user_story_elements.yaml` or generation) and pre-populate the Neo4j knowledge graph.
 *   **Subsequent Runs:** It will load the existing state from Neo4j and continue generating chapters from where it left off.
 *   The orchestrator recalculates pending plot points before each chapter and continues until none remain or `CHAPTERS_PER_RUN` chapters have been written.
+*   Evaluation prompts now include only the active plot point and the next one to keep feedback focused.
 
 Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`). This directory is ignored by Git to keep generated data out of version control.
 

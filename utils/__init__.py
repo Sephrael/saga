@@ -13,7 +13,7 @@ from core.llm_interface import count_tokens, llm_service
 
 from .helpers import _is_fill_in
 from .logging import setup_logging_nana
-from .plot import get_plot_point_info
+from .plot import get_plot_point_info, get_scoped_plot_outline
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
 from .text_processing import (
     SpaCyModelManager,
@@ -231,6 +231,7 @@ __all__ = [
     "get_text_segments",
     "format_scene_plan_for_prompt",
     "get_plot_point_info",
+    "get_scoped_plot_outline",
     "deduplicate_text_segments",
     "remove_spans_from_text",
     "setup_logging_nana",
