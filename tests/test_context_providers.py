@@ -1,13 +1,17 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from chapter_generation.context_models import ProviderSettings
 from chapter_generation.context_providers import (
     CanonProvider,
     ContextRequest,
     KGFactProvider,
     KGReasoningProvider,
     PlanProvider,
+    PlotFocusProvider,
+    UpcomingPlotPointsProvider,
     UserNoteProvider,
+    WorldStateProvider,
 )
 
 
@@ -97,3 +101,36 @@ async def test_plan_provider_llm_fallback(monkeypatch):
     request = ContextRequest(1, "intro", {"plot_points": ["intro"]})
     chunk = await provider.get_context(request)
     assert "a" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_plot_focus_provider_truncates():
+    provider = PlotFocusProvider()
+    request = ContextRequest(1, "A very long focus line", {})
+    settings = ProviderSettings(provider, max_tokens=2)
+    chunk = await provider.get_context(request, settings)
+    assert len(chunk.text.split()) <= 2
+
+
+@pytest.mark.asyncio
+async def test_upcoming_plot_points_provider():
+    provider = UpcomingPlotPointsProvider()
+    outline = {"plot_points": ["a", "b", "c", "d"]}
+    request = ContextRequest(1, None, outline)
+    chunk = await provider.get_context(request)
+    assert "b" in chunk.text and "c" in chunk.text
+
+
+@pytest.mark.asyncio
+async def test_world_state_provider_respects_max_tokens(monkeypatch):
+    async def fake_world(*args, **kwargs):
+        return {"locations": {"L1": {}, "L2": {}, "L3": {}}}
+
+    monkeypatch.setattr(
+        "data_access.world_queries.get_world_building_from_db", fake_world
+    )
+    provider = WorldStateProvider()
+    request = ContextRequest(2, None, {})
+    settings = ProviderSettings(provider, max_tokens=3)
+    chunk = await provider.get_context(request, settings)
+    assert chunk.tokens <= 3

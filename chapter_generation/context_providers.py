@@ -8,11 +8,11 @@ from typing import Any
 
 import structlog
 from config import settings
-from core.llm_interface import count_tokens, llm_service
+from core.llm_interface import count_tokens, llm_service, truncate_text_by_tokens
 
 from models.agent_models import ChapterEndState
 
-from .context_models import ContextChunk, ContextRequest
+from .context_models import ContextChunk, ContextRequest, ProviderSettings
 
 logger = structlog.get_logger(__name__)
 
@@ -22,7 +22,9 @@ class ContextProvider:
 
     source: str = "base"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         """Return context for the given request."""
         raise NotImplementedError
 
@@ -43,7 +45,9 @@ class SemanticHistoryProvider(ContextProvider):
         self.chapter_queries = chapter_queries_module or default_chapter_queries
         self.llm_service = llm_service_instance or default_llm_service
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         try:
             plot_points = request.plot_outline.get("plot_points", [])
             plot_focus = None
@@ -106,7 +110,9 @@ class KGFactProvider(ContextProvider):
 
     source = "kg_facts"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         from .context_kg_utils import get_reliable_kg_facts_for_drafting_prompt
 
         text = await get_reliable_kg_facts_for_drafting_prompt(
@@ -121,7 +127,9 @@ class KGReasoningProvider(ContextProvider):
 
     source = "kg_reasoning"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         from .context_kg_utils import get_kg_reasoning_guidance_for_prompt
 
         text = await get_kg_reasoning_guidance_for_prompt(
@@ -136,7 +144,9 @@ class CanonProvider(ContextProvider):
 
     source = "canon"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         from .context_kg_utils import get_canonical_truths_from_kg
 
         lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
@@ -183,7 +193,9 @@ class PlanProvider(ContextProvider):
 
     source = "scene_plan"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         plan = request.chapter_plan or []
         lines: list[str] = []
         for scene in plan:
@@ -218,7 +230,9 @@ class UserNoteProvider(ContextProvider):
 
     source = "user_notes"
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         notes = ""
         if request.agent_hints:
             notes = request.agent_hints.get("user_notes", "")
@@ -238,7 +252,9 @@ class CharacterStateProvider(ContextProvider):
 
         self.character_queries = queries_module or default_character_queries
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         profiles = await self.character_queries.get_character_profiles_from_db()
         lines = [f"- {name}" for name in sorted(profiles.keys())]
         text = "\n".join(lines)
@@ -256,8 +272,12 @@ class WorldStateProvider(ContextProvider):
 
         self.world_queries = queries_module or default_world_queries
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
-        world = await self.world_queries.get_world_building_from_db()
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        world = await self.world_queries.get_world_building_from_db(
+            chapter_limit=request.chapter_number
+        )
         lines: list[str] = []
         for category, items in world.items():
             if category.startswith("_"):
@@ -265,6 +285,8 @@ class WorldStateProvider(ContextProvider):
             for name in items:
                 lines.append(f"- {name}")
         text = "\n".join(lines)
+        if provider_settings and provider_settings.max_tokens:
+            text = truncate_text_by_tokens(text, "dummy", provider_settings.max_tokens)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
 
@@ -279,7 +301,9 @@ class StateContextProvider(ContextProvider):
 
         self.chapter_queries = queries_module or default_chapter_queries
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         prev_chapter = request.chapter_number - 1
         state: ChapterEndState | None = None
         if prev_chapter <= 0:
@@ -349,5 +373,40 @@ class StateContextProvider(ContextProvider):
             )
 
         text = "\n".join(lines)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
+class PlotFocusProvider(ContextProvider):
+    """Provide the current plot focus text."""
+
+    source = "plot_focus"
+
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        text = request.plot_focus or ""
+        if provider_settings and provider_settings.max_tokens:
+            text = truncate_text_by_tokens(text, "dummy", provider_settings.max_tokens)
+        tokens = count_tokens(text, "dummy")
+        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+
+
+class UpcomingPlotPointsProvider(ContextProvider):
+    """Provide a list of upcoming plot points."""
+
+    source = "upcoming_plot_points"
+
+    async def get_context(
+        self, request: ContextRequest, provider_settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        points = request.plot_outline.get("plot_points", [])
+        upcoming: list[str] = []
+        if isinstance(points, list) and request.chapter_number < len(points):
+            upcoming = points[request.chapter_number : request.chapter_number + 3]
+        lines = [f"- {p}" for p in upcoming]
+        text = "\n".join(lines)
+        if provider_settings and provider_settings.max_tokens:
+            text = truncate_text_by_tokens(text, "dummy", provider_settings.max_tokens)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)

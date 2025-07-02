@@ -35,6 +35,7 @@ class ProviderSettings:
 
     provider: Any
     max_tokens: int | None = None
+    detail_level: str | None = None
 
 
 @dataclass

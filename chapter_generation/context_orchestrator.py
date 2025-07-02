@@ -89,12 +89,11 @@ class ContextOrchestrator:
         if profile is None:
             raise ValueError(f"Unknown context profile: {request.profile_name}")
 
-        providers = [ps.provider for ps in profile.providers]
-
         chunks: list[ContextChunk] = []
-        tasks = [provider.get_context(request) for provider in providers]
+        tasks = [ps.provider.get_context(request, ps) for ps in profile.providers]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for provider, res in zip(providers, results, strict=True):
+        for ps, res in zip(profile.providers, results, strict=True):
+            provider = ps.provider
             if isinstance(res, Exception):  # pragma: no cover - log and skip
                 logger.warning(
                     "Context provider error", provider=provider.source, error=res
