@@ -1,4 +1,5 @@
-# core_db/db_manager.py
+# core/db_manager.py
+import asyncio
 from typing import Any
 
 import numpy as np
@@ -16,15 +17,16 @@ logger = structlog.get_logger(__name__)
 
 
 class Neo4jManagerSingleton:
-    _instance = None
+    _instance: "Neo4jManagerSingleton | None" = None
+    _initialized_flag: bool
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Neo4jManagerSingleton":
         if not cls._instance:
             cls._instance = super().__new__(cls)
             cls._instance._initialized_flag = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized_flag:
             return
 
@@ -39,10 +41,12 @@ class Neo4jManagerSingleton:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+    ) -> None:
         await self.close()
 
-    async def connect(self):
+    async def connect(self, max_retries: int = settings.NEO4J_CONNECT_RETRIES) -> None:
         if self.driver:
             self.logger.info(
                 "Existing driver instance found. Attempting to close it before creating a new connection."
@@ -56,26 +60,38 @@ class Neo4jManagerSingleton:
             finally:
                 self.driver = None
 
-        try:
-            self.driver = AsyncGraphDatabase.driver(
-                settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
-            )
-            await self.driver.verify_connectivity()
-            self.logger.info(f"Successfully connected to Neo4j at {settings.NEO4J_URI}")
-        except ServiceUnavailable as e:
-            self.logger.critical(
-                f"Neo4j connection failed: {e}. Ensure the Neo4j database is running and accessible."
-            )
+        for attempt in range(max_retries):
+            try:
+                self.driver = AsyncGraphDatabase.driver(
+                    settings.NEO4J_URI,
+                    auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                )
+                await self.driver.verify_connectivity()
+                self.logger.info(
+                    f"Successfully connected to Neo4j at {settings.NEO4J_URI}"
+                )
+                return
+            except ServiceUnavailable as e:
+                self.logger.warning(
+                    f"Neo4j connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Unexpected error during Neo4j connection attempt {attempt + 1}: {e}",
+                    exc_info=True,
+                )
             self.driver = None
-            raise
-        except Exception as e:
-            self.logger.critical(
-                f"Unexpected error during Neo4j connection: {e}", exc_info=True
-            )
-            self.driver = None
-            raise
+            if attempt < max_retries - 1:
+                delay = settings.NEO4J_RETRY_DELAY_SECONDS * (2**attempt)
+                self.logger.info(f"Retrying Neo4j connection in {delay:.2f} seconds...")
+                await asyncio.sleep(delay)
 
-    async def close(self):
+        self.logger.critical(
+            f"Failed to connect to Neo4j after {max_retries} attempts."
+        )
+        raise ConnectionError("Failed to connect to Neo4j")
+
+    async def close(self) -> None:
         if self.driver:
             try:
                 await self.driver.close()
@@ -89,7 +105,7 @@ class Neo4jManagerSingleton:
         else:
             self.logger.info("No active Neo4j driver to close (driver was None).")
 
-    async def _ensure_connected(self):
+    async def _ensure_connected(self) -> None:
         if self.driver is None:
             self.logger.info("Driver is None, attempting to connect.")
             await self.connect()
@@ -125,7 +141,7 @@ class Neo4jManagerSingleton:
 
     async def execute_cypher_batch(
         self, cypher_statements_with_params: list[tuple[str, dict[str, Any]]]
-    ):
+    ) -> None:
         if not cypher_statements_with_params:
             self.logger.info("execute_cypher_batch: No statements to execute.")
             return

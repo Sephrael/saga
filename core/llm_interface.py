@@ -1,4 +1,4 @@
-# llm_interface.py
+# core/llm_interface.py
 """
 Handles all direct interactions with Large Language Models (LLMs)
 and embedding models (via Ollama). Includes functions for API calls,
@@ -25,6 +25,7 @@ import asyncio
 import functools
 import json
 import os
+import random
 import re
 import tempfile
 
@@ -206,6 +207,12 @@ class LLMService:
             f"LLMService initialized with a concurrency limit of {settings.MAX_CONCURRENT_LLM_CALLS}."
         )
 
+    async def _backoff_delay(self, attempt: int) -> None:
+        """Sleep for an exponentially increasing delay with jitter."""
+        delay = settings.LLM_RETRY_DELAY_SECONDS * (2**attempt)
+        jitter = random.uniform(0, delay / 2)
+        await asyncio.sleep(delay + jitter)
+
     async def aclose(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()
@@ -348,7 +355,7 @@ class LLMService:
                     logger.info(
                         f"Ollama Embedding: Retrying in {delay:.2f} seconds due to: {retry_reason}."
                     )
-                    await asyncio.sleep(delay)
+                    await self._backoff_delay(attempt)
                 else:
                     logger.error(
                         f"Ollama Embedding: All {settings.LLM_RETRY_ATTEMPTS} retry attempts failed. Last error: {last_exception}"
@@ -719,12 +726,10 @@ class LLMService:
                                 )
 
                     if (
-                        retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1  # Use settings
+                        retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1
                         and last_exception_for_current_model is not None
                     ):
-                        delay = settings.LLM_RETRY_DELAY_SECONDS * (
-                            2**retry_attempt
-                        )  # Use settings
+                        delay = settings.LLM_RETRY_DELAY_SECONDS * (2**retry_attempt)
                         retry_reason = (
                             type(last_exception_for_current_model).__name__
                             if last_exception_for_current_model
@@ -733,7 +738,7 @@ class LLMService:
                         logger.info(
                             f"Async LLM ('{current_model_to_try}'): Retrying in {delay:.2f} seconds due to: {retry_reason}."
                         )
-                        await asyncio.sleep(delay)
+                        await self._backoff_delay(retry_attempt)
                     elif last_exception_for_current_model is not None:
                         logger.error(
                             f"Async LLM ('{current_model_to_try}'): All {settings.LLM_RETRY_ATTEMPTS} retries failed for this model. Last error: {last_exception_for_current_model}"  # Use settings

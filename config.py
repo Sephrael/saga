@@ -78,6 +78,8 @@ class SagaSettings(BaseSettings):
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "saga_password"
     NEO4J_DATABASE: str | None = "neo4j"
+    NEO4J_CONNECT_RETRIES: int = 3
+    NEO4J_RETRY_DELAY_SECONDS: float = 2.0
 
     # Neo4j Vector Index Configuration
     NEO4J_VECTOR_INDEX_NAME: str = "chapterEmbeddings"
