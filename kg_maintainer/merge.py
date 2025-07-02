@@ -1,8 +1,8 @@
 # kg_maintainer/merge.py
 """Helpers for merging parsed updates into existing knowledge graph state."""
 
+import kg_constants as kg_keys
 import structlog
-from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 

@@ -2,9 +2,9 @@
 import json
 from typing import Any
 
+import kg_constants as kg_keys
 import structlog
 import utils
-from utils import kg_property_keys as kg_keys
 
 from .models import CharacterProfile, WorldItem
 

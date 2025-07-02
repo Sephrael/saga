@@ -1,6 +1,7 @@
 # data_access/world_queries.py
 from typing import Any
 
+import kg_constants as kg_keys
 import structlog
 import utils
 from async_lru import alru_cache  # type: ignore
@@ -12,7 +13,6 @@ from kg_constants import (
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem
-from utils import kg_property_keys as kg_keys
 
 from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
@@ -609,9 +609,8 @@ async def get_world_building_from_db(
             overview_data_dict,
         )
         WORLD_NAME_TO_ID[utils._normalize_for_id("_overview_")] = (
-            utils._normalize_for_id("_overview_") # Should be wc_id_param
+            utils._normalize_for_id("_overview_")  # Should be wc_id_param
         )
-
 
     # Load WorldElements and their details with chapter limit
     we_query_parts = ["MATCH (we:WorldElement:Entity)"]
@@ -628,8 +627,9 @@ async def get_world_building_from_db(
         we_query_parts.append("WHERE " + " AND ".join(base_conditions))
 
     we_query_parts.append("RETURN we")
-    we_results = await neo4j_manager.execute_read_query(" ".join(we_query_parts), we_params)
-
+    we_results = await neo4j_manager.execute_read_query(
+        " ".join(we_query_parts), we_params
+    )
 
     if not we_results:
         logger.info(
@@ -637,7 +637,12 @@ async def get_world_building_from_db(
             f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
         )
         standard_categories = [
-            "locations", "society", "systems", "lore", "history", "factions"
+            "locations",
+            "society",
+            "systems",
+            "lore",
+            "history",
+            "factions",
         ]
         for cat_key in standard_categories:
             world_data.setdefault(cat_key, {})
@@ -667,7 +672,9 @@ async def get_world_building_from_db(
             KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
         item_detail_dict["created_chapter"] = int(created_chapter_num)
-        item_detail_dict[kg_keys.added_key(created_chapter_num)] = True # Mark as added in its creation chapter
+        item_detail_dict[kg_keys.added_key(created_chapter_num)] = (
+            True  # Mark as added in its creation chapter
+        )
 
         # Provisional status based on its own flag or chapter-specific source quality
         is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
@@ -680,8 +687,10 @@ async def get_world_building_from_db(
         # List properties (goals, rules, etc.) are fetched if the parent WE is included.
         # No separate chapter filtering for these ValueNode relationships themselves.
         list_prop_map = {
-            "goals": "HAS_GOAL", "rules": "HAS_RULE",
-            "key_elements": "HAS_KEY_ELEMENT", "traits": "HAS_TRAIT_ASPECT",
+            "goals": "HAS_GOAL",
+            "rules": "HAS_RULE",
+            "key_elements": "HAS_KEY_ELEMENT",
+            "traits": "HAS_TRAIT_ASPECT",
         }
         for list_prop_key, rel_name_internal in list_prop_map.items():
             list_values_query = f"""
@@ -693,7 +702,11 @@ async def get_world_building_from_db(
                 {"we_id_param": we_id, "value_node_type_param": list_prop_key},
             )
             item_detail_dict[list_prop_key] = sorted(
-                [res["item_value"] for res in list_val_res if res and res.get("item_value") is not None]
+                [
+                    res["item_value"]
+                    for res in list_val_res
+                    if res and res.get("item_value") is not None
+                ]
             )
 
         # Fetch elaborations with chapter limit
@@ -711,7 +724,9 @@ async def get_world_building_from_db(
         )
         elab_query_parts.append("ORDER BY elab.chapter_updated ASC")
 
-        elab_results = await neo4j_manager.execute_read_query(" ".join(elab_query_parts), elab_params)
+        elab_results = await neo4j_manager.execute_read_query(
+            " ".join(elab_query_parts), elab_params
+        )
 
         actual_elaborations_count = 0
         if elab_results:
@@ -719,35 +734,50 @@ async def get_world_building_from_db(
                 chapter_val = elab_rec.get("chapter")
                 summary_val = elab_rec.get("summary")
                 # Ensure elaboration is within chapter_limit (query should handle this, but good to be safe)
-                if chapter_val is not None and summary_val is not None and \
-                   (chapter_limit is None or chapter_val <= chapter_limit):
+                if (
+                    chapter_val is not None
+                    and summary_val is not None
+                    and (chapter_limit is None or chapter_val <= chapter_limit)
+                ):
                     elab_key = kg_keys.elaboration_key(chapter_val)
                     item_detail_dict[elab_key] = summary_val
                     if elab_rec.get(KG_IS_PROVISIONAL):
                         item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
                             "provisional_from_unrevised_draft"
                         )
-                    actual_elaborations_count +=1
+                    actual_elaborations_count += 1
 
         item_detail_dict["id"] = we_id
 
         # Add to world_data if it's not filtered out by chapter_limit on its creation
         # (The main query for we_results already handles this if chapter_limit is set)
         # OR if it has elaborations within the chapter_limit.
-        if chapter_limit is None or \
-           (created_chapter_num is not None and created_chapter_num <= chapter_limit) or \
-           actual_elaborations_count > 0:
+        if (
+            chapter_limit is None
+            or (
+                created_chapter_num is not None and created_chapter_num <= chapter_limit
+            )
+            or actual_elaborations_count > 0
+        ):
             world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
                 category, item_name, item_detail_dict
             )
             WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
-        elif not (created_chapter_num is not None and created_chapter_num <= chapter_limit) and \
-             actual_elaborations_count == 0 and chapter_limit is not None:
-            logger.debug(f"WorldElement '{item_name}' (id: {we_id}) created in chapter {created_chapter_num} "
-                         f"with no elaborations up to chapter {chapter_limit}, excluding.")
+        elif (
+            not (
+                created_chapter_num is not None and created_chapter_num <= chapter_limit
+            )
+            and actual_elaborations_count == 0
+            and chapter_limit is not None
+        ):
+            logger.debug(
+                f"WorldElement '{item_name}' (id: {we_id}) created in chapter {created_chapter_num} "
+                f"with no elaborations up to chapter {chapter_limit}, excluding."
+            )
 
-
-    num_elements_loaded = sum(len(items) for cat, items in world_data.items() if cat != "_overview_")
+    num_elements_loaded = sum(
+        len(items) for cat, items in world_data.items() if cat != "_overview_"
+    )
     logger.info(
         f"Successfully loaded and recomposed world building data ({num_elements_loaded} elements) from Neo4j%s.",
         f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
