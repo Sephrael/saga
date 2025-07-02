@@ -18,8 +18,7 @@ This file provides guidance for OpenAI Codex and other AI agents working with th
 │   ├── comprehensive_evaluator_agent.py  # Draft evaluation
 │   ├── patch_validation_agent.py    # Patch instruction validation
 │   ├── kg_maintainer_agent.py       # Knowledge graph management
-│   ├── finalize_agent.py            # Chapter finalization
-│   └── pre_flight_check_agent.py    # LLM readiness checks
+│   └── finalize_agent.py            # Chapter finalization
 ├── chapter_generation/              # Chapter generation services
 │   ├── context_orchestrator.py      # Provider-based context system
 │   ├── context_kg_utils.py          # KG context helpers

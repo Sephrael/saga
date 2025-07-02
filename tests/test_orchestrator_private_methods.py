@@ -100,11 +100,6 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
     orchestrator.plot_outline = PlotOutline(plot_points=["Intro"])
     orchestrator.next_chapter_context = "prefetched"
     monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
-    monkeypatch.setattr(
-        orchestrator.pre_flight_agent,
-        "perform_core_checks",
-        AsyncMock(),
-    )
 
     async def fake_plan(*_args, **_kwargs):
         return ([{"scene_number": 1}], {"total_tokens": 1})
@@ -156,44 +151,6 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
     )
     assert orchestrator.next_chapter_context is None
     build_ctx_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_prepare_prerequisites_runs_preflight(orchestrator, monkeypatch):
-    orchestrator.plot_outline = PlotOutline(
-        plot_points=["Intro"], protagonist_name="Hero"
-    )
-    orchestrator.next_chapter_context = "prefetched"
-    monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
-    monkeypatch.setattr(
-        orchestrator.planner_agent,
-        "plan_chapter_scenes",
-        AsyncMock(return_value=([], {})),
-    )
-    monkeypatch.setattr(
-        character_queries, "get_character_profiles_from_db", AsyncMock(return_value={})
-    )
-    monkeypatch.setattr(
-        world_queries, "get_world_building_from_db", AsyncMock(return_value={})
-    )
-    await orchestrator.refresh_knowledge_cache()
-    preflight_mock = AsyncMock()
-    monkeypatch.setattr(
-        orchestrator.pre_flight_agent,
-        "perform_core_checks",
-        preflight_mock,
-    )
-    monkeypatch.setattr(
-        orchestrator.evaluator_agent,
-        "check_scene_plan_consistency",
-        AsyncMock(return_value=([], {})),
-    )
-    await orchestrator._prepare_chapter_prerequisites(1)
-    preflight_mock.assert_awaited_with(
-        orchestrator.plot_outline,
-        orchestrator.knowledge_cache.characters,
-        orchestrator.knowledge_cache.world,
-    )
 
 
 @pytest.mark.asyncio

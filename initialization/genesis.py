@@ -80,9 +80,14 @@ async def run_genesis_phase() -> tuple[
     await kg_agent.heal_and_enrich_kg()
     logger.info("Initial KG enrichment pass executed.")
 
+    # Create a version of the plot outline for Chapter 0 context
+    # that EXCLUDES the future plot points.
+    plot_outline_for_ch0 = plot_outline.model_dump(exclude_none=True)
+    plot_outline_for_ch0.pop("plot_points", None)
+
     bootstrap_state_text = json.dumps(
         {
-            "plot_outline": plot_outline.model_dump(exclude_none=True),
+            "plot_outline": plot_outline_for_ch0,
             "characters": {
                 name: profile.model_dump(exclude_none=True)
                 for name, profile in character_profiles.items()
