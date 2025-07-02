@@ -469,8 +469,8 @@ async def get_character_profiles_from_db(
       WHERE $limit IS NULL OR dev.{KG_NODE_CHAPTER_UPDATED} <= $limit
     RETURN c,
            collect(DISTINCT tr.name) AS traits,
-           collect(DISTINCT {target: target.name, props: properties(r)}) AS rels,
-           collect(DISTINCT {chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: dev.{KG_IS_PROVISIONAL}}) AS devs
+           collect(DISTINCT {{target: target.name, props: properties(r)}}) AS rels,
+           collect(DISTINCT {{chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: dev.{KG_IS_PROVISIONAL}}}) AS devs
     """
 
     results = await neo4j_manager.execute_read_query(query, params or None)

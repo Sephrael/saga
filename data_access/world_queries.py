@@ -567,6 +567,7 @@ async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
     return mapping
 
 
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
 async def get_world_building_from_db(
     chapter_limit: int | None = None,
 ) -> dict[str, dict[str, WorldItem]]:

@@ -197,6 +197,8 @@ class SagaSettings(BaseSettings):
     KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
     TOKENIZER_CACHE_SIZE: int = 10
     SENTENCE_EMBEDDING_CACHE_SIZE: int = 32
+    LLM_CALL_CACHE_SIZE: int = 32
+    WORLD_QUERY_CACHE_SIZE: int = 32
 
     # Reranking Configuration
     ENABLE_RERANKING: bool = False

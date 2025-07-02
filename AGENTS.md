@@ -639,7 +639,7 @@ except Neo4jConnectionError as e:
 - **Model Selection**: Use appropriate model sizes for different tasks
 - **Context Management**: Keep prompts within `MAX_CONTEXT_TOKENS` limits
 - **Parallel Processing**: Run independent evaluations in parallel
-- **Caching**: Cache repeated LLM calls where appropriate
+- **Caching**: Cache repeated LLM calls and world queries where appropriate
 
 ### Neo4j Optimization
 - **Vector Search**: Optimize vector similarity searches with appropriate thresholds
