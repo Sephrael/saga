@@ -1,4 +1,4 @@
-# nana_orchestrator.py
+# orchestration/nana_orchestrator.py
 import asyncio
 import time  # For Rich display updates
 from dataclasses import dataclass, field
@@ -1245,17 +1245,17 @@ class NANA_Orchestrator:
         logger.info("Critical configurations validated successfully.")
         return True
 
-    async def run_novel_generation_loop(self):
-        logger.info("--- NANA: Starting Novel Generation Run ---")
-
+    async def _initialize_run(self) -> bool:
+        """Initialize the run by validating configuration and setting up state."""
         if not self._validate_critical_configs():
             self._update_rich_display(step="Critical Config Error - Halting")
             await self.display.stop()
-            return
+            return False
 
         self.total_tokens_generated_this_run = 0
         self.run_start_time = time.time()
         self.display.start()
+
         try:
             async with neo4j_manager:
                 await neo4j_manager.create_db_schema()
@@ -1265,60 +1265,86 @@ class NANA_Orchestrator:
                 logger.info("NANA: KG schema loaded into maintainer agent.")
 
                 await self.async_init_orchestrator()
-
-            plot_points_exist = (
-                self.plot_outline
-                and self.plot_outline.get("plot_points")
-                and len(
-                    [
-                        pp
-                        for pp in self.plot_outline.get("plot_points", [])
-                        if not utils._is_fill_in(pp)
-                    ]
-                )
-                > 0
-            )
-
-            if (
-                not plot_points_exist
-                or not self.plot_outline.get("title")
-                or utils._is_fill_in(self.plot_outline.get("title"))
-            ):
-                logger.info(
-                    "NANA: Core plot data missing or insufficient (e.g., no title, no concrete plot points). Performing initial setup..."
-                )
-                if not await self.perform_initial_setup():
-                    logger.critical("NANA: Initial setup failed. Halting generation.")
-                    self._update_rich_display(step="Initial Setup Failed - Halting")
-                    return
-                self._update_novel_props_cache()
-
-            # KG pre-population handled within run_genesis_phase
-
-            logger.info("\n--- NANA: Starting Novel Writing Process ---")
-
-            runner = ChapterGenerationRunner(self)
-            await runner.run()
-
-            final_chapter_count_from_db = await chapter_repository.load_chapter_count()
-            logger.info("\n--- NANA: Novel writing process finished for this run ---")
-            logger.info(
-                f"NANA: Successfully processed {runner.chapters_written} chapter(s) in this run."
-            )
-            logger.info(
-                f"NANA: Current total chapters in database after this run: {final_chapter_count_from_db}"
-            )
-
-            logger.info(
-                f"NANA: Total LLM tokens generated this run: {self.total_tokens_generated_this_run}"
-            )
-            self._update_rich_display(
-                chapter_num=self.chapter_count, step="Run Finished"
-            )
-
-        except Exception as e:
+        except Exception as exc:
             logger.critical(
-                f"NANA: Unhandled exception in orchestrator main loop: {e}",
+                "NANA: Initialization failed: %s",
+                exc,
+                exc_info=True,
+            )
+            return False
+
+        return True
+
+    async def _ensure_initial_setup(self) -> bool:
+        """Perform initial setup if plot outline or title is missing."""
+        plot_points_exist = (
+            self.plot_outline
+            and self.plot_outline.get("plot_points")
+            and len(
+                [
+                    pp
+                    for pp in self.plot_outline.get("plot_points", [])
+                    if not utils._is_fill_in(pp)
+                ]
+            )
+            > 0
+        )
+
+        if (
+            not plot_points_exist
+            or not self.plot_outline.get("title")
+            or utils._is_fill_in(self.plot_outline.get("title"))
+        ):
+            logger.info(
+                "NANA: Core plot data missing or insufficient. Performing initial setup..."
+            )
+            if not await self.perform_initial_setup():
+                logger.critical("NANA: Initial setup failed. Halting generation.")
+                self._update_rich_display(step="Initial Setup Failed - Halting")
+                return False
+            self._update_novel_props_cache()
+
+        return True
+
+    async def _run_generation(self) -> None:
+        """Run the chapter generation runner and log summary stats."""
+        logger.info("\n--- NANA: Starting Novel Writing Process ---")
+
+        runner = ChapterGenerationRunner(self)
+        await runner.run()
+
+        final_chapter_count_from_db = await chapter_repository.load_chapter_count()
+        logger.info("\n--- NANA: Novel writing process finished for this run ---")
+        logger.info(
+            "NANA: Successfully processed %s chapter(s) in this run.",
+            runner.chapters_written,
+        )
+        logger.info(
+            "NANA: Current total chapters in database after this run: %s",
+            final_chapter_count_from_db,
+        )
+        logger.info(
+            "NANA: Total LLM tokens generated this run: %s",
+            self.total_tokens_generated_this_run,
+        )
+        self._update_rich_display(chapter_num=self.chapter_count, step="Run Finished")
+
+    async def run_novel_generation_loop(self):
+        logger.info("--- NANA: Starting Novel Generation Run ---")
+
+        if not await self._initialize_run():
+            return
+
+        try:
+            if not await self._ensure_initial_setup():
+                return
+
+            await self._run_generation()
+
+        except Exception as exc:
+            logger.critical(
+                "NANA: Unhandled exception in orchestrator main loop: %s",
+                exc,
                 exc_info=True,
             )
             self._update_rich_display(step="Critical Error in Main Loop")
