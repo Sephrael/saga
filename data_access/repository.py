@@ -118,6 +118,38 @@ class ChapterRepository(BaseRepository):
             return None
         return None
 
+    async def get_chapter_data_range(
+        self, start_number: int, end_number: int
+    ) -> list[dict[str, Any]]:
+        """Return chapter data for ``start_number`` ``<=`` number ``<`` ``end_number``."""
+        if start_number >= end_number:
+            return []
+        query = f"""
+        MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL})
+        WHERE c.number >= $start_param AND c.number < $end_param
+        RETURN c.number AS number,
+               c.summary AS summary,
+               c.text AS text,
+               c.is_provisional AS is_provisional
+        ORDER BY c.number ASC
+        """
+        try:
+            results = await self.read(
+                query, {"start_param": start_number, "end_param": end_number}
+            )
+            return [
+                {
+                    "number": r.get("number"),
+                    "summary": r.get("summary"),
+                    "text": r.get("text"),
+                    "is_provisional": r.get("is_provisional", False),
+                }
+                for r in results
+                if r
+            ]
+        except Exception:
+            return []
+
     async def get_embedding(self, chapter_number: int) -> np.ndarray | None:
         """Return the text embedding for a chapter."""
         if chapter_number < 0:

@@ -646,6 +646,7 @@ except Neo4jConnectionError as e:
 - **Query Efficiency**: Use `LIMIT` clauses and avoid Cartesian products
 - **Batch Operations**: Group related database operations when possible
 - **Index Usage**: Ensure queries use existing indexes effectively
+- **Aggregated Queries**: Retrieve related records in a single query (e.g. character profiles, world elements, chapter ranges) to avoid N+1 patterns
 
 ### Processing Pipeline
 - **Lazy Loading**: Load context data only when needed
