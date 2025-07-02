@@ -17,7 +17,9 @@ class DummyProvider(ContextProvider):
         self.text = text
         self.source = source
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         return ContextChunk(
             text=self.text, tokens=len(self.text), provenance={}, source=self.source
         )
@@ -31,10 +33,29 @@ class SlowProvider(ContextProvider):
         self.text = text
         self.source = source
 
-    async def get_context(self, request: ContextRequest) -> ContextChunk:
+    async def get_context(
+        self, request: ContextRequest, settings: ProviderSettings | None = None
+    ) -> ContextChunk:
         await asyncio.sleep(self.delay)
         return ContextChunk(
             text=self.text, tokens=len(self.text), provenance={}, source=self.source
+        )
+
+
+class ConfigAwareProvider(ContextProvider):
+    def __init__(self) -> None:
+        self.last_setting = None
+        self.source = "cfg"
+
+    async def get_context(
+        self, request: ContextRequest, settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        self.last_setting = settings.max_tokens if settings else None
+        text = "x" * 10
+        if settings and settings.max_tokens:
+            text = text[: settings.max_tokens]
+        return ContextChunk(
+            text=text, tokens=len(text), provenance={}, source=self.source
         )
 
 
@@ -94,10 +115,14 @@ async def test_providers_run_concurrently():
         original = prov.get_context
 
         async def wrapper(
-            request: ContextRequest, *, _orig=original, _prov=prov
+            request: ContextRequest,
+            settings: ProviderSettings | None = None,
+            *,
+            _orig=original,
+            _prov=prov,
         ) -> ContextChunk:
             events.append(f"start-{_prov.source}")
-            chunk = await _orig(request)
+            chunk = await _orig(request, settings)
             events.append(f"end-{_prov.source}")
             return chunk
 
@@ -122,3 +147,18 @@ async def test_profile_selection():
     req = ContextRequest(1, None, {}, profile_name=ContextProfileName.ALTERNATE)
     ctx = await orch.build_context(req)
     assert ctx.startswith("[B]")
+
+
+@pytest.mark.asyncio
+async def test_provider_settings_passed():
+    provider = ConfigAwareProvider()
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(provider, max_tokens=5)],
+            max_tokens=50,
+        )
+    }
+    orch = ContextOrchestrator(profiles)
+    req = ContextRequest(1, None, {})
+    await orch.build_context(req)
+    assert provider.last_setting == 5

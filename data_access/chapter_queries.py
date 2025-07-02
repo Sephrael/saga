@@ -158,6 +158,7 @@ async def find_similar_chapters_in_db(
     query_embedding: np.ndarray,
     limit: int,
     current_chapter_to_exclude: int | None = None,
+    chapter_limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return chapters with embeddings most similar to the query vector.
 
@@ -182,20 +183,25 @@ async def find_similar_chapters_in_db(
         )
         return []
 
-    exclude_clause = ""
+    conditions: list[str] = []
     params_dict: dict[str, Any] = {
         "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME,
         "limit_param": limit + 1 if current_chapter_to_exclude is not None else 0,
         "queryVector_param": query_embedding_list,
     }
     if current_chapter_to_exclude is not None:
-        exclude_clause = "WHERE c.number <> $current_chapter_to_exclude_param "
+        conditions.append("c.number <> $current_chapter_to_exclude_param")
         params_dict["current_chapter_to_exclude_param"] = current_chapter_to_exclude
+    if chapter_limit is not None:
+        conditions.append("c.number <= $chapter_limit_param")
+        params_dict["chapter_limit_param"] = chapter_limit
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     similarity_query = f"""
     CALL db.index.vector.queryNodes($index_name_param, $limit_param, $queryVector_param)
     YIELD node AS c, score
-    {exclude_clause}
+    {where_clause}
     RETURN c.number AS chapter_number,
            c.summary AS summary,
            c.text AS text,
