@@ -7,7 +7,7 @@ from typing import Any, TypedDict
 import numpy as np
 import structlog
 from core.llm_interface import llm_service
-from data_access import chapter_queries
+from data_access import chapter_repository
 
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from models import CharacterProfile, WorldItem
@@ -90,7 +90,7 @@ class FinalizeAgent:
         )
         summary, summary_usage = summary_data
 
-        await chapter_queries.save_chapter_data_to_db(
+        await chapter_repository.save_chapter_data(
             chapter_number,
             final_text,
             raw_llm_output or "N/A",

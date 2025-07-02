@@ -12,6 +12,12 @@ from config import settings
 from core.db_manager import Neo4jManagerSingleton, neo4j_manager
 from core.llm_interface import llm_service
 
+__all__ = [
+    "BaseRepository",
+    "ChapterRepository",
+    "chapter_repository",
+]
+
 
 class BaseRepository:
     """Base repository providing simple database helpers."""
@@ -41,7 +47,7 @@ class ChapterRepository(BaseRepository):
 
     async def load_chapter_count(self) -> int:
         """Return the number of chapters stored in the database."""
-        query = f"MATCH (c:{neo4j_manager.settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"
+        query = f"MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL}) RETURN count(c) AS chapter_count"
         try:
             result = await self.read(query)
             return result[0]["chapter_count"] if result and result[0] else 0
@@ -182,3 +188,6 @@ class ChapterRepository(BaseRepository):
                 }
             )
         return similar
+
+
+chapter_repository = ChapterRepository()

@@ -8,7 +8,7 @@ import structlog
 import utils
 from config import settings
 from core.llm_interface import llm_service
-from data_access import chapter_queries
+from data_access import chapter_repository
 from processing.evaluation_helpers import (
     parse_llm_evaluation_output,
     perform_llm_comprehensive_evaluation,
@@ -90,9 +90,7 @@ class ComprehensiveEvaluatorAgent:
 
         current_embedding_task = llm_service.async_get_embedding(draft_text)
         if chapter_number > 1:
-            prev_embedding = await chapter_queries.get_embedding_from_db(
-                chapter_number - 1
-            )
+            prev_embedding = await chapter_repository.get_embedding(chapter_number - 1)
             current_embedding = await current_embedding_task
             if current_embedding is not None and prev_embedding is not None:
                 coherence_score = utils.numpy_cosine_similarity(

@@ -33,6 +33,7 @@ from .plot_queries import (
     plot_point_exists,
     save_plot_outline_to_db,
 )
+from .repository import chapter_repository
 from .world_queries import (
     get_world_building_from_db,
     get_world_elements_for_snippet_from_db,
@@ -64,6 +65,7 @@ __all__ = [
     "resolve_world_name",
     "get_world_item_by_name",
     "get_world_item_by_id",
+    "chapter_repository",
     "load_chapter_count_from_db",
     "save_chapter_data_to_db",
     "get_chapter_data_from_db",
