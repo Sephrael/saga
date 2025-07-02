@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from chapter_generation.context_orchestrator import ContextOrchestrator, ContextRequest
 from chapter_generation.context_providers import ContextChunk, ContextProvider
@@ -10,6 +12,21 @@ class DummyProvider(ContextProvider):
         self.source = source
 
     async def get_context(self, request: ContextRequest) -> ContextChunk:
+        return ContextChunk(
+            text=self.text, tokens=len(self.text), provenance={}, source=self.source
+        )
+
+
+class SlowProvider(ContextProvider):
+    """Provider that sleeps before returning."""
+
+    def __init__(self, delay: float, text: str, source: str) -> None:
+        self.delay = delay
+        self.text = text
+        self.source = source
+
+    async def get_context(self, request: ContextRequest) -> ContextChunk:
+        await asyncio.sleep(self.delay)
         return ContextChunk(
             text=self.text, tokens=len(self.text), provenance={}, source=self.source
         )
@@ -39,3 +56,26 @@ async def test_agent_hints_cache_key():
     out1 = await orch.build_context(req)
     out2 = await orch.build_context(req)
     assert out1 == out2
+
+
+@pytest.mark.asyncio
+async def test_providers_run_concurrently():
+    orch = ContextOrchestrator(
+        [SlowProvider(0.05, "a", "A"), SlowProvider(0.05, "b", "B")]
+    )
+    req = ContextRequest(1, None, {})
+    events: list[str] = []
+    for prov in orch.providers:
+        original = prov.get_context
+
+        async def wrapper(
+            request: ContextRequest, *, _orig=original, _prov=prov
+        ) -> ContextChunk:
+            events.append(f"start-{_prov.source}")
+            chunk = await _orig(request)
+            events.append(f"end-{_prov.source}")
+            return chunk
+
+        prov.get_context = wrapper  # type: ignore[assignment]
+    await orch.build_context(req)
+    assert events[0].startswith("start") and events[1].startswith("start")
