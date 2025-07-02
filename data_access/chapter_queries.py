@@ -185,8 +185,7 @@ async def find_similar_chapters_in_db(
     exclude_clause = ""
     params_dict: dict[str, Any] = {
         "index_name_param": settings.NEO4J_VECTOR_INDEX_NAME,
-        "limit_param": limit
-        + (0),  # 1 if current_chapter_to_exclude is not None else 0),
+        "limit_param": limit + 1 if current_chapter_to_exclude is not None else 0,
         "queryVector_param": query_embedding_list,
     }
     if current_chapter_to_exclude is not None:
