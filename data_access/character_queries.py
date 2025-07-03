@@ -452,11 +452,10 @@ async def get_character_profiles_from_db(
     )
     profiles_data: dict[str, CharacterProfile] = {}
 
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"limit": chapter_limit}
     chapter_filter = ""
     if chapter_limit is not None:
         chapter_filter = f"AND (c.{KG_NODE_CHAPTER_UPDATED} IS NULL OR c.{KG_NODE_CHAPTER_UPDATED} <= $limit)"
-        params["limit"] = chapter_limit
 
     query = f"""
     MATCH (c:Character:Entity)
@@ -473,7 +472,7 @@ async def get_character_profiles_from_db(
            collect(DISTINCT {{chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: dev.{KG_IS_PROVISIONAL}}}) AS devs
     """
 
-    results = await neo4j_manager.execute_read_query(query, params or None)
+    results = await neo4j_manager.execute_read_query(query, params)
 
     for record in results:
         char_node = record.get("c")
