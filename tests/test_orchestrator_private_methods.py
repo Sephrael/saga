@@ -10,7 +10,7 @@ from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator, RevisionOutcome
 
-from models.agent_models import ChapterEndState
+from models.agent_models import ChapterEndState, CharacterState
 from models.user_input_models import (
     KeyLocationModel,
     NovelConceptModel,
@@ -241,3 +241,79 @@ async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkey
         orchestrator, 2, None, None, profile_name=ContextProfileName.DEFAULT
     )
     assert orchestrator.next_chapter_context == "ctx1"
+
+
+@pytest.mark.asyncio
+async def test_missing_reference_detection_found(orchestrator, monkeypatch):
+    orchestrator.plot_outline = PlotOutline(plot_points=["A"])
+    orchestrator.next_chapter_context = "prefetched"
+
+    plan = [
+        {"scene_number": 1, "characters_involved": ["Bob"], "setting_details": "Castle"}
+    ]
+    monkeypatch.setattr(
+        orchestrator.planner_agent,
+        "plan_chapter_scenes",
+        AsyncMock(return_value=(plan, {})),
+    )
+
+    prev_state = ChapterEndState(
+        chapter_number=0,
+        character_states=[CharacterState(name="Alice", status="", location="Village")],
+        unresolved_cliffhanger=None,
+        key_world_changes={"Forest": "burned"},
+    )
+    monkeypatch.setattr(
+        orchestrator, "_load_previous_end_state", AsyncMock(return_value=prev_state)
+    )
+    monkeypatch.setattr(
+        orchestrator.evaluator_agent,
+        "check_scene_plan_consistency",
+        AsyncMock(return_value=([], {})),
+    )
+
+    result = await orchestrator._prepare_chapter_prerequisites(1)
+
+    assert result.chapter_plan == plan
+    assert "Bob" in orchestrator.missing_references["characters"]
+    assert "Castle" in orchestrator.missing_references["locations"]
+
+
+@pytest.mark.asyncio
+async def test_missing_reference_detection_none(orchestrator, monkeypatch):
+    orchestrator.plot_outline = PlotOutline(plot_points=["A"])
+    orchestrator.next_chapter_context = "prefetched"
+
+    plan = [
+        {
+            "scene_number": 1,
+            "characters_involved": ["Alice"],
+            "setting_details": "Village",
+        }
+    ]
+    monkeypatch.setattr(
+        orchestrator.planner_agent,
+        "plan_chapter_scenes",
+        AsyncMock(return_value=(plan, {})),
+    )
+
+    prev_state = ChapterEndState(
+        chapter_number=0,
+        character_states=[CharacterState(name="Alice", status="", location="Village")],
+        unresolved_cliffhanger=None,
+        key_world_changes={},
+    )
+    monkeypatch.setattr(
+        orchestrator, "_load_previous_end_state", AsyncMock(return_value=prev_state)
+    )
+    monkeypatch.setattr(
+        orchestrator.evaluator_agent,
+        "check_scene_plan_consistency",
+        AsyncMock(return_value=([], {})),
+    )
+
+    result = await orchestrator._prepare_chapter_prerequisites(1)
+
+    assert result.chapter_plan == plan
+    assert orchestrator.missing_references["characters"] == set()
+    assert orchestrator.missing_references["locations"] == set()

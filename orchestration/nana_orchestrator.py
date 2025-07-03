@@ -107,6 +107,10 @@ class NANA_Orchestrator:
 
         self.next_chapter_context: str | None = None
         self.chapter_zero_end_state: ChapterEndState | None = None
+        self.missing_references: dict[str, set[str]] = {
+            "characters": set(),
+            "locations": set(),
+        }
 
         self.display = RichDisplayManager()
         self.run_start_time: float = 0.0
@@ -378,6 +382,34 @@ class NANA_Orchestrator:
                 exc_info=True,
             )
             return text_to_dedup, 0
+
+    async def _load_previous_end_state(
+        self, chapter_number: int
+    ) -> ChapterEndState | None:
+        """Return the ChapterEndState for ``chapter_number`` if available."""
+        if chapter_number <= 0:
+            return self.chapter_zero_end_state
+        try:
+            data = await chapter_repository.get_chapter_data(chapter_number)
+        except Exception as exc:  # pragma: no cover - log and skip
+            logger.error(
+                "Failed to load chapter data for end state",
+                chapter=chapter_number,
+                error=exc,
+                exc_info=True,
+            )
+            return None
+        if data and data.get("end_state_json"):
+            try:
+                return ChapterEndState.model_validate_json(data["end_state_json"])
+            except Exception as exc:  # pragma: no cover - log and skip
+                logger.error(
+                    "Failed to parse end state JSON",
+                    chapter=chapter_number,
+                    error=exc,
+                    exc_info=True,
+                )
+        return None
 
     async def _run_evaluation_cycle(
         self,
@@ -898,6 +930,21 @@ class NANA_Orchestrator:
                 logger.warning(
                     f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
                 )
+
+        self.missing_references["characters"].clear()
+        self.missing_references["locations"].clear()
+        prev_state = await self._load_previous_end_state(novel_chapter_number - 1)
+        if chapter_plan and prev_state is not None:
+            known_chars = {c.name for c in prev_state.character_states}
+            known_locs = {c.location for c in prev_state.character_states}
+            known_locs.update(prev_state.key_world_changes.keys())
+            for scene in chapter_plan:
+                for name in scene.get("characters_involved", []):
+                    if name not in known_chars:
+                        self.missing_references["characters"].add(name)
+                setting = scene.get("setting_details")
+                if setting and setting not in known_locs:
+                    self.missing_references["locations"].add(setting)
 
         hybrid_context_for_draft = self.next_chapter_context
         if hybrid_context_for_draft is None:
