@@ -1,7 +1,8 @@
 # Python cache, logs, venv, and neo4j
 __pycache__/
+*/__pycache__
 *.py[cod]
-venv/
+.venv/
 neo4j/
 
 # Test and coverage outputs
