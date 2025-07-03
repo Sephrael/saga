@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from config import settings
 from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -138,3 +139,64 @@ async def test_revision_loop_deduplicates_each_cycle(monkeypatch):
     assert result[0].endswith("_d")
     assert result[2]
     assert len(dedup_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_revision_loop_respects_max_cycles(monkeypatch):
+    orch = DummyOrchestrator()
+    monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(orch, "_save_debug_output", _noop)
+    monkeypatch.setattr(orch, "_accumulate_tokens", lambda *a, **k: None)
+    monkeypatch.setattr(
+        character_queries,
+        "get_character_profiles_from_db",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(
+        world_queries,
+        "get_world_building_from_db",
+        AsyncMock(return_value={}),
+    )
+
+    monkeypatch.setattr(
+        orch,
+        "perform_deduplication",
+        AsyncMock(return_value=("start", 0)),
+    )
+
+    async def always_needs_revision(*_args, **_kwargs):
+        return (
+            {"needs_revision": True, "problems_found": [], "reasons": ["bad"]},
+            [],
+            {},
+            {},
+            [],
+        )
+
+    call_counter = {"count": 0}
+
+    async def fake_revise(*_args, **_kwargs):
+        call_counter["count"] += 1
+        return ("start", None, []), {}
+
+    monkeypatch.setattr(orch, "_run_evaluation_cycle", always_needs_revision)
+    monkeypatch.setattr(orch.revision_manager, "revise_chapter", fake_revise)
+    monkeypatch.setattr(settings, "MAX_REVISION_CYCLES_PER_CHAPTER", 3)
+
+    await orch._run_revision_loop(
+        1,
+        "start",
+        "raw",
+        "focus",
+        0,
+        "ctx",
+        None,
+        [],
+        False,
+    )
+
+    assert call_counter["count"] == 3
