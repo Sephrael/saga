@@ -19,7 +19,6 @@ from models import (
 
 from .patch import (
     PatchGenerator,
-    _consolidate_overlapping_problems,
     _deduplicate_problems,
     _get_formatted_scene_plan_from_agent_or_fallback,
 )
@@ -123,9 +122,7 @@ class RevisionManager:
             all_problems.extend(continuity_problems)
         if repetition_problems:
             all_problems.extend(repetition_problems)
-        all_problems = _deduplicate_problems(
-            _consolidate_overlapping_problems(all_problems)
-        )
+        all_problems = _deduplicate_problems(all_problems)
 
         patcher = PatchGenerator()
         patched_text, spans, patch_usage = await patcher.generate_and_apply(
@@ -415,9 +412,7 @@ class RevisionManager:
             problems_to_fix.extend(continuity_problems)
         if repetition_problems:
             problems_to_fix.extend(repetition_problems)
-        problems_to_fix = _deduplicate_problems(
-            _consolidate_overlapping_problems(problems_to_fix)
-        )
+        problems_to_fix = _deduplicate_problems(problems_to_fix)
 
         is_deeply_flawed = len(
             problems_to_fix

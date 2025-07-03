@@ -190,6 +190,28 @@ async def test_skip_repatch_same_segment(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_deletion_patch(monkeypatch):
+    original = "Hello world!"
+    patches = [
+        {
+            "original_problem_quote_text": "Hello ",
+            "target_char_start": 0,
+            "target_char_end": 6,
+            "replace_with": "",
+            "reason_for_change": "remove greeting",
+        }
+    ]
+
+    async def fake_embed(_text: str) -> np.ndarray:
+        return np.array([0.5, 0.5])
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
+    assert result == "world!"
+
+
+@pytest.mark.asyncio
 async def test_multiple_patches_applied(monkeypatch):
     original = "Hello world! Bye world!"
     patches = [
