@@ -16,7 +16,6 @@ _get_formatted_scene_plan_from_agent_or_fallback = (
 _generate_single_patch_instruction_llm = (
     instructions._generate_single_patch_instruction_llm
 )
-_consolidate_overlapping_problems = instructions._consolidate_overlapping_problems
 _deduplicate_problems = instructions._deduplicate_problems
 _group_problems_for_patch_generation = instructions._group_problems_for_patch_generation
 _generate_patch_instructions_logic = instructions._generate_patch_instructions_logic
