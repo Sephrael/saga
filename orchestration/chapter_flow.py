@@ -1,3 +1,4 @@
+# orchestration/chapter_flow.py
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -29,6 +30,7 @@ async def run_chapter_pipeline(
     plot_point_index = processed_prereqs.plot_point_index
     chapter_plan = processed_prereqs.chapter_plan
     hybrid_context_for_draft = processed_prereqs.hybrid_context_for_draft
+    fill_in_context = processed_prereqs.fill_in_context
 
     draft_result = await orchestrator._draft_initial_chapter_text(
         novel_chapter_number,
@@ -63,5 +65,9 @@ async def run_chapter_pipeline(
     is_flawed = processed_revision.is_flawed
 
     return await orchestrator._finalize_and_log(
-        novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+        novel_chapter_number,
+        processed_text,
+        processed_raw_llm,
+        is_flawed,
+        fill_in_context,
     )

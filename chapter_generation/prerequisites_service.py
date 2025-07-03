@@ -1,3 +1,4 @@
+# chapter_generation/prerequisites_service.py
 """Gather required planning and context before drafting."""
 
 from __future__ import annotations
@@ -15,3 +16,4 @@ class PrerequisiteData:
     plot_point_index: int
     chapter_plan: list[SceneDetail] | None
     hybrid_context_for_draft: str | None
+    fill_in_context: str | None = None

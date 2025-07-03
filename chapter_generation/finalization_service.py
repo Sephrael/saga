@@ -34,6 +34,7 @@ class FinalizationService:
         final_text: str,
         raw_llm_output: str | None,
         from_flawed_draft: bool,
+        fill_in_context: str | None,
     ) -> FinalizationServiceResult:
         """Return persisted chapter details."""
 
@@ -45,5 +46,6 @@ class FinalizationService:
             final_text,
             raw_llm_output,
             from_flawed_draft,
+            fill_in_context,
         )
         return FinalizationServiceResult(text=final_text)

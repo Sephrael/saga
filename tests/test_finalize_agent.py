@@ -1,4 +1,6 @@
+# tests/test_finalize_agent.py
 import asyncio
+from typing import Any
 
 import numpy as np
 import pytest
@@ -14,7 +16,7 @@ class DummyKGAgent(KGMaintainerAgent):
 
 
 @pytest.mark.asyncio
-async def test_finalize_chapter_success(monkeypatch):
+async def test_finalize_chapter_success(monkeypatch) -> None:
     kg_agent = DummyKGAgent()
     agent = FinalizeAgent(kg_agent)
 
@@ -58,14 +60,16 @@ async def test_finalize_chapter_success(monkeypatch):
         "data_access.chapter_repository.save_chapter_data", lambda *a, **k: save_mock
     )
 
-    result = await agent.finalize_chapter({}, {}, {}, 1, "text", "raw")
+    result = await agent.finalize_chapter(
+        {}, {}, {}, 1, "text", "raw", fill_in_context=None
+    )
     assert result["summary"] == "sum"
     assert np.allclose(result["embedding"], np.array([0.1, 0.2], dtype=np.float32))
     assert result["kg_usage"] == {"total_tokens": 2}
 
 
 @pytest.mark.asyncio
-async def test_finalize_chapter_validation_failure(monkeypatch):
+async def test_finalize_chapter_validation_failure(monkeypatch) -> None:
     kg_agent = DummyKGAgent()
     agent = FinalizeAgent(kg_agent)
 
@@ -116,7 +120,49 @@ async def test_finalize_chapter_validation_failure(monkeypatch):
         "data_access.chapter_repository.save_chapter_data", lambda *a, **k: save_mock
     )
 
-    result = await agent.finalize_chapter({}, {}, {}, 1, "text", None)
+    result = await agent.finalize_chapter(
+        {}, {}, {}, 1, "text", None, fill_in_context=None
+    )
     assert profiles_called == {}
     assert world_called == {}
     assert result["kg_usage"] == {"total_tokens": 2}
+
+
+@pytest.mark.asyncio
+async def test_finalize_chapter_passes_fill_ins(monkeypatch) -> None:
+    kg_agent = DummyKGAgent()
+    agent = FinalizeAgent(kg_agent)
+
+    async def fake_summary(text: str, num: int):
+        return "sum", {}
+
+    async def fake_embedding(text: str):
+        return np.array([0.0], dtype=np.float32)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_extract(*_args, **kwargs):
+        captured.update(kwargs)
+        return "{}", {}
+
+    async def fake_state(*_args, **kwargs):
+        return ChapterEndState(
+            chapter_number=1,
+            character_states=[],
+            unresolved_cliffhanger=None,
+            key_world_changes={},
+        )
+
+    monkeypatch.setattr(kg_agent, "summarize_chapter", fake_summary)
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_get_embedding", fake_embedding
+    )
+    monkeypatch.setattr(kg_agent, "extract_and_merge_knowledge", fake_extract)
+    monkeypatch.setattr(kg_agent, "generate_chapter_end_state", fake_state)
+    monkeypatch.setattr(
+        "data_access.chapter_repository.save_chapter_data",
+        lambda *a, **k: asyncio.Future(),
+    )
+
+    await agent.finalize_chapter({}, {}, {}, 1, "t", fill_in_context="extra")
+    assert captured.get("fill_in_context") == "extra"
