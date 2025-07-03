@@ -1,5 +1,6 @@
 # tests/test_context_orchestrator.py
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from chapter_generation.context_models import (
@@ -222,3 +223,48 @@ async def test_cache_miss_on_provider_setting_change():
     profiles[ContextProfileName.DEFAULT].providers[0].max_tokens = 6
     await orch.build_context(req)
     assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_hybrid_context_queries_missing_entities(monkeypatch):
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(DummyProvider("a", "A"))],
+            max_tokens=50,
+        )
+    }
+    orch = ContextOrchestrator(profiles)
+    helper_path = "chapter_generation.context_orchestrator.context_kg_utils.get_facts_for_entities"
+    helper = AsyncMock(return_value=["- Bob: brave"])
+    monkeypatch.setattr(helper_path, helper)
+    ctx = await orch.build_hybrid_context(
+        {},
+        1,
+        None,
+        profile_name=ContextProfileName.DEFAULT,
+        missing_entities=["Bob"],
+    )
+    assert "Bob" in ctx
+    helper.assert_awaited_once_with(["Bob"])
+
+
+@pytest.mark.asyncio
+async def test_hybrid_context_skips_lookup_when_empty(monkeypatch):
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(DummyProvider("a", "A"))],
+            max_tokens=50,
+        )
+    }
+    orch = ContextOrchestrator(profiles)
+    helper_path = "chapter_generation.context_orchestrator.context_kg_utils.get_facts_for_entities"
+    helper = AsyncMock(return_value=["- none"])
+    monkeypatch.setattr(helper_path, helper)
+    await orch.build_hybrid_context(
+        {},
+        1,
+        None,
+        profile_name=ContextProfileName.DEFAULT,
+        missing_entities=[],
+    )
+    helper.assert_not_called()
