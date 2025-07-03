@@ -437,6 +437,8 @@ async def generate_agent_response(
 - **Problem Grouping**: Group related evaluation problems for efficient patching
 - **Validation**: Use `PatchValidationAgent` when `AGENT_ENABLE_PATCH_VALIDATION` is enabled
 - **Full Rewrite Fallback**: Trigger complete rewrite when patching is insufficient
+- **Cycle Limit**: Respect `MAX_REVISION_CYCLES_PER_CHAPTER` to avoid infinite revision loops
+- **Evaluation & Revision Loop**: `EvaluationService` reports issues and `RevisionService` applies fixes. Re-evaluate after each cycle to ensure new problems aren't introduced.
 
 ### Text Processing
 - **De-duplication**: Apply text de-duplication before evaluation
