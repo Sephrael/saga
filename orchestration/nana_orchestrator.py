@@ -393,7 +393,10 @@ class NANA_Orchestrator:
             data = await chapter_repository.get_chapter_data(chapter_number)
         except Exception as exc:  # pragma: no cover - log and skip
             logger.error(
-                "Failed to load chapter data for end state", chapter=chapter_number, error=exc, exc_info=True
+                "Failed to load chapter data for end state",
+                chapter=chapter_number,
+                error=exc,
+                exc_info=True,
             )
             return None
         if data and data.get("end_state_json"):
@@ -401,7 +404,10 @@ class NANA_Orchestrator:
                 return ChapterEndState.model_validate_json(data["end_state_json"])
             except Exception as exc:  # pragma: no cover - log and skip
                 logger.error(
-                    "Failed to parse end state JSON", chapter=chapter_number, error=exc, exc_info=True
+                    "Failed to parse end state JSON",
+                    chapter=chapter_number,
+                    error=exc,
+                    exc_info=True,
                 )
         return None
 
