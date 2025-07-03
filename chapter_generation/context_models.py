@@ -54,3 +54,5 @@ class ContextChunk:
     tokens: int
     provenance: dict[str, Any]
     source: str
+    from_llm_fill: bool = False
+    """Whether this chunk's content was filled in by an LLM."""
