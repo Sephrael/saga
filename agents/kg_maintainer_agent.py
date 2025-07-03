@@ -233,7 +233,11 @@ class KGMaintainerAgent:
             return None, None
 
     async def generate_chapter_end_state(
-        self, chapter_text: str, chapter_number: int
+        self,
+        chapter_text: str,
+        chapter_number: int,
+        *,
+        fill_in_context: str | None = None,
     ) -> ChapterEndState:
         """Generate a structured snapshot of the chapter's final state."""
 
@@ -243,6 +247,7 @@ class KGMaintainerAgent:
                 "enable_no_think": True,
                 "chapter_number": chapter_number,
                 "chapter_text": chapter_text,
+                "fill_in_context": fill_in_context,
             },
         )
         try:
@@ -288,6 +293,7 @@ class KGMaintainerAgent:
         chapter_text: str,
         chapter_number: int,
         character_names: list[str] | None = None,
+        fill_in_context: str | None = None,
     ) -> tuple[str, dict[str, int] | None]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
         protagonist = plot_outline.get(
@@ -305,6 +311,7 @@ class KGMaintainerAgent:
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "novel_genre": plot_outline.get("genre", "Unknown"),
                 "chapter_text": chapter_text,
+                "fill_in_context": fill_in_context,
                 "available_node_labels": self.node_labels,
                 "available_relationship_types": self.relationship_types,
                 "character_names": sorted(names),
@@ -334,7 +341,11 @@ class KGMaintainerAgent:
         chapter_number: int,
         chapter_text: str,
         is_from_flawed_draft: bool = False,
+        fill_in_context: str | None = None,
     ) -> dict[str, int] | None:
+        if fill_in_context:
+            chapter_text = chapter_text + "\n" + fill_in_context
+
         if not chapter_text:
             logger.warning(
                 "Skipping knowledge extraction for chapter %s: no text provided.",
@@ -342,10 +353,11 @@ class KGMaintainerAgent:
             )
             return None
 
+        provisional = is_from_flawed_draft or bool(fill_in_context)
         logger.info(
-            "KGMaintainerAgent: Starting knowledge extraction for chapter %d. Flawed draft: %s",
+            "KGMaintainerAgent: Starting knowledge extraction for chapter %d. Provisional: %s",
             chapter_number,
-            is_from_flawed_draft,
+            provisional,
         )
 
         raw_extracted_text, usage_data = await self._llm_extract_updates(
@@ -353,6 +365,7 @@ class KGMaintainerAgent:
             chapter_text,
             chapter_number,
             list(character_profiles.keys()),
+            fill_in_context=fill_in_context,
         )
 
         if not raw_extracted_text.strip():
@@ -454,7 +467,7 @@ class KGMaintainerAgent:
             char_updates_from_llm,  # Already model instances
             world_updates_from_llm,  # Already model instances
             chapter_number,
-            is_from_flawed_draft,
+            provisional,
         )
         logger.info(
             f"Merged LLM updates into in-memory state for chapter {chapter_number}."
@@ -470,7 +483,7 @@ class KGMaintainerAgent:
         if parsed_triples_structured:
             try:
                 await kg_queries.add_kg_triples_batch_to_db(
-                    parsed_triples_structured, chapter_number, is_from_flawed_draft
+                    parsed_triples_structured, chapter_number, provisional
                 )
                 logger.info(
                     f"Persisted {len(parsed_triples_structured)} KG triples for chapter {chapter_number} to Neo4j."

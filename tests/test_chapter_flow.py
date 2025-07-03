@@ -1,3 +1,4 @@
+# tests/test_chapter_flow.py
 import pytest
 from chapter_generation.drafting_service import DraftResult
 from chapter_generation.prerequisites_service import PrerequisiteData
@@ -18,7 +19,7 @@ class DummyOrchestrator:
     async def _prepare_chapter_prerequisites(self, chapter):
         return self.values.get(
             "prereq",
-            PrerequisiteData("focus", 1, "plan", "ctx"),
+            PrerequisiteData("focus", 1, "plan", "ctx", None),
         )
 
     async def _process_prereq_result(self, chapter, prereq_result):
@@ -47,14 +48,14 @@ class DummyOrchestrator:
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_success():
+async def test_run_chapter_pipeline_success() -> None:
     orch = DummyOrchestrator()
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
     assert result == "done"
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_invalid_outline():
+async def test_run_chapter_pipeline_invalid_outline() -> None:
     orch = DummyOrchestrator()
     orch.values["validate"] = False
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -62,7 +63,7 @@ async def test_run_chapter_pipeline_invalid_outline():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_prereq_none():
+async def test_run_chapter_pipeline_prereq_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_prereqs"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -70,7 +71,7 @@ async def test_run_chapter_pipeline_prereq_none():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_draft_none():
+async def test_run_chapter_pipeline_draft_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_draft"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -78,7 +79,7 @@ async def test_run_chapter_pipeline_draft_none():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_revision_none():
+async def test_run_chapter_pipeline_revision_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_revision"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)

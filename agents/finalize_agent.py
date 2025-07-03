@@ -37,6 +37,7 @@ class FinalizeAgent:
         chapter_number: int,
         chapter_text: str,
         from_flawed_draft: bool,
+        fill_in_context: str | None,
     ) -> dict[str, int] | None:
         return await self.kg_agent.extract_and_merge_knowledge(
             plot_outline,
@@ -45,6 +46,7 @@ class FinalizeAgent:
             chapter_number,
             chapter_text,
             is_from_flawed_draft=from_flawed_draft,
+            fill_in_context=fill_in_context,
         )
 
     async def finalize_chapter(
@@ -56,6 +58,7 @@ class FinalizeAgent:
         final_text: str,
         raw_llm_output: str | None = None,
         from_flawed_draft: bool = False,
+        fill_in_context: str | None = None,
     ) -> FinalizationResult:
         """Finalize a chapter and persist all related updates.
 
@@ -67,6 +70,8 @@ class FinalizeAgent:
             final_text: The approved chapter text.
             raw_llm_output: Optional raw draft from the LLM.
             from_flawed_draft: Whether the text came from a flawed draft.
+            fill_in_context: Additional context filled in by LLMs for missing
+                references.
 
         Returns:
             A dictionary containing the summary, embedding, and token usage data.
@@ -80,9 +85,12 @@ class FinalizeAgent:
             chapter_number,
             final_text,
             from_flawed_draft,
+            fill_in_context,
         )
         end_state_task = self.kg_agent.generate_chapter_end_state(
-            final_text, chapter_number
+            final_text,
+            chapter_number,
+            fill_in_context=fill_in_context,
         )
 
         (summary_data, embedding, kg_usage, end_state) = await asyncio.gather(

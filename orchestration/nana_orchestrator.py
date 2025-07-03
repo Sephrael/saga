@@ -969,6 +969,15 @@ class NANA_Orchestrator:
         else:
             self.next_chapter_context = None
 
+        fill_in_context = (
+            "\n".join(
+                chunk.text
+                for chunk in self.context_service.llm_fill_chunks
+                if chunk.text
+            )
+            or None
+        )
+
         if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
                 f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only."
@@ -989,6 +998,7 @@ class NANA_Orchestrator:
             plot_point_index=plot_point_index,
             chapter_plan=chapter_plan,
             hybrid_context_for_draft=hybrid_context_for_draft,
+            fill_in_context=fill_in_context,
         )
 
     async def _draft_initial_chapter_text(
@@ -1107,7 +1117,10 @@ class NANA_Orchestrator:
         final_text_to_process: str,
         final_raw_llm_output: str | None,
         is_from_flawed_source_for_kg: bool,
+        fill_in_context: str | None,
     ) -> str | None:
+        """Finalize, persist, and summarize a chapter."""
+
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Finalization")
 
         result: FinalizationResult = await self.finalize_agent.finalize_chapter(
@@ -1118,6 +1131,7 @@ class NANA_Orchestrator:
             final_text_to_process,
             final_raw_llm_output,
             is_from_flawed_source_for_kg,
+            fill_in_context=fill_in_context,
         )
 
         self._accumulate_tokens(
@@ -1181,6 +1195,7 @@ class NANA_Orchestrator:
         plot_point_index = prereq_result.plot_point_index
         chapter_plan = prereq_result.chapter_plan
         hybrid_context_for_draft = prereq_result.hybrid_context_for_draft
+        fill_in_context = prereq_result.fill_in_context
 
         if plot_point_focus is None or hybrid_context_for_draft is None:
             self._update_rich_display(
@@ -1192,6 +1207,7 @@ class NANA_Orchestrator:
             plot_point_index=plot_point_index,
             chapter_plan=chapter_plan,
             hybrid_context_for_draft=hybrid_context_for_draft,
+            fill_in_context=fill_in_context,
         )
 
     async def _process_initial_draft(
@@ -1233,9 +1249,16 @@ class NANA_Orchestrator:
         processed_text: str,
         processed_raw_llm: str | None,
         is_flawed: bool,
+        fill_in_context: str | None,
     ) -> str | None:
+        """Finalize the chapter then refresh caches and context."""
+
         final_text_result = await self._finalize_and_save_chapter(
-            novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+            novel_chapter_number,
+            processed_text,
+            processed_raw_llm,
+            is_flawed,
+            fill_in_context,
         )
 
         await self.refresh_plot_outline()

@@ -32,6 +32,11 @@ You are an expert knowledge graph extractor for a creative writing project. Anal
 {{ chapter_text }}
 ```
 ---
+{% if fill_in_context %}
+Additional provisional context:
+{{ fill_in_context }}
+---
+{% endif %}
 
 **Ignore the narrative details in the below example. It shows the required format only.**
 **Example of Final JSON Output Structure:**

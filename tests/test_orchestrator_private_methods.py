@@ -36,27 +36,27 @@ def orchestrator(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_validate_plot_outline_missing(orchestrator):
+async def test_validate_plot_outline_missing(orchestrator) -> None:
     orchestrator.plot_outline = PlotOutline()
     assert not await orchestrator._validate_plot_outline(1)
 
 
 @pytest.mark.asyncio
-async def test_process_prereq_result_failure(orchestrator):
+async def test_process_prereq_result_failure(orchestrator) -> None:
     result = await orchestrator._process_prereq_result(
-        1, PrerequisiteData(None, -1, None, None)
+        1, PrerequisiteData(None, -1, None, None, None)
     )
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_process_initial_draft_failure(orchestrator):
+async def test_process_initial_draft_failure(orchestrator) -> None:
     result = await orchestrator._process_initial_draft(1, DraftResult(None, None))
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_process_revision_result_failure(orchestrator):
+async def test_process_revision_result_failure(orchestrator) -> None:
     result = await orchestrator._process_revision_result(
         1, RevisionOutcome(None, None, False)
     )
@@ -64,7 +64,7 @@ async def test_process_revision_result_failure(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_finalize_and_log_success(orchestrator, monkeypatch):
+async def test_finalize_and_log_success(orchestrator, monkeypatch) -> None:
     monkeypatch.setattr(
         orchestrator,
         "_finalize_and_save_chapter",
@@ -75,7 +75,7 @@ async def test_finalize_and_log_success(orchestrator, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_finalize_and_log_failure(orchestrator, monkeypatch):
+async def test_finalize_and_log_failure(orchestrator, monkeypatch) -> None:
     monkeypatch.setattr(
         orchestrator,
         "_finalize_and_save_chapter",
@@ -97,7 +97,7 @@ def test_load_state_from_user_model(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
+async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch) -> None:
     orchestrator.plot_outline = PlotOutline(plot_points=["Intro"])
     orchestrator.next_chapter_context = "prefetched"
     monkeypatch.setattr(orchestrator, "_update_novel_props_cache", lambda: None)
@@ -149,13 +149,16 @@ async def test_prepare_prerequisites_uses_plan(orchestrator, monkeypatch):
         plot_point_index=0,
         chapter_plan=[{"scene_number": 1}],
         hybrid_context_for_draft="prefetched",
+        fill_in_context=None,
     )
     assert orchestrator.next_chapter_context is None
     build_ctx_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_perform_initial_setup_sets_next_context(monkeypatch, orchestrator):
+async def test_perform_initial_setup_sets_next_context(
+    monkeypatch, orchestrator
+) -> None:
     plot_outline = PlotOutline(title="T", plot_points=["p"], protagonist_name="Hero")
     monkeypatch.setattr(
         "orchestration.nana_orchestrator.run_genesis_phase",
@@ -179,7 +182,7 @@ async def test_perform_initial_setup_sets_next_context(monkeypatch, orchestrator
 
 
 @pytest.mark.asyncio
-async def test_perform_initial_setup_loads_ch0_state(monkeypatch, orchestrator):
+async def test_perform_initial_setup_loads_ch0_state(monkeypatch, orchestrator) -> None:
     plot_outline = PlotOutline(title="T", plot_points=["p"], protagonist_name="Hero")
     monkeypatch.setattr(
         "orchestration.nana_orchestrator.run_genesis_phase",

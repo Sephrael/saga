@@ -1,4 +1,6 @@
+# tests/test_agent_extract.py
 import asyncio
+from typing import Any
 
 import pytest
 from agents.kg_maintainer_agent import KGMaintainerAgent
@@ -16,7 +18,7 @@ class DummyLLM:
 llm_service_mock = DummyLLM()
 
 
-def test_extract_and_merge(monkeypatch):
+def test_extract_and_merge(monkeypatch) -> None:
     agent = KGMaintainerAgent()
     monkeypatch.setattr(
         agent,
@@ -49,8 +51,37 @@ def test_extract_and_merge(monkeypatch):
     assert character_profiles["Alice"].traits == ["brave"]
 
 
+def test_extract_with_fill_ins(monkeypatch) -> None:
+    agent = KGMaintainerAgent()
+    monkeypatch.setattr(
+        agent,
+        "_llm_extract_updates",
+        lambda *a, **k: llm_service_mock.async_call_llm(),
+    )
+    called: dict[str, Any] = {}
+
+    async def fake_add(triples, chapter, provisional):
+        called["provisional"] = provisional
+
+    monkeypatch.setattr("data_access.kg_queries.add_kg_triples_batch_to_db", fake_add)
+    monkeypatch.setattr(agent, "persist_profiles", lambda *a, **k: asyncio.sleep(0))
+    monkeypatch.setattr(agent, "persist_world", lambda *a, **k: asyncio.sleep(0))
+
+    asyncio.run(
+        agent.extract_and_merge_knowledge(
+            {},
+            {},
+            {},
+            1,
+            "text",
+            fill_in_context="extra",
+        )
+    )
+    assert called.get("provisional") is True
+
+
 @pytest.mark.asyncio
-async def test_summarize_chapter_json(monkeypatch):
+async def test_summarize_chapter_json(monkeypatch) -> None:
     agent = KGMaintainerAgent()
 
     async def _fake_llm(*args, **kwargs):
