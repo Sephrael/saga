@@ -1,3 +1,4 @@
+# tests/test_context_providers.py
 from unittest.mock import AsyncMock
 
 import pytest
@@ -134,3 +135,24 @@ async def test_world_state_provider_respects_max_tokens(monkeypatch):
     settings = ProviderSettings(provider, max_tokens=3)
     chunk = await provider.get_context(request, settings)
     assert chunk.tokens <= 3
+
+
+@pytest.mark.asyncio
+async def test_plan_provider_unresolved_entities_llm(monkeypatch):
+    async def fake_llm(*args, **kwargs):
+        prompt = kwargs.get("prompt", "")
+        if "A1" in prompt:
+            return ("desc1", {})
+        return ("desc2", {})
+
+    monkeypatch.setattr(
+        "core.llm_interface.llm_service.async_call_llm",
+        AsyncMock(side_effect=fake_llm),
+    )
+
+    provider = PlanProvider()
+    hints = {"unresolved_entities": ["A1", "B2"]}
+    request = ContextRequest(1, None, {}, agent_hints=hints)
+    chunk = await provider.get_context(request)
+    assert "A1" in chunk.text and "B2" in chunk.text
+    assert chunk.provenance.get("llm_fill_ins") == {"A1": "desc1", "B2": "desc2"}
