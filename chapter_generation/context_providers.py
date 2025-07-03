@@ -200,8 +200,10 @@ class PlanProvider(ContextProvider):
     async def get_context(
         self, request: ContextRequest, provider_settings: ProviderSettings | None = None
     ) -> ContextChunk:
+        """Return scene plan lines, calling the LLM for unresolved entities."""
         plan = request.chapter_plan or []
         lines: list[str] = []
+        provenance: dict[str, Any] = {}
         for scene in plan:
             summary = scene.get("summary")
             if summary:
@@ -224,9 +226,35 @@ class PlanProvider(ContextProvider):
                 if cleaned:
                     lines.append(f"- {cleaned}")
 
+        unresolved: list[str] = []
+        if request.agent_hints:
+            unresolved = request.agent_hints.get("unresolved_entities", []) or []
+        if unresolved:
+            descs: dict[str, str] = {}
+            for entity in unresolved:
+                prompt = (
+                    "Provide a one sentence description for the entity "
+                    f"'{entity}' in this story."
+                )
+                description, _ = await llm_service.async_call_llm(
+                    model_name=settings.SMALL_MODEL,
+                    prompt=prompt,
+                    temperature=settings.TEMPERATURE_SUMMARY,
+                    max_tokens=settings.MAX_SUMMARY_TOKENS,
+                    allow_fallback=True,
+                )
+                cleaned = description.strip().replace("\n", " ")
+                if cleaned:
+                    lines.append(f"- {entity}: {cleaned}")
+                    descs[entity] = cleaned
+            if descs:
+                provenance["llm_fill_ins"] = descs
+
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
-        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+        return ContextChunk(
+            text=text, tokens=tokens, provenance=provenance, source=self.source
+        )
 
 
 class UserNoteProvider(ContextProvider):
