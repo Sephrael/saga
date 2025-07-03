@@ -10,7 +10,7 @@ from core.llm_interface import llm_service
 from data_access import chapter_repository
 
 from agents.kg_maintainer_agent import KGMaintainerAgent
-from models import CharacterProfile, WorldItem
+from models import ChapterEndState, CharacterProfile, WorldItem
 
 logger = structlog.get_logger(__name__)
 
@@ -20,6 +20,7 @@ class FinalizationResult(TypedDict, total=False):
     embedding: np.ndarray | None
     summary_usage: dict[str, int] | None
     kg_usage: dict[str, int] | None
+    chapter_end_state: ChapterEndState | None
 
 
 class FinalizeAgent:
@@ -113,6 +114,7 @@ class FinalizeAgent:
             "embedding": embedding,
             "summary_usage": summary_usage,
             "kg_usage": kg_usage,
+            "chapter_end_state": end_state,
         }
 
     async def ingest_and_finalize_chunk(

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 import utils
 from chapter_generation import ContextProfileName
+from chapter_generation.context_models import ContextChunk
 from chapter_generation.drafting_service import DraftResult
 from chapter_generation.prerequisites_service import PrerequisiteData
 from data_access import character_queries, world_queries
@@ -68,7 +69,17 @@ async def test_finalize_and_log_success(orchestrator, monkeypatch) -> None:
     monkeypatch.setattr(
         orchestrator,
         "_finalize_and_save_chapter",
-        AsyncMock(return_value="final"),
+        AsyncMock(
+            return_value=(
+                "final",
+                ChapterEndState(
+                    chapter_number=1,
+                    character_states=[],
+                    unresolved_cliffhanger=None,
+                    key_world_changes={},
+                ),
+            )
+        ),
     )
     result = await orchestrator._finalize_and_log(1, "text", None, False)
     assert result == "final"
@@ -79,7 +90,7 @@ async def test_finalize_and_log_failure(orchestrator, monkeypatch) -> None:
     monkeypatch.setattr(
         orchestrator,
         "_finalize_and_save_chapter",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value=(None, None)),
     )
     result = await orchestrator._finalize_and_log(1, "text", None, True)
     assert result is None
@@ -234,7 +245,17 @@ async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkey
     monkeypatch.setattr(
         orchestrator,
         "_finalize_and_save_chapter",
-        AsyncMock(return_value="text"),
+        AsyncMock(
+            return_value=(
+                "text",
+                ChapterEndState(
+                    chapter_number=1,
+                    character_states=[],
+                    unresolved_cliffhanger=None,
+                    key_world_changes={},
+                ),
+            )
+        ),
     )
 
     result = await orchestrator._finalize_and_log(1, "text", None, False)
@@ -244,6 +265,80 @@ async def test_finalize_and_save_chapter_prefetches_context(orchestrator, monkey
         orchestrator, 2, None, None, profile_name=ContextProfileName.DEFAULT
     )
     assert orchestrator.next_chapter_context == "ctx1"
+
+
+@pytest.mark.asyncio
+async def test_finalize_and_log_stores_state_and_fill_ins(
+    orchestrator, monkeypatch
+) -> None:
+    async def ctx_side_effect(*_args, **_kwargs):
+        orchestrator.context_service.llm_fill_chunks = [
+            ContextChunk(
+                text="desc",
+                tokens=1,
+                provenance={},
+                source="fill",
+                from_llm_fill=True,
+            )
+        ]
+        return "ctx2"
+
+    monkeypatch.setattr(
+        orchestrator.context_service,
+        "build_hybrid_context",
+        AsyncMock(side_effect=ctx_side_effect),
+    )
+    monkeypatch.setattr(orchestrator, "refresh_plot_outline", AsyncMock())
+    monkeypatch.setattr(
+        "orchestration.nana_orchestrator.neo4j_manager.driver", None, raising=False
+    )
+    monkeypatch.setattr(orchestrator, "refresh_knowledge_cache", AsyncMock())
+    end_state = ChapterEndState(
+        chapter_number=1,
+        character_states=[],
+        unresolved_cliffhanger=None,
+        key_world_changes={},
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_finalize_and_save_chapter",
+        AsyncMock(return_value=("txt", end_state)),
+    )
+
+    result = await orchestrator._finalize_and_log(1, "text", None, False)
+
+    assert result == "txt"
+    assert orchestrator.last_chapter_end_state == end_state
+    assert orchestrator.pending_fill_ins == ["desc"]
+
+
+@pytest.mark.asyncio
+async def test_prepare_prerequisites_uses_pending_fill_ins(orchestrator, monkeypatch):
+    orchestrator.plot_outline = PlotOutline(plot_points=["A"])
+    orchestrator.pending_fill_ins = ["old_desc"]
+    monkeypatch.setattr(
+        orchestrator.context_service,
+        "build_hybrid_context",
+        AsyncMock(return_value="ctx"),
+    )
+    monkeypatch.setattr(
+        orchestrator.planner_agent,
+        "plan_chapter_scenes",
+        AsyncMock(return_value=([], {})),
+    )
+    monkeypatch.setattr(
+        orchestrator.evaluator_agent,
+        "check_scene_plan_consistency",
+        AsyncMock(return_value=([], {})),
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_load_previous_end_state",
+        AsyncMock(return_value=None),
+    )
+    result = await orchestrator._prepare_chapter_prerequisites(1)
+    assert "old_desc" in result.fill_in_context
+    assert orchestrator.pending_fill_ins == []
 
 
 @pytest.mark.asyncio

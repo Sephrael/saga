@@ -106,6 +106,8 @@ class NANA_Orchestrator:
         self.total_tokens_generated_this_run: int = 0
 
         self.next_chapter_context: str | None = None
+        self.last_chapter_end_state: ChapterEndState | None = None
+        self.pending_fill_ins: list[str] = []
         self.chapter_zero_end_state: ChapterEndState | None = None
         self.missing_references: dict[str, set[str]] = {
             "characters": set(),
@@ -969,14 +971,13 @@ class NANA_Orchestrator:
         else:
             self.next_chapter_context = None
 
-        fill_in_context = (
-            "\n".join(
-                chunk.text
-                for chunk in self.context_service.llm_fill_chunks
-                if chunk.text
-            )
-            or None
-        )
+        fill_in_lines = [
+            chunk.text for chunk in self.context_service.llm_fill_chunks if chunk.text
+        ]
+        if self.pending_fill_ins:
+            fill_in_lines = self.pending_fill_ins + fill_in_lines
+            self.pending_fill_ins = []
+        fill_in_context = "\n".join(fill_in_lines) or None
 
         if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
             logger.warning(
@@ -1118,7 +1119,7 @@ class NANA_Orchestrator:
         final_raw_llm_output: str | None,
         is_from_flawed_source_for_kg: bool,
         fill_in_context: str | None,
-    ) -> str | None:
+    ) -> tuple[str | None, ChapterEndState | None]:
         """Finalize, persist, and summarize a chapter."""
 
         self._update_rich_display(step=f"Ch {novel_chapter_number} - Finalization")
@@ -1159,7 +1160,7 @@ class NANA_Orchestrator:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - No Embedding"
             )
-            return None
+            return None, result.get("chapter_end_state")
 
         await self._save_chapter_text_and_log(
             novel_chapter_number, final_text_to_process, final_raw_llm_output
@@ -1169,7 +1170,7 @@ class NANA_Orchestrator:
 
         self.chapter_count = max(self.chapter_count, novel_chapter_number)
 
-        return final_text_to_process
+        return final_text_to_process, result.get("chapter_end_state")
 
     async def _validate_plot_outline(self, novel_chapter_number: int) -> bool:
         if (
@@ -1253,13 +1254,22 @@ class NANA_Orchestrator:
     ) -> str | None:
         """Finalize the chapter then refresh caches and context."""
 
-        final_text_result = await self._finalize_and_save_chapter(
+        combined_fill_ins: list[str] = []
+        if self.pending_fill_ins:
+            combined_fill_ins.extend(self.pending_fill_ins)
+            self.pending_fill_ins = []
+        if fill_in_context:
+            combined_fill_ins.append(fill_in_context)
+
+        final_text_result, end_state = await self._finalize_and_save_chapter(
             novel_chapter_number,
             processed_text,
             processed_raw_llm,
             is_flawed,
-            fill_in_context,
+            "\n".join(combined_fill_ins) or None,
         )
+
+        self.last_chapter_end_state = end_state
 
         await self.refresh_plot_outline()
         if neo4j_manager.driver is not None:
@@ -1268,13 +1278,17 @@ class NANA_Orchestrator:
             logger.warning(
                 "Neo4j driver not initialized. Skipping knowledge cache refresh."
             )
+        next_hints = {"previous_chapter_end_state": end_state} if end_state else None
         self.next_chapter_context = await self.context_service.build_hybrid_context(
             self,
             novel_chapter_number + 1,
             None,
-            None,
+            next_hints,
             profile_name=ContextProfileName.DEFAULT,
         )
+        self.pending_fill_ins = [
+            c.text for c in self.context_service.llm_fill_chunks if c.text
+        ]
 
         if final_text_result:
             status_message = (

@@ -66,6 +66,7 @@ async def test_finalize_chapter_success(monkeypatch) -> None:
     assert result["summary"] == "sum"
     assert np.allclose(result["embedding"], np.array([0.1, 0.2], dtype=np.float32))
     assert result["kg_usage"] == {"total_tokens": 2}
+    assert isinstance(result["chapter_end_state"], ChapterEndState)
 
 
 @pytest.mark.asyncio
@@ -126,6 +127,7 @@ async def test_finalize_chapter_validation_failure(monkeypatch) -> None:
     assert profiles_called == {}
     assert world_called == {}
     assert result["kg_usage"] == {"total_tokens": 2}
+    assert isinstance(result["chapter_end_state"], ChapterEndState)
 
 
 @pytest.mark.asyncio
@@ -164,5 +166,6 @@ async def test_finalize_chapter_passes_fill_ins(monkeypatch) -> None:
         lambda *a, **k: asyncio.Future(),
     )
 
-    await agent.finalize_chapter({}, {}, {}, 1, "t", fill_in_context="extra")
+    result = await agent.finalize_chapter({}, {}, {}, 1, "t", fill_in_context="extra")
     assert captured.get("fill_in_context") == "extra"
+    assert isinstance(result["chapter_end_state"], ChapterEndState)
