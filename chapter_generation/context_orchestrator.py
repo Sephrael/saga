@@ -16,6 +16,7 @@ from core.llm_interface import count_tokens, truncate_text_by_tokens
 
 from models.agent_models import SceneDetail
 
+from . import context_kg_utils
 from .context_models import (
     ContextChunk,
     ContextProfileName,
@@ -151,8 +152,9 @@ class ContextOrchestrator:
         chapter_plan: list[SceneDetail] | None,
         agent_hints: dict[str, Any] | None = None,
         profile_name: ContextProfileName = ContextProfileName.DEFAULT,
+        missing_entities: list[str] | None = None,
     ) -> str:
-        """Backward compatible wrapper for build_context."""
+        """Build context and enrich it with facts about missing entities."""
         if isinstance(agent_or_props, dict):
             plot_outline = agent_or_props.get(
                 "plot_outline_full", agent_or_props.get("plot_outline", {})
@@ -172,6 +174,19 @@ class ContextOrchestrator:
                     "Failed to dump plot outline to dict", error=exc, exc_info=True
                 )
 
+        missing_lines: list[str] = []
+        if missing_entities:
+            try:
+                missing_lines = await context_kg_utils.get_facts_for_entities(
+                    missing_entities
+                )
+            except Exception:  # pragma: no cover - log and continue
+                logger.error(
+                    "Failed to lookup missing entities: %s",
+                    missing_entities,
+                    exc_info=True,
+                )
+
         request = ContextRequest(
             chapter_number=current_chapter_number,
             plot_focus=plot_focus,
@@ -180,7 +195,14 @@ class ContextOrchestrator:
             agent_hints=agent_hints,
             profile_name=profile_name,
         )
-        return await self.build_context(request)
+        base_context = await self.build_context(request)
+
+        if missing_lines:
+            prefix = "[KG_LOOKUP]\n" + "\n".join(missing_lines)
+            if base_context:
+                return prefix + "\n---\n" + base_context
+            return prefix
+        return base_context
 
 
 def create_from_settings() -> ContextOrchestrator:

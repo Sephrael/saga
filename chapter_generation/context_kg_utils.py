@@ -33,13 +33,15 @@ async def get_canonical_truths_from_kg(
     query = " ".join(query_parts)
 
     try:
-        records = await character_queries.neo4j_manager.execute_read_query(query, params)
+        records = await character_queries.neo4j_manager.execute_read_query(
+            query, params
+        )
     except Exception as exc:  # pragma: no cover - DB failures logged
         logger.error(
             "Failed to load canonical truths (limit: %s): %s",
             chapter_limit,
             exc,
-            exc_info=True
+            exc_info=True,
         )
         records = []
 
@@ -110,6 +112,46 @@ async def get_reliable_kg_facts_for_drafting_prompt(
         allow_fallback=True,
     )
     return text.strip()
+
+
+async def get_facts_for_entities(entity_names: list[str]) -> list[str]:
+    """Return bullet point facts for the provided entity names."""
+
+    facts: list[str] = []
+    for name in entity_names:
+        if not name:
+            continue
+
+        try:
+            profile = await character_queries.get_character_profile_by_name(name)
+        except Exception as exc:  # pragma: no cover - DB failures logged
+            logger.error("Failed character lookup for %s: %s", name, exc, exc_info=True)
+            profile = None
+
+        if profile is not None:
+            parts = []
+            if profile.description:
+                parts.append(profile.description)
+            if profile.traits:
+                parts.append("Traits: " + ", ".join(profile.traits))
+            facts.append(
+                f"- {profile.name}: {'; '.join(parts) if parts else 'No details'}"
+            )
+            continue
+
+        try:
+            world_item = await world_queries.get_world_item_by_id(name)
+        except Exception as exc:  # pragma: no cover - DB failures logged
+            logger.error(
+                "Failed world item lookup for %s: %s", name, exc, exc_info=True
+            )
+            world_item = None
+
+        if world_item is not None:
+            desc = world_item.properties.get("description") or ""
+            facts.append(f"- {world_item.name}: {desc}".strip())
+
+    return facts
 
 
 async def get_kg_reasoning_guidance_for_prompt(
