@@ -613,11 +613,10 @@ async def get_world_building_from_db(
             utils._normalize_for_id("_overview_")  # Should be wc_id_param
         )
 
-    we_params: dict[str, Any] = {}
+    we_params: dict[str, Any] = {"limit": chapter_limit}
     chapter_filter = ""
     if chapter_limit is not None:
         chapter_filter = f"AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $limit)"
-        we_params["limit"] = chapter_limit
 
     query = f"""
     MATCH (we:WorldElement:Entity)
@@ -638,7 +637,7 @@ async def get_world_building_from_db(
     ORDER BY we.category, we.name
     """
 
-    we_results = await neo4j_manager.execute_read_query(query, we_params or None)
+    we_results = await neo4j_manager.execute_read_query(query, we_params)
 
     if not we_results:
         logger.info(
