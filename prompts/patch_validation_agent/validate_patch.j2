@@ -21,6 +21,10 @@ Does the "Proposed Replacement Text" not only fix the "Identified Problem" but a
 4.  **Conciseness and Impact:** Is the replacement text concise and impactful, or does it introduce unnecessary verbosity or dilute the narrative?
 5.  **Overall Improvement:** Is the text genuinely better with this patch?
 
+Note that a completely empty `replace_with` text means the problematic span
+should be deleted entirely. This is acceptable if removal best resolves the
+issue.
+
 **Response Format:**
 
 1.  **First Line:** A single, definitive word: `YES` or `NO`.

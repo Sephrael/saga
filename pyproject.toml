@@ -41,7 +41,7 @@ namespace_packages = true
 show_error_codes = true
 
 [tool.pytest.ini_options]
-addopts = "-v --cov=. --cov-report=term-missing"
+addopts = "-v"
 testpaths = ["tests"]
 
 [tool.coverage.run]
