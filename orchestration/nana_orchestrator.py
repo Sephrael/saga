@@ -961,6 +961,10 @@ class NANA_Orchestrator:
                 chapter_plan,
                 None,
                 profile_name=ContextProfileName.DEFAULT,
+                missing_entities=list(
+                    self.missing_references["characters"]
+                    | self.missing_references["locations"]
+                ),
             )
         else:
             self.next_chapter_context = None
