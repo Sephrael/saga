@@ -154,6 +154,7 @@ class CanonProvider(ContextProvider):
         from .context_kg_utils import get_canonical_truths_from_kg
 
         lines = ["**CANONICAL TRUTHS (DO NOT CONTRADICT):**"]
+        llm_used = False
         try:
             # Pass chapter_number as chapter_limit
             records = await get_canonical_truths_from_kg(
@@ -184,12 +185,19 @@ class CanonProvider(ContextProvider):
                 max_tokens=settings.MAX_SUMMARY_TOKENS,
                 allow_fallback=True,
             )
+            llm_used = True
             if fallback.strip():
                 lines.append(fallback.strip())
 
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
-        return ContextChunk(text=text, tokens=tokens, provenance={}, source=self.source)
+        return ContextChunk(
+            text=text,
+            tokens=tokens,
+            provenance={},
+            source=self.source,
+            from_llm_fill=llm_used,
+        )
 
 
 class PlanProvider(ContextProvider):
@@ -204,6 +212,7 @@ class PlanProvider(ContextProvider):
         plan = request.chapter_plan or []
         lines: list[str] = []
         provenance: dict[str, Any] = {}
+        llm_used = False
         for scene in plan:
             summary = scene.get("summary")
             if summary:
@@ -221,6 +230,7 @@ class PlanProvider(ContextProvider):
                 max_tokens=settings.MAX_SUMMARY_TOKENS,
                 allow_fallback=True,
             )
+            llm_used = True
             for line in fallback.splitlines():
                 cleaned = line.strip(" -*")
                 if cleaned:
@@ -243,6 +253,7 @@ class PlanProvider(ContextProvider):
                     max_tokens=settings.MAX_SUMMARY_TOKENS,
                     allow_fallback=True,
                 )
+                llm_used = True
                 cleaned = description.strip().replace("\n", " ")
                 if cleaned:
                     lines.append(f"- {entity}: {cleaned}")
@@ -253,7 +264,11 @@ class PlanProvider(ContextProvider):
         text = "\n".join(lines)
         tokens = count_tokens(text, "dummy")
         return ContextChunk(
-            text=text, tokens=tokens, provenance=provenance, source=self.source
+            text=text,
+            tokens=tokens,
+            provenance=provenance,
+            source=self.source,
+            from_llm_fill=llm_used,
         )
 
 

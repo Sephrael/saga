@@ -76,6 +76,18 @@ class CountingProvider(ContextProvider):
         )
 
 
+class FillProvider(ContextProvider):
+    def __init__(self, source: str = "fill") -> None:
+        self.source = source
+
+    async def get_context(
+        self, request: ContextRequest, settings: ProviderSettings | None = None
+    ) -> ContextChunk:
+        return ContextChunk(
+            text="fill", tokens=4, provenance={}, source=self.source, from_llm_fill=True
+        )
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_truncates():
     profiles = {
@@ -179,6 +191,21 @@ async def test_provider_settings_passed():
     req = ContextRequest(1, None, {})
     await orch.build_context(req)
     assert provider.last_setting == 5
+
+
+@pytest.mark.asyncio
+async def test_llm_fill_chunks_collected():
+    profiles = {
+        ContextProfileName.DEFAULT: ProfileConfiguration(
+            providers=[ProviderSettings(FillProvider())],
+            max_tokens=50,
+        )
+    }
+    orch = ContextOrchestrator(profiles)
+    req = ContextRequest(1, None, {})
+    await orch.build_context(req)
+    assert len(orch.llm_fill_chunks) == 1
+    assert orch.llm_fill_chunks[0].source == "fill"
 
 
 @pytest.mark.asyncio

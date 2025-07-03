@@ -90,6 +90,7 @@ async def test_canon_provider_llm_fallback(monkeypatch):
     request = ContextRequest(1, None, {"title": "T"})
     chunk = await provider.get_context(request)
     assert "fallback canon" in chunk.text
+    assert chunk.from_llm_fill
 
 
 @pytest.mark.asyncio
@@ -102,6 +103,7 @@ async def test_plan_provider_llm_fallback(monkeypatch):
     request = ContextRequest(1, "intro", {"plot_points": ["intro"]})
     chunk = await provider.get_context(request)
     assert "a" in chunk.text
+    assert chunk.from_llm_fill
 
 
 @pytest.mark.asyncio
@@ -156,3 +158,4 @@ async def test_plan_provider_unresolved_entities_llm(monkeypatch):
     chunk = await provider.get_context(request)
     assert "A1" in chunk.text and "B2" in chunk.text
     assert chunk.provenance.get("llm_fill_ins") == {"A1": "desc1", "B2": "desc2"}
+    assert chunk.from_llm_fill

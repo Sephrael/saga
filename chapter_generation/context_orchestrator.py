@@ -61,6 +61,7 @@ class ContextOrchestrator:
     ) -> None:
         self.profiles = profiles
         self.cache = TTLCache(settings.CONTEXT_CACHE_SIZE, settings.CONTEXT_CACHE_TTL)
+        self.llm_fill_chunks: list[ContextChunk] = []
 
     async def build_context(self, request: ContextRequest) -> str:
         """Return an ordered context string for the request."""
@@ -119,6 +120,8 @@ class ContextOrchestrator:
                     provider=provider.source,
                     result_type=type(res).__name__,
                 )
+
+        self.llm_fill_chunks = [c for c in chunks if c.from_llm_fill]
 
         merged: list[str] = []
         token_total = 0
