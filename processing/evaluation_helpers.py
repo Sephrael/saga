@@ -37,6 +37,80 @@ def normalize_llm_category(llm_category_str: str) -> str:
     return "meta"
 
 
+NO_ISSUES_KEYWORDS = [
+    "no significant problems found",
+    "no issues found",
+    "no problems found",
+    "no revision needed",
+    "no changes needed",
+    "all clear",
+    "looks good",
+    "is fine",
+    "is acceptable",
+    "passes evaluation",
+    "meets criteria",
+    "therefore, no revision is needed",
+]
+
+
+def _contains_no_issues(text: str) -> bool:
+    """Return True if the text indicates no issues."""
+    normalized_eval_text = text.lower().strip().replace(".", "")
+    for keyword in NO_ISSUES_KEYWORDS:
+        normalized_keyword = keyword.lower().strip().replace(".", "")
+        if normalized_keyword == normalized_eval_text or (
+            len(normalized_eval_text) < len(normalized_keyword) + 20
+            and normalized_keyword in normalized_eval_text
+        ):
+            return True
+    return False
+
+
+def _legacy_flags(
+    cleaned_text: str,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return legacy flag values based on cleaned text."""
+    lowered = cleaned_text.lower()
+    return (
+        "Potential consistency issues." if "consistency" in lowered else None,
+        "Potential plot arc issues." if "plot_arc" in lowered else None,
+        "Potential thematic issues." if "thematic" in lowered else None,
+        "Potential narrative depth/length issues."
+        if "narrative_depth" in lowered
+        else None,
+    )
+
+
+def _parse_eval_output(cleaned_text: str) -> dict[str, Any]:
+    """Return evaluation output dict based on cleaned text."""
+    if _contains_no_issues(cleaned_text):
+        return {
+            "problems_found_text_output": cleaned_text,
+            "legacy_consistency_issues": None,
+            "legacy_plot_arc_deviation": None,
+            "legacy_thematic_issues": None,
+            "legacy_narrative_depth_issues": None,
+        }
+    if not cleaned_text.strip():
+        return {
+            "problems_found_text_output": "Evaluation LLM call failed or returned empty.",
+            "legacy_consistency_issues": "LLM call failed.",
+            "legacy_plot_arc_deviation": "LLM call failed.",
+            "legacy_thematic_issues": "LLM call failed.",
+            "legacy_narrative_depth_issues": "LLM call failed.",
+        }
+    legacy_consistency, legacy_plot, legacy_theme, legacy_depth = _legacy_flags(
+        cleaned_text
+    )
+    return {
+        "problems_found_text_output": cleaned_text,
+        "legacy_consistency_issues": legacy_consistency,
+        "legacy_plot_arc_deviation": legacy_plot,
+        "legacy_thematic_issues": legacy_theme,
+        "legacy_narrative_depth_issues": legacy_depth,
+    }
+
+
 async def parse_llm_evaluation_output(
     json_text: str, chapter_number: int, original_draft_text: str
 ) -> list[ProblemDetail]:
@@ -243,88 +317,24 @@ async def perform_llm_comprehensive_evaluation(
         auto_clean_response=True,
     )
 
-    no_issues_keywords = [
-        "no significant problems found",
-        "no issues found",
-        "no problems found",
-        "no revision needed",
-        "no changes needed",
-        "all clear",
-        "looks good",
-        "is fine",
-        "is acceptable",
-        "passes evaluation",
-        "meets criteria",
-        "therefore, no revision is needed",
-    ]
-    is_likely_no_issues_text = False
-    if cleaned_evaluation_text.strip():
-        normalized_eval_text = cleaned_evaluation_text.lower().strip().replace(".", "")
-        for keyword in no_issues_keywords:
-            normalized_keyword = keyword.lower().strip().replace(".", "")
-            if normalized_keyword == normalized_eval_text or (
-                len(normalized_eval_text) < len(normalized_keyword) + 20
-                and normalized_keyword in normalized_eval_text
-            ):
-                is_likely_no_issues_text = True
-                break
-    eval_output_dict: dict[str, Any]
+    is_likely_no_issues_text = _contains_no_issues(cleaned_evaluation_text)
     if is_likely_no_issues_text:
         logger.info(
             "Heuristic: Evaluation for Ch %s appears to indicate 'no issues': '%s'",
             chapter_number,
             cleaned_evaluation_text[:100],
         )
-        eval_output_dict = {
-            "problems_found_text_output": cleaned_evaluation_text,
-            "legacy_consistency_issues": None,
-            "legacy_plot_arc_deviation": None,
-            "legacy_thematic_issues": None,
-            "legacy_narrative_depth_issues": None,
-        }
     elif not cleaned_evaluation_text.strip():
         logger.error(
             "Comprehensive evaluation LLM for Ch %s returned empty text.",
             chapter_number,
         )
-        eval_output_dict = {
-            "problems_found_text_output": "Evaluation LLM call failed or returned empty.",
-            "legacy_consistency_issues": "LLM call failed.",
-            "legacy_plot_arc_deviation": "LLM call failed.",
-            "legacy_thematic_issues": "LLM call failed.",
-            "legacy_narrative_depth_issues": "LLM call failed.",
-        }
     else:
-        legacy_consistency = (
-            "Potential consistency issues."
-            if "consistency" in cleaned_evaluation_text.lower()
-            else None
-        )
-        legacy_plot = (
-            "Potential plot arc issues."
-            if "plot_arc" in cleaned_evaluation_text.lower()
-            else None
-        )
-        legacy_theme = (
-            "Potential thematic issues."
-            if "thematic" in cleaned_evaluation_text.lower()
-            else None
-        )
-        legacy_depth = (
-            "Potential narrative depth/length issues."
-            if "narrative_depth" in cleaned_evaluation_text.lower()
-            else None
-        )
         logger.info(
             "Comprehensive evaluation for Ch %s complete. LLM output (first 200 chars): '%s'",
             chapter_number,
             cleaned_evaluation_text[:200],
         )
-        eval_output_dict = {
-            "problems_found_text_output": cleaned_evaluation_text,
-            "legacy_consistency_issues": legacy_consistency,
-            "legacy_plot_arc_deviation": legacy_plot,
-            "legacy_thematic_issues": legacy_theme,
-            "legacy_narrative_depth_issues": legacy_depth,
-        }
+
+    eval_output_dict: dict[str, Any] = _parse_eval_output(cleaned_evaluation_text)
     return eval_output_dict, usage_data
