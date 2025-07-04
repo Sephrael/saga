@@ -417,6 +417,81 @@ class RevisionManager:
 
         return cleaned, raw_revised_llm_output, usage
 
+    def _is_deeply_flawed(self, problems: list[ProblemDetail]) -> bool:
+        """Return ``True`` if the draft is considered deeply flawed."""
+
+        return len(problems) > settings.REWRITE_TRIGGER_PROBLEM_COUNT or any(
+            p.issue_category == "narrative_depth_and_length" for p in problems
+        )
+
+    async def _maybe_direct_full_rewrite(
+        self,
+        is_deeply_flawed: bool,
+        revision_cycle: int,
+        plot_outline: dict[str, Any],
+        original_text: str,
+        chapter_number: int,
+        problems_to_fix: list[ProblemDetail],
+        revision_reason_str: str,
+        hybrid_context_for_revision: str,
+        chapter_plan: list[SceneDetail] | None,
+        is_from_flawed_source: bool,
+    ) -> tuple[str | None, str | None, TokenUsage | None]:
+        """Perform a full rewrite immediately if conditions warrant."""
+
+        if (
+            is_deeply_flawed
+            and settings.ENABLE_STRATEGIC_REWRITES
+            and not self._should_defer_full_rewrite(revision_cycle)
+        ):
+            logger.info(
+                "Deeply flawed draft detected. Proceeding directly to full chapter rewrite."
+            )
+            return await self._perform_full_rewrite(
+                plot_outline,
+                original_text,
+                chapter_number,
+                problems_to_fix,
+                revision_reason_str,
+                hybrid_context_for_revision,
+                chapter_plan,
+                is_from_flawed_source,
+            )
+        return None, None, None
+
+    async def _apply_patch_revision(
+        self,
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
+        original_text: str,
+        chapter_number: int,
+        problems_to_fix: list[ProblemDetail],
+        hybrid_context_for_revision: str,
+        chapter_plan: list[SceneDetail] | None,
+        already_patched_spans: list[tuple[int, int]],
+        continuity_problems: list[ProblemDetail] | None,
+        repetition_problems: list[ProblemDetail] | None,
+    ) -> tuple[str | None, list[tuple[int, int]], bool, TokenUsage | None]:
+        """Run one patch revision cycle if enabled."""
+
+        if not settings.ENABLE_PATCH_BASED_REVISION:
+            return None, list(already_patched_spans), False, None
+
+        return await self._patch_revision_cycle(
+            plot_outline,
+            character_profiles,
+            world_building,
+            original_text,
+            chapter_number,
+            problems_to_fix,
+            hybrid_context_for_revision,
+            chapter_plan,
+            already_patched_spans,
+            continuity_problems=continuity_problems,
+            repetition_problems=repetition_problems,
+        )
+
     async def revise_chapter(
         self,
         plot_outline: dict[str, Any],
@@ -487,11 +562,7 @@ class RevisionManager:
             problems_to_fix.extend(repetition_problems)
         problems_to_fix = _deduplicate_problems(problems_to_fix)
 
-        is_deeply_flawed = len(
-            problems_to_fix
-        ) > settings.REWRITE_TRIGGER_PROBLEM_COUNT or any(
-            p.issue_category == "narrative_depth_and_length" for p in problems_to_fix
-        )
+        is_deeply_flawed = self._is_deeply_flawed(problems_to_fix)
         if not problems_to_fix and evaluation_result.needs_revision:
             logger.warning(
                 "Revision for ch %s explicitly requested, but no specific problems were itemized.",
@@ -516,24 +587,19 @@ class RevisionManager:
             revision_reason_str,
         )
 
-        if (
-            is_deeply_flawed
-            and settings.ENABLE_STRATEGIC_REWRITES
-            and not self._should_defer_full_rewrite(revision_cycle)
-        ):
-            logger.info(
-                "Deeply flawed draft detected. Proceeding directly to full chapter rewrite."
-            )
-            final_text, final_raw, rewrite_usage = await self._perform_full_rewrite(
-                plot_outline,
-                original_text,
-                chapter_number,
-                problems_to_fix,
-                revision_reason_str,
-                hybrid_context_for_revision,
-                chapter_plan,
-                is_from_flawed_source,
-            )
+        final_text, final_raw, rewrite_usage = await self._maybe_direct_full_rewrite(
+            is_deeply_flawed,
+            revision_cycle,
+            plot_outline,
+            original_text,
+            chapter_number,
+            problems_to_fix,
+            revision_reason_str,
+            hybrid_context_for_revision,
+            chapter_plan,
+            is_from_flawed_source,
+        )
+        if final_text:
             _add_usage(rewrite_usage)
             return (
                 (final_text, final_raw, []),
@@ -542,30 +608,25 @@ class RevisionManager:
                 else None,
             )
 
-        patched_text: str | None = None
-        all_spans_in_patched_text: list[tuple[int, int]] = list(already_patched_spans)
-        if settings.ENABLE_PATCH_BASED_REVISION:
-            (
-                patched_text,
-                all_spans_in_patched_text,
-                use_patch,
-                patch_usage,
-            ) = await self._patch_revision_cycle(
-                plot_outline,
-                character_profiles,
-                world_building,
-                original_text,
-                chapter_number,
-                problems_to_fix,
-                hybrid_context_for_revision,
-                chapter_plan,
-                already_patched_spans,
-                continuity_problems=continuity_problems,
-                repetition_problems=repetition_problems,
-            )
-            _add_usage(patch_usage)
-        else:
-            use_patch = False
+        (
+            patched_text,
+            all_spans_in_patched_text,
+            use_patch,
+            patch_usage,
+        ) = await self._apply_patch_revision(
+            plot_outline,
+            character_profiles,
+            world_building,
+            original_text,
+            chapter_number,
+            problems_to_fix,
+            hybrid_context_for_revision,
+            chapter_plan,
+            already_patched_spans,
+            continuity_problems,
+            repetition_problems,
+        )
+        _add_usage(patch_usage)
 
         final_revised_text: str | None = None
         final_raw_llm_output: str | None = None
