@@ -95,216 +95,268 @@ async def sync_world_items(
         return False
 
 
-async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
-    """Persist the entire world-building state to Neo4j."""
+def _build_world_element_id(
+    category: str, item_name: str, details: dict[str, Any]
+) -> str:
+    """Return a stable ID for a world element."""
+    if isinstance(details.get("id"), str) and details.get("id", "").strip():
+        return str(details["id"])
+    norm_cat = utils._normalize_for_id(category) or "unknown_category"
+    norm_name = utils._normalize_for_id(item_name) or "unknown_name"
+    return f"{norm_cat}_{norm_name}"
 
-    logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
-    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
-    wc_id_param = (
-        settings.MAIN_WORLD_CONTAINER_NODE_ID
-    )  # Unique ID for the WorldContainer
+def _collect_input_world_element_ids(world_data: dict[str, Any]) -> set[str]:
+    """Gather all world element IDs present in the input ``world_data``."""
+    ids: set[str] = set()
+    for category, items in world_data.items():
+        if category == "_overview_" or not isinstance(items, dict):
+            continue
+        for name, details in items.items():
+            if name.startswith(
+                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
+            ):
+                continue
+            if isinstance(details, dict):
+                we_id = _build_world_element_id(category, name, details)
+                if we_id:
+                    ids.add(we_id)
+    return ids
+
+
+async def _fetch_existing_world_element_ids() -> set[str]:
+    """Return IDs of non-deleted world elements stored in Neo4j."""
+    records = await neo4j_manager.execute_read_query(
+        "MATCH (we:WorldElement:Entity)"
+        " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
+        " RETURN we.id AS id"
+    )
+    return {rec["id"] for rec in records if rec and rec.get("id")}
+
+
+def _generate_world_container_statements(
+    overview_details: dict[str, Any], wc_id: str, novel_id: str
+) -> list[tuple[str, dict[str, Any]]]:
+    """Create cypher statements for the world container node."""
+    if not isinstance(overview_details, dict):
+        return []
+    wc_props: dict[str, Any] = {
+        "id": wc_id,
+        "overview_description": str(overview_details.get("description", "")),
+        KG_IS_PROVISIONAL: overview_details.get(
+            kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
+        )
+        == "provisional_from_unrevised_draft",
+    }
+    for key, val in overview_details.items():
+        if isinstance(val, str | int | float | bool) and key not in wc_props:
+            wc_props[key] = val
+    return [
+        (
+            """
+        MERGE (wc:Entity {id: $id_val})
+        ON CREATE SET wc:WorldContainer, wc = $props, wc.created_ts = timestamp()
+        ON MATCH SET  wc:WorldContainer, wc = $props, wc.updated_ts = timestamp()
+        """,
+            {"id_val": wc_id, "props": wc_props},
+        ),
+        (
+            """
+        MATCH (ni:NovelInfo:Entity {id: $novel_id_val})
+        MATCH (wc:WorldContainer:Entity {id: $wc_id_val})
+        MERGE (ni)-[:HAS_WORLD_META]->(wc)
+        """,
+            {"novel_id_val": novel_id, "wc_id_val": wc_id},
+        ),
+    ]
+
+
+def _prepare_world_element_props(
+    category: str, name: str, details: dict[str, Any]
+) -> dict[str, Any]:
+    """Build property dictionary for a ``WorldElement`` node."""
+    we_props = {
+        "id": _build_world_element_id(category, name, details),
+        "name": name,
+        "category": category,
+    }
+    created_chap = details.get(
+        KG_NODE_CREATED_CHAPTER,
+        details.get("created_chapter", settings.KG_PREPOPULATION_CHAPTER_NUM),
+    )
+    we_props[KG_NODE_CREATED_CHAPTER] = int(created_chap)
+
+    is_prov = False
+    sq_key = kg_keys.source_quality_key(we_props[KG_NODE_CREATED_CHAPTER])
+    if details.get(sq_key) == "provisional_from_unrevised_draft":
+        is_prov = True
+    elif details.get(KG_IS_PROVISIONAL) is True:
+        is_prov = True
+    elif details.get("is_provisional") is True:
+        is_prov = True
+    we_props[KG_IS_PROVISIONAL] = is_prov
+    we_props["is_deleted"] = False
+
+    for key, val in details.items():
+        if (
+            isinstance(val, str | int | float | bool)
+            and key not in we_props
+            and not key.startswith(kg_keys.ELABORATION_PREFIX)
+            and not key.startswith(kg_keys.ADDED_PREFIX)
+            and not key.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
+            and key
+            not in [
+                "goals",
+                "rules",
+                "key_elements",
+                "traits",
+                "id",
+                "name",
+                "category",
+                "created_chapter",
+                "is_provisional",
+            ]
+        ):
+            we_props[key] = val
+    return we_props
+
+
+def _generate_list_value_statements(
+    we_id: str, details: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Create cypher statements for list properties like goals or rules."""
     statements: list[tuple[str, dict[str, Any]]] = []
-
-    # 1. Synchronize WorldContainer (_overview_)
-    overview_details = world_data.get("_overview_", {})
-    if isinstance(overview_details, dict):
-        wc_props = {
-            "id": wc_id_param,  # Ensure ID is part of props for SET
-            "overview_description": str(overview_details.get("description", "")),
-            KG_IS_PROVISIONAL: overview_details.get(
-                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
-            )
-            == "provisional_from_unrevised_draft",
+    list_prop_map = {
+        "goals": "HAS_GOAL",
+        "rules": "HAS_RULE",
+        "key_elements": "HAS_KEY_ELEMENT",
+        "traits": "HAS_TRAIT_ASPECT",
+    }
+    for prop_key, rel_name in list_prop_map.items():
+        current_values = {
+            str(v).strip()
+            for v in details.get(prop_key, [])
+            if isinstance(v, str) and str(v).strip()
         }
-        # Add other direct properties from overview_details if any
-        for k_overview, v_overview in overview_details.items():
-            if (
-                isinstance(v_overview, str | int | float | bool)
-                and k_overview not in wc_props
-            ):
-                wc_props[k_overview] = v_overview
-
         statements.append(
             (
-                """
-            MERGE (wc:Entity {id: $id_val})
-            ON CREATE SET wc:WorldContainer, wc = $props, wc.created_ts = timestamp()
-            ON MATCH SET  wc:WorldContainer, wc = $props, wc.updated_ts = timestamp()
+                f"""
+            MATCH (we:WorldElement:Entity {{id: $we_id_val}})-[r:{rel_name}]->(v:ValueNode:Entity {{type: $value_node_type}})
+            WHERE NOT v.value IN $current_values_list
+            DELETE r
             """,
-                {"id_val": wc_id_param, "props": wc_props},
+                {
+                    "we_id_val": we_id,
+                    "value_node_type": prop_key,
+                    "current_values_list": list(current_values),
+                },
             )
         )
-        # Link WorldContainer to NovelInfo
-        statements.append(
-            (
-                """
-            MATCH (ni:NovelInfo:Entity {id: $novel_id_val})
-            MATCH (wc:WorldContainer:Entity {id: $wc_id_val})
-            MERGE (ni)-[:HAS_WORLD_META]->(wc)
-            """,
-                {"novel_id_val": novel_id_param, "wc_id_val": wc_id_param},
+        if current_values:
+            statements.append(
+                (
+                    f"""
+                MATCH (we:WorldElement:Entity {{id: $we_id_val}})
+                UNWIND $current_values_list AS item_value_str
+                MERGE (v:Entity:ValueNode {{value: item_value_str, type: $value_node_type}})
+                   ON CREATE SET v.created_ts = timestamp()
+                MERGE (we)-[:{rel_name}]->(v)
+                """,
+                    {
+                        "we_id_val": we_id,
+                        "value_node_type": prop_key,
+                        "current_values_list": list(current_values),
+                    },
+                )
             )
-        )
+    return statements
 
-    # 2. Collect all WorldElement IDs from input data
-    all_input_we_ids: set[str] = set()
-    for category_str, items_dict_value in world_data.items():
-        if category_str == "_overview_" or not isinstance(items_dict_value, dict):
+
+def _generate_elaboration_statements(
+    we_id: str, details: dict[str, Any], item_name: str
+) -> list[tuple[str, dict[str, Any]]]:
+    """Create cypher statements for ``WorldElaborationEvent`` nodes."""
+    statements: list[tuple[str, dict[str, Any]]] = [
+        (
+            """
+        MATCH (we:WorldElement:Entity {id: $we_id_val})-[r:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+        DETACH DELETE elab, r
+        """,
+            {"we_id_val": we_id},
+        )
+    ]
+    for key, value in details.items():
+        if (
+            key.startswith(kg_keys.ELABORATION_PREFIX)
+            and isinstance(value, str)
+            and value.strip()
+        ):
+            try:
+                chap_num = kg_keys.parse_elaboration_key(key)
+                if chap_num is None:
+                    logger.warning(
+                        "Could not parse chapter number from world elab key: %s for item %s",
+                        key,
+                        item_name,
+                    )
+                    continue
+                elab_is_prov = False
+                sq_key = kg_keys.source_quality_key(chap_num)
+                if details.get(sq_key) == "provisional_from_unrevised_draft":
+                    elab_is_prov = True
+                elab_props = {
+                    "id": f"elab_{we_id}_ch{chap_num}_{hash(value.strip())}",
+                    "summary": value.strip(),
+                    KG_NODE_CHAPTER_UPDATED: chap_num,
+                    KG_IS_PROVISIONAL: elab_is_prov,
+                }
+                statements.append(
+                    (
+                        """
+                    MATCH (we:WorldElement:Entity {id: $we_id_val})
+                    CREATE (elab:Entity:WorldElaborationEvent)
+                    SET elab = $props, elab.created_ts = timestamp()
+                    CREATE (we)-[:ELABORATED_IN_CHAPTER]->(elab)
+                    """,
+                        {"we_id_val": we_id, "props": elab_props},
+                    )
+                )
+            except ValueError:
+                logger.warning(
+                    "Could not parse chapter for world elab key: %s for item %s",
+                    key,
+                    item_name,
+                )
+    return statements
+
+
+def _cleanup_orphan_value_nodes() -> tuple[str, dict[str, Any]]:
+    """Return cypher to remove orphan ``ValueNode`` records."""
+    return (
+        """
+    MATCH (v:ValueNode:Entity)
+    WHERE NOT EXISTS((:WorldElement:Entity)-[]->(v)) AND NOT EXISTS((:Entity)-[:DYNAMIC_REL]->(v))
+    DETACH DELETE v
+    """,
+        {},
+    )
+
+
+def _generate_world_element_statements(
+    world_data: dict[str, Any], wc_id: str
+) -> list[tuple[str, dict[str, Any]]]:
+    """Create cypher statements for all ``WorldElement`` nodes."""
+    statements: list[tuple[str, dict[str, Any]]] = []
+    for category, items in world_data.items():
+        if category == "_overview_" or not isinstance(items, dict):
             continue
-        for (
-            item_name_str,
-            item_details_value,
-        ) in items_dict_value.items():  # Iterate through items in the category
-            # Ensure item_name_str itself is not a reserved key
-            if item_name_str.startswith(
+        for name, details in items.items():
+            if not isinstance(details, dict) or name.startswith(
                 ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
             ):
                 continue
-
-            # Use the 'id' from item_details_value if present and valid, otherwise generate.
-            # This aligns with how WorldItem.from_dict handles ID.
-            we_id_str = ""
-            if (
-                isinstance(item_details_value, dict)
-                and isinstance(item_details_value.get("id"), str)
-                and item_details_value.get("id").strip()
-            ):
-                we_id_str = item_details_value.get("id")
-            else:  # Fallback to old generation for consistency if 'id' isn't in the dict from DB.
-                # WorldItem.from_dict ensures 'id' is always there for objects from parsing.
-                # For data from DB via get_world_building_from_db, 'id' is popped but needs to be reconstructed for this check.
-                norm_cat = utils._normalize_for_id(category_str)
-                norm_name = utils._normalize_for_id(item_name_str)
-                if not norm_cat:
-                    norm_cat = "unknown_category"
-                if not norm_name:
-                    norm_name = "unknown_name"
-                we_id_str = f"{norm_cat}_{norm_name}"
-
-            if we_id_str:
-                all_input_we_ids.add(we_id_str)
-
-    # 3. Get existing WorldElement IDs from DB to find orphans
-    try:
-        existing_we_records = await neo4j_manager.execute_read_query(
-            "MATCH (we:WorldElement:Entity)"
-            " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
-            " RETURN we.id AS id"
-        )
-        existing_db_we_ids: set[str] = {
-            record["id"] for record in existing_we_records if record and record["id"]
-        }
-    except Exception as e:
-        logger.error(
-            f"Failed to retrieve existing WorldElement IDs from DB: {e}", exc_info=True
-        )
-        return False
-
-    # WorldElements to delete (in DB but not in input world_data)
-    we_to_delete = existing_db_we_ids - all_input_we_ids
-    if we_to_delete:
-        statements.append(
-            (
-                """
-            MATCH (we:WorldElement:Entity)
-            WHERE we.id IN $we_ids_to_delete
-            SET we.is_deleted = TRUE
-            """,
-                {"we_ids_to_delete": list(we_to_delete)},
-            )
-        )
-
-    # 4. Process each WorldElement from input data
-    for category_str, items_category_dict in world_data.items():
-        if category_str == "_overview_" or not isinstance(items_category_dict, dict):
-            continue
-
-        for item_name_str, details_dict in items_category_dict.items():
-            if not isinstance(details_dict, dict) or item_name_str.startswith(
-                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
-            ):
-                continue
-
-            # ID should be taken from details_dict if present, otherwise generated.
-            # This aligns with WorldItem.from_dict's ID handling.
-            we_id_str = ""
-            if (
-                isinstance(details_dict.get("id"), str)
-                and details_dict.get("id").strip()
-            ):
-                we_id_str = details_dict.get("id")
-            else:  # Fallback for safety or if 'id' was somehow removed before this point
-                norm_cat = utils._normalize_for_id(category_str)
-                norm_name = utils._normalize_for_id(item_name_str)
-                if not norm_cat:
-                    norm_cat = "unknown_category"
-                if not norm_name:
-                    norm_name = "unknown_name"
-                we_id_str = f"{norm_cat}_{norm_name}"
-
-            # Prepare WorldElement properties
-            we_node_props = {
-                "id": we_id_str,
-                "name": item_name_str,  # This is the display name
-                "category": category_str,  # This is the display category
-            }
-
-            created_chap_num = details_dict.get(
-                KG_NODE_CREATED_CHAPTER,  # Check direct KG constant key first
-                details_dict.get(
-                    "created_chapter",
-                    settings.KG_PREPOPULATION_CHAPTER_NUM,
-                ),
-            )  # Fallback
-
-            we_node_props[KG_NODE_CREATED_CHAPTER] = int(created_chap_num)
-
-            # Provisional status: check specific source_quality_chapter_X, then KG_IS_PROVISIONAL, then 'is_provisional'
-            is_prov = False
-            sq_key_for_created_chap = kg_keys.source_quality_key(
-                we_node_props[KG_NODE_CREATED_CHAPTER]
-            )
-            if (
-                details_dict.get(sq_key_for_created_chap)
-                == "provisional_from_unrevised_draft"
-            ):
-                is_prov = True
-            elif (
-                details_dict.get(KG_IS_PROVISIONAL) is True
-            ):  # Check direct KG constant key
-                is_prov = True
-            elif (
-                details_dict.get("is_provisional") is True
-            ):  # Fallback to 'is_provisional'
-                is_prov = True
-            we_node_props[KG_IS_PROVISIONAL] = is_prov
-            we_node_props["is_deleted"] = False
-
-            # Add other direct properties
-            for k_detail, v_detail in details_dict.items():
-                if (
-                    isinstance(v_detail, str | int | float | bool)
-                    and k_detail not in we_node_props
-                    and not k_detail.startswith(kg_keys.ELABORATION_PREFIX)
-                    and not k_detail.startswith(kg_keys.ADDED_PREFIX)
-                    and not k_detail.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
-                    and k_detail
-                    not in [
-                        "goals",
-                        "rules",
-                        "key_elements",
-                        "traits",
-                        "id",
-                        "name",
-                        "category",
-                        "created_chapter",
-                        "is_provisional",
-                    ]
-                ):  # Exclude already handled
-                    we_node_props[k_detail] = v_detail
-
-            # MERGE WorldElement node
+            we_id = _build_world_element_id(category, name, details)
+            props = _prepare_world_element_props(category, name, details)
             statements.append(
                 (
                     """
@@ -312,10 +364,9 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
                 ON CREATE SET we:WorldElement, we = $props, we.created_ts = timestamp()
                 ON MATCH SET  we:WorldElement, we += $props, we.updated_ts = timestamp()
                 """,
-                    {"id_val": we_id_str, "props": we_node_props},
+                    {"id_val": we_id, "props": props},
                 )
             )
-            # Link WorldElement to WorldContainer
             statements.append(
                 (
                     """
@@ -323,135 +374,63 @@ async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
                 MATCH (we:WorldElement:Entity {id: $we_id_val})
                 MERGE (wc)-[:CONTAINS_ELEMENT]->(we)
                 """,
-                    {"wc_id_val": wc_id_param, "we_id_val": we_id_str},
+                    {"wc_id_val": wc_id, "we_id_val": we_id},
                 )
             )
+            statements.extend(_generate_list_value_statements(we_id, details))
+            statements.extend(_generate_elaboration_statements(we_id, details, name))
+    return statements
 
-            # Reconcile list properties (goals, rules, key_elements, traits) as ValueNode relationships
-            list_prop_map = {
-                "goals": "HAS_GOAL",
-                "rules": "HAS_RULE",
-                "key_elements": "HAS_KEY_ELEMENT",
-                "traits": "HAS_TRAIT_ASPECT",
-            }
-            for list_prop_key, rel_name_internal in list_prop_map.items():
-                current_prop_values: set[str] = {
-                    str(v).strip()
-                    for v in details_dict.get(list_prop_key, [])
-                    if isinstance(v, str) and str(v).strip()
-                }
 
-                # Delete relationships to ValueNodes no longer in the list
-                statements.append(
-                    (
-                        f"""
-                    MATCH (we:WorldElement:Entity {{id: $we_id_val}})-[r:{rel_name_internal}]->(v:ValueNode:Entity {{type: $value_node_type}})
-                    WHERE NOT v.value IN $current_values_list
-                    DELETE r
-                    """,
-                        {
-                            "we_id_val": we_id_str,
-                            "value_node_type": list_prop_key,
-                            "current_values_list": list(current_prop_values),
-                        },
-                    )
-                )
-                # Add/Ensure relationships for current values
-                if current_prop_values:
-                    statements.append(
-                        (
-                            f"""
-                        MATCH (we:WorldElement:Entity {{id: $we_id_val}})
-                        UNWIND $current_values_list AS item_value_str
-                        MERGE (v:Entity:ValueNode {{value: item_value_str, type: $value_node_type}})
-                           ON CREATE SET v.created_ts = timestamp()
-                        MERGE (we)-[:{rel_name_internal}]->(v)
-                        """,
-                            {
-                                "we_id_val": we_id_str,
-                                "value_node_type": list_prop_key,
-                                "current_values_list": list(current_prop_values),
-                            },
-                        )
-                    )
+async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
+    """Persist the entire world-building state to Neo4j."""
 
-            # Reconcile WorldElaborationEvents
-            statements.append(
-                (
-                    """
-                MATCH (we:WorldElement:Entity {id: $we_id_val})-[r:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-                DETACH DELETE elab, r
-                """,
-                    {"we_id_val": we_id_str},
-                )
-            )
-            for key_str, value_val in details_dict.items():
-                if (
-                    key_str.startswith(kg_keys.ELABORATION_PREFIX)
-                    and isinstance(value_val, str)
-                    and value_val.strip()
-                ):
-                    try:
-                        chap_num_val = kg_keys.parse_elaboration_key(key_str)
-                        if chap_num_val is None:
-                            logger.warning(
-                                f"Could not parse chapter number from world elab key: {key_str} for item {item_name_str}"
-                            )
-                            continue
+    logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
-                        elab_summary = value_val.strip()
-                        elab_event_id = (
-                            f"elab_{we_id_str}_ch{chap_num_val}_{hash(elab_summary)}"
-                        )
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
+    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID
 
-                        elab_is_provisional = False
-                        sq_key_for_elab_chap = kg_keys.source_quality_key(chap_num_val)
-                        if (
-                            details_dict.get(sq_key_for_elab_chap)
-                            == "provisional_from_unrevised_draft"
-                        ):
-                            elab_is_provisional = True
+    statements: list[tuple[str, dict[str, Any]]] = []
 
-                        elab_props = {
-                            "id": elab_event_id,
-                            "summary": elab_summary,
-                            KG_NODE_CHAPTER_UPDATED: chap_num_val,
-                            KG_IS_PROVISIONAL: elab_is_provisional,
-                        }
-                        statements.append(
-                            (
-                                """
-                            MATCH (we:WorldElement:Entity {id: $we_id_val})
-                            CREATE (elab:Entity:WorldElaborationEvent)
-                            SET elab = $props, elab.created_ts = timestamp()
-                            CREATE (we)-[:ELABORATED_IN_CHAPTER]->(elab)
-                            """,
-                                {"we_id_val": we_id_str, "props": elab_props},
-                            )
-                        )
-                    except ValueError:
-                        logger.warning(
-                            f"Could not parse chapter for world elab key: {key_str} for item {item_name_str}"
-                        )
-
-    # 5. Cleanup orphaned ValueNodes (those not connected to any WorldElement after reconciliation)
-    statements.append(
-        (
-            """
-        MATCH (v:ValueNode:Entity)
-        WHERE NOT EXISTS((:WorldElement:Entity)-[]->(v)) AND NOT EXISTS((:Entity)-[:DYNAMIC_REL]->(v))
-        DETACH DELETE v
-        """,
-            {},
+    statements.extend(
+        _generate_world_container_statements(
+            world_data.get("_overview_", {}), wc_id_param, novel_id_param
         )
     )
+
+    input_ids = _collect_input_world_element_ids(world_data)
+    try:
+        existing_ids = await _fetch_existing_world_element_ids()
+    except Exception as exc:  # pragma: no cover - log and return failure
+        logger.error(
+            f"Failed to retrieve existing WorldElement IDs from DB: {exc}",
+            exc_info=True,
+        )
+        return False
+
+    orphan_ids = existing_ids - input_ids
+    if orphan_ids:
+        statements.append(
+            (
+                """
+            MATCH (we:WorldElement:Entity)
+            WHERE we.id IN $we_ids_to_delete
+            SET we.is_deleted = TRUE
+            """,
+                {"we_ids_to_delete": list(orphan_ids)},
+            )
+        )
+
+    statements.extend(_generate_world_element_statements(world_data, wc_id_param))
+
+    statements.append(_cleanup_orphan_value_nodes())
 
     try:
         if statements:
             await neo4j_manager.execute_cypher_batch(statements)
         logger.info("Successfully synchronized world building data to Neo4j.")
         return True
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - log and return failure
         logger.error(f"Error synchronizing world building data: {e}", exc_info=True)
         return False
 
