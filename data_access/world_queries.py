@@ -90,11 +90,14 @@ def _build_world_elements_query(chapter_filter: str) -> str:
         rules,
         key_elements,
         traits,
-        [e IN collect(DISTINCT {{
-            chapter: elab.{KG_NODE_CHAPTER_UPDATED},
-            summary: elab.summary,
-            prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
-        }}) WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND e.summary IS NOT NULL] AS elaborations
+
+        [e IN collect(DISTINCT CASE
+            WHEN ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL THEN {{
+                chapter: elab.{KG_NODE_CHAPTER_UPDATED},
+                summary: elab.summary,
+                prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
+            }}
+            ELSE NULL END) WHERE e IS NOT NULL] AS elaborations
 
     RETURN we, goals, rules, key_elements, traits, elaborations
     ORDER BY we.category, we.name
