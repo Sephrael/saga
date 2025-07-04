@@ -1,3 +1,4 @@
+# data_access/cypher_builders/character_cypher.py
 from typing import Any
 
 import kg_constants as kg_keys
@@ -99,7 +100,7 @@ def generate_character_node_cypher(
                             MATCH (c:Character:Entity {name: $name})
                             MERGE (t:Trait:Entity {name: $trait_name})
                                 ON CREATE SET t.created_ts = timestamp()
-                            MERGE (c)-[:HAS_TRAIT]->(t)
+                            MERGE (c)-[r:HAS_TRAIT]->(t)
                             SET r.chapter_added = $chapter_number_for_delta
                             """,
                             {

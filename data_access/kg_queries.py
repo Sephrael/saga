@@ -525,7 +525,7 @@ async def find_candidate_duplicate_entities(
     """
     query = """
     MATCH (e1:Entity), (e2:Entity)
-    WHERE id(e1) < id(e2)
+    WHERE elementId(e1) < elementId(e2)
       AND e1.name IS NOT NULL AND e2.name IS NOT NULL
       AND NOT e1:ValueNode AND NOT e2:ValueNode
     WITH e1, e2, apoc.text.distance(e1.name, e2.name) AS distance
@@ -712,7 +712,7 @@ async def fetch_unresolved_dynamic_relationships(
     query = """
     MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
     WHERE r.type IS NULL OR r.type = 'UNKNOWN'
-    RETURN id(r) AS rel_id,
+    RETURN elementId(r) AS rel_id,
            s.name AS subject,
            labels(s) AS subject_labels,
            coalesce(s.description, '') AS subject_desc,
@@ -732,9 +732,9 @@ async def fetch_unresolved_dynamic_relationships(
         return []
 
 
-async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
+async def update_dynamic_relationship_type(rel_id: str, new_type: str) -> None:
     """Update a dynamic relationship's type."""
-    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE id(r) = $id SET r.type = $type"
+    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE elementId(r) = $id SET r.type = $type"
     try:
         await neo4j_manager.execute_write_query(query, {"id": rel_id, "type": new_type})
     except Exception as exc:  # pragma: no cover - narrow DB errors

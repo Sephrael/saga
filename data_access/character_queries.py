@@ -460,15 +460,18 @@ async def get_character_profiles_from_db(
     query = f"""
     MATCH (c:Character:Entity)
     WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE {chapter_filter}
+
     OPTIONAL MATCH (c)-[t:HAS_TRAIT]->(tr:Trait:Entity)
       WHERE $limit IS NULL OR t.chapter_added <= $limit
-    OPTIONAL MATCH (c)-[r:DYNAMIC_REL]->(target:Entity)
-      WHERE r.source_profile_managed = TRUE AND ($limit IS NULL OR r.chapter_added <= $limit)
+    WITH c, collect(DISTINCT tr.name) AS traits
+
+    OPTIONAL MATCH (c)-[r:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
+      WHERE $limit IS NULL OR r.chapter_added <= $limit
+    WITH c, traits, collect(DISTINCT {{target: target.name, props: properties(r)}}) AS rels
+
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
       WHERE $limit IS NULL OR dev.{KG_NODE_CHAPTER_UPDATED} <= $limit
-    RETURN c,
-           collect(DISTINCT tr.name) AS traits,
-           collect(DISTINCT {{target: target.name, props: properties(r)}}) AS rels,
+    RETURN c, traits, rels,
            collect(DISTINCT {{chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: dev.{KG_IS_PROVISIONAL}}}) AS devs
     """
 
