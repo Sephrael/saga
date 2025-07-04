@@ -63,29 +63,38 @@ def _build_world_elements_query(chapter_filter: str) -> str:
     WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
 
     OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
-      WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
-    WITH we, collect(DISTINCT goal.value) AS goals
+    WITH we,
+        [v IN collect(DISTINCT coalesce(goal.value, '')) WHERE trim(v) <> ""] AS goals
 
     OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
-      WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
-    WITH we, goals, collect(DISTINCT rule.value) AS rules
+    WITH we,
+        goals,
+        [v IN collect(DISTINCT coalesce(rule.value, '')) WHERE trim(v) <> ""] AS rules
 
     OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
-      WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
-    WITH we, goals, rules, collect(DISTINCT kelem.value) AS key_elements
+    WITH we,
+        goals,
+        rules,
+        [v IN collect(DISTINCT coalesce(kelem.value, '')) WHERE trim(v) <> ""] AS key_elements
 
     OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
-      WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
-    WITH we, goals, rules, key_elements, collect(DISTINCT trait.value) AS traits
+    WITH we,
+        goals,
+        rules,
+        key_elements,
+        [v IN collect(DISTINCT coalesce(trait.value, '')) WHERE trim(v) <> ""] AS traits
 
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-      WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
-    WITH we, goals, rules, key_elements, traits,
-        collect(DISTINCT {{
+    WITH we,
+        goals,
+        rules,
+        key_elements,
+        traits,
+        [e IN collect(DISTINCT {{
             chapter: elab.{KG_NODE_CHAPTER_UPDATED},
             summary: elab.summary,
             prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
-        }}) AS elaborations
+        }}) WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND e.summary IS NOT NULL] AS elaborations
 
     RETURN we, goals, rules, key_elements, traits, elaborations
     ORDER BY we.category, we.name
