@@ -90,6 +90,7 @@ def _build_world_elements_query(chapter_filter: str) -> str:
         rules,
         key_elements,
         traits,
+
         [e IN collect(DISTINCT CASE
             WHEN ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL THEN {{
                 chapter: elab.{KG_NODE_CHAPTER_UPDATED},
