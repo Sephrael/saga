@@ -467,10 +467,6 @@ async def get_character_profiles_from_db(
 
     OPTIONAL MATCH (c)-[r:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
       WHERE $limit IS NULL OR r.chapter_added <= $limit
-    WITH c, collect(DISTINCT tr.name) AS traits
-
-    OPTIONAL MATCH (c)-[r:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
-      WHERE $limit IS NULL OR r.chapter_added <= $limit
     WITH c, traits, collect(DISTINCT {{target: target.name, props: properties(r)}}) AS rels
 
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
