@@ -475,12 +475,14 @@ async def get_character_profiles_from_db(
 
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
       WHERE $limit IS NULL OR dev.{KG_NODE_CHAPTER_UPDATED} <= $limit
-    RETURN c, traits, rels,
+    WITH c, traits, rels,
         collect(DISTINCT {{
             chapter: dev.{KG_NODE_CHAPTER_UPDATED},
             summary: dev.summary,
             prov: coalesce(dev.{KG_IS_PROVISIONAL}, false)
         }}) AS devs
+
+    RETURN c, traits, rels, devs
     """
 
     results = await neo4j_manager.execute_read_query(query, params)
