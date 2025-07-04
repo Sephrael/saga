@@ -21,6 +21,182 @@ logger = structlog.get_logger(__name__)
 # Mapping from normalized world item names to canonical IDs
 WORLD_NAME_TO_ID: dict[str, str] = {}
 
+# Default categories used when no world elements exist
+DEFAULT_WORLD_CATEGORIES = [
+    "locations",
+    "society",
+    "systems",
+    "lore",
+    "history",
+    "factions",
+]
+
+
+async def _load_world_container(wc_id: str) -> WorldItem | None:
+    """Return the world container ``WorldItem`` from Neo4j."""
+
+    overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc"
+    overview_res_list = await neo4j_manager.execute_read_query(
+        overview_query, {"wc_id_param": wc_id}
+    )
+    if not overview_res_list or not overview_res_list[0].get("wc"):
+        return None
+
+    wc_node = overview_res_list[0]["wc"]
+    overview_data_dict = dict(wc_node)
+    overview_data_dict.pop("created_ts", None)
+    overview_data_dict.pop("updated_ts", None)
+
+    if overview_data_dict.get(KG_IS_PROVISIONAL):
+        overview_data_dict[
+            kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
+        ] = "provisional_from_unrevised_draft"
+
+    return WorldItem.from_dict("_overview_", "_overview_", overview_data_dict)
+
+
+def _build_world_elements_query(chapter_filter: str) -> str:
+    """Return the cypher query used to fetch world elements."""
+
+    return f"""
+    MATCH (we:WorldElement:Entity)
+    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
+
+    OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
+      WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
+    WITH we, collect(DISTINCT goal.value) AS goals
+
+    OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
+      WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
+    WITH we, goals, collect(DISTINCT rule.value) AS rules
+
+    OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
+      WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
+    WITH we, goals, rules, collect(DISTINCT kelem.value) AS key_elements
+
+    OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
+      WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
+    WITH we, goals, rules, key_elements, collect(DISTINCT trait.value) AS traits
+
+    OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+      WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
+    WITH we, goals, rules, key_elements, traits,
+        collect(DISTINCT {{
+            chapter: elab.{KG_NODE_CHAPTER_UPDATED},
+            summary: elab.summary,
+            prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
+        }}) AS elaborations
+
+    RETURN we, goals, rules, key_elements, traits, elaborations
+    ORDER BY we.category, we.name
+    """
+
+
+def _process_elaborations(
+    elaborations: list[dict[str, Any]],
+    chapter_limit: int | None,
+    item_detail_dict: dict[str, Any],
+) -> int:
+    """Apply elaboration records to ``item_detail_dict`` and return the count."""
+
+    count = 0
+    for elab_rec in elaborations:
+        chapter_val = elab_rec.get("chapter")
+        summary_val = elab_rec.get("summary")
+        if chapter_val is None or summary_val is None:
+            continue
+        if chapter_limit is not None and chapter_val > chapter_limit:
+            continue
+        elab_key = kg_keys.elaboration_key(chapter_val)
+        item_detail_dict[elab_key] = summary_val
+        if elab_rec.get("prov"):
+            item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
+                "provisional_from_unrevised_draft"
+            )
+        count += 1
+    return count
+
+
+def _update_world_data_from_record(
+    record: dict[str, Any],
+    world_data: dict[str, dict[str, WorldItem]],
+    chapter_limit: int | None,
+) -> None:
+    """Update ``world_data`` using a single query record."""
+
+    we_node = record.get("we")
+    if not we_node:
+        return
+
+    category = we_node.get("category")
+    item_name = we_node.get("name")
+    we_id = we_node.get("id")
+
+    if not all([category, item_name, we_id]):
+        logger.warning(
+            "Skipping WorldElement with missing core fields (id, name, or category): %s",
+            we_node,
+        )
+        return
+
+    item_detail_dict = dict(we_node)
+    item_detail_dict.pop("created_ts", None)
+    item_detail_dict.pop("updated_ts", None)
+
+    created_chapter_num = item_detail_dict.pop(
+        KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
+    )
+    item_detail_dict["created_chapter"] = int(created_chapter_num)
+    item_detail_dict[kg_keys.added_key(created_chapter_num)] = True
+
+    is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
+    item_detail_dict["is_provisional"] = is_provisional_at_creation
+    if is_provisional_at_creation:
+        item_detail_dict[kg_keys.source_quality_key(created_chapter_num)] = (
+            "provisional_from_unrevised_draft"
+        )
+
+    item_detail_dict["goals"] = sorted(
+        [v for v in record.get("goals", []) if v is not None]
+    )
+    item_detail_dict["rules"] = sorted(
+        [v for v in record.get("rules", []) if v is not None]
+    )
+    item_detail_dict["key_elements"] = sorted(
+        [v for v in record.get("key_elements", []) if v is not None]
+    )
+    item_detail_dict["traits"] = sorted(
+        [v for v in record.get("traits", []) if v is not None]
+    )
+
+    actual_elaborations_count = _process_elaborations(
+        record.get("elaborations", []), chapter_limit, item_detail_dict
+    )
+
+    item_detail_dict["id"] = we_id
+
+    if (
+        chapter_limit is None
+        or (created_chapter_num is not None and created_chapter_num <= chapter_limit)
+        or actual_elaborations_count > 0
+    ):
+        world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
+            category, item_name, item_detail_dict
+        )
+        WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
+    elif (
+        not (created_chapter_num is not None and created_chapter_num <= chapter_limit)
+        and actual_elaborations_count == 0
+        and chapter_limit is not None
+    ):
+        logger.debug(
+            "WorldElement '%s' (id: %s) created in chapter %s with no elaborations up to chapter %s, excluding.",
+            item_name,
+            we_id,
+            created_chapter_num,
+            chapter_limit,
+        )
+
 
 def resolve_world_name(name: str) -> str | None:
     """Return canonical world item ID for a display name if known."""
@@ -550,7 +726,7 @@ async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
 async def get_world_building_from_db(
     chapter_limit: int | None = None,
 ) -> dict[str, dict[str, WorldItem]]:
-    """Load all world elements grouped by category from Neo4j, optionally up to a chapter limit."""
+    """Load world elements grouped by category from Neo4j."""
 
     logger.info(
         "Loading decomposed world building data from Neo4j%s...",
@@ -563,73 +739,22 @@ async def get_world_building_from_db(
 
     WORLD_NAME_TO_ID.clear()
 
-    # Load WorldContainer (_overview_) - typically not chapter-limited, but check properties if needed
-    overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc"
-    overview_res_list = await neo4j_manager.execute_read_query(
-        overview_query, {"wc_id_param": wc_id_param}
-    )
-    if overview_res_list and overview_res_list[0] and overview_res_list[0].get("wc"):
-        wc_node = overview_res_list[0]["wc"]
-        overview_data_dict = dict(wc_node)
-        overview_data_dict.pop("created_ts", None)
-        overview_data_dict.pop("updated_ts", None)
-
-        # Note: Overview provisional status might be more complex if it aggregates chapter-specific info.
-        # For now, assume its KG_IS_PROVISIONAL is a general flag.
-        if overview_data_dict.get(KG_IS_PROVISIONAL):
-            # If overview itself can be provisional based on a chapter, this logic might need adjustment.
-            # Defaulting to KG_PREPOPULATION_CHAPTER_NUM for source_quality key.
-            overview_data_dict[
-                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
-            ] = "provisional_from_unrevised_draft"
-
-        world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
-            "_overview_",
-            "_overview_",
-            overview_data_dict,
-        )
+    overview_item = await _load_world_container(wc_id_param)
+    if overview_item:
+        world_data.setdefault("_overview_", {})["_overview_"] = overview_item
         WORLD_NAME_TO_ID[utils._normalize_for_id("_overview_")] = (
-            utils._normalize_for_id("_overview_")  # Should be wc_id_param
+            utils._normalize_for_id("_overview_")
         )
 
     we_params: dict[str, Any] = {"limit": chapter_limit}
     chapter_filter = ""
     if chapter_limit is not None:
-        chapter_filter = f"AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $limit)"
+        chapter_filter = (
+            f"AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL "
+            f"OR we.{KG_NODE_CREATED_CHAPTER} <= $limit)"
+        )
 
-    query = f"""
-    MATCH (we:WorldElement:Entity)
-    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
-
-    OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
-      WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
-    WITH we, collect(DISTINCT goal.value) AS goals
-
-    OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
-      WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
-    WITH we, goals, collect(DISTINCT rule.value) AS rules
-
-    OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
-      WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
-    WITH we, goals, rules, collect(DISTINCT kelem.value) AS key_elements
-
-    OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
-      WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
-    WITH we, goals, rules, key_elements, collect(DISTINCT trait.value) AS traits
-
-    OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-      WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
-    WITH we, goals, rules, key_elements, traits,
-        collect(DISTINCT {{
-            chapter: elab.{KG_NODE_CHAPTER_UPDATED},
-            summary: elab.summary,
-            prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
-        }}) AS elaborations
-
-    RETURN we, goals, rules, key_elements, traits, elaborations
-    ORDER BY we.category, we.name
-    """
-
+    query = _build_world_elements_query(chapter_filter)
     we_results = await neo4j_manager.execute_read_query(query, we_params)
 
     if not we_results:
@@ -637,110 +762,19 @@ async def get_world_building_from_db(
             "No WorldElements found in Neo4j%s.",
             f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
         )
-        standard_categories = [
-            "locations",
-            "society",
-            "systems",
-            "lore",
-            "history",
-            "factions",
-        ]
-        for cat_key in standard_categories:
+        for cat_key in DEFAULT_WORLD_CATEGORIES:
             world_data.setdefault(cat_key, {})
         return world_data
 
     for record in we_results:
-        we_node = record.get("we")
-        if not we_node:
-            continue
-
-        category = we_node.get("category")
-        item_name = we_node.get("name")
-        we_id = we_node.get("id")
-
-        if not all([category, item_name, we_id]):
-            logger.warning(
-                f"Skipping WorldElement with missing core fields (id, name, or category): {we_node}"
-            )
-            continue
-
-        item_detail_dict = dict(we_node)
-        item_detail_dict.pop("created_ts", None)
-        item_detail_dict.pop("updated_ts", None)
-
-        created_chapter_num = item_detail_dict.pop(
-            KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
-        )
-        item_detail_dict["created_chapter"] = int(created_chapter_num)
-        item_detail_dict[kg_keys.added_key(created_chapter_num)] = True
-
-        is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
-        item_detail_dict["is_provisional"] = is_provisional_at_creation
-        if is_provisional_at_creation:
-            item_detail_dict[kg_keys.source_quality_key(created_chapter_num)] = (
-                "provisional_from_unrevised_draft"
-            )
-
-        item_detail_dict["goals"] = sorted(
-            [v for v in record.get("goals", []) if v is not None]
-        )
-        item_detail_dict["rules"] = sorted(
-            [v for v in record.get("rules", []) if v is not None]
-        )
-        item_detail_dict["key_elements"] = sorted(
-            [v for v in record.get("key_elements", []) if v is not None]
-        )
-        item_detail_dict["traits"] = sorted(
-            [v for v in record.get("traits", []) if v is not None]
-        )
-
-        actual_elaborations_count = 0
-        for elab_rec in record.get("elaborations", []):
-            chapter_val = elab_rec.get("chapter")
-            summary_val = elab_rec.get("summary")
-            if chapter_val is not None and summary_val is not None:
-                if chapter_limit is None or chapter_val <= chapter_limit:
-                    elab_key = kg_keys.elaboration_key(chapter_val)
-                    item_detail_dict[elab_key] = summary_val
-                    if elab_rec.get("prov"):
-                        item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
-                            "provisional_from_unrevised_draft"
-                        )
-                    actual_elaborations_count += 1
-
-        item_detail_dict["id"] = we_id
-
-        # Add to world_data if it's not filtered out by chapter_limit on its creation
-        # (The main query for we_results already handles this if chapter_limit is set)
-        # OR if it has elaborations within the chapter_limit.
-        if (
-            chapter_limit is None
-            or (
-                created_chapter_num is not None and created_chapter_num <= chapter_limit
-            )
-            or actual_elaborations_count > 0
-        ):
-            world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
-                category, item_name, item_detail_dict
-            )
-            WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
-        elif (
-            not (
-                created_chapter_num is not None and created_chapter_num <= chapter_limit
-            )
-            and actual_elaborations_count == 0
-            and chapter_limit is not None
-        ):
-            logger.debug(
-                f"WorldElement '{item_name}' (id: {we_id}) created in chapter {created_chapter_num} "
-                f"with no elaborations up to chapter {chapter_limit}, excluding."
-            )
+        _update_world_data_from_record(record, world_data, chapter_limit)
 
     num_elements_loaded = sum(
         len(items) for cat, items in world_data.items() if cat != "_overview_"
     )
     logger.info(
-        f"Successfully loaded and recomposed world building data ({num_elements_loaded} elements) from Neo4j%s.",
+        "Successfully loaded and recomposed world building data (%d elements) from Neo4j%s.",
+        num_elements_loaded,
         f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     return world_data
