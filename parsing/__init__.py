@@ -39,6 +39,50 @@ def _get_entity_type_and_name_from_text(entity_text: str) -> dict[str, str | Non
     }
 
 
+def _parse_relationships(rels_val: Any) -> dict[str, str]:
+    """Return normalized relationship dictionary."""
+    rels_dict: dict[str, str] = {}
+    if isinstance(rels_val, list):
+        for rel_entry in rels_val:
+            if isinstance(rel_entry, str):
+                if ":" in rel_entry:
+                    parts = rel_entry.split(":", 1)
+                    if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                        rels_dict[parts[0].strip()] = parts[1].strip()
+                    elif parts[0].strip():
+                        rels_dict[parts[0].strip()] = "related"
+                elif rel_entry.strip():
+                    rels_dict[rel_entry.strip()] = "related"
+            elif isinstance(rel_entry, dict):
+                target_name = rel_entry.get("name")
+                detail = rel_entry.get("detail", "related")
+                if target_name and isinstance(target_name, str) and target_name.strip():
+                    rels_dict[target_name] = detail
+    elif isinstance(rels_val, dict):
+        rels_dict = {str(k): str(v) for k, v in rels_val.items()}
+    return rels_dict
+
+
+def _ensure_dev_key(char_name: str, attrs: dict[str, Any], chapter_number: int) -> None:
+    """Standardize development event key in ``attrs``."""
+    dev_key_standard = kg_keys.development_key(chapter_number)
+    specific_dev_key = next(
+        (k for k in attrs if k.lower().replace(" ", "_") == dev_key_standard),
+        None,
+    )
+    if specific_dev_key and specific_dev_key != dev_key_standard:
+        attrs[dev_key_standard] = attrs.pop(specific_dev_key)
+
+    has_other = any(
+        k not in {"modification_proposal", dev_key_standard} and v
+        for k, v in attrs.items()
+    )
+    if not attrs.get(dev_key_standard) and has_other:
+        attrs[dev_key_standard] = (
+            f"Character '{char_name}' details updated in Chapter {chapter_number}."
+        )
+
+
 def parse_rdf_triples_with_rdflib(
     text_block: str,
     rdf_format: str = "turtle",
@@ -251,62 +295,11 @@ def parse_unified_character_updates(
                 if isinstance(t, str) and utils.normalize_trait_name(t)
             ]
 
-        rels_val = processed_char_attributes.get("relationships")
-        if isinstance(rels_val, list):
-            rels_list = rels_val
-            rels_dict: dict[str, str] = {}
-            for rel_entry in rels_list:
-                if isinstance(rel_entry, str):
-                    if ":" in rel_entry:
-                        parts = rel_entry.split(":", 1)
-                        if len(parts) == 2 and parts[0].strip() and parts[1].strip():
-                            rels_dict[parts[0].strip()] = parts[1].strip()
-                        elif parts[0].strip():
-                            rels_dict[parts[0].strip()] = "related"
-                    elif rel_entry.strip():
-                        rels_dict[rel_entry.strip()] = "related"
-                elif isinstance(rel_entry, dict):
-                    target_name = rel_entry.get("name")
-                    detail = rel_entry.get("detail", "related")
-                    if (
-                        target_name
-                        and isinstance(target_name, str)
-                        and target_name.strip()
-                    ):
-                        rels_dict[target_name] = detail
-            processed_char_attributes["relationships"] = rels_dict
-        elif isinstance(rels_val, dict):
-            processed_char_attributes["relationships"] = {
-                str(k): str(v) for k, v in rels_val.items()
-            }
-        else:
-            processed_char_attributes["relationships"] = {}
-
-        dev_key_standard = kg_keys.development_key(chapter_number)
-        specific_dev_key_from_llm = next(
-            (
-                k
-                for k in processed_char_attributes
-                if k.lower().replace(" ", "_") == dev_key_standard
-            ),
-            None,
+        processed_char_attributes["relationships"] = _parse_relationships(
+            processed_char_attributes.get("relationships")
         )
-        if specific_dev_key_from_llm and specific_dev_key_from_llm != dev_key_standard:
-            processed_char_attributes[dev_key_standard] = processed_char_attributes.pop(
-                specific_dev_key_from_llm
-            )
 
-        has_other_meaningful_attrs = any(
-            k not in ["modification_proposal", dev_key_standard] and v
-            for k, v in processed_char_attributes.items()
-        )
-        if (
-            not processed_char_attributes.get(dev_key_standard)
-            and has_other_meaningful_attrs
-        ):
-            processed_char_attributes[dev_key_standard] = (
-                f"Character '{char_name}' details updated in Chapter {chapter_number}."
-            )
+        _ensure_dev_key(char_name, processed_char_attributes, chapter_number)
 
         try:
             char_updates[char_name] = CharacterProfile.from_dict(

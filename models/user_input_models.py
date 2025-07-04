@@ -90,6 +90,54 @@ class UserStoryInputModel(BaseModel):
     symbolism: list[dict[str, str]] | None = None
 
 
+def _add_character_profile(
+    characters: dict[str, CharacterProfile], info: ProtagonistModel, role: str
+) -> None:
+    """Create and store a ``CharacterProfile`` from the supplied model."""
+    cp = CharacterProfile(name=info.name)
+    cp.description = info.description or ""
+    cp.traits = info.traits
+    cp.relationships = {
+        rel_key: rel.model_dump(exclude_none=True)
+        for rel_key, rel in info.relationships.items()
+    }
+    cp.status = "As described"
+    cp.updates["role"] = role
+    if hasattr(info, "motivation"):
+        cp.updates["motivation"] = info.motivation or ""
+    characters[cp.name] = cp
+
+
+def _add_world_items_from_setting(
+    setting: SettingModel, world_items: dict[str, dict[str, WorldItem]]
+) -> None:
+    """Populate ``world_items`` from the ``SettingModel``."""
+    world_items.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
+        "_overview_",
+        "_overview_",
+        {"description": setting.primary_setting_overview or ""},
+    )
+    for loc in setting.key_locations:
+        world_items.setdefault("locations", {})[loc.name] = WorldItem.from_dict(
+            "locations",
+            loc.name,
+            {"description": loc.description or "", "atmosphere": loc.atmosphere or ""},
+        )
+
+
+def _add_world_details(
+    details: dict[str, Any], world_items: dict[str, dict[str, WorldItem]]
+) -> None:
+    """Add world items from ``details`` dict."""
+    for category, items in details.items():
+        world_items.setdefault(category, {})
+        if isinstance(items, dict):
+            for item_name, item_details in items.items():
+                world_items[category][item_name] = WorldItem.from_dict(
+                    category, item_name, item_details
+                )
+
+
 def user_story_to_objects(
     model: UserStoryInputModel,
 ) -> tuple[
@@ -106,54 +154,34 @@ def user_story_to_objects(
         if model.novel_concept.setting is not None:
             plot_outline["setting"] = model.novel_concept.setting
 
-    main_char_model = model.protagonist
-    if not main_char_model and model.characters:
-        main_char_model = model.characters.protagonist
+    main_char_model = model.protagonist or (
+        model.characters.protagonist if model.characters else None
+    )
     if main_char_model:
         plot_outline["protagonist_name"] = main_char_model.name
-
-        cp = CharacterProfile(name=main_char_model.name)
-        cp.description = main_char_model.description or ""
-        cp.traits = main_char_model.traits
-        cp.relationships = {
-            rel_key: rel.model_dump(exclude_none=True)
-            for rel_key, rel in main_char_model.relationships.items()
-        }
-        cp.status = "As described"
-        cp.updates["role"] = main_char_model.role or "protagonist"
-        cp.updates["motivation"] = main_char_model.motivation or ""
-        characters[cp.name] = cp
+        _add_character_profile(
+            characters, main_char_model, main_char_model.role or "protagonist"
+        )
 
     antagonist_model = model.antagonist
     if not antagonist_model and model.characters:
         antagonist_model = model.characters.antagonist
     if antagonist_model:
-        ant_cp = CharacterProfile(name=antagonist_model.name)
-        ant_cp.description = antagonist_model.description or ""
-        ant_cp.traits = antagonist_model.traits
-        ant_cp.relationships = {
-            rel_key: rel.model_dump(exclude_none=True)
-            for rel_key, rel in antagonist_model.relationships.items()
-        }
-        ant_cp.status = "As described"
-        ant_cp.updates["role"] = antagonist_model.role or "antagonist"
-        characters[ant_cp.name] = ant_cp
+        _add_character_profile(
+            characters,
+            antagonist_model,
+            antagonist_model.role or "antagonist",
+        )
 
     if model.other_key_characters:
         for _name, info in model.other_key_characters.items():
-            cp = CharacterProfile(name=info.name)
-            cp.description = info.description or ""
-            cp.traits = info.traits
-            cp.updates["role"] = "other_key_character"
-            characters[cp.name] = cp
+            _add_character_profile(characters, info, "other_key_character")
 
     if model.characters and model.characters.supporting_characters:
         for info in model.characters.supporting_characters:
-            cp = CharacterProfile(name=info.name)
-            cp.description = info.description or ""
-            cp.traits = info.traits
-            cp.updates["role"] = info.role or "supporting_character"
-            characters[cp.name] = cp
+            _add_character_profile(
+                characters, info, info.role or "supporting_character"
+            )
 
     if model.plot_elements:
         plot_outline["inciting_incident"] = model.plot_elements.inciting_incident
@@ -162,20 +190,7 @@ def user_story_to_objects(
         plot_outline["stakes"] = model.plot_elements.stakes
 
     if model.setting:
-        world_items.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
-            "_overview_",
-            "_overview_",
-            {"description": model.setting.primary_setting_overview or ""},
-        )
-        for loc in model.setting.key_locations:
-            world_items.setdefault("locations", {})[loc.name] = WorldItem.from_dict(
-                "locations",
-                loc.name,
-                {
-                    "description": loc.description or "",
-                    "atmosphere": loc.atmosphere or "",
-                },
-            )
+        _add_world_items_from_setting(model.setting, world_items)
 
     if model.style_and_tone:
         if "narrative_style" in model.style_and_tone:
@@ -186,12 +201,6 @@ def user_story_to_objects(
             plot_outline["pacing"] = model.style_and_tone["pacing"]
 
     if model.world_details:
-        for category, items in model.world_details.items():
-            world_items.setdefault(category, {})
-            if isinstance(items, dict):
-                for item_name, item_details in items.items():
-                    world_items[category][item_name] = WorldItem.from_dict(
-                        category, item_name, item_details
-                    )
+        _add_world_details(model.world_details, world_items)
 
     return plot_outline, characters, world_items if world_items else []

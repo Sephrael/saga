@@ -18,6 +18,131 @@ logger = structlog.get_logger(__name__)
 neo4j_manager_instance = Neo4jManagerSingleton()
 
 
+async def _connect_with_retries(
+    uri: str, max_retries: int = 5, retry_delay: int = 5
+) -> None:
+    """Connect to Neo4j with retry logic."""
+    for attempt in range(max_retries):
+        try:
+            logger.info(
+                "Connecting to Neo4j database at %s (Attempt %s/%s)...",
+                uri,
+                attempt + 1,
+                max_retries,
+            )
+            await neo4j_manager_instance.connect()
+            logger.info("Successfully connected to Neo4j.")
+            return
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                logger.warning(
+                    "Connection failed: %s. Retrying in %s seconds...", exc, retry_delay
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Could not connect to Neo4j after multiple retries.")
+                raise
+
+
+async def _delete_all_nodes() -> int:
+    """Delete all nodes and relationships from the database."""
+    nodes_deleted_total = 0
+    while True:
+        async with neo4j_manager_instance.driver.session(
+            database=settings.NEO4J_DATABASE
+        ) as session:  # type: ignore
+            tx = await session.begin_transaction()
+            result = await tx.run(
+                "MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch"
+            )
+            single_result_batch = await result.single()
+            await tx.commit()
+            deleted_in_batch = (
+                single_result_batch["deleted_nodes_batch"] if single_result_batch else 0
+            )
+            nodes_deleted_total += deleted_in_batch
+            if deleted_in_batch == 0:
+                break
+            logger.info("   Deleted %s nodes in this batch...", deleted_in_batch)
+    return nodes_deleted_total
+
+
+async def _drop_all_constraints() -> None:
+    """Drop all user-defined constraints."""
+    async with neo4j_manager_instance.driver.session(
+        database=settings.NEO4J_DATABASE
+    ) as session:  # type: ignore
+        constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
+        constraints_to_drop = [
+            record["name"]
+            for record in await constraints_result.data()
+            if record["name"]
+        ]
+        if not constraints_to_drop:
+            logger.info("   No user-defined constraints found to drop.")
+            return
+        for constraint_name in constraints_to_drop:
+            try:
+                logger.info("   Attempting to drop constraint: %s", constraint_name)
+                tx = await session.begin_transaction()
+                await tx.run(f"DROP CONSTRAINT {constraint_name} IF EXISTS")
+                await tx.commit()
+                logger.info(
+                    "      Dropped constraint '%s' (or it didn't exist).",
+                    constraint_name,
+                )
+            except Exception as exc:
+                if tx and not tx.closed():  # type: ignore
+                    await tx.rollback()
+                logger.warning(
+                    "   Note: Could not drop constraint '%s': %s", constraint_name, exc
+                )
+
+
+async def _drop_all_indexes() -> None:
+    """Drop all user-defined indexes."""
+    async with neo4j_manager_instance.driver.session(
+        database=settings.NEO4J_DATABASE
+    ) as session:  # type: ignore
+        indexes_result = await session.run("SHOW INDEXES YIELD name, type")
+        indexes_to_drop_info: list[dict[str, Any]] = await indexes_result.data()
+        if not indexes_to_drop_info:
+            logger.info("   No user-defined indexes found to drop.")
+            return
+        for index_info in indexes_to_drop_info:
+            index_name = index_info.get("name")
+            index_type = index_info.get("type", "").upper()
+            if (
+                index_name
+                and "tokenLookup" not in index_name.lower()
+                and "system" not in index_type.lower()
+            ):
+                try:
+                    logger.info(
+                        "   Attempting to drop index: %s (type: %s)",
+                        index_name,
+                        index_type,
+                    )
+                    tx = await session.begin_transaction()
+                    await tx.run(f"DROP INDEX {index_name} IF EXISTS")
+                    await tx.commit()
+                    logger.info(
+                        "      Dropped index '%s' (or it didn't exist).", index_name
+                    )
+                except Exception as exc:
+                    if tx and not tx.closed():  # type: ignore
+                        await tx.rollback()
+                    logger.warning(
+                        "   Note: Could not drop index '%s': %s", index_name, exc
+                    )
+            elif index_name:
+                logger.info(
+                    "   Skipping potential system/lookup index: %s (type: %s)",
+                    index_name,
+                    index_type,
+                )
+
+
 async def reset_neo4j_database_async(uri, user, password, confirm=False):
     """
     Asynchronously resets a Neo4j database by:
@@ -52,25 +177,7 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
     )
 
     try:
-        max_retries = 5
-        retry_delay = 5  # seconds
-        for attempt in range(max_retries):
-            try:
-                logger.info(
-                    f"Connecting to Neo4j database at {effective_uri} (Attempt {attempt + 1}/{max_retries})..."
-                )
-                await neo4j_manager_instance.connect()
-                logger.info("Successfully connected to Neo4j.")
-                break  # Exit loop on successful connection
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Connection failed: {e}. Retrying in {retry_delay} seconds..."
-                    )
-                    await asyncio.sleep(retry_delay)
-                else:
-                    logger.error("Could not connect to Neo4j after multiple retries.")
-                    raise  # Re-raise the last exception if all retries fail
+        await _connect_with_retries(effective_uri)
 
         async with neo4j_manager_instance.driver.session(
             database=settings.NEO4J_DATABASE,
@@ -82,113 +189,16 @@ async def reset_neo4j_database_async(uri, user, password, confirm=False):
 
         logger.info("Resetting database data (nodes and relationships)...")
         start_time = time.time()
-
-        nodes_deleted_total = 0
-        while True:
-            async with neo4j_manager_instance.driver.session(
-                database=settings.NEO4J_DATABASE,
-            ) as session:  # type: ignore
-                tx = await session.begin_transaction()
-                result = await tx.run(
-                    "MATCH (n) WITH n LIMIT 10000 DETACH DELETE n RETURN count(n) as deleted_nodes_batch"
-                )
-                single_result_batch = await result.single()
-                await tx.commit()
-                deleted_in_batch = (
-                    single_result_batch["deleted_nodes_batch"]
-                    if single_result_batch
-                    else 0
-                )
-                nodes_deleted_total += deleted_in_batch
-                if deleted_in_batch == 0:
-                    break
-                logger.info(f"   Deleted {deleted_in_batch} nodes in this batch...")
-        logger.info(f"   Total {nodes_deleted_total} nodes deleted.")
+        nodes_deleted_total = await _delete_all_nodes()
+        logger.info("   Total %s nodes deleted.", nodes_deleted_total)
 
         logger.info("Attempting to drop ALL user-defined constraints...")
-        async with neo4j_manager_instance.driver.session(
-            database=settings.NEO4J_DATABASE,
-        ) as session:  # type: ignore
-            constraints_result = await session.run("SHOW CONSTRAINTS YIELD name")
-            constraints_to_drop: list[str] = [
-                record["name"]
-                for record in await constraints_result.data()
-                if record["name"]
-            ]
-
-            if not constraints_to_drop:
-                logger.info("   No user-defined constraints found to drop.")
-            else:
-                for constraint_name in constraints_to_drop:
-                    try:
-                        logger.info(
-                            f"   Attempting to drop constraint: {constraint_name}"
-                        )
-                        tx = await session.begin_transaction()
-                        await tx.run(f"DROP CONSTRAINT {constraint_name} IF EXISTS")
-                        await tx.commit()
-                        logger.info(
-                            f"      Dropped constraint '{constraint_name}' (or it didn't exist)."
-                        )
-                    except Exception as e_constraint:
-                        if tx and not tx.closed():  # type: ignore
-                            await tx.rollback()
-                        logger.warning(
-                            f"   Note: Could not drop constraint '{constraint_name}': {e_constraint}"
-                        )
+        await _drop_all_constraints()
 
         logger.info(
             "Attempting to drop ALL user-defined indexes (excluding system indexes if identifiable)..."
         )
-        async with neo4j_manager_instance.driver.session(
-            database=settings.NEO4J_DATABASE,
-        ) as session:  # type: ignore
-            # Query for indexes, trying to filter out system ones if possible (type might not always be 'SYSTEM_LOOKUP')
-            # The most reliable way is usually by name patterns if system indexes have those, or by excluding known types.
-            # For now, we will attempt to drop all that are not of type 'LOOKUP' for node_label_property which could be old schema index.
-            # And also not 'RANGE' or 'POINT' unless we are sure SAGA doesn't use them (it mostly uses BTREE for properties and VECTOR).
-            # A simpler approach for a full reset is to try dropping all and let `IF EXISTS` handle it.
-            indexes_result = await session.run("SHOW INDEXES YIELD name, type")
-            indexes_to_drop_info: list[dict[str, Any]] = await indexes_result.data()
-
-            if not indexes_to_drop_info:
-                logger.info("   No user-defined indexes found to drop.")
-            else:
-                for index_info in indexes_to_drop_info:
-                    index_name = index_info.get("name")
-                    index_type = index_info.get(
-                        "type", ""
-                    ).upper()  # VECTOR, BTREE, TEXT, FULLTEXT, POINT, RANGE, LOOKUP
-
-                    # Heuristic: Avoid dropping system/lookup indexes that Neo4j might manage internally for constraints.
-                    # Typically, SAGA creates BTREE (for property indexes) and VECTOR indexes.
-                    # Other types might be from older versions or manual creation.
-                    # `tokenLookup` is often for fulltext schema indexes.
-                    if (
-                        index_name
-                        and "tokenLookup" not in index_name.lower()
-                        and "system" not in index_type.lower()
-                    ):
-                        try:
-                            logger.info(
-                                f"   Attempting to drop index: {index_name} (type: {index_type})"
-                            )
-                            tx = await session.begin_transaction()
-                            await tx.run(f"DROP INDEX {index_name} IF EXISTS")
-                            await tx.commit()
-                            logger.info(
-                                f"      Dropped index '{index_name}' (or it didn't exist)."
-                            )
-                        except Exception as e_index:
-                            if tx and not tx.closed():  # type: ignore
-                                await tx.rollback()
-                            logger.warning(
-                                f"   Note: Could not drop index '{index_name}': {e_index}"
-                            )
-                    elif index_name:
-                        logger.info(
-                            f"   Skipping potential system/lookup index: {index_name} (type: {index_type})"
-                        )
+        await _drop_all_indexes()
 
         elapsed_time = time.time() - start_time
         logger.info(
