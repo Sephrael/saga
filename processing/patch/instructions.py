@@ -22,6 +22,112 @@ from .context import (
 logger = structlog.get_logger(__name__)
 
 
+def _build_plan_section(
+    chapter_plan: list[SceneDetail] | None,
+    plot_point_focus: str | None,
+    chapter_number: int,
+) -> str:
+    """Return plan focus section for the patch prompt."""
+    parts: list[str] = []
+    max_plan_tokens = settings.MAX_CONTEXT_TOKENS // 2
+    if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
+        formatted = _get_formatted_scene_plan_from_agent_or_fallback(
+            chapter_plan,
+            settings.PATCH_GENERATION_MODEL,
+            max_plan_tokens,
+        )
+        parts.append(formatted)
+        if "plan truncated" in formatted:
+            logger.warning(
+                "Scene plan token-truncated for Ch %s patch generation prompt.",
+                chapter_number,
+            )
+    else:
+        parts.append(
+            f"**Original Chapter Focus (Reference for overall chapter direction):**\n{plot_point_focus or 'Not specified.'}\n"
+        )
+    return "".join(parts)
+
+
+def _build_length_instructions(
+    problem: ProblemDetail,
+    original_quote_text: str,
+    chapter_number: int,
+    original_snippet_tokens: int,
+) -> tuple[bool, str, str, int]:
+    """Return length expansion flags and instructions."""
+    header_parts: list[str] = []
+    is_general = False
+    if problem.issue_category == "narrative_depth_and_length" and (
+        "short" in problem.problem_description.lower()
+        or "length" in problem.problem_description.lower()
+        or "expand" in problem.suggested_fix_focus.lower()
+        or "depth" in problem.problem_description.lower()
+        or original_quote_text == "N/A - General Issue"
+    ):
+        header_parts.append(
+            "\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** "
+        )
+        header_parts.append(
+            "The 'replace_with' text MUST be significantly longer and more detailed. "
+        )
+        header_parts.append(
+            "Add descriptive details, character thoughts, dialogue, actions, and sensory information. "
+        )
+        if original_quote_text == "N/A - General Issue":
+            is_general = True
+            header_parts.append(
+                "Since the original quote is 'N/A - General Issue', your 'replace_with' text should be a **new, expanded passage** "
+                "that addresses the 'Problem Description' and 'Suggested Fix Focus' within the broader 'Text Snippet' context. "
+                "This generated text is intended as a candidate for insertion or to inform a broader rewrite of a section."
+            )
+        else:
+            header_parts.append(
+                "Aim for a notable increase in length and detail for the conceptual segment related to the original quote."
+            )
+    header_str = "".join(header_parts)
+
+    scope_parts: list[str] = []
+    max_tokens = 0
+    if is_general:
+        scope_parts.append(
+            "    - The 'Original Quote Illustrating Problem' is \"N/A - General Issue\". Therefore, your `replace_with` text should be a **new, self-contained, and substantially expanded passage** "
+            'that addresses the "Problem Description" and "Suggested Fix Focus" as guided by the `length_expansion_instruction_header_str`. '
+            "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
+        )
+        max_tokens = max(settings.MAX_GENERATION_TOKENS // 2, 750)
+        logger.info(
+            "Patch (Ch %s, general expansion): Max output tokens set to %s.",
+            chapter_number,
+            max_tokens,
+        )
+    else:
+        scope_parts.append(
+            "    - The 'Original Quote Illustrating Problem' is specific. Your `replace_with` text should be a revised version "
+            "of the **entire conceptual sentence or short paragraph** within the 'ORIGINAL TEXT SNIPPET' that best corresponds to that quote. Your output will replace that whole segment.\n"
+            "    - **Crucially, for this specific fix, your replacement text should primarily focus on correcting the identified issue. "
+        )
+        if header_str:
+            scope_parts.append(
+                "If `length_expansion_instruction_header_str` is present, apply its guidance to *this specific segment*. "
+            )
+        scope_parts.append(
+            "Otherwise, aim for a length comparable to the original segment, plus necessary additions for the fix. "
+            "Avoid excessive unrelated expansion beyond the scope of the problem for this segment.**"
+        )
+        expansion_factor = 2.5 if header_str else 1.5
+        max_tokens = int(original_snippet_tokens * expansion_factor)
+        max_tokens = min(max_tokens, settings.MAX_GENERATION_TOKENS // 2)
+        max_tokens = max(max_tokens, 200)
+        logger.info(
+            "Patch (Ch %s, specific fix): Original snippet tokens: %s. Max output tokens set to %s.",
+            chapter_number,
+            original_snippet_tokens,
+            max_tokens,
+        )
+    return is_general, header_str, "".join(scope_parts), max_tokens
+
+
 async def _generate_single_patch_instruction_llm(
     plot_outline: dict[str, Any],
     original_chapter_text_snippet_for_llm: str,
@@ -52,110 +158,25 @@ async def _generate_single_patch_instruction_llm(
         A ``PatchInstruction`` with replacement text and optional token usage
         statistics, or ``None`` if generation failed.
     """
-    plan_focus_section_parts: list[str] = []
-    max_plan_tokens_for_patch_prompt = settings.MAX_CONTEXT_TOKENS // 2
-
-    if settings.ENABLE_AGENTIC_PLANNING and chapter_plan:
-        formatted_plan = _get_formatted_scene_plan_from_agent_or_fallback(
-            chapter_plan,
-            settings.PATCH_GENERATION_MODEL,
-            max_plan_tokens_for_patch_prompt,
-        )
-        plan_focus_section_parts.append(formatted_plan)
-        if "plan truncated" in formatted_plan:
-            logger.warning(
-                "Scene plan token-truncated for Ch %s patch generation prompt.",
-                chapter_number,
-            )
-    else:
-        plan_focus_section_parts.append(
-            f"**Original Chapter Focus (Reference for overall chapter direction):**\n{plot_point_focus or 'Not specified.'}\n"
-        )
-    plan_focus_section_str = "".join(plan_focus_section_parts)
-
-    is_general_expansion_task = False
-    length_expansion_instruction_header_parts: list[str] = []
-    original_quote_text_from_problem = problem.quote_from_original_text
-
-    if problem.issue_category == "narrative_depth_and_length" and (
-        "short" in problem.problem_description.lower()
-        or "length" in problem.problem_description.lower()
-        or "expand" in problem.suggested_fix_focus.lower()
-        or "depth" in problem.problem_description.lower()
-        or original_quote_text_from_problem == "N/A - General Issue"
-    ):
-        length_expansion_instruction_header_parts.append(
-            "\n**Critical: SUBSTANTIAL EXPANSION REQUIRED FOR THIS SEGMENT/PASSAGE.** "
-        )
-        length_expansion_instruction_header_parts.append(
-            "The 'replace_with' text MUST be significantly longer and more detailed. "
-        )
-        length_expansion_instruction_header_parts.append(
-            "Add descriptive details, character thoughts, dialogue, actions, and sensory information. "
-        )
-        if original_quote_text_from_problem == "N/A - General Issue":
-            is_general_expansion_task = True
-            length_expansion_instruction_header_parts.append(
-                "Since the original quote is 'N/A - General Issue', your 'replace_with' text should be a **new, expanded passage** "
-                "that addresses the 'Problem Description' and 'Suggested Fix Focus' within the broader 'Text Snippet' context. "
-                "This generated text is intended as a candidate for insertion or to inform a broader rewrite of a section."
-            )
-        else:
-            length_expansion_instruction_header_parts.append(
-                "Aim for a notable increase in length and detail for the conceptual segment related to the original quote."
-            )
-    length_expansion_instruction_header_str = "".join(
-        length_expansion_instruction_header_parts
+    plan_focus_section_str = _build_plan_section(
+        chapter_plan, plot_point_focus, chapter_number
     )
 
-    prompt_instruction_for_replacement_scope_parts: list[str] = []
-    max_patch_output_tokens = 0
-
-    if is_general_expansion_task:
-        prompt_instruction_for_replacement_scope_parts.append(
-            "    - The 'Original Quote Illustrating Problem' is \"N/A - General Issue\". Therefore, your `replace_with` text should be a **new, self-contained, and substantially expanded passage** "
-            'that addresses the "Problem Description" and "Suggested Fix Focus" as guided by the `length_expansion_instruction_header_str`. '
-            "This new passage is intended for potential insertion into the chapter, not to replace a specific quote."
-        )
-        max_patch_output_tokens = settings.MAX_GENERATION_TOKENS // 2
-        max_patch_output_tokens = max(max_patch_output_tokens, 750)
-        logger.info(
-            "Patch (Ch %s, general expansion): Max output tokens set to %s.",
-            chapter_number,
-            max_patch_output_tokens,
-        )
-    else:
-        prompt_instruction_for_replacement_scope_parts.append(
-            "    - The 'Original Quote Illustrating Problem' is specific. Your `replace_with` text should be a revised version "
-            "of the **entire conceptual sentence or short paragraph** within the 'ORIGINAL TEXT SNIPPET' that best corresponds to that quote. Your output will replace that whole segment.\n"
-            "    - **Crucially, for this specific fix, your replacement text should primarily focus on correcting the identified issue. "
-        )
-        if length_expansion_instruction_header_str:
-            prompt_instruction_for_replacement_scope_parts.append(
-                "If `length_expansion_instruction_header_str` is present, apply its guidance to *this specific segment*. "
-            )
-        prompt_instruction_for_replacement_scope_parts.append(
-            "Otherwise, aim for a length comparable to the original segment, plus necessary additions for the fix. "
-            "Avoid excessive unrelated expansion beyond the scope of the problem for this segment.**"
-        )
-        original_snippet_tokens = count_tokens(
-            original_chapter_text_snippet_for_llm,
-            settings.PATCH_GENERATION_MODEL,
-        )
-        expansion_factor = 2.5 if length_expansion_instruction_header_str else 1.5
-        max_patch_output_tokens = int(original_snippet_tokens * expansion_factor)
-        max_patch_output_tokens = min(
-            max_patch_output_tokens, settings.MAX_GENERATION_TOKENS // 2
-        )
-        max_patch_output_tokens = max(max_patch_output_tokens, 200)
-        logger.info(
-            "Patch (Ch %s, specific fix): Original snippet tokens: %s. Max output tokens set to %s.",
-            chapter_number,
-            original_snippet_tokens,
-            max_patch_output_tokens,
-        )
-    prompt_instruction_for_replacement_scope_str = "".join(
-        prompt_instruction_for_replacement_scope_parts
+    original_quote_text_from_problem = problem.quote_from_original_text
+    original_snippet_tokens = count_tokens(
+        original_chapter_text_snippet_for_llm,
+        settings.PATCH_GENERATION_MODEL,
+    )
+    (
+        is_general_expansion_task,
+        length_expansion_instruction_header_str,
+        prompt_instruction_for_replacement_scope_str,
+        max_patch_output_tokens,
+    ) = _build_length_instructions(
+        problem,
+        original_quote_text_from_problem,
+        chapter_number,
+        original_snippet_tokens,
     )
 
     protagonist_name = plot_outline.get(

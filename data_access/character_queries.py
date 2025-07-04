@@ -31,6 +31,153 @@ def resolve_character_name(name: str) -> str:
 logger = structlog.get_logger(__name__)
 
 
+async def _get_existing_character_names() -> set[str]:
+    """Return current character names from the database."""
+    try:
+        records = await neo4j_manager.execute_read_query(
+            "MATCH (c:Character:Entity)"
+            " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
+            " RETURN c.name AS name"
+        )
+        return {record["name"] for record in records if record and record.get("name")}
+    except Exception as exc:  # pragma: no cover - log and re-raise
+        logger.error(
+            "Failed to retrieve existing character names from DB: %s",
+            exc,
+            exc_info=True,
+        )
+        raise
+
+
+def _build_dev_event_statements(
+    char_name: str, profile_dict: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return Cypher statements for development events defined in ``profile_dict``."""
+    statements: list[tuple[str, dict[str, Any]]] = []
+    for key, value_str in profile_dict.items():
+        if (
+            key.startswith(kg_keys.DEVELOPMENT_PREFIX)
+            and isinstance(value_str, str)
+            and value_str.strip()
+        ):
+            try:
+                chap_num_int = kg_keys.parse_development_key(key)
+                if chap_num_int is None:
+                    continue
+                dev_event_summary = value_str.strip()
+                dev_event_id = f"dev_{utils._normalize_for_id(char_name)}_ch{chap_num_int}_{hash(dev_event_summary)}"
+                dev_event_props = {
+                    "id": dev_event_id,
+                    "summary": dev_event_summary,
+                    KG_NODE_CHAPTER_UPDATED: chap_num_int,
+                    KG_IS_PROVISIONAL: profile_dict.get(
+                        kg_keys.source_quality_key(chap_num_int)
+                    )
+                    == "provisional_from_unrevised_draft",
+                }
+                statements.append(
+                    (
+                        """
+                        MATCH (c:Character:Entity {name: $char_name_val})
+                        CREATE (dev:Entity:DevelopmentEvent)
+                        SET dev = $props, dev.created_ts = timestamp()
+                        CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
+                        """,
+                        {"char_name_val": char_name, "props": dev_event_props},
+                    )
+                )
+            except (ValueError, IndexError):
+                logger.warning(
+                    "Could not parse chapter number from dev key: %s for char %s",
+                    key,
+                    char_name,
+                )
+    return statements
+
+
+def _build_relationship_statements(
+    char_name: str, profile_dict: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return Cypher statements for profile-defined relationships."""
+    statements: list[tuple[str, dict[str, Any]]] = []
+    profile_defined_rels = profile_dict.get("relationships", {})
+    target_chars_in_profile_rels: set[str] = set()
+    if isinstance(profile_defined_rels, dict):
+        target_chars_in_profile_rels = {
+            str(k).strip() for k in profile_defined_rels if str(k).strip()
+        }
+
+    statements.append(
+        (
+            """
+            MATCH (c1:Character:Entity {name: $char_name_val})-[r:DYNAMIC_REL]->(c2:Entity)
+            WHERE r.source_profile_managed = TRUE AND NOT c2.name IN $target_chars_list
+            DELETE r
+            """,
+            {
+                "char_name_val": char_name,
+                "target_chars_list": list(target_chars_in_profile_rels),
+            },
+        )
+    )
+
+    if isinstance(profile_defined_rels, dict):
+        for target_char_name_str, rel_detail in profile_defined_rels.items():
+            target_char_name = str(target_char_name_str).strip()
+            if not target_char_name:
+                continue
+
+            rel_type_str = "RELATED_TO"
+            rel_cypher_props = {"source_profile_managed": True, "confidence": 1.0}
+
+            chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM
+            if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
+                with contextlib.suppress(ValueError, TypeError):
+                    chapter_added_val = int(rel_detail["chapter_added"])
+            rel_cypher_props["chapter_added"] = chapter_added_val
+
+            if isinstance(rel_detail, str) and rel_detail.strip():
+                rel_cypher_props["description"] = rel_detail.strip()
+                if rel_detail.isupper() and " " not in rel_detail:
+                    rel_type_str = rel_detail
+            elif isinstance(rel_detail, dict):
+                rel_type_str = (
+                    str(rel_detail.get("type", rel_type_str)).upper().replace(" ", "_")
+                )
+                for k_rel, v_rel in rel_detail.items():
+                    if isinstance(v_rel, str | int | float | bool) and k_rel not in {
+                        "type",
+                        "chapter_added",
+                    }:
+                        rel_cypher_props[k_rel] = v_rel
+
+            rel_cypher_props[KG_IS_PROVISIONAL] = (
+                profile_dict.get(kg_keys.source_quality_key(chapter_added_val))
+                == "provisional_from_unrevised_draft"
+            )
+
+            statements.append(
+                (
+                    """
+                    MATCH (s:Character:Entity {name: $subject_param})
+                    MERGE (o:Entity {name: $object_param})
+                        ON CREATE SET o.description = 'Auto-created via relationship from ' + $subject_param, o.created_ts = timestamp()
+                    MERGE (s)-[r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_val }]->(o)
+                    ON CREATE SET r = $props_param, r.created_ts = timestamp()
+                    ON MATCH SET  r += $props_param, r.updated_ts = timestamp()
+                    """,
+                    {
+                        "subject_param": char_name,
+                        "object_param": target_char_name,
+                        "predicate_param": rel_type_str,
+                        "chapter_added_val": chapter_added_val,
+                        "props_param": rel_cypher_props,
+                    },
+                )
+            )
+    return statements
+
+
 async def sync_characters(
     profiles: dict[str, CharacterProfile],
     chapter_number: int,
@@ -77,20 +224,8 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
     all_input_char_names: set[str] = set(profiles_data.keys())
 
     try:
-        existing_char_records = await neo4j_manager.execute_read_query(
-            "MATCH (c:Character:Entity)"
-            " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
-            " RETURN c.name AS name"
-        )
-        existing_db_char_names: set[str] = {
-            record["name"]
-            for record in existing_char_records
-            if record and record["name"]
-        }
-    except Exception as e:
-        logger.error(
-            f"Failed to retrieve existing character names from DB: {e}", exc_info=True
-        )
+        existing_db_char_names = await _get_existing_character_names()
+    except Exception:
         return False
 
     chars_to_delete = existing_db_char_names - all_input_char_names
@@ -108,7 +243,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
 
     for char_name, profile_dict in profiles_data.items():
         if not isinstance(profile_dict, dict):
-            logger.warning(f"Skipping invalid profile for '{char_name}' (not a dict).")
+            logger.warning("Skipping invalid profile for '%s' (not a dict).", char_name)
             continue
 
         char_direct_props = {
@@ -150,7 +285,7 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
             if isinstance(t, str) and utils.normalize_trait_name(str(t))
         }
         for trait in current_profile_traits:
-            TRAIT_NAME_TO_CANONICAL[trait] = trait  # canonical mapping to itself
+            TRAIT_NAME_TO_CANONICAL[trait] = trait
 
         statements.append(
             (
@@ -196,127 +331,8 @@ async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bo
             )
         )
 
-        for key, value_str in profile_dict.items():
-            if (
-                key.startswith(kg_keys.DEVELOPMENT_PREFIX)
-                and isinstance(value_str, str)
-                and value_str.strip()
-            ):
-                try:
-                    chap_num_int = kg_keys.parse_development_key(key)
-                    if chap_num_int is None:
-                        continue
-
-                    dev_event_summary = value_str.strip()
-                    dev_event_id = f"dev_{utils._normalize_for_id(char_name)}_ch{chap_num_int}_{hash(dev_event_summary)}"
-
-                    dev_event_props = {
-                        "id": dev_event_id,
-                        "summary": dev_event_summary,
-                        KG_NODE_CHAPTER_UPDATED: chap_num_int,
-                        KG_IS_PROVISIONAL: profile_dict.get(
-                            kg_keys.source_quality_key(chap_num_int)
-                        )
-                        == "provisional_from_unrevised_draft",
-                    }
-
-                    statements.append(
-                        (
-                            """
-                        MATCH (c:Character:Entity {name: $char_name_val})
-                        CREATE (dev:Entity:DevelopmentEvent)
-                        SET dev = $props, dev.created_ts = timestamp()
-                        CREATE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
-                        """,
-                            {"char_name_val": char_name, "props": dev_event_props},
-                        )
-                    )
-                except (ValueError, IndexError):
-                    logger.warning(
-                        f"Could not parse chapter number from dev key: {key} for char {char_name}"
-                    )
-
-        profile_defined_rels = profile_dict.get("relationships", {})
-        target_chars_in_profile_rels: set[str] = set()
-        if isinstance(profile_defined_rels, dict):
-            target_chars_in_profile_rels = {
-                str(k).strip() for k in profile_defined_rels if str(k).strip()
-            }
-
-        statements.append(
-            (
-                """
-            MATCH (c1:Character:Entity {name: $char_name_val})-[r:DYNAMIC_REL]->(c2:Entity)
-            WHERE r.source_profile_managed = TRUE AND NOT c2.name IN $target_chars_list
-            DELETE r
-            """,
-                {
-                    "char_name_val": char_name,
-                    "target_chars_list": list(target_chars_in_profile_rels),
-                },
-            )
-        )
-
-        if isinstance(profile_defined_rels, dict):
-            for target_char_name_str, rel_detail in profile_defined_rels.items():
-                target_char_name = str(target_char_name_str).strip()
-                if not target_char_name:
-                    continue
-
-                rel_type_str = "RELATED_TO"
-                rel_cypher_props = {
-                    "source_profile_managed": True,
-                    "confidence": 1.0,
-                }
-
-                chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM
-                if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
-                    with contextlib.suppress(ValueError, TypeError):
-                        chapter_added_val = int(rel_detail["chapter_added"])
-                rel_cypher_props["chapter_added"] = chapter_added_val
-
-                if isinstance(rel_detail, str) and rel_detail.strip():
-                    rel_cypher_props["description"] = rel_detail.strip()
-                    if rel_detail.isupper() and " " not in rel_detail:
-                        rel_type_str = rel_detail
-                elif isinstance(rel_detail, dict):
-                    rel_type_str = (
-                        str(rel_detail.get("type", rel_type_str))
-                        .upper()
-                        .replace(" ", "_")
-                    )
-                    for k_rel, v_rel in rel_detail.items():
-                        if (
-                            isinstance(v_rel, str | int | float | bool)
-                            and k_rel != "type"
-                            and k_rel != "chapter_added"
-                        ):
-                            rel_cypher_props[k_rel] = v_rel
-
-                rel_cypher_props[KG_IS_PROVISIONAL] = (
-                    profile_dict.get(kg_keys.source_quality_key(chapter_added_val))
-                    == "provisional_from_unrevised_draft"
-                )
-
-                statements.append(
-                    (
-                        """
-                    MATCH (s:Character:Entity {name: $subject_param})
-                    MERGE (o:Entity {name: $object_param})
-                        ON CREATE SET o.description = 'Auto-created via relationship from ' + $subject_param, o.created_ts = timestamp()
-                    MERGE (s)-[r:DYNAMIC_REL {type: $predicate_param, chapter_added: $chapter_added_val }]->(o)
-                    ON CREATE SET r = $props_param, r.created_ts = timestamp()
-                    ON MATCH SET  r += $props_param, r.updated_ts = timestamp()
-                    """,
-                        {
-                            "subject_param": char_name,
-                            "object_param": target_char_name,
-                            "predicate_param": rel_type_str,
-                            "chapter_added_val": chapter_added_val,
-                            "props_param": rel_cypher_props,
-                        },
-                    )
-                )
+        statements.extend(_build_dev_event_statements(char_name, profile_dict))
+        statements.extend(_build_relationship_statements(char_name, profile_dict))
 
     statements.append(
         (

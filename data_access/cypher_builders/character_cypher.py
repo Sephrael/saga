@@ -13,24 +13,20 @@ TRAIT_NAME_TO_CANONICAL: dict[str, str] = {}
 logger = structlog.get_logger(__name__)
 
 
-def generate_character_node_cypher(
-    profile: CharacterProfile, chapter_number_for_delta: int = 0
-) -> list[tuple[str, dict[str, Any]]]:
-    """Create Cypher statements for a character update."""
-    statements: list[tuple[str, dict[str, Any]]] = []
-
+def _get_basic_props(
+    profile: CharacterProfile, chapter_number_for_delta: int
+) -> dict[str, Any]:
+    """Return property dictionary for a character node."""
     props_from_profile = profile.to_dict()
-    # Create a clean property dictionary for the node, excluding complex types.
     basic_props = {
         k: v
         for k, v in props_from_profile.items()
         if isinstance(v, str | int | float | bool)
-        and k not in ["name", "traits", "relationships"]
+        and k not in {"name", "traits", "relationships"}
         and not k.startswith(kg_keys.DEVELOPMENT_PREFIX)
         and not k.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
     }
 
-    # Add any updates from the profile's 'updates' field.
     if isinstance(profile.updates, dict):
         for k_update, v_update in profile.updates.items():
             if (
@@ -40,22 +36,167 @@ def generate_character_node_cypher(
             ) and k_update not in basic_props:
                 basic_props[k_update] = v_update
 
-    # Determine provisional status based on the current chapter's update source.
-    current_chapter_source_quality_key = kg_keys.source_quality_key(
-        chapter_number_for_delta
-    )
+    current_quality_key = kg_keys.source_quality_key(chapter_number_for_delta)
     if (
         isinstance(profile.updates, dict)
-        and profile.updates.get(current_chapter_source_quality_key)
+        and profile.updates.get(current_quality_key)
         == "provisional_from_unrevised_draft"
     ):
         basic_props[KG_IS_PROVISIONAL] = True
     elif KG_IS_PROVISIONAL not in basic_props:
-        # Default to False if not explicitly set by the update.
         basic_props[KG_IS_PROVISIONAL] = False
 
-    # Ensure is_deleted is explicitly set to False for active characters.
     basic_props["is_deleted"] = False
+    return basic_props
+
+
+def _trait_statements(
+    profile: CharacterProfile, chapter_number_for_delta: int
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return Cypher statements for trait relationships."""
+    stmts: list[tuple[str, dict[str, Any]]] = []
+    if profile.traits:
+        for trait_name in profile.traits:
+            if isinstance(trait_name, str) and trait_name.strip():
+                canonical = utils.normalize_trait_name(trait_name)
+                if canonical:
+                    TRAIT_NAME_TO_CANONICAL[canonical] = trait_name
+                    stmts.append(
+                        (
+                            """
+                            MATCH (c:Character:Entity {name: $name})
+                            MERGE (t:Trait:Entity {name: $trait_name})
+                                ON CREATE SET t.created_ts = timestamp()
+                            MERGE (c)-[r:HAS_TRAIT]->(t)
+                            SET r.chapter_added = $chapter_number_for_delta
+                            """,
+                            {
+                                "name": profile.name,
+                                "trait_name": canonical,
+                                "chapter_number_for_delta": chapter_number_for_delta,
+                            },
+                        )
+                    )
+    return stmts
+
+
+def _dev_event_statements(
+    profile: CharacterProfile, chapter_number_for_delta: int, is_provisional: bool
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return Cypher statements for a development event if present."""
+    stmts: list[tuple[str, dict[str, Any]]] = []
+    dev_event_key = kg_keys.development_key(chapter_number_for_delta)
+    if isinstance(profile.updates, dict) and dev_event_key in profile.updates:
+        dev_event_summary = profile.updates[dev_event_key]
+        if isinstance(dev_event_summary, str) and dev_event_summary.strip():
+            dev_event_id = f"dev_{utils._normalize_for_id(profile.name)}_ch{chapter_number_for_delta}_{hash(dev_event_summary)}"
+            dev_event_props = {
+                "id": dev_event_id,
+                "summary": dev_event_summary,
+                "chapter_updated": chapter_number_for_delta,
+                KG_IS_PROVISIONAL: is_provisional,
+            }
+            stmts.append(
+                (
+                    """
+                    MATCH (c:Character:Entity {name: $name})
+                    MERGE (dev:Entity {id: $dev_event_id})
+                        ON CREATE SET
+                            dev:DevelopmentEvent,
+                            dev = $props,
+                            dev.created_ts = timestamp()
+                        ON MATCH SET
+                            dev:DevelopmentEvent,
+                            dev = $props,
+                            dev.updated_ts = timestamp()
+                    MERGE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
+                    """,
+                    {
+                        "name": profile.name,
+                        "dev_event_id": dev_event_id,
+                        "props": dev_event_props,
+                    },
+                )
+            )
+    return stmts
+
+
+def _relationship_statements(
+    profile: CharacterProfile, chapter_number_for_delta: int, is_provisional: bool
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return Cypher statements for relationships."""
+    stmts: list[tuple[str, dict[str, Any]]] = []
+    if profile.relationships:
+        for target_char_name, rel_detail in profile.relationships.items():
+            if isinstance(target_char_name, str) and target_char_name.strip():
+                rel_type_str = "RELATED_TO"
+                rel_cypher_props: dict[str, Any] = {}
+                if isinstance(rel_detail, str) and rel_detail.strip():
+                    rel_cypher_props["description"] = rel_detail.strip()
+                    if rel_detail.isupper() and " " not in rel_detail:
+                        rel_type_str = rel_detail
+                elif isinstance(rel_detail, dict):
+                    rel_type_str = (
+                        str(rel_detail.get("type", rel_type_str))
+                        .upper()
+                        .replace(" ", "_")
+                    )
+                    for k_rel, v_rel in rel_detail.items():
+                        if isinstance(v_rel, str | int | float | bool):
+                            rel_cypher_props[k_rel] = v_rel
+                    rel_cypher_props.pop("type", None)
+
+                rel_cypher_props[KG_REL_CHAPTER_ADDED] = chapter_number_for_delta
+                rel_cypher_props[KG_IS_PROVISIONAL] = is_provisional
+                rel_cypher_props["source_profile_managed"] = True
+
+                stmts.append(
+                    (
+                        """
+                        MATCH (c1:Character:Entity {name: $source_name})
+                        MERGE (c2:Entity {name: $target_name})
+                            ON CREATE SET
+                                c2:Entity,
+                                c2.description = 'Auto-created via relationship from ' + $source_name,
+                                c2.created_ts = timestamp()
+
+                        MERGE (
+                            c1
+                        )-[
+                            r:DYNAMIC_REL {
+                                type: $rel_type_str,
+                                chapter_added: $chapter_num_delta
+                            }
+                        ]->(
+                            c2
+                        )
+                            ON CREATE SET
+                                r = $rel_props,
+                                r.created_ts = timestamp()
+                            ON MATCH SET
+                                r += $rel_props,
+                                r.updated_ts = timestamp()
+                        """,
+                        {
+                            "source_name": profile.name,
+                            "target_name": target_char_name.strip(),
+                            "rel_type_str": rel_type_str,
+                            "chapter_num_delta": chapter_number_for_delta,
+                            "rel_props": rel_cypher_props,
+                        },
+                    )
+                )
+    return stmts
+
+
+def generate_character_node_cypher(
+    profile: CharacterProfile, chapter_number_for_delta: int = 0
+) -> list[tuple[str, dict[str, Any]]]:
+    """Create Cypher statements for a character update."""
+    statements: list[tuple[str, dict[str, Any]]] = []
+
+    basic_props = _get_basic_props(profile, chapter_number_for_delta)
+    is_provisional = basic_props.get(KG_IS_PROVISIONAL, False)
 
     statements.append(
         (
@@ -87,133 +228,16 @@ def generate_character_node_cypher(
         )
     )
 
-    # Process and link traits.
-    if profile.traits:
-        for trait_name in profile.traits:
-            if isinstance(trait_name, str) and trait_name.strip():
-                canonical = utils.normalize_trait_name(trait_name)
-                if canonical:
-                    TRAIT_NAME_TO_CANONICAL[canonical] = trait_name
-                    statements.append(
-                        (
-                            """
-                            MATCH (c:Character:Entity {name: $name})
-                            MERGE (t:Trait:Entity {name: $trait_name})
-                                ON CREATE SET t.created_ts = timestamp()
-                            MERGE (c)-[r:HAS_TRAIT]->(t)
-                            SET r.chapter_added = $chapter_number_for_delta
-                            """,
-                            {
-                                "name": profile.name,
-                                "trait_name": canonical,
-                                "chapter_number_for_delta": chapter_number_for_delta,
-                            },
-                        )
-                    )
+    statements.extend(_trait_statements(profile, chapter_number_for_delta))
 
     # Process and link development events for the current chapter.
-    dev_event_key = kg_keys.development_key(chapter_number_for_delta)
-    if isinstance(profile.updates, dict) and dev_event_key in profile.updates:
-        dev_event_summary = profile.updates[dev_event_key]
-        if isinstance(dev_event_summary, str) and dev_event_summary.strip():
-            dev_event_id = (
-                f"dev_{utils._normalize_for_id(profile.name)}_ch{chapter_number_for_delta}_"
-                f"{hash(dev_event_summary)}"
-            )
-            dev_event_props = {
-                "id": dev_event_id,
-                "summary": dev_event_summary,
-                "chapter_updated": chapter_number_for_delta,
-                KG_IS_PROVISIONAL: basic_props.get(KG_IS_PROVISIONAL, False),
-            }
-            statements.append(
-                (
-                    """
-                    MATCH (c:Character:Entity {name: $name})
-                    MERGE (dev:Entity {id: $dev_event_id})
-                        ON CREATE SET
-                            dev:DevelopmentEvent,
-                            dev = $props,
-                            dev.created_ts = timestamp()
-                        ON MATCH SET
-                            dev:DevelopmentEvent,
-                            dev = $props,
-                            dev.updated_ts = timestamp()
-                    MERGE (c)-[:DEVELOPED_IN_CHAPTER]->(dev)
-                    """,
-                    {
-                        "name": profile.name,
-                        "dev_event_id": dev_event_id,
-                        "props": dev_event_props,
-                    },
-                )
-            )
+    statements.extend(
+        _dev_event_statements(profile, chapter_number_for_delta, is_provisional)
+    )
 
     # Process and link relationships.
-    if profile.relationships:
-        for target_char_name, rel_detail in profile.relationships.items():
-            if isinstance(target_char_name, str) and target_char_name.strip():
-                rel_type_str = "RELATED_TO"
-                rel_cypher_props: dict[str, Any] = {}
-                if isinstance(rel_detail, str) and rel_detail.strip():
-                    rel_cypher_props["description"] = rel_detail.strip()
-                    if rel_detail.isupper() and " " not in rel_detail:
-                        rel_type_str = rel_detail
-                elif isinstance(rel_detail, dict):
-                    rel_type_str = (
-                        str(rel_detail.get("type", rel_type_str))
-                        .upper()
-                        .replace(" ", "_")
-                    )
-                    for k_rel, v_rel in rel_detail.items():
-                        if isinstance(v_rel, str | int | float | bool):
-                            rel_cypher_props[k_rel] = v_rel
-                    rel_cypher_props.pop("type", None)
-
-                rel_cypher_props[KG_REL_CHAPTER_ADDED] = chapter_number_for_delta
-                rel_cypher_props[KG_IS_PROVISIONAL] = basic_props.get(
-                    KG_IS_PROVISIONAL, False
-                )
-                rel_cypher_props["source_profile_managed"] = True
-
-                statements.append(
-                    (
-                        """
-                        MATCH (c1:Character:Entity {name: $source_name})
-                        MERGE (c2:Entity {name: $target_name})
-                            ON CREATE SET
-                                c2:Entity,
-                                c2.description = (
-                                    'Auto-created via relationship from '
-                                    + $source_name
-                                ),
-                                c2.created_ts = timestamp()
-
-                        MERGE (
-                            c1
-                        )-[
-                            r:DYNAMIC_REL {
-                                type: $rel_type_str,
-                                chapter_added: $chapter_num_delta
-                            }
-                        ]->(
-                            c2
-                        )
-                            ON CREATE SET
-                                r = $rel_props,
-                                r.created_ts = timestamp()
-                            ON MATCH SET
-                                r += $rel_props,
-                                r.updated_ts = timestamp()
-                        """,
-                        {
-                            "source_name": profile.name,
-                            "target_name": target_char_name.strip(),
-                            "rel_type_str": rel_type_str,
-                            "chapter_num_delta": chapter_number_for_delta,
-                            "rel_props": rel_cypher_props,
-                        },
-                    )
-                )
+    statements.extend(
+        _relationship_statements(profile, chapter_number_for_delta, is_provisional)
+    )
 
     return statements
