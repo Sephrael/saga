@@ -237,6 +237,16 @@ To start SAGA from a completely fresh state:
 
 After resetting and ensuring Neo4j is running, the next execution of `python main.py` will re-initialize the story and KG.
 
+## Complexity Analysis
+
+You can check SAGA's cyclomatic complexity with [Radon](https://radon.readthedocs.io/en/latest/):
+
+```bash
+python complexity_report.py
+```
+
+This runs `radon cc . -nc` and highlights functions that may benefit from refactoring.
+
 ## License
 
 This project is licensed under the Apache License, Version 2.0. See the `LICENSE` file for details.

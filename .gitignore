@@ -12,3 +12,4 @@ novel_output/
 
 # OS files
 .DS_Store
+.venv/
