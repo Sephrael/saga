@@ -1,3 +1,4 @@
+# tests/test_revision_manager_partial_rewrite.py
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,7 +9,7 @@ from models import ProblemDetail
 
 
 @pytest.mark.asyncio
-async def test_rewrite_problem_paragraphs(monkeypatch):
+async def test_rewrite_problem_paragraphs(monkeypatch: pytest.MonkeyPatch) -> None:
     manager = RevisionManager()
     text = "Para1.\n\nBad para2.\n\nPara3."
     problems = [

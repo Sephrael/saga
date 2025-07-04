@@ -1,3 +1,4 @@
+# tests/test_kg_root_cause_trigger.py
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,13 +8,13 @@ from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 class DummyOrchestrator(NANA_Orchestrator):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.plot_outline = PlotOutline(plot_points=["a"])
 
 
 @pytest.mark.asyncio
-async def test_kg_healing_triggered(monkeypatch):
+async def test_kg_healing_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
     orch = DummyOrchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
     monkeypatch.setattr(orch, "_save_debug_output", AsyncMock())
