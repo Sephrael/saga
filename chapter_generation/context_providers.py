@@ -40,9 +40,11 @@ class SemanticHistoryProvider(ContextProvider):
         llm_service_instance: Any | None = None,
     ) -> None:
         from core.llm_interface import llm_service as default_llm_service
-        from data_access import chapter_repository as default_repo
+        from data_access import chapter_queries as default_queries
 
-        self.chapter_queries = chapter_repo or default_repo
+        # Default to the chapter_queries module so we have the helper
+        # functions like ``find_similar_chapters_in_db``.
+        self.chapter_queries = chapter_repo or default_queries
         self.llm_service = llm_service_instance or default_llm_service
 
     async def get_context(

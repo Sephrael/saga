@@ -20,9 +20,7 @@ async def get_canonical_truths_from_kg(
     """Return canonical truths stored in the knowledge graph, up to a chapter limit."""
 
     lines: list[str] = []
-    query_parts = [
-        "MATCH (c:Character:Entity)-[r:HAS_TRAIT]->(t:Trait:Entity {is_canonical_truth: true})"
-    ]
+    query_parts = ["MATCH (c:Character:Entity)-[r:HAS_TRAIT]->(t:Trait:Entity)"]
     params: dict[str, Any] = {}
 
     if chapter_limit is not None:
