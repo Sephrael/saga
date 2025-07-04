@@ -571,3 +571,48 @@ async def test_deduplicate_problems():
 
     result = patch_generator._deduplicate_problems(problems)
     assert len(result) == 2
+
+
+@pytest.mark.asyncio
+async def test_deletion_keyword_triggers_empty_patch(monkeypatch):
+    called = False
+
+    async def fake_generate(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return None, None
+
+    monkeypatch.setattr(
+        patch_generator,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+    monkeypatch.setattr(
+        patch_generator.instructions,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+
+    problems = [
+        {
+            "issue_category": "clarity",
+            "problem_description": "irrelevant text",
+            "quote_from_original_text": "bad text",
+            "sentence_char_start": 0,
+            "sentence_char_end": 8,
+            "suggested_fix_focus": "delete this",
+        }
+    ]
+
+    res, _ = await patch_generator._generate_patch_instructions_logic(
+        {},
+        "bad text",
+        problems,
+        1,
+        "",
+        None,
+        PatchValidationAgent(),
+    )
+
+    assert res and res[0]["replace_with"] == ""
+    assert not called
