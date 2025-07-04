@@ -4,6 +4,7 @@
 from typing import TypedDict
 
 from models import (
+    ChapterEndState,
     CharacterProfile,
     EvaluationResult,
     PatchInstruction,
@@ -29,4 +30,5 @@ __all__ = [
     "ProblemDetail",
     "SceneDetail",
     "WorldItem",
+    "ChapterEndState",
 ]

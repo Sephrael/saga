@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from agents.finalize_agent import FinalizationResult
 from data_access import character_queries, world_queries
-from kg_maintainer.models import ChapterEndState
 from storage.file_manager import FileManager
 
+from models import ChapterEndState
 from orchestration.token_accountant import Stage
 
 if TYPE_CHECKING:  # pragma: no cover - type hints
