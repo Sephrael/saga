@@ -94,6 +94,7 @@ class ChapterServiceLayer:
         evaluation_result: EvaluationResult,
         hybrid_context: str,
         chapter_plan: list[SceneDetail] | None,
+        revision_cycle: int = 0,
     ) -> RevisionResult:
         """Revise a draft using the revision service."""
         return await self.revision_service.revise(
@@ -105,6 +106,7 @@ class ChapterServiceLayer:
             evaluation_result,
             hybrid_context,
             chapter_plan,
+            revision_cycle,
         )
 
     async def finalize_chapter(

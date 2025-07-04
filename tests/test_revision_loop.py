@@ -45,7 +45,7 @@ async def test_revision_loop_retries_on_failure(monkeypatch):
 
     call_counter = {"count": 0}
 
-    async def fake_revise(*_args, **_kwargs):
+    async def fake_revise(*_args, revision_cycle: int, **_kwargs):
         call_counter["count"] += 1
         if call_counter["count"] == 1:
             return ("start", None, []), {}
@@ -110,7 +110,7 @@ async def test_revision_loop_deduplicates_each_cycle(monkeypatch):
             [],
         )
 
-    async def fake_revise(*_a, **_k):
+    async def fake_revise(*_a, revision_cycle: int, **_k):
         return ("revised", None, []), {}
 
     dedup_calls: list[str] = []
@@ -179,7 +179,7 @@ async def test_revision_loop_respects_max_cycles(monkeypatch):
 
     call_counter = {"count": 0}
 
-    async def fake_revise(*_args, **_kwargs):
+    async def fake_revise(*_args, revision_cycle: int, **_kwargs):
         call_counter["count"] += 1
         return ("start", None, []), {}
 

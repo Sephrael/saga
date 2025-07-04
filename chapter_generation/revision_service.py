@@ -37,6 +37,7 @@ class RevisionService:
         evaluation_result: EvaluationResult,
         hybrid_context_for_revision: str,
         chapter_plan: list[SceneDetail] | None,
+        revision_cycle: int,
     ) -> RevisionResult:
         """Return a revised draft based on evaluation feedback."""
 
@@ -49,6 +50,7 @@ class RevisionService:
             evaluation_result,
             hybrid_context_for_revision,
             chapter_plan,
+            revision_cycle,
         )
         if revised is None:
             return RevisionResult(None, None, False, [])

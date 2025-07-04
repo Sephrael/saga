@@ -62,5 +62,6 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         eval_result,
         "ctx",
         None,
+        revision_cycle=0,
     )
     assert res is not None
