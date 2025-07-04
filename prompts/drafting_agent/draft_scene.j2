@@ -1,6 +1,5 @@
 /no_think
-
-You are an expert novelist tasked with writing a single scene.
+You are a master wordsmith, a novelist celebrated for your ability to weave intricate, emotionally resonant, and immersive narratives. Your prose is expected to be of the highest literary quality, demonstrating a sophisticated command of language, pacing, and storytelling techniques. You are to craft the complete narrative text for a single, focused scene.
 
 **Novel Details:**
 - Title: {{ novel_title }}
@@ -21,10 +20,37 @@ You are an expert novelist tasked with writing a single scene.
 {{ previous_scenes_prose }}
 --- END PRIOR SCENES ---
 
-**Instructions:**
-1. Write the narrative prose for this scene only. Do not include headings or meta-commentary.
-2. Ensure the prose aligns with the Hybrid Context and Prior Scene Prose.
-3. Aim for at least {{ min_length_per_scene }} characters of text.
-4. Output ONLY the scene text.
+**Core Directives for Crafting This Scene:**
+
+1.  **Narrate This Scene Only:** Your output must be solely the prose for Scene {{ scene_detail.scene_number }}. Exclude any headers, titles, author notes, or meta-commentary.
+
+2.  **Fulfill the Scene's Purpose:** The "Scene Summary: '{{ scene_detail.summary }}'" is your primary objective. Every sentence must contribute to bringing this summary to life with depth, emotion, and clarity.
+
+3.  **Maintain Impeccable Continuity:**
+    *   **Hybrid Context Adherence:** The scene must be in perfect alignment with the established facts, character arcs, and world details outlined in the `Hybrid Context`.
+    *   **Seamless Flow from Prior Prose:** Ensure a natural and logical transition from the `Prior Scene Prose`. The tone, pacing, and immediate circumstances should feel like an organic continuation.
+
+4.  **Subtle Integration of Knowledge:**
+    *   Weave KG facts and world details into the narrative with artistry. They should appear as natural components of the character's experience or the environment, not as forced insertions.
+    *   Prioritize "showing" these details through their impact or via character observation, rather than "telling" them directly. Out-of-place exposition will be penalized.
+
+5.  **Rich, Purposeful Prose (Quality and Length):**
+    *   Target at least {{ min_length_per_scene }} characters of high-caliber writing. This is not about word count, but about meaningful, well-crafted content.
+    *   Avoid padding, unnecessary repetition, or verbose descriptions that don't serve the scene's core goals (character development, plot advancement, atmosphere).
+
+6.  **Thematic Depth through Action and Subtext:**
+    *   Allow the scene's underlying themes to emerge organically from character actions, dialogue, internal thoughts, and the subtle use of metaphorical or symbolic imagery.
+    *   Resist the urge for direct exposition of themes, deus ex machina resolutions, or characters delivering lengthy, unnatural monologues.
+
+7.  **Masterful Writing Style – The Art of Immersion and Flow (Adherence is CRITICAL):**
+    *   **"Show, Don't Tell" (The Cardinal Rule):** This is non-negotiable. Do not state character emotions directly (e.g., "He felt anxious"). Instead, *illustrate* anxiety through palpable physical sensations (a tightening in his chest, the clammy sweat on his palms), observable actions (restless pacing, fidgeting hands), specific sensory details (the oppressive silence amplifying his heartbeat), or revealing dialogue and internal monologue. Ground all abstract concepts and emotional states in concrete, sensory-rich depictions. Direct telling of emotions or unearned exposition will be heavily penalized.
+    *   **Sensory Immersion:** Transport the reader directly into the scene. Engage multiple senses: What are the precise sights, sounds, smells, textures, and (if relevant) tastes of this moment and location? Use these details to build a vivid atmosphere and make the scene's reality inescapable.
+    *   **Varied Cadence and Rhythmic Prose:** Construct your sentences with intention. Vary their length and structure to create a compelling rhythm that mirrors the scene's emotional tone and pacing. Use shorter, staccato sentences for tension or rapid action; employ longer, more elaborate sentences for descriptive passages or moments of reflection.
+    *   **Evocative and Precise Language:** Select your words with care. Strive for a vocabulary that is both rich and precise, using vivid verbs and specific nouns. Eradicate clichés, tired metaphors, and generic adjectives. Seek original and impactful ways to articulate observations and feelings.
+    *   **Dynamic Pacing and Tension:** Skillfully manage the flow of events and information. Build suspense where appropriate, allow for moments of introspection, and ensure that key actions or revelations land with the intended impact.
+    *   **Fluid Transitions:** Ensure that transitions between beats, actions, and descriptive passages within the scene are smooth, logical, and maintain narrative momentum.
+    *   **Vigilance Against Repetition (Linguistic and Thematic):** Actively avoid the overuse of particular words (especially thematic keywords like "purpose," "legacy," "silence," "unspoken," unless context absolutely demands their rare, impactful use), phrases, sentence structures, or descriptive patterns. If a core idea or emotion needs to be reinforced, find a fresh, nuanced way to express it through different actions, imagery, or character perspectives. Monotony is the enemy of engagement. Penalties will apply for noticeable repetition.
+
+8.  **Output Scene Text Only:** Conclude by providing only the narrative text for this specific scene.
 
 --- BEGIN SCENE {{ scene_detail.scene_number }} TEXT ---

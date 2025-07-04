@@ -1,14 +1,15 @@
-# kg_maintainer_agent.py
+# agents/kg_maintainer_agent.py
+"""Manage Neo4j updates and knowledge extraction."""
+
 import asyncio
 import json
-import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
+import utils
 from async_lru import alru_cache  # type: ignore
-from jinja2 import Template
-
-import config
+from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from data_access import (
@@ -17,38 +18,37 @@ from data_access import (
     plot_queries,
     world_queries,
 )
+from jinja2 import Template
 
 # Assuming a package structure for kg_maintainer components
 from kg_maintainer import merge, models, parsing
-from parsing_utils import (
-    parse_rdf_triples_with_rdflib,
-)
+from parsing import parse_rdf_triples_with_rdflib
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+from models.agent_models import ChapterEndState
+
+logger = structlog.get_logger(__name__)
 
 
-@alru_cache(maxsize=config.SUMMARY_CACHE_SIZE)
+@alru_cache(maxsize=settings.SUMMARY_CACHE_SIZE)
 async def _llm_summarize_full_chapter_text(
     chapter_text: str, chapter_number: int
-) -> Tuple[str, Optional[Dict[str, int]]]:
+) -> tuple[str, dict[str, int] | None]:
     """Summarize full chapter text via the configured LLM."""
     prompt = render_prompt(
         "kg_maintainer_agent/chapter_summary.j2",
         {
-            "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            "enable_no_think": True,
             "chapter_number": chapter_number,
             "chapter_text": chapter_text,
         },
     )
     summary, usage_data = await llm_service.async_call_llm(
-        model_name=config.SMALL_MODEL,  # Using SMALL_MODEL for summarization
+        model_name=settings.SMALL_MODEL,  # Using SMALL_MODEL for summarization
         prompt=prompt,
-        temperature=config.Temperatures.SUMMARY,
-        max_tokens=config.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
+        temperature=settings.TEMPERATURE_SUMMARY,
+        max_tokens=settings.MAX_SUMMARY_TOKENS,  # Should be small for 1-3 sentences
         stream_to_disk=False,
-        frequency_penalty=config.FREQUENCY_PENALTY_SUMMARY,
-        presence_penalty=config.PRESENCE_PENALTY_SUMMARY,
         auto_clean_response=True,
     )
     summary_text = summary.strip()
@@ -63,8 +63,8 @@ async def _llm_summarize_full_chapter_text(
 
 
 # Prompt template for entity resolution, embedded to avoid new file dependency
-ENTITY_RESOLUTION_PROMPT_TEMPLATE = """/no_think
-You are an expert knowledge graph analyst for a creative writing project. Your task is to determine if two entities from the narrative's knowledge graph are referring to the same canonical thing based on their names, properties, and relationships.
+ENTITY_RESOLUTION_PROMPT_TEMPLATE = """{% if enable_no_think %}/no_think{% endif %}
+You are an expert knowledge graph analyst for a creative writing project. Determine if two entities from the narrative's knowledge graph refer to the same canonical thing based on their names, properties, and relationships.
 
 **Entity 1 Details:**
 - Name: {{ entity1.name }}
@@ -98,7 +98,7 @@ You are an expert knowledge graph analyst for a creative writing project. Your t
 Based on all the provided context, including name similarity, properties (like descriptions), and shared relationships, are "Entity 1" and "Entity 2" the same entity within the story's canon? For example, "The Locket" and "The Pendant" might be the same item, or "The Shattered Veil" and "Shattered Veil" are likely the same faction.
 
 **Response Format:**
-Respond in JSON format only, with no other text, commentary, or markdown. Your entire response must be a single, valid JSON object with the following structure:
+Output only JSON, with no other text or markdown. Your entire response must be a single, valid JSON object with the following structure:
 {
   "is_same_entity": boolean,
   "confidence_score": float (from 0.0 to 1.0, representing your certainty),
@@ -107,9 +107,9 @@ Respond in JSON format only, with no other text, commentary, or markdown. Your e
 """
 
 # Prompt template for dynamic relationship resolution
-DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """/no_think
+DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE = """{% if enable_no_think %}/no_think{% endif %}
 You analyze a relationship from the novel's knowledge graph and provide a
-single, canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
+single canonical predicate name in ALL_CAPS_WITH_UNDERSCORES describing the
 relationship between the subject and object.
 
 Subject: {{ subject }} ({{ subject_labels }})
@@ -118,17 +118,17 @@ Existing Type: {{ type }}
 Subject Description: {{ subject_desc }}
 Object Description: {{ object_desc }}
 
-Respond with only the predicate string, no extra words.
+Respond with only the predicate string, nothing else.
 """
 
 
 class KGMaintainerAgent:
     """High level interface for KG parsing and persistence."""
 
-    def __init__(self, model_name: str = config.KNOWLEDGE_UPDATE_MODEL):
+    def __init__(self, model_name: str = settings.KNOWLEDGE_UPDATE_MODEL):
         self.model_name = model_name
-        self.node_labels: List[str] = []
-        self.relationship_types: List[str] = []
+        self.node_labels: list[str] = []
+        self.relationship_types: list[str] = []
         logger.info(
             "KGMaintainerAgent initialized with model for extraction: %s",
             self.model_name,
@@ -144,22 +144,22 @@ class KGMaintainerAgent:
 
     def parse_character_updates(
         self, text: str, chapter_number: int
-    ) -> Dict[str, models.CharacterProfile]:
+    ) -> dict[str, models.CharacterProfile]:
         """Parse character update text into structured profiles."""
         return parsing.parse_unified_character_updates(text, chapter_number)
 
     def parse_world_updates(
         self, text: str, chapter_number: int
-    ) -> Dict[str, Dict[str, models.WorldItem]]:
+    ) -> dict[str, dict[str, models.WorldItem]]:
         """Parse world update text into structured items."""
         return parsing.parse_unified_world_updates(text, chapter_number)
 
     def merge_updates(
         self,
-        current_profiles: Dict[str, models.CharacterProfile],
-        current_world: Dict[str, Dict[str, models.WorldItem]],
-        char_updates_parsed: Dict[str, models.CharacterProfile],
-        world_updates_parsed: Dict[str, Dict[str, models.WorldItem]],
+        current_profiles: dict[str, models.CharacterProfile],
+        current_world: dict[str, dict[str, models.WorldItem]],
+        char_updates_parsed: dict[str, models.CharacterProfile],
+        world_updates_parsed: dict[str, dict[str, models.WorldItem]],
         chapter_number: int,
         from_flawed_draft: bool = False,
     ) -> None:
@@ -173,7 +173,7 @@ class KGMaintainerAgent:
 
     async def persist_profiles(
         self,
-        profiles_to_persist: Dict[str, models.CharacterProfile],
+        profiles_to_persist: dict[str, models.CharacterProfile],
         chapter_number_for_delta: int,
         full_sync: bool = False,
     ) -> None:
@@ -184,7 +184,7 @@ class KGMaintainerAgent:
 
     async def persist_world(
         self,
-        world_items_to_persist: Dict[str, Dict[str, models.WorldItem]],
+        world_items_to_persist: dict[str, dict[str, models.WorldItem]],
         chapter_number_for_delta: int,
         full_sync: bool = False,
     ) -> None:
@@ -198,17 +198,17 @@ class KGMaintainerAgent:
         return await plot_queries.append_plot_point(description, prev_plot_point_id)
 
     async def summarize_chapter(
-        self, chapter_text: Optional[str], chapter_number: int
-    ) -> Tuple[Optional[str], Optional[Dict[str, int]]]:
+        self, chapter_text: str | None, chapter_number: int
+    ) -> tuple[str | None, dict[str, int] | None]:
         if (
             not chapter_text
-            or len(chapter_text) < config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
+            or len(chapter_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH // 2
         ):
             logger.warning(
                 "Chapter %s text too short for summarization (%d chars, min_req for meaningful summary: %d).",
                 chapter_number,
                 len(chapter_text or ""),
-                config.MIN_ACCEPTABLE_DRAFT_LENGTH // 2,
+                settings.MIN_ACCEPTABLE_DRAFT_LENGTH // 2,
             )
             return None, None
 
@@ -232,28 +232,89 @@ class KGMaintainerAgent:
             )
             return None, None
 
-    async def _llm_extract_updates(
+    async def generate_chapter_end_state(
         self,
-        plot_outline: Dict[str, Any],
         chapter_text: str,
         chapter_number: int,
-    ) -> Tuple[str, Optional[Dict[str, int]]]:
+        *,
+        fill_in_context: str | None = None,
+    ) -> ChapterEndState:
+        """Generate a structured snapshot of the chapter's final state."""
+
+        prompt = render_prompt(
+            "kg_maintainer_agent/chapter_end_state.j2",
+            {
+                "enable_no_think": True,
+                "chapter_number": chapter_number,
+                "chapter_text": chapter_text,
+                "fill_in_context": fill_in_context,
+            },
+        )
+        try:
+            response, _ = await llm_service.async_call_llm(
+                model_name=settings.KNOWLEDGE_UPDATE_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_KG_EXTRACTION,
+                max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
+                auto_clean_response=True,
+            )
+            data = json.loads(response)
+            return ChapterEndState.model_validate(data)
+        except Exception as exc:  # pragma: no cover - heavy I/O
+            logger.error(
+                "Failed to generate chapter end state for ch %s: %s",
+                chapter_number,
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    def _extract_character_names_from_text(self, text: str) -> list[str]:
+        """Return a list of probable character names from ``text``."""
+        utils.load_spacy_model_if_needed()
+        names: list[str] = []
+        nlp = utils.spacy_manager.nlp
+        if nlp is not None:
+            doc = nlp(text)
+            for ent in doc.ents:
+                if ent.label_ == "PERSON":
+                    cleaned = ent.text.strip()
+                    if cleaned and cleaned not in names:
+                        names.append(cleaned)
+        else:
+            for match in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text):
+                if match not in names:
+                    names.append(match)
+        return names
+
+    async def _llm_extract_updates(
+        self,
+        plot_outline: dict[str, Any],
+        chapter_text: str,
+        chapter_number: int,
+        character_names: list[str] | None = None,
+        fill_in_context: str | None = None,
+    ) -> tuple[str, dict[str, int] | None]:
         """Call the LLM to extract structured updates from chapter text, including typed entities in triples."""
         protagonist = plot_outline.get(
-            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
+            "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
 
+        names = set(character_names or [])
+        names.update(self._extract_character_names_from_text(chapter_text))
         prompt = render_prompt(
             "kg_maintainer_agent/extract_updates.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                "enable_no_think": True,
                 "protagonist": protagonist,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled Novel"),
                 "novel_genre": plot_outline.get("genre", "Unknown"),
                 "chapter_text": chapter_text,
+                "fill_in_context": fill_in_context,
                 "available_node_labels": self.node_labels,
                 "available_relationship_types": self.relationship_types,
+                "character_names": sorted(names),
             },
         )
 
@@ -261,12 +322,10 @@ class KGMaintainerAgent:
             text, usage = await llm_service.async_call_llm(
                 model_name=self.model_name,
                 prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
-                max_tokens=config.MAX_KG_TRIPLE_TOKENS,
+                temperature=settings.TEMPERATURE_KG_EXTRACTION,
+                max_tokens=settings.MAX_KG_TRIPLE_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=False,
-                frequency_penalty=config.FREQUENCY_PENALTY_KG_EXTRACTION,
-                presence_penalty=config.PRESENCE_PENALTY_KG_EXTRACTION,
                 auto_clean_response=True,
             )
             return text, usage
@@ -276,13 +335,17 @@ class KGMaintainerAgent:
 
     async def extract_and_merge_knowledge(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, models.CharacterProfile],
-        world_building: Dict[str, Dict[str, models.WorldItem]],
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, models.CharacterProfile],
+        world_building: dict[str, dict[str, models.WorldItem]],
         chapter_number: int,
         chapter_text: str,
         is_from_flawed_draft: bool = False,
-    ) -> Optional[Dict[str, int]]:
+        fill_in_context: str | None = None,
+    ) -> dict[str, int] | None:
+        if fill_in_context:
+            chapter_text = chapter_text + "\n" + fill_in_context
+
         if not chapter_text:
             logger.warning(
                 "Skipping knowledge extraction for chapter %s: no text provided.",
@@ -290,14 +353,19 @@ class KGMaintainerAgent:
             )
             return None
 
+        provisional = is_from_flawed_draft or bool(fill_in_context)
         logger.info(
-            "KGMaintainerAgent: Starting knowledge extraction for chapter %d. Flawed draft: %s",
+            "KGMaintainerAgent: Starting knowledge extraction for chapter %d. Provisional: %s",
             chapter_number,
-            is_from_flawed_draft,
+            provisional,
         )
 
         raw_extracted_text, usage_data = await self._llm_extract_updates(
-            plot_outline, chapter_text, chapter_number
+            plot_outline,
+            chapter_text,
+            chapter_number,
+            list(character_profiles.keys()),
+            fill_in_context=fill_in_context,
         )
 
         if not raw_extracted_text.strip():
@@ -399,7 +467,7 @@ class KGMaintainerAgent:
             char_updates_from_llm,  # Already model instances
             world_updates_from_llm,  # Already model instances
             chapter_number,
-            is_from_flawed_draft,
+            provisional,
         )
         logger.info(
             f"Merged LLM updates into in-memory state for chapter {chapter_number}."
@@ -415,7 +483,7 @@ class KGMaintainerAgent:
         if parsed_triples_structured:
             try:
                 await kg_queries.add_kg_triples_batch_to_db(
-                    parsed_triples_structured, chapter_number, is_from_flawed_draft
+                    parsed_triples_structured, chapter_number, provisional
                 )
                 logger.info(
                     f"Persisted {len(parsed_triples_structured)} KG triples for chapter {chapter_number} to Neo4j."
@@ -438,6 +506,8 @@ class KGMaintainerAgent:
         checking for inconsistencies, and resolving duplicate entities.
         """
         logger.info("KG Healer/Enricher: Starting maintenance cycle.")
+
+        await world_queries.fix_missing_world_element_core_fields()
 
         # 1. Enrichment (which includes healing orphans/stubs)
         enrichment_cypher = await self._find_and_enrich_thin_nodes()
@@ -477,9 +547,9 @@ class KGMaintainerAgent:
 
         logger.info("KG Healer/Enricher: Maintenance cycle complete.")
 
-    async def _find_and_enrich_thin_nodes(self) -> List[Tuple[str, Dict[str, Any]]]:
+    async def _find_and_enrich_thin_nodes(self) -> list[tuple[str, dict[str, Any]]]:
         """Finds thin characters and world elements and generates enrichment updates in parallel."""
-        statements: List[Tuple[str, Dict[str, Any]]] = []
+        statements: list[tuple[str, dict[str, Any]]] = []
         enrichment_tasks = []
 
         # Find all thin nodes first
@@ -513,8 +583,8 @@ class KGMaintainerAgent:
         return statements
 
     async def _create_character_enrichment_task(
-        self, char_info: Dict[str, Any]
-    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        self, char_info: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
         char_name = char_info.get("name")
         if not char_name:
             return None
@@ -528,9 +598,9 @@ class KGMaintainerAgent:
             {"character_name": char_name, "chapter_context": context_chapters},
         )
         enrichment_text, _ = await llm_service.async_call_llm(
-            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            model_name=settings.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt,
-            temperature=config.Temperatures.KG_EXTRACTION,
+            temperature=settings.TEMPERATURE_KG_EXTRACTION,
             auto_clean_response=True,
         )
         if enrichment_text:
@@ -552,8 +622,8 @@ class KGMaintainerAgent:
         return None
 
     async def _create_world_element_enrichment_task(
-        self, element_info: Dict[str, Any]
-    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        self, element_info: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
         element_id = element_info.get("id")
         if not element_id:
             return None
@@ -569,9 +639,9 @@ class KGMaintainerAgent:
             {"element": element_info, "chapter_context": context_chapters},
         )
         enrichment_text, _ = await llm_service.async_call_llm(
-            model_name=config.KNOWLEDGE_UPDATE_MODEL,
+            model_name=settings.KNOWLEDGE_UPDATE_MODEL,
             prompt=prompt,
-            temperature=config.Temperatures.KG_EXTRACTION,
+            temperature=settings.TEMPERATURE_KG_EXTRACTION,
             auto_clean_response=True,
         )
         if enrichment_text:
@@ -658,9 +728,13 @@ class KGMaintainerAgent:
                 )
                 continue
 
-            prompt = jinja_template.render(entity1=context1, entity2=context2)
+            prompt = jinja_template.render(
+                enable_no_think=settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                entity1=context1,
+                entity2=context2,
+            )
             llm_response, _ = await llm_service.async_call_llm(
-                model_name=config.KNOWLEDGE_UPDATE_MODEL,
+                model_name=settings.KNOWLEDGE_UPDATE_MODEL,
                 prompt=prompt,
                 temperature=0.1,
                 auto_clean_response=True,
@@ -720,11 +794,14 @@ class KGMaintainerAgent:
             return
         jinja_template = Template(DYNAMIC_REL_RESOLUTION_PROMPT_TEMPLATE)
         for rel in dyn_rels:
-            prompt = jinja_template.render(rel)
+            prompt = jinja_template.render(
+                **rel,
+                enable_no_think=settings.ENABLE_LLM_NO_THINK_DIRECTIVE,
+            )
             new_type_raw, _ = await llm_service.async_call_llm(
-                model_name=config.MEDIUM_MODEL,
+                model_name=settings.MEDIUM_MODEL,
                 prompt=prompt,
-                temperature=config.Temperatures.KG_EXTRACTION,
+                temperature=settings.TEMPERATURE_KG_EXTRACTION,
                 max_tokens=10,
                 auto_clean_response=True,
             )

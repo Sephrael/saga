@@ -1,15 +1,16 @@
 # data_access/character_queries.py
-from typing import Any, Dict, List, Optional, Set, Tuple
+import contextlib
+from typing import Any
 
+import kg_constants as kg_keys
 import structlog
-from async_lru import alru_cache  # type: ignore
-from neo4j.exceptions import ServiceUnavailable  # type: ignore
-
-import config
 import utils
+from async_lru import alru_cache  # type: ignore
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CHAPTER_UPDATED
 from kg_maintainer.models import CharacterProfile
+from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
 from .cypher_builders.character_cypher import (
     TRAIT_NAME_TO_CANONICAL,
@@ -17,7 +18,7 @@ from .cypher_builders.character_cypher import (
 )
 
 # Mapping from normalized character names to canonical display names
-CHAR_NAME_TO_CANONICAL: Dict[str, str] = {}
+CHAR_NAME_TO_CANONICAL: dict[str, str] = {}
 
 
 def resolve_character_name(name: str) -> str:
@@ -31,7 +32,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def sync_characters(
-    profiles: Dict[str, CharacterProfile],
+    profiles: dict[str, CharacterProfile],
     chapter_number: int,
     full_sync: bool = False,
 ) -> bool:
@@ -40,7 +41,7 @@ async def sync_characters(
         profile_dicts = {k: v.to_dict() for k, v in profiles.items()}
         return await sync_full_state_from_object_to_db(profile_dicts)
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
     for profile in profiles.values():
         statements.extend(generate_character_node_cypher(profile, chapter_number))
 
@@ -65,13 +66,15 @@ async def sync_characters(
         return False
 
 
-async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bool:
+async def sync_full_state_from_object_to_db(profiles_data: dict[str, Any]) -> bool:
+    """Persist the full set of character profiles to Neo4j."""
+
     logger.info("Synchronizing character profiles to Neo4j (non-destructive)...")
 
-    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
+    statements: list[tuple[str, dict[str, Any]]] = []
 
-    all_input_char_names: Set[str] = set(profiles_data.keys())
+    all_input_char_names: set[str] = set(profiles_data.keys())
 
     try:
         existing_char_records = await neo4j_manager.execute_read_query(
@@ -79,7 +82,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
             " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
             " RETURN c.name AS name"
         )
-        existing_db_char_names: Set[str] = {
+        existing_db_char_names: set[str] = {
             record["name"]
             for record in existing_char_records
             if record and record["name"]
@@ -111,7 +114,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
         char_direct_props = {
             k: v
             for k, v in profile_dict.items()
-            if isinstance(v, (str, int, float, bool)) and k != "name"
+            if isinstance(v, str | int | float | bool) and k != "name"
         }
         char_direct_props["is_deleted"] = False
 
@@ -141,7 +144,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
             )
         )
 
-        current_profile_traits: Set[str] = {
+        current_profile_traits: set[str] = {
             utils.normalize_trait_name(str(t))
             for t in profile_dict.get("traits", [])
             if isinstance(t, str) and utils.normalize_trait_name(str(t))
@@ -171,11 +174,14 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                 UNWIND $current_traits_list AS trait_name_val
                 MERGE (t:Trait:Entity {name: trait_name_val})
                     ON CREATE SET t.created_ts = timestamp()
-                MERGE (c)-[:HAS_TRAIT]->(t)
+                MERGE (c)-[r:HAS_TRAIT]->(t)
+                ON CREATE SET r.chapter_added = $prepopulation_chapter_num
+                ON MATCH SET r.chapter_added = COALESCE(r.chapter_added, $prepopulation_chapter_num)
                 """,
                     {
                         "char_name_val": char_name,
                         "current_traits_list": list(current_profile_traits),
+                        "prepopulation_chapter_num": settings.KG_PREPOPULATION_CHAPTER_NUM,
                     },
                 )
             )
@@ -192,16 +198,13 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
 
         for key, value_str in profile_dict.items():
             if (
-                key.startswith("development_in_chapter_")
+                key.startswith(kg_keys.DEVELOPMENT_PREFIX)
                 and isinstance(value_str, str)
                 and value_str.strip()
             ):
                 try:
-                    chap_num_int_str = key.split("_")[-1]
-                    chap_num_int = (
-                        int(chap_num_int_str) if chap_num_int_str.isdigit() else -1
-                    )
-                    if chap_num_int == -1:
+                    chap_num_int = kg_keys.parse_development_key(key)
+                    if chap_num_int is None:
                         continue
 
                     dev_event_summary = value_str.strip()
@@ -212,7 +215,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                         "summary": dev_event_summary,
                         KG_NODE_CHAPTER_UPDATED: chap_num_int,
                         KG_IS_PROVISIONAL: profile_dict.get(
-                            f"source_quality_chapter_{chap_num_int}"
+                            kg_keys.source_quality_key(chap_num_int)
                         )
                         == "provisional_from_unrevised_draft",
                     }
@@ -234,10 +237,10 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     )
 
         profile_defined_rels = profile_dict.get("relationships", {})
-        target_chars_in_profile_rels: Set[str] = set()
+        target_chars_in_profile_rels: set[str] = set()
         if isinstance(profile_defined_rels, dict):
             target_chars_in_profile_rels = {
-                str(k).strip() for k in profile_defined_rels.keys() if str(k).strip()
+                str(k).strip() for k in profile_defined_rels if str(k).strip()
             }
 
         statements.append(
@@ -266,12 +269,10 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     "confidence": 1.0,
                 }
 
-                chapter_added_val = config.KG_PREPOPULATION_CHAPTER_NUM
+                chapter_added_val = settings.KG_PREPOPULATION_CHAPTER_NUM
                 if isinstance(rel_detail, dict) and "chapter_added" in rel_detail:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         chapter_added_val = int(rel_detail["chapter_added"])
-                    except (ValueError, TypeError):
-                        pass
                 rel_cypher_props["chapter_added"] = chapter_added_val
 
                 if isinstance(rel_detail, str) and rel_detail.strip():
@@ -286,14 +287,14 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
                     )
                     for k_rel, v_rel in rel_detail.items():
                         if (
-                            isinstance(v_rel, (str, int, float, bool))
+                            isinstance(v_rel, str | int | float | bool)
                             and k_rel != "type"
                             and k_rel != "chapter_added"
                         ):
                             rel_cypher_props[k_rel] = v_rel
 
                 rel_cypher_props[KG_IS_PROVISIONAL] = (
-                    profile_dict.get(f"source_quality_chapter_{chapter_added_val}")
+                    profile_dict.get(kg_keys.source_quality_key(chapter_added_val))
                     == "provisional_from_unrevised_draft"
                 )
 
@@ -343,7 +344,7 @@ async def sync_full_state_from_object_to_db(profiles_data: Dict[str, Any]) -> bo
 
 
 @alru_cache(maxsize=128)
-async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]:
+async def get_character_profile_by_name(name: str) -> CharacterProfile | None:
     """Retrieve a single ``CharacterProfile`` from Neo4j by character name."""
     canonical_name = resolve_character_name(name)
     logger.info("Loading character profile '%s' from Neo4j...", canonical_name)
@@ -359,7 +360,7 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
         return None
 
     char_node = results[0]["c"]
-    profile: Dict[str, Any] = dict(char_node)
+    profile: dict[str, Any] = dict(char_node)
     profile.pop("name", None)
     profile.pop("created_ts", None)
     profile.pop("updated_ts", None)
@@ -383,7 +384,7 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
     rel_results = await neo4j_manager.execute_read_query(
         rels_query, {"char_name": name}
     )
-    relationships: Dict[str, Any] = {}
+    relationships: dict[str, Any] = {}
     if rel_results:
         for rel_rec in rel_results:
             target_name = rel_rec.get("target_name")
@@ -418,10 +419,10 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
             chapter_num = dev_rec.get("chapter")
             summary = dev_rec.get("summary")
             if chapter_num is not None and summary is not None:
-                dev_key = f"development_in_chapter_{chapter_num}"
+                dev_key = kg_keys.development_key(chapter_num)
                 profile[dev_key] = summary
                 if dev_rec.get(KG_IS_PROVISIONAL):
-                    profile[f"source_quality_chapter_{chapter_num}"] = (
+                    profile[kg_keys.source_quality_key(chapter_num)] = (
                         "provisional_from_unrevised_draft"
                     )
 
@@ -429,7 +430,7 @@ async def get_character_profile_by_name(name: str) -> Optional[CharacterProfile]
 
 
 @alru_cache(maxsize=128)
-async def get_all_character_names() -> List[str]:
+async def get_all_character_names() -> list[str]:
     """Return a list of all character names from Neo4j."""
     query = (
         "MATCH (c:Character:Entity) "
@@ -440,22 +441,49 @@ async def get_all_character_names() -> List[str]:
     return [record["name"] for record in results if record.get("name")]
 
 
-async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
-    logger.info("Loading decomposed character profiles from Neo4j...")
-    profiles_data: Dict[str, CharacterProfile] = {}
+async def get_character_profiles_from_db(
+    chapter_limit: int | None = None,
+) -> dict[str, CharacterProfile]:
+    """Load all character profiles from Neo4j, optionally up to a chapter limit."""
 
-    char_query = (
-        "MATCH (c:Character:Entity)"
-        " WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE"
-        " RETURN c"
+    logger.info(
+        "Loading decomposed character profiles from Neo4j%s...",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
-    char_results = await neo4j_manager.execute_read_query(char_query)
+    profiles_data: dict[str, CharacterProfile] = {}
 
-    if not char_results:
-        logger.info("No character profiles found in Neo4j.")
-        return {}
+    params: dict[str, Any] = {"limit": chapter_limit}
+    chapter_filter = ""
+    if chapter_limit is not None:
+        chapter_filter = f"AND (c.{KG_NODE_CHAPTER_UPDATED} IS NULL OR c.{KG_NODE_CHAPTER_UPDATED} <= $limit)"
 
-    for record in char_results:
+    query = f"""
+    MATCH (c:Character:Entity)
+    WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE {chapter_filter}
+
+    OPTIONAL MATCH (c)-[t:HAS_TRAIT]->(tr:Trait:Entity)
+      WHERE $limit IS NULL OR t.chapter_added <= $limit
+    WITH c, collect(DISTINCT tr.name) AS traits
+
+    OPTIONAL MATCH (c)-[r:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
+      WHERE $limit IS NULL OR r.chapter_added <= $limit
+    WITH c, traits, collect(DISTINCT {{target: target.name, props: properties(r)}}) AS rels
+
+    OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
+      WHERE $limit IS NULL OR dev.{KG_NODE_CHAPTER_UPDATED} <= $limit
+    WITH c, traits, rels,
+        collect(DISTINCT {{
+            chapter: dev.{KG_NODE_CHAPTER_UPDATED},
+            summary: dev.summary,
+            prov: coalesce(dev.{KG_IS_PROVISIONAL}, false)
+        }}) AS devs
+
+    RETURN c, traits, rels, devs
+    """
+
+    results = await neo4j_manager.execute_read_query(query, params)
+
+    for record in results:
         char_node = record.get("c")
         if not char_node:
             continue
@@ -463,85 +491,74 @@ async def get_character_profiles_from_db() -> Dict[str, CharacterProfile]:
         if not char_name:
             continue
 
-        CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
+        profile_dict: dict[str, Any] = dict(char_node)
+        profile_dict.pop("name", None)
+        profile_dict.pop("created_ts", None)
+        profile_dict.pop("updated_ts", None)
 
-        profile = dict(char_node)
-        profile.pop("name", None)
-        profile.pop("created_ts", None)
-        profile.pop("updated_ts", None)
+        traits = [t for t in record.get("traits", []) if t]
+        profile_dict["traits"] = sorted(set(traits))
 
-        traits_query = "MATCH (:Character:Entity {name: $char_name})-[:HAS_TRAIT]->(t:Trait:Entity) RETURN t.name AS trait_name"
-        trait_results = await neo4j_manager.execute_read_query(
-            traits_query, {"char_name": char_name}
-        )
-        profile["traits"] = sorted(
-            [tr["trait_name"] for tr in trait_results if tr and tr["trait_name"]]
-        )
+        rels = record.get("rels", []) or []
+        relationships: dict[str, Any] = {}
+        for rel_rec in rels:
+            target = rel_rec.get("target")
+            props = rel_rec.get("props", {})
+            if not target:
+                continue
+            props_cleaned = {
+                k: v
+                for k, v in props.items()
+                if k not in ["created_ts", "updated_ts", "source_profile_managed"]
+            }
+            relationships[target] = props_cleaned
+        profile_dict["relationships"] = relationships
 
-        rels_query = """
-        MATCH (:Character:Entity {name: $char_name})-[r:DYNAMIC_REL]->(target:Entity)
-        WHERE r.source_profile_managed = TRUE
-        RETURN target.name AS target_name, properties(r) AS rel_props
-        """
-        rel_results = await neo4j_manager.execute_read_query(
-            rels_query, {"char_name": char_name}
-        )
-        relationships = {}
-        if rel_results:
-            for rel_rec in rel_results:
-                target_name = rel_rec.get("target_name")
-                rel_props_full = rel_rec.get("rel_props", {})
-                rel_props_cleaned = {
-                    k: v
-                    for k, v in rel_props_full.items()
-                    if k
-                    not in [
-                        "created_ts",
-                        "updated_ts",
-                        "source_profile_managed",
-                        "chapter_added",
-                    ]
-                }
-                if "type" in rel_props_full:
-                    rel_props_cleaned["type"] = rel_props_full["type"]
-                if "chapter_added" in rel_props_full:
-                    rel_props_cleaned["chapter_added"] = rel_props_full["chapter_added"]
+        devs = record.get("devs", []) or []
+        for dev_rec in devs:
+            chapter_num = dev_rec.get("chapter")
+            summary = dev_rec.get("summary")
+            if chapter_num is None or summary is None:
+                continue
+            dev_key = kg_keys.development_key(chapter_num)
+            profile_dict[dev_key] = summary
+            if dev_rec.get("prov"):
+                profile_dict[kg_keys.source_quality_key(chapter_num)] = (
+                    "provisional_from_unrevised_draft"
+                )
 
-                if target_name:
-                    relationships[target_name] = rel_props_cleaned
-        profile["relationships"] = relationships
-
-        dev_query = (
-            "MATCH (:Character:Entity {name: $char_name})-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)\n"
-            f"RETURN dev.summary AS summary, dev.{KG_NODE_CHAPTER_UPDATED} AS chapter, dev.{KG_IS_PROVISIONAL} AS is_provisional, dev.id as dev_id\n"
-            "ORDER BY dev.chapter_updated ASC"
-        )
-        dev_results = await neo4j_manager.execute_read_query(
-            dev_query, {"char_name": char_name}
-        )
-        if dev_results:
-            for dev_rec in dev_results:
-                chapter_num = dev_rec.get("chapter")
-                summary = dev_rec.get("summary")
-                if chapter_num is not None and summary is not None:
-                    dev_key = f"development_in_chapter_{chapter_num}"
-                    profile[dev_key] = summary
-                    if dev_rec.get(KG_IS_PROVISIONAL):
-                        profile[f"source_quality_chapter_{chapter_num}"] = (
-                            "provisional_from_unrevised_draft"
-                        )
-
-        profiles_data[char_name] = CharacterProfile.from_dict(char_name, profile)
+        if (
+            chapter_limit is None
+            or profile_dict.get("traits")
+            or profile_dict.get("relationships")
+            or any(key.startswith(kg_keys.DEVELOPMENT_PREFIX) for key in profile_dict)
+        ):
+            CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
+            profiles_data[char_name] = CharacterProfile.from_dict(
+                char_name, profile_dict
+            )
 
     logger.info(
-        f"Successfully loaded and recomposed {len(profiles_data)} character profiles from Neo4j."
+        "Successfully loaded and recomposed %d character profiles from Neo4j%s.",
+        len(profiles_data),
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     return profiles_data
 
 
 async def get_character_info_for_snippet_from_db(
     char_name: str, chapter_limit: int
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
+    """Return character details with history up to ``chapter_limit``.
+
+    Args:
+        char_name: Name of the character to fetch.
+        chapter_limit: Highest chapter number to consider when collecting data.
+
+    Returns:
+        A dictionary of character info or ``None`` if not found.
+    """
+
     canonical_name = resolve_character_name(char_name)
     query = """
     MATCH (c:Character:Entity {name: $char_name_param})
@@ -668,7 +685,7 @@ async def get_character_info_for_snippet_from_db(
     return None
 
 
-async def find_thin_characters_for_enrichment() -> List[Dict[str, Any]]:
+async def find_thin_characters_for_enrichment() -> list[dict[str, Any]]:
     """Finds character nodes that are considered 'thin' (e.g., auto-created stubs)."""
     query = """
     MATCH (c:Character)
@@ -684,3 +701,27 @@ async def find_thin_characters_for_enrichment() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error finding thin characters: {e}", exc_info=True)
         return []
+
+
+async def remove_character_trait(char_name: str, trait_name: str) -> bool:
+    """Remove a trait from a character node."""
+    query = (
+        "MATCH (:Character {name: $char_name})-[r:HAS_TRAIT]->(t:Trait {name: $trait_name})"
+        " DELETE r"
+    )
+    cleanup_query = (
+        "MATCH (t:Trait {name: $trait_name})"
+        " WHERE NOT EXISTS((:Character)-[:HAS_TRAIT]->(t))"
+        " DETACH DELETE t"
+    )
+    try:
+        await neo4j_manager.execute_write_query(
+            query, {"char_name": char_name, "trait_name": trait_name}
+        )
+        await neo4j_manager.execute_write_query(
+            cleanup_query, {"trait_name": trait_name}
+        )
+        return True
+    except Exception as e:  # pragma: no cover - log but return False
+        logger.error(f"Error removing trait '{trait_name}' from '{char_name}': {e}")
+        return False

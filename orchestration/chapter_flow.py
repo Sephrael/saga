@@ -1,6 +1,7 @@
+# orchestration/chapter_flow.py
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - type hint import
     from .nana_orchestrator import NANA_Orchestrator
@@ -8,7 +9,7 @@ if TYPE_CHECKING:  # pragma: no cover - type hint import
 
 async def run_chapter_pipeline(
     orchestrator: NANA_Orchestrator, novel_chapter_number: int
-) -> Optional[str]:
+) -> str | None:
     """High-level pipeline for generating a chapter."""
     orchestrator._update_rich_display(
         chapter_num=novel_chapter_number, step="Starting Chapter"
@@ -25,9 +26,11 @@ async def run_chapter_pipeline(
     )
     if processed_prereqs is None:
         return None
-    plot_point_focus, plot_point_index, chapter_plan, hybrid_context_for_draft = (
-        processed_prereqs
-    )
+    plot_point_focus = processed_prereqs.plot_point_focus
+    plot_point_index = processed_prereqs.plot_point_index
+    chapter_plan = processed_prereqs.chapter_plan
+    hybrid_context_for_draft = processed_prereqs.hybrid_context_for_draft
+    fill_in_context = processed_prereqs.fill_in_context
 
     draft_result = await orchestrator._draft_initial_chapter_text(
         novel_chapter_number,
@@ -40,7 +43,8 @@ async def run_chapter_pipeline(
     )
     if processed_draft is None:
         return None
-    initial_draft_text, initial_raw_llm_text = processed_draft
+    initial_draft_text = processed_draft.text
+    initial_raw_llm_text = processed_draft.raw_llm_output
 
     revision_result = await orchestrator._process_and_revise_draft(
         novel_chapter_number,
@@ -56,8 +60,14 @@ async def run_chapter_pipeline(
     )
     if processed_revision is None:
         return None
-    processed_text, processed_raw_llm, is_flawed = processed_revision
+    processed_text = processed_revision.text
+    processed_raw_llm = processed_revision.raw_llm_output
+    is_flawed = processed_revision.is_flawed
 
     return await orchestrator._finalize_and_log(
-        novel_chapter_number, processed_text, processed_raw_llm, is_flawed
+        novel_chapter_number,
+        processed_text,
+        processed_raw_llm,
+        is_flawed,
+        fill_in_context,
     )

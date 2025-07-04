@@ -1,21 +1,16 @@
-# planner_agent.py
+# agents/planner_agent.py
 import json
-import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import config
+import structlog
+from config import settings
 from core.llm_interface import llm_service
-from data_access import chapter_queries
-from kg_maintainer.models import CharacterProfile, SceneDetail, WorldItem
-from prompt_data_getters import (
-    get_character_state_snippet_for_prompt,
-    get_reliable_kg_facts_for_drafting_prompt,
-    get_world_state_snippet_for_prompt,
-)
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+from models import SceneDetail
+
+logger = structlog.get_logger(__name__)
 
 SCENE_PLAN_KEY_MAP = {
     "scene": "scene_number",
@@ -40,13 +35,15 @@ SCENE_PLAN_LIST_INTERNAL_KEYS = [
 
 
 class PlannerAgent:
-    def __init__(self, model_name: str = config.PLANNING_MODEL):
+    """LLM-powered scene planner for chapter outlines."""
+
+    def __init__(self, model_name: str = settings.PLANNING_MODEL):
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
 
     def _parse_llm_scene_plan_output(
         self, json_text: str, chapter_number: int
-    ) -> Optional[List[SceneDetail]]:
+    ) -> list[SceneDetail] | None:
         """
         Parses JSON scene plan output from LLM.
         Expects a JSON array of scene objects.
@@ -90,7 +87,7 @@ class PlannerAgent:
             )
             return None
 
-        scenes_data: List[SceneDetail] = []
+        scenes_data: list[SceneDetail] = []
         for i, scene_item in enumerate(parsed_data):
             if not isinstance(scene_item, dict):
                 logger.warning(
@@ -98,7 +95,7 @@ class PlannerAgent:
                 )
                 continue
 
-            processed_scene_dict: Dict[str, Any] = {}
+            processed_scene_dict: dict[str, Any] = {}
             for llm_key, value in scene_item.items():
                 internal_key = SCENE_PLAN_KEY_MAP.get(
                     llm_key.lower().replace(" ", "_"), llm_key
@@ -149,18 +146,29 @@ class PlannerAgent:
 
     async def plan_chapter_scenes(
         self,
-        plot_outline: Dict[str, Any],
-        character_profiles: Dict[str, CharacterProfile],
-        world_building: Dict[str, Dict[str, WorldItem]],
+        plot_outline: dict[str, Any],
         chapter_number: int,
-        plot_point_focus: Optional[str],
+        plot_point_focus: str | None,
         plot_point_index: int,
-    ) -> Tuple[Optional[List[SceneDetail]], Optional[Dict[str, int]]]:
+        plot_point_progress_chapter: int,
+        chapter_context: str,
+        forbidden_locations: list[str] | None = None,
+    ) -> tuple[list[SceneDetail] | None, dict[str, int] | None]:
+        """Generate a detailed scene plan for a chapter.
+
+        Args:
+            plot_outline: Full plot outline for the novel.
+            chapter_number: The sequential chapter number.
+            plot_point_focus: The active major plot point.
+            plot_point_index: Index of the active plot point in the outline.
+            plot_point_progress_chapter: Chapter count within the current plot point span (1-based).
+            chapter_context: Context string for planning.
+            forbidden_locations: Locations or plot points that must be avoided.
+
+        Returns:
+            The planned scenes and token usage data.
         """
-        Generates a detailed scene plan for the chapter.
-        Returns the plan and LLM usage data.
-        """
-        if not config.ENABLE_AGENTIC_PLANNING:
+        if not settings.ENABLE_AGENTIC_PLANNING:
             logger.info(
                 f"Agentic planning disabled. Skipping detailed planning for Chapter {chapter_number}."
             )
@@ -175,53 +183,13 @@ class PlannerAgent:
             )
             return None, None
 
-        context_summary_parts: List[str] = []
-        if chapter_number > 1:
-            prev_chap_data = await chapter_queries.get_chapter_data_from_db(
-                chapter_number - 1
-            )
-            if prev_chap_data:
-                prev_summary = prev_chap_data.get("summary")
-                prev_is_provisional = prev_chap_data.get("is_provisional", False)
-                summary_prefix = (
-                    "[Provisional Summary from Prev Ch] "
-                    if prev_is_provisional and prev_summary
-                    else "[Summary from Prev Ch] "
-                )
-                if prev_summary:
-                    context_summary_parts.append(
-                        f"{summary_prefix}({chapter_number - 1}):\n{prev_summary[:1000].strip()}...\n"
-                    )
-                else:
-                    prev_text = prev_chap_data.get("text", "")
-                    text_prefix = (
-                        "[Provisional Text Snippet from Prev Ch] "
-                        if prev_is_provisional and prev_text
-                        else "[Text Snippet from Prev Ch] "
-                    )
-                    if prev_text:
-                        context_summary_parts.append(
-                            f"{text_prefix}({chapter_number - 1}):\n...{prev_text[-1000:].strip()}\n"
-                        )
-
-        context_summary_str = "".join(context_summary_parts)
+        context_summary_str = chapter_context
 
         protagonist_name = plot_outline.get(
-            "protagonist_name", config.DEFAULT_PROTAGONIST_NAME
-        )
-        kg_context_section = await get_reliable_kg_facts_for_drafting_prompt(
-            plot_outline, chapter_number, None
-        )
-        character_state_snippet_plain_text = (
-            await get_character_state_snippet_for_prompt(
-                character_profiles, plot_outline, chapter_number
-            )
-        )
-        world_state_snippet_plain_text = await get_world_state_snippet_for_prompt(
-            world_building, chapter_number
+            "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
         )
 
-        future_plot_context_parts: List[str] = []
+        future_plot_context_parts: list[str] = []
         all_plot_points = plot_outline.get("plot_points", [])
         total_plot_points_in_novel = len(all_plot_points)
 
@@ -295,9 +263,9 @@ class PlannerAgent:
         prompt = render_prompt(
             "planner_agent/scene_plan.j2",
             {
-                "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
-                "target_scenes_min": config.TARGET_SCENES_MIN,
-                "target_scenes_max": config.TARGET_SCENES_MAX,
+                "enable_no_think": True,
+                "target_scenes_min": settings.TARGET_SCENES_MIN,
+                "target_scenes_max": settings.TARGET_SCENES_MAX,
                 "chapter_number": chapter_number,
                 "novel_title": plot_outline.get("title", "Untitled"),
                 "novel_genre": plot_outline.get("genre", "N/A"),
@@ -306,17 +274,20 @@ class PlannerAgent:
                 "protagonist_arc": plot_outline.get("character_arc", "N/A"),
                 "plot_point_index_plus1": plot_point_index + 1,
                 "total_plot_points_in_novel": total_plot_points_in_novel,
+                "plot_point_chapter_progress": plot_point_progress_chapter,
+                "plot_point_chapter_span": settings.PLOT_POINT_CHAPTER_SPAN,
                 "plot_point_focus": plot_point_focus,
                 "future_plot_context_str": future_plot_context_str,
-                "context_summary_str": context_summary_str,
-                "kg_context_section": kg_context_section,
-                "character_state_snippet_plain_text": character_state_snippet_plain_text,
-                "world_state_snippet_plain_text": world_state_snippet_plain_text,
+                "chapter_context": context_summary_str,
                 "few_shot_scene_plan_example_str": few_shot_scene_plan_example_str,
+                "forbidden_locations": forbidden_locations or [],
             },
         )
         logger.info(
-            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} (target scenes: {config.TARGET_SCENES_MIN}-{config.TARGET_SCENES_MAX}, expecting JSON). Plot Point {plot_point_index + 1}/{total_plot_points_in_novel}."
+            f"Calling LLM ({self.model_name}) for detailed scene plan for chapter {chapter_number} "
+            f"(target scenes: {settings.TARGET_SCENES_MIN}-{settings.TARGET_SCENES_MAX}, expecting JSON). "
+            f"Plot Point {plot_point_index + 1}/{total_plot_points_in_novel} "
+            f"progress {plot_point_progress_chapter}/{settings.PLOT_POINT_CHAPTER_SPAN}."
         )
 
         (
@@ -325,12 +296,10 @@ class PlannerAgent:
         ) = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.PLANNING,
-            max_tokens=config.MAX_PLANNING_TOKENS,
+            temperature=settings.TEMPERATURE_PLANNING,
+            max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=True,
-            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
 
@@ -339,7 +308,7 @@ class PlannerAgent:
         )
 
         if parsed_scenes_list_of_dicts:
-            final_scenes_typed: List[SceneDetail] = []
+            final_scenes_typed: list[SceneDetail] = []
             for i, scene_dict in enumerate(parsed_scenes_list_of_dicts):
                 if not isinstance(scene_dict, dict):
                     logger.warning(
@@ -374,7 +343,7 @@ class PlannerAgent:
 
     async def plan_continuation(
         self, summary_text: str, num_points: int = 5
-    ) -> Tuple[Optional[List[str]], Optional[Dict[str, int]]]:
+    ) -> tuple[list[str] | None, dict[str, int] | None]:
         """Generate future plot points from a story summary."""
         prompt = render_prompt(
             "planner_agent/plan_continuation.j2",
@@ -383,12 +352,10 @@ class PlannerAgent:
         cleaned, usage = await llm_service.async_call_llm(
             model_name=self.model_name,
             prompt=prompt,
-            temperature=config.Temperatures.PLANNING,
-            max_tokens=config.MAX_PLANNING_TOKENS,
+            temperature=settings.TEMPERATURE_PLANNING,
+            max_tokens=settings.MAX_PLANNING_TOKENS,
             allow_fallback=True,
             stream_to_disk=False,
-            frequency_penalty=config.FREQUENCY_PENALTY_PLANNING,
-            presence_penalty=config.PRESENCE_PENALTY_PLANNING,
             auto_clean_response=True,
         )
         try:

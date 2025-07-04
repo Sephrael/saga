@@ -1,65 +1,91 @@
-# AGENTS Instructions
+# AGENTS Guide - SAGA Novel Generation
 
-These guidelines ensure consistent contributions to the SAGA autonomous creative writing system.
+This guide provides concise instructions for Codex and other automation agents working with the SAGA codebase.
 
-## Repository Overview
-SAGA is a Python project containing multiple modules such as `planner_agent.py`, `drafting_agent.py`, and `world_continuity_agent.py`. These agents collaborate to generate novel content using asynchronous tasks and a Neo4j knowledge graph.
+## Overview
+SAGA is an autonomous novel-writing system powered by the NANA engine. It relies on Python 3.10+, Neo4j, Jinja2 templates and OpenAI-compatible LLM APIs.
 
-## Commit Messages
-- Use Conventional Commits: `<type>(<scope>): <subject>`
-- Types include `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
-- Optional scopes: `agents`, `coordinator`, `memory`, `tasks`, `api`, `cli`
-- Keep the subject under 50 characters in the imperative mood
-- Example: `feat(agents): add emotion tracking`
+## Repository Layout
+```
+/agents              # Specialized AI agents
+/chapter_generation  # Chapter generation services
+/core                # Core infrastructure
+/data_access         # Database access layer
+/ingestion           # Text ingestion
+/initialization      # Story genesis and bootstrap
+/kg_maintainer       # Knowledge graph merge utilities
+/models              # Shared pydantic models
+/orchestration       # High level orchestration
+/processing          # Text processing pipeline
+/storage             # File I/O helpers
+/ui                  # Optional Rich CLI
+/utils               # Misc helpers
+/prompts             # Jinja2 templates
+main.py              # CLI entry
+config.py            # Configuration via Pydantic
+```
+
+## Development Setup
+- Create a virtual environment: `python -m venv venv && source venv/bin/activate`
+- Install dependencies: `pip install -r requirements.txt`
+- Install development tools: `pip install ruff mypy pytest-cov`
+- Copy `.env.example` to `.env` and update credentials
+- Start Neo4j: `docker-compose up -d neo4j`
+
+## Coding Standards
+- Python 3.10+ required
+- Include the relative file path as the first comment in every source file
+- Format and lint with `ruff`
+- Use type hints for all functions and methods
+- Write Google style docstrings
+- Organize imports: standard library, third party, local
+- Use async/await for I/O bound operations
 
 ## Testing Requirements
-- Run `ruff check . && ruff format --check .`
-- Run `pytest tests/ -v --cov=. --cov-report=term-missing`
-- Ensure coverage stays above 85%
-- Run `mypy .`
-- Skip the above when changing only documentation or comments
+- Primary framework: `pytest`
+- Run `pytest -v --cov=. --cov-report=term-missing` for coverage
+- Lint with `ruff check .` and type check with `mypy .`
+- Run tests and linters for any change that modifies code
+- Documentation or comment-only changes may skip tests and linters
 
-## Code Style
-- Format with `ruff format` (Black compatible, 88 characters)
-- Sort imports via `ruff check --select I --fix`
-- Use double quotes for strings
-- Provide type hints for all new functions
-- Use `async`/`await` for I/O
-- Prefer composition over inheritance for new agent features
-- Use `structlog` for logging instead of `print`
-- Agent names end with `Agent` (e.g., `PlannerAgent`)
+## Pull Request Guidelines
+- Title format: `[COMPONENT] Brief description`
+- Include in the description:
+  1. Summary of changes
+  2. Agent modifications
+  3. Database or config updates
+  4. Testing performed
+  5. Performance considerations
+- Ensure all tests and quality checks pass before merging
 
-## Agent Guidelines
-- Agent classes should implement clear entry points such as `process_task()` and `handle_message()`
-- Maintain agent state through helper classes or the existing database modules, not bare instance variables
-- All agent communication should go through the orchestrator modules
+## Useful Commands
+- Format and lint: `ruff check . && ruff format .`
+- Type check: `mypy .`
+- Full quality suite: `ruff check . && ruff format . && mypy . && pytest -v --cov=. --cov-report=term-missing`
+- Run SAGA: `docker-compose up -d neo4j && python main.py`
 
-## Dependencies
-- Add new packages to `requirements.txt` and pin major versions (e.g., `requests>=2.25,<3`)
-- Prefer lightweight libraries when possible (e.g., `httpx` for HTTP)
+## Environment Variables
+- `OPENAI_API_BASE`, `OPENAI_API_KEY`
+- `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
+- `OLLAMA_EMBED_URL`, `EMBEDDING_MODEL`
+- `AGENT_LOG_LEVEL`, `AGENT_ENABLE_PATCH_VALIDATION`
+- `CHAPTERS_PER_RUN`, `MAX_REVISION_CYCLES_PER_CHAPTER`
 
-## PR Expectations
-- Provide a concise summary of changes and motivation
-- Indicate the change type (bug fix, new feature, breaking change, documentation)
-- Include test results in the PR description
-- Mention any breaking changes or migrations
+## Model Configuration Example
+```python
+MODELS = {
+    "planning": LARGE_MODEL,
+    "evaluation": LARGE_MODEL,
+    "drafting": NARRATOR_MODEL,
+    "patches": MEDIUM_MODEL,
+    "summaries": SMALL_MODEL,
+    "kg_updates": MEDIUM_MODEL,
+}
+```
 
-## Documentation Standards
-- Use Google‑style docstrings for public functions and classes
-- Document expected message formats and agent capabilities
-- Update `README.md` when adding new agent types or changing setup steps
-
-## Error Handling
-- Wrap external calls with `try`/`except` and log exceptions with `logger.exception`
-- Fail fast when required environment variables are missing
-- Agent failures should not crash the orchestrator
-
-## Configuration Management
-- Environment variable names begin with `AGENT_` when possible (e.g., `AGENT_LOG_LEVEL`)
-- Document variables in `.env.example`
-
-## Security & Performance
-- Never commit API keys
-- Validate message payloads between agents
-- Limit concurrent tasks per agent (default 10) and monitor memory usage
-
+---
+**Important Notes**
+- Keep AGENTS.md updated as the project evolves
+- Follow the revision pipeline patterns
+- Maintain Neo4j schema consistency
+- Respect configuration management for new features

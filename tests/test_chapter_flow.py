@@ -1,6 +1,9 @@
+# tests/test_chapter_flow.py
 import pytest
-
+from chapter_generation.drafting_service import DraftResult
+from chapter_generation.prerequisites_service import PrerequisiteData
 from orchestration import chapter_flow
+from orchestration.nana_orchestrator import RevisionOutcome
 
 
 class DummyOrchestrator:
@@ -14,27 +17,30 @@ class DummyOrchestrator:
         return self.values.get("validate", True)
 
     async def _prepare_chapter_prerequisites(self, chapter):
-        return self.values.get("prereq", object())
-
-    async def _process_prereq_result(self, chapter, prereq_result):
         return self.values.get(
-            "process_prereqs",
-            ("focus", 1, "plan", "ctx"),
+            "prereq",
+            PrerequisiteData("focus", 1, "plan", "ctx", None),
         )
 
+    async def _process_prereq_result(self, chapter, prereq_result):
+        return self.values.get("process_prereqs", prereq_result)
+
     async def _draft_initial_chapter_text(self, *args):
-        return self.values.get("draft", "draft_res")
+        return self.values.get("draft", DraftResult("draft_res", "raw"))
 
     async def _process_initial_draft(self, chapter, draft_result):
-        return self.values.get("process_draft", ("txt", "raw"))
+        return self.values.get("process_draft", draft_result)
 
     async def _process_and_revise_draft(self, *args):
-        return self.values.get("revise", "revise_res")
+        return self.values.get(
+            "revise",
+            RevisionOutcome("revise_res", "raw", False),
+        )
 
     async def _process_revision_result(self, chapter, rev_res):
         return self.values.get(
             "process_revision",
-            ("processed", "raw", False),
+            RevisionOutcome("processed", "raw", False),
         )
 
     async def _finalize_and_log(self, *args):
@@ -42,14 +48,14 @@ class DummyOrchestrator:
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_success():
+async def test_run_chapter_pipeline_success() -> None:
     orch = DummyOrchestrator()
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
     assert result == "done"
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_invalid_outline():
+async def test_run_chapter_pipeline_invalid_outline() -> None:
     orch = DummyOrchestrator()
     orch.values["validate"] = False
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -57,7 +63,7 @@ async def test_run_chapter_pipeline_invalid_outline():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_prereq_none():
+async def test_run_chapter_pipeline_prereq_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_prereqs"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -65,7 +71,7 @@ async def test_run_chapter_pipeline_prereq_none():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_draft_none():
+async def test_run_chapter_pipeline_draft_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_draft"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)
@@ -73,7 +79,7 @@ async def test_run_chapter_pipeline_draft_none():
 
 
 @pytest.mark.asyncio
-async def test_run_chapter_pipeline_revision_none():
+async def test_run_chapter_pipeline_revision_none() -> None:
     orch = DummyOrchestrator()
     orch.values["process_revision"] = None
     result = await chapter_flow.run_chapter_pipeline(orch, 1)

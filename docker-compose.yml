@@ -1,22 +1,21 @@
 services:
-  neo4j-apoc:
-    # Best practice is to pin to a specific major version for stability.
-    image: neo4j:5.26.8
-    ports:
-      - "7474:7474"  # HTTP Browser interface
-      - "7687:7687"  # Bolt protocol
-    environment:
-      - NEO4J_AUTH=neo4j/saga_password
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
-      - NEO4J_dbms_security_procedures_allowlist=apoc.*
-      # You must accept the license agreement to use APOC core procedures in Neo4j 5+.
-      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-      - NEO4J_PLUGINS=["apoc"]
-    volumes:
-      - ./neo4j/data:/data
-      - ./neo4j/logs:/logs
-      - ./neo4j/conf:/conf
-      - ./neo4j/plugins:/plugins
+  neo4j:
+    image: neo4j:5.26.8                             # Use Neo4j 5.x (replace with latest 5.x tag as needed)
+    container_name: neo4j
     restart: unless-stopped
+    ports:
+      - "7474:7474"                                 # HTTP port
+      - "7687:7687"                                 # Bolt port
+    volumes:
+      - ./neo4j/data:/data                                # Persist graph data
+      - ./neo4j/logs:/logs                                # Persist logs
+      - ./neo4j/import:/import                            # Import directory for CSV/JSON files
+      - ./neo4j/plugins:/plugins                          # Mount for plugin jars
+      - ./neo4j/conf:/var/lib/neo4j/conf                  # Custom configuration overrides
+    environment:
+      - NEO4J_AUTH=neo4j/saga_password              # Set initial username/password
+      - NEO4J_PLUGINS=["apoc","apoc-extended"]                      # Auto-download and install APOC plugin
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.* # Allow unrestricted APOC procedures
+      - NEO4J_apoc_import_file_enabled=true         # Enable file import procedures
+      - NEO4J_apoc_export_file_enabled=true         # Enable file export procedures
+      - NEO4J_apoc_import_file_use_neo4j_config=true # Respect Neo4j config for import

@@ -1,44 +1,45 @@
 import asyncio
-from typing import Any, Coroutine, Dict, Optional, Tuple
+from collections.abc import Coroutine
 
 import structlog
-
-import config
 import utils
+from config import settings
+
+from initialization.models import PlotOutline
 
 from .common import bootstrap_field
 
 logger = structlog.get_logger(__name__)
 
 
-def create_default_plot(default_protagonist_name: str) -> Dict[str, Any]:
+def create_default_plot(default_protagonist_name: str) -> PlotOutline:
     """Create a default plot outline with placeholders."""
-    num_points = config.TARGET_PLOT_POINTS_INITIAL_GENERATION
-    return {
-        "title": config.DEFAULT_PLOT_OUTLINE_TITLE,
-        "protagonist_name": default_protagonist_name,
-        "genre": config.CONFIGURED_GENRE,
-        "setting": config.CONFIGURED_SETTING_DESCRIPTION,
-        "theme": config.CONFIGURED_THEME,
-        "logline": config.FILL_IN,
-        "inciting_incident": config.FILL_IN,
-        "central_conflict": config.FILL_IN,
-        "stakes": config.FILL_IN,
-        "plot_points": [f"{config.FILL_IN}" for _ in range(num_points)],
-        "narrative_style": config.FILL_IN,
-        "tone": config.FILL_IN,
-        "pacing": config.FILL_IN,
-        "is_default": True,
-        "source": "default_fallback",
-    }
+    num_points = settings.TARGET_PLOT_POINTS_INITIAL_GENERATION
+    return PlotOutline(
+        title=settings.DEFAULT_PLOT_OUTLINE_TITLE,
+        protagonist_name=default_protagonist_name,
+        genre=settings.CONFIGURED_GENRE,
+        setting=settings.CONFIGURED_SETTING_DESCRIPTION,
+        theme=settings.CONFIGURED_THEME,
+        logline=settings.FILL_IN,
+        inciting_incident=settings.FILL_IN,
+        central_conflict=settings.FILL_IN,
+        stakes=settings.FILL_IN,
+        plot_points=[f"{settings.FILL_IN}" for _ in range(num_points)],
+        narrative_style=settings.FILL_IN,
+        tone=settings.FILL_IN,
+        pacing=settings.FILL_IN,
+        is_default=True,
+        source="default_fallback",
+    )
 
 
 async def bootstrap_plot_outline(
-    plot_outline: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Optional[Dict[str, int]]]:
+    plot_outline: PlotOutline,
+) -> tuple[PlotOutline, dict[str, int] | None]:
     """Fill missing plot fields via LLM."""
-    tasks: Dict[str, Coroutine] = {}
-    usage_data: Dict[str, int] = {
+    tasks: dict[str, Coroutine] = {}
+    usage_data: dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
@@ -81,7 +82,7 @@ async def bootstrap_plot_outline(
     fill_in_count = sum(1 for p in plot_points if utils._is_fill_in(p))
     needed_plot_points = max(
         0,
-        config.TARGET_PLOT_POINTS_INITIAL_GENERATION
+        settings.TARGET_PLOT_POINTS_INITIAL_GENERATION
         - (len(plot_points) - fill_in_count),
     )
 
@@ -114,7 +115,7 @@ async def bootstrap_plot_outline(
             ]
             final_points.extend(new_points)
             plot_outline["plot_points"] = final_points[
-                : config.TARGET_PLOT_POINTS_INITIAL_GENERATION
+                : settings.TARGET_PLOT_POINTS_INITIAL_GENERATION
             ]
         elif value:
             plot_outline[field] = value

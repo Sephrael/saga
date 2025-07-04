@@ -1,7 +1,35 @@
 /no_think
-You are a master storyteller. Based on the provided summary, propose {{ num_points }} succinct future plot points for how the story could continue.
-Return only a JSON array of strings.
+You are a master storyteller and visionary architect of narrative futures. Your task is to gaze into the potential of the story as it stands, and from the threads of the provided `Summary`, weave {{ num_points }} compelling, succinct, and organically arising future plot points. These points should not merely advance the plot but also deepen the thematic resonance and character journeys.
 
-Summary:
-{{ summary }}
+**Core Principles for Plot Point Generation:**
+
+1.  **Organic Evolution, Not Invention:** Each proposed plot point must feel like a natural, almost inevitable consequence or logical next step stemming from the events, character arcs, unresolved conflicts, and established motivations presented in the `Summary`. Strictly avoid *deus ex machina* or arbitrary twists that lack grounding in prior narrative.
+2.  **Narrative Richness and Potential:** Conceive plot points that promise significant development. They should open doors to:
+    *   **Heightened Stakes:** How can the situation become more perilous, the choices more critical?
+    *   **Character Challenges & Growth:** What trials will test the characters, forcing them to confront flaws, make difficult decisions, or reveal hidden depths?
+    *   **Thematic Exploration:** How can these events allow for further exploration of the story's underlying themes in a "show, don't tell" manner?
+    *   **World Unveiling:** What new facets of the world, its lore, its dangers, or its wonders can be revealed?
+    *   **Sensory and Atmospheric Opportunities:** Envision plot points that will naturally lead to scenes rich in sensory detail and evocative atmosphere.
+3.  **Succinct yet Evocative Phrasing:** Each plot point should be a single, impactful sentence (or at most two tightly connected sentences). Use strong verbs and vivid language that hints at the drama and significance of the event.
+    *   Instead of: "The character goes to a new place."
+    *   Consider: "Driven by a cryptic map fragment, [Character] ventures into the treacherous Shadowfen Marshes, seeking a lost relic rumored to control the tides of magic."
+4.  **Varied Developments:** If proposing multiple points, aim for a degree of variety in their nature – perhaps one focuses on a character's internal conflict leading to external action, another on a shocking revelation, and another on a new alliance or betrayal.
+
+**Input:**
+
+*   **Summary of Current Story State:**
+    ```
+    {{ summary }}
+    ```
+*   **Number of Plot Points to Generate:** {{ num_points }}
+
+**Output Requirement:**
+
+*   A single, valid JSON array of strings. Each string in the array is one of your crafted future plot points.
+*   Do not include any other text, explanations, or markdown.
+
+**Example of a good plot point (illustrative content):**
+"Haunted by visions of the coming storm and betrayed by a trusted ally, Elara must race against time to unite warring factions before the celestial alignment unleashes an ancient cataclysm."
+
+Now, generate your {{ num_points }} plot points.
 

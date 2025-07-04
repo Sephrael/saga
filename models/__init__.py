@@ -1,6 +1,8 @@
 """Central package for SAGA data models."""
 
 from .agent_models import (
+    ChapterEndState,
+    CharacterState,
     EvaluationResult,
     PatchInstruction,
     ProblemDetail,
@@ -24,6 +26,8 @@ __all__ = [
     "ProblemDetail",
     "EvaluationResult",
     "PatchInstruction",
+    "CharacterState",
+    "ChapterEndState",
     "CharacterProfile",
     "WorldItem",
     "NovelConceptModel",

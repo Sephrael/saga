@@ -1,5 +1,53 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saga"
+version = "0.1.0"
+description = "Semantic And Graph-enhanced Authoring"
+readme = "README.md"
+requires-python = ">=3.10"
+
 [tool.black]
 line-length = 88
+target-version = ["py310"]
 
 [tool.ruff]
 line-length = 88
+target-version = "py310"
+src = [
+    "agents",
+    "core",
+    "data_access",
+    "initialization",
+    "models",
+    "orchestration",
+    "processing",
+    "utils",
+    "ui",
+]
+lint.select = ["F", "B", "I", "UP"]
+lint.fixable = ["ALL"]
+lint.unfixable = []
+format.quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+namespace_packages = true
+show_error_codes = true
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true

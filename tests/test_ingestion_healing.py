@@ -1,10 +1,10 @@
 from unittest.mock import AsyncMock
 
-import pytest
-
 import config
+import pytest
 import utils
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import plot_queries
 from orchestration.nana_orchestrator import NANA_Orchestrator
 
@@ -12,7 +12,7 @@ from orchestration.nana_orchestrator import NANA_Orchestrator
 @pytest.mark.asyncio
 async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
     monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
-    monkeypatch.setattr(config, "KG_HEALING_INTERVAL", 2)
+    monkeypatch.setattr(config.settings, "KG_HEALING_INTERVAL", 2)
 
     orch = NANA_Orchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
@@ -20,7 +20,8 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
     chapters = ["a", "b", "c", "d", "e"]
 
     monkeypatch.setattr(
-        "orchestration.nana_orchestrator.split_text_into_chapters", lambda _t: chapters
+        "ingestion.ingestion_manager.split_text_into_chapters",
+        lambda _t: chapters,
     )
     monkeypatch.setattr(
         orch.finalize_agent,
@@ -35,6 +36,8 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
 
     monkeypatch.setattr(orch.display, "start", lambda: None)
     monkeypatch.setattr(orch.display, "stop", AsyncMock())
+    llm_close = AsyncMock()
+    monkeypatch.setattr(llm_service, "aclose", llm_close)
     monkeypatch.setattr(neo4j_manager, "connect", AsyncMock())
     monkeypatch.setattr(neo4j_manager, "create_db_schema", AsyncMock())
     monkeypatch.setattr(neo4j_manager, "close", AsyncMock())
@@ -52,3 +55,4 @@ async def test_ingestion_triggers_healing(monkeypatch, tmp_path):
     await orch.run_ingestion_process(str(text_file))
 
     assert heal.call_count == 3
+    llm_close.assert_awaited_once()

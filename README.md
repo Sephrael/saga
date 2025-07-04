@@ -22,8 +22,7 @@ SAGA, with its NANA engine, is an ambitious project designed to autonomously cra
 *   **`agents.PlannerAgent`:** Strategically outlines detailed scene-by-scene plans for each chapter, ensuring plot progression and incorporating directorial elements like pacing and scene type.
 *   **`agents.DraftingAgent`:** Weaves the initial prose for chapters, guided by the planner's blueprints and rich contextual information. It can operate scene-by-scene or draft a whole chapter in a single pass.
 *   **`agents.ComprehensiveEvaluatorAgent`:** Critically assesses drafts for plot coherence, thematic alignment, character consistency, narrative depth, and overall quality, generating structured `ProblemDetail` feedback.
-*   **`agents.WorldContinuityAgent`:** Performs targeted checks to ensure consistency with established world-building rules, lore, and character backstories by querying the knowledge graph.
-*   **`processing.revision_logic`:** Implements sophisticated revisions based on evaluation feedback, capable of performing targeted, patch-based fixes or full chapter rewrites.
+*   **`processing.revision_manager.RevisionManager`:** Coordinates revisions based on evaluation feedback, orchestrating patch-based fixes or full chapter rewrites.
 *   **`agents.PatchValidationAgent`:** Verifies generated patch instructions to ensure they resolve the identified problems before being applied.
 *   **`agents.KGMaintainerAgent`:** Intelligently manages the novel's evolving knowledge graph in Neo4j. It summarizes chapters, extracts new knowledge from final text, and performs periodic "healing" cycles to resolve duplicates and enrich sparse data.
 *   **`agents.FinalizeAgent`:** Orchestrates the final steps for a chapter, including KG updates, text summarization, embedding generation, and persisting all data to the database.
@@ -62,22 +61,25 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
     *   **Initial Story Generation (`initialization.genesis`):**
         *   If `user_story_elements.yaml` is provided, it's parsed to bootstrap the plot, characters, and world.
         *   Otherwise, or if key elements are marked `[Fill-in]`, the `bootstrapper` modules fill in the plot outline, character profiles, and world-building details via targeted LLM calls.
+        *   The results are returned as typed models: `PlotOutline`, `CharacterProfile`, and `WorldBuilding` defined in `initialization.models`.
     *   **KG Pre-population:** The `KGMaintainerAgent` performs a full sync of this foundational story data to the Neo4j graph.
+    *   **Initial Context Computation:** Once bootstrapping is complete, SAGA generates a baseline hybrid context from the newly populated KG. This context is stored and used to seed the prerequisites step for Chapter&nbsp;1.
+    *   **Reset Neo4j:** To restart from a clean slate, stop the container with `docker-compose down -v` or run `python reset_neo4j.py --force` and then re-run `docker-compose up -d neo4j`.
 
 2.  **Chapter Generation Loop (up to `CHAPTERS_PER_RUN` chapters):**
     *   **(A) Prerequisites (`orchestration.chapter_flow`):**
         *   Retrieves the current **Plot Point Focus** for the chapter.
         *   **Planning (if enabled):** The `PlannerAgent` creates a detailed scene-by-scene plan.
-        *   **Context Generation:** `processing.context_generator` assembles a "hybrid context" string by:
+        *   **Context Generation:** `chapter_generation.context_orchestrator.ContextOrchestrator` assembles a "hybrid context" string by:
             *   Querying Neo4j for semantically similar past chapter summaries/text snippets (vector search).
-            *   Fetching key reliable facts from the Knowledge Graph via `prompt_data_getters`.
+            *   Fetching key reliable facts from the Knowledge Graph via context providers.
     *   **(B) Drafting:**
         *   The `DraftingAgent` writes the initial draft, guided by the scene plan (if available), plot point focus, and hybrid context.
     *   **(C) De-duplication & Evaluation:**
         *   The draft undergoes de-duplication via `processing.text_deduplicator` to reduce repetitiveness.
-        *   The `ComprehensiveEvaluatorAgent` and `WorldContinuityAgent` run in parallel to assess the draft against multiple criteria.
+        *   The `ComprehensiveEvaluatorAgent` evaluates the draft against multiple criteria, including world continuity.
     *   **(D) Revision (if `needs_revision` is true):**
-        *   `processing.revision_logic` attempts to fix identified issues.
+        *   `processing.revision_manager.RevisionManager` attempts to fix identified issues.
         *   If `ENABLE_PATCH_BASED_REVISION` is true, it generates and applies targeted text patches. A patch suggesting deletion is now handled as an empty string replacement.
         *   If patching is insufficient or disabled, or problems are extensive, a full chapter rewrite may be performed.
         *   The evaluation steps are repeated on the revised text.
@@ -87,8 +89,64 @@ SAGA's NANA engine orchestrates a sophisticated pipeline for novel generation:
         *   It extracts new knowledge (character updates, world-building changes, new KG triples) from the final chapter text and merges these updates into the in-memory state and persists them to Neo4j.
         *   It generates an embedding for the final chapter text.
         *   The final chapter data (text, summary, embedding, provisional status) is saved to Neo4j by `data_access.chapter_queries`.
+        *   These updates recalculate the hybrid context so that the next chapter begins its prerequisites phase with the most current information.
     *   **(F) KG Maintenance (Periodic):**
         *   Every `KG_HEALING_INTERVAL` chapters, the `KGMaintainerAgent.heal_and_enrich_kg()` method is called to perform maintenance like resolving duplicate entities.
+
+## Revision Phase
+
+The revision stage is coordinated by `processing.revision_manager.RevisionManager`.
+It receives the draft text and `EvaluationResult` objects and chooses between
+patch-based fixes or a full rewrite. Patching is handled by
+`processing.patch_generator.PatchGenerator`, which groups related problems,
+generates patch instructions, optionally validates them via the
+`PatchValidationAgent`, and applies the changes. After patching, the chapter is
+re-evaluated and may loop through additional revision cycles up to
+`MAX_REVISION_CYCLES_PER_CHAPTER`.
+
+### Full Revision Flow
+
+1. **Collect Evaluations:** `RevisionManager` receives `EvaluationResult` objects
+   along with the draft text.
+2. **Generate Patch Instructions:** When `ENABLE_PATCH_BASED_REVISION` is
+   enabled, related problems are grouped and sent to `PatchGenerator`. It tries
+   up to `PATCH_GENERATION_ATTEMPTS` times to create a maximum of
+   `MAX_PATCH_INSTRUCTIONS_TO_GENERATE` instructions.
+3. **Validate Patches:** If `AGENT_ENABLE_PATCH_VALIDATION` is true, each
+   instruction is verified by `PatchValidationAgent` before it is applied.
+4. **Apply Patches:** Accepted patches modify the text. The chapter is then
+   re-evaluated. If the remaining problems are at or below
+   `POST_PATCH_PROBLEM_THRESHOLD` and the changes meet the
+   `REVISION_SIMILARITY_ACCEPTANCE` requirement, the revision is accepted.
+5. **Full Rewrite Trigger:** Patching may be skipped when disabled, when the
+   draft is shorter than `MIN_ACCEPTABLE_DRAFT_LENGTH`, or when repeated cycles
+   exceed `MAX_REVISION_CYCLES_PER_CHAPTER`. In these cases `RevisionManager`
+   instructs the `DraftingAgent` to perform a complete rewrite.
+6. **Knowledge Graph Healing:** When root cause analysis reveals conflicts with
+   character profiles or world elements, the orchestrator now calls
+   `KGMaintainerAgent.heal_and_enrich_kg()` before the next revision attempt.
+
+```mermaid
+flowchart TD
+    RevisionManager --> PatchGenerator
+    PatchGenerator --> PatchValidationAgent
+    PatchValidationAgent --> RevisionManager
+    RevisionManager -->|full rewrite| DraftingAgent
+```
+
+### Configuration Highlights
+
+Several options in `config.py` adjust revision behavior:
+
+* `ENABLE_PATCH_BASED_REVISION` – enable/disable the patch workflow.
+* `AGENT_ENABLE_PATCH_VALIDATION` – use the LLM-based validator before applying patches.
+* `MAX_PATCH_INSTRUCTIONS_TO_GENERATE` and `PATCH_GENERATION_ATTEMPTS` – control how many patches are produced and how many attempts are made.
+* `POST_PATCH_PROBLEM_THRESHOLD` – if remaining problems after patching are at or below this value, the patched text is accepted.
+* `REVISION_SIMILARITY_ACCEPTANCE` – skip patches that are too similar to the original text.
+* `MAX_REVISION_CYCLES_PER_CHAPTER` and `MIN_ACCEPTABLE_DRAFT_LENGTH` – govern full rewrite limits and minimum chapter length.
+
+Refer to `config.py` for additional settings such as temperatures and penalty
+values that further tune revision and patch prompts.
 
 ## Setup
 
@@ -132,12 +190,15 @@ OPENAI_API_KEY="nope"                       # API key (can be any string if serv
 OLLAMA_EMBED_URL="http://127.0.0.1:11434"     # URL of your Ollama API
 EMBEDDING_MODEL="nomic-embed-text:latest"   # Ensure this model is pulled in Ollama (ollama pull nomic-embed-text)
 EXPECTED_EMBEDDING_DIM="768"                # Dimension of your embedding model (e.g., 768 for nomic-embed-text)
+ENABLE_RERANKING="True"                     # Enable reranker step for vector search
+RERANKER_MODEL="mxbai-rerank-large-v1:latest" # Reranker model used when ENABLE_RERANKING is True
 
 # Neo4j Connection (Defaults usually work with the provided Docker setup)
 NEO4J_URI="bolt://localhost:7687"
 NEO4J_USER="neo4j"
 NEO4J_PASSWORD="saga_password"
 NEO4J_DATABASE="neo4j" # Or your specific database name if not default
+NEO4J_VECTOR_DIMENSIONS="768"                # Dimensions of your vector index
 
 # Model Aliases (Set to the names of models available on your OPENAI_API_BASE server)
 LARGE_MODEL="Qwen3-14B-Q4"    # Used for Planning, Evaluation
@@ -146,7 +207,7 @@ SMALL_MODEL="Qwen3-4B-Q4"    # Used for Summaries
 NARRATOR_MODEL="Qwen3-14B-Q4" # Used for Drafting and a full Revision
 
 # Other important settings in config.py (review defaults)
-# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, LOG_LEVEL, etc.
+# MAX_CONTEXT_TOKENS, CHAPTERS_PER_RUN, AGENT_LOG_LEVEL, etc.
 ```
 
 Refer to `config.py` for a full list of configurable options and their defaults.
@@ -195,6 +256,7 @@ python main.py
 *   **First Run:** SAGA will perform initial setup (plot, world, characters based on `user_story_elements.yaml` or generation) and pre-populate the Neo4j knowledge graph.
 *   **Subsequent Runs:** It will load the existing state from Neo4j and continue generating chapters from where it left off.
 *   The orchestrator recalculates pending plot points before each chapter and continues until none remain or `CHAPTERS_PER_RUN` chapters have been written.
+*   Evaluation prompts now include only the active plot point and the next one to keep feedback focused.
 
 Output files (chapters, logs, debug information) will be saved in the directory specified by `BASE_OUTPUT_DIR` (default: `novel_output`). This directory is ignored by Git to keep generated data out of version control.
 
@@ -246,6 +308,39 @@ python complexity_report.py
 ```
 
 This runs `radon cc . -nc` and highlights functions that may benefit from refactoring.
+
+### Install Dev Dependencies
+
+Install `ruff` and `mypy` in addition to the core requirements:
+
+```bash
+pip install -r requirements.txt  # installs pytest-cov for coverage
+pip install ruff mypy
+```
+
+### Environment Variables
+
+Use `.env.example` as a starting point:
+
+```bash
+cp .env.example .env
+```
+
+Two notable variables prefixed with `AGENT_` control behavior:
+
+- `AGENT_LOG_LEVEL` – set log verbosity (e.g., `INFO` or `DEBUG`).
+- `AGENT_ENABLE_PATCH_VALIDATION` – enable the `PatchValidationAgent` to verify patches.
+
+### Running Linters and Tests
+
+Check formatting and linting with Ruff, run type checks, and execute tests with coverage:
+
+```bash
+ruff check .
+ruff format --check .
+mypy .
+pytest -v --cov=. --cov-report=term-missing
+```
 
 ## License
 

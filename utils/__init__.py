@@ -1,18 +1,19 @@
-"""General utility functions for the Saga Novel Generation system."""
+# utils/__init__.py
+"""General utility functions for the SAGA Novel Generation system."""
 
 from __future__ import annotations
 
 import asyncio
-import logging
+import logging as std_logging
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
-
-import config
+from config import settings
 from core.llm_interface import count_tokens, llm_service
 
-from .helpers import _is_fill_in
+from .logging import setup_logging_nana
+from .plot import get_plot_point_info, get_scoped_plot_outline
 from .similarity import find_semantically_closest_segment, numpy_cosine_similarity
 from .text_processing import (
     SpaCyModelManager,
@@ -24,15 +25,16 @@ from .text_processing import (
     normalize_trait_name,
     spacy_manager,
 )
+from .text_utils import _is_fill_in
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from kg_maintainer.models import SceneDetail
 
-logger = logging.getLogger(__name__)
+logger = std_logging.getLogger(__name__)
 
 
 def format_scene_plan_for_prompt(
-    chapter_plan: List["SceneDetail"],
+    chapter_plan: list[SceneDetail],
     model_name_for_tokens: str,
     max_tokens_budget: int,
 ) -> str:
@@ -86,11 +88,11 @@ def format_scene_plan_for_prompt(
 async def deduplicate_text_segments(
     original_text: str,
     segment_level: str = "paragraph",
-    similarity_threshold: float = config.DEDUPLICATION_SEMANTIC_THRESHOLD,
-    use_semantic_comparison: bool = config.DEDUPLICATION_USE_SEMANTIC,
-    min_segment_length_chars: int = config.DEDUPLICATION_MIN_SEGMENT_LENGTH,
+    similarity_threshold: float = settings.DEDUPLICATION_SEMANTIC_THRESHOLD,
+    use_semantic_comparison: bool = settings.DEDUPLICATION_USE_SEMANTIC,
+    min_segment_length_chars: int = settings.DEDUPLICATION_MIN_SEGMENT_LENGTH,
     prefer_newer: bool = False,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Remove near-duplicate segments from text."""
     if not original_text.strip():
         return original_text, 0
@@ -102,8 +104,8 @@ async def deduplicate_text_segments(
     num_segments = len(segments_with_offsets)
     indices_to_remove = set()
 
-    embeddings: List[Optional[np.ndarray]] = []
-    normalized_texts: List[str] = []
+    embeddings: list[np.ndarray | None] = []
+    normalized_texts: list[str] = []
 
     if use_semantic_comparison:
         tasks = [
@@ -182,7 +184,7 @@ async def deduplicate_text_segments(
     ]
     spans_to_remove_offsets.sort(key=lambda x: x[0])
 
-    new_text_parts: List[str] = []
+    new_text_parts: list[str] = []
     last_pos = 0
     for start, end in spans_to_remove_offsets:
         if start > last_pos:
@@ -200,13 +202,13 @@ async def deduplicate_text_segments(
     return deduplicated_text, characters_removed_count
 
 
-def remove_spans_from_text(text: str, spans: List[Tuple[int, int]]) -> str:
+def remove_spans_from_text(text: str, spans: list[tuple[int, int]]) -> str:
     """Remove character spans from ``text``."""
     if not spans:
         return text
 
     spans_sorted = sorted(spans, key=lambda x: x[0])
-    result_parts: List[str] = []
+    result_parts: list[str] = []
     last_end = 0
     for start, end in spans_sorted:
         if start > last_end:
@@ -229,6 +231,9 @@ __all__ = [
     "numpy_cosine_similarity",
     "get_text_segments",
     "format_scene_plan_for_prompt",
+    "get_plot_point_info",
+    "get_scoped_plot_outline",
     "deduplicate_text_segments",
     "remove_spans_from_text",
+    "setup_logging_nana",
 ]

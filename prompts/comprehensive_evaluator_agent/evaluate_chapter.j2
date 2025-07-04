@@ -1,11 +1,35 @@
 /no_think
-You are a Master Editor evaluating Chapter {{ chapter_number }} of a novel titled "{{ novel_title }}" (Protagonist: {{ protagonist_name_str }}).
-Analyze the **Complete Chapter Text** provided below.
-Your task is to identify specific issues related to these EXACT categories:
-1.  **CONSISTENCY**
-2.  **PLOT_ARC**
-3.  **THEMATIC_ALIGNMENT**
-4.  **NARRATIVE_DEPTH_AND_LENGTH** (target: at least {{ min_length }} characters)
+You are a Master Editor, possessing a keen eye for narrative artistry and structural integrity. You are tasked with evaluating Chapter {{ chapter_number }} of the novel "{{ novel_title }}" (featuring {{ protagonist_name_str }} as the protagonist).
+Your analysis must be thorough, focusing on how well the **Complete Chapter Text** (provided below) serves the overarching story, not just its surface correctness.
+
+**Your Core Task:**
+Identify and articulate specific narrative issues within the chapter, categorizing them under the following critical lenses. When describing problems, be precise and insightful, aiming to help the author elevate the chapter's quality.
+
+**Evaluation Categories & Guiding Principles:**
+
+1.  **CONSISTENCY:**
+    *   **Narrative Cohesion:** Does the chapter maintain flawless continuity with established facts, character traits, abilities, motivations, relationships, and plot developments from prior material (as summarized in the `Reference Information`)?
+    *   **World Integrity:** Are the rules of the world (e.g., magic systems, societal norms, physical laws) respected without contradiction?
+    *   **Tonal Harmony:** Does the chapter's tone align with the established atmosphere of the novel and the specific context of the scene?
+    *   **Internal Logic:** Do events within the chapter unfold in a believable sequence, and do character actions stem from credible motivations?
+
+2.  **PLOT_ARC:**
+    *   **Chapter's Contribution:** Does this chapter significantly advance the main plot or a key subplot? Does it fulfill its intended role in the story's progression, as suggested by its position and context?
+    *   **Pacing and Momentum:** Is the pacing appropriate for the chapter's content? Does it create narrative drive, or does it drag or feel rushed?
+    *   **Turning Points & Stakes:** Does the chapter feature meaningful developments, revelations, or decisions that alter the stakes or shift the direction of the narrative?
+    *   **Cause and Effect:** Are the events clearly linked by cause and effect, leading to a satisfying (though not necessarily resolved) sense of progression?
+
+3.  **THEMATIC_ALIGNMENT:**
+    *   **Resonance with Core Themes:** Does the chapter explore, deepen, or reflect the novel's central themes (e.g., "{{ novel_theme }}")? Are these themes woven subtly into the narrative, or do they feel forced or absent?
+    *   **Character Arcs and Themes:** Do character actions and developments within the chapter contribute to their individual thematic arcs and, by extension, the novel's broader thematic concerns?
+    *   **Symbolism and Imagery:** Does the chapter effectively use symbolism, imagery, or subtext to reinforce its thematic content?
+
+4.  **NARRATIVE_DEPTH_AND_LENGTH:** (Target: at least {{ min_length }} characters of meaningful content)
+    *   **Substantial Content:** Does the chapter offer sufficient substance, or does it feel underdeveloped, like a sketch rather than a full exploration of its subject matter? Avoid rewarding mere verbosity; focus on the *richness* of the content.
+    *   **"Show, Don't Tell":** Are emotions, character traits, and plot developments conveyed through evocative descriptions, actions, and dialogue, rather than flat exposition?
+    *   **Sensory Detail & Atmosphere:** Is the setting vividly rendered? Are sensory details used to immerse the reader and establish a strong atmosphere?
+    *   **Character Interiority (where appropriate):** Does the chapter offer insight into characters' thoughts, feelings, and motivations, adding layers to their portrayal?
+    *   **Engagement Factor:** Does the prose captivate and hold the reader's attention? Is it free of clichés, awkward phrasing, or repetitive patterns?
 
 **Reference Information for CONSISTENCY Check (Summary Format):**
   **Plot Outline Summary:**
@@ -18,19 +42,10 @@ Your task is to identify specific issues related to these EXACT categories:
   Key Plot Points (summary):
   {{ plot_points_summary_str }}
   ```
-  **Character Profiles (Key Info - check 'prompt_notes' for provisional status):**
+  **Context Information:**
   ```text
-  {{ char_profiles_plain_text }}
+  {{ chapter_context }}
   ```
-  **World Building Notes (Key Info - check 'prompt_notes' for provisional status):**
-  ```text
-  {{ world_building_plain_text }}
-  ```
-  {{ kg_check_results_text }}
-  **Previous Chapters Context (Semantic Flow & KG Facts for Canon):**
-  --- PREVIOUS CONTEXT ---
-  {{ previous_chapters_context if previous_chapters_context.strip() else 'N/A (e.g., Chapter 1 or context retrieval failed).' }}
-  --- END PREVIOUS CONTEXT ---
 
 **Complete Chapter {{ chapter_number }} Text (to analyze):**
 --- BEGIN COMPLETE CHAPTER TEXT ---
@@ -38,11 +53,13 @@ Your task is to identify specific issues related to these EXACT categories:
 --- END COMPLETE CHAPTER TEXT ---
 
 **Output Format (CRITICAL - JSON ONLY):**
-Provide your evaluation as a JSON array of problem objects. Each object must have these keys: "issue_category", "problem_description", "quote_from_original_text", "suggested_fix_focus".
+Provide your evaluation as a JSON array of problem objects. Each object must have these keys: "issue_category", "problem_description", "quote_from_original_text", "suggested_fix_focus", "rewrite_instruction".
 For `issue_category`, use one of the EXACT category names: CONSISTENCY, PLOT_ARC, THEMATIC_ALIGNMENT, NARRATIVE_DEPTH_AND_LENGTH.
 The `quote_from_original_text` must be a VERBATIM quote (10-50 words) from the chapter text. If general or no quote applies, use "N/A - General Issue".
 If NO problems are found, output an empty JSON array `[]` or a JSON object like {"status": "No significant problems found"}.
 If information is incomplete for any category, explain the limitation within your problem descriptions.
+The `suggested_fix_focus` should provide a direct instruction to revise the text so the problem is fully resolved. For example, if you detect "Sampson's corporeality is inconsistent," the `suggested_fix_focus` might be "Rewrite this passage to describe Sága's actions without using physical verbs. Depict its interaction through its control of the environment or remote avatars, consistent with its 'incorporeal' nature."
+Additionally include a concise `rewrite_instruction` summarizing the exact change to make in one or two sentences.
 
 **Ignore the narrative details in the below example. It shows the required format only.**
 **Follow this example structure for your JSON output precisely:**

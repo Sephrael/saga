@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 import utils
 from data_access import character_queries, world_queries
 from kg_constants import KG_NODE_CREATED_CHAPTER
@@ -180,3 +179,4 @@ async def test_get_world_building_from_db_populates_name_to_id(monkeypatch):
     assert (
         world_queries.WORLD_NAME_TO_ID[utils._normalize_for_id("City")] == "places_city"
     )
+    world_queries.get_world_building_from_db.cache_clear()

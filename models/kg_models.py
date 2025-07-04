@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from pydantic import BaseModel, Field
-
+import kg_constants as kg_keys
 import utils
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CREATED_CHAPTER
+from pydantic import BaseModel, Field
 
 
 class CharacterProfile(BaseModel):
@@ -15,13 +15,13 @@ class CharacterProfile(BaseModel):
 
     name: str
     description: str = ""
-    traits: List[str] = Field(default_factory=list)
-    relationships: Dict[str, Any] = Field(default_factory=dict)
+    traits: list[str] = Field(default_factory=list)
+    relationships: dict[str, Any] = Field(default_factory=dict)
     status: str = "Unknown"
-    updates: Dict[str, Any] = Field(default_factory=dict)
+    updates: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict[str, Any]) -> "CharacterProfile":
+    def from_dict(cls, name: str, data: dict[str, Any]) -> CharacterProfile:
         """Create a ``CharacterProfile`` from a raw dictionary."""
 
         known_fields = cls.model_fields.keys()
@@ -32,7 +32,7 @@ class CharacterProfile(BaseModel):
         profile_data["updates"] = updates_data
         return cls(name=name, **profile_data)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the profile to a flat dictionary."""
 
         data = self.model_dump(exclude={"name"})
@@ -40,17 +40,16 @@ class CharacterProfile(BaseModel):
         data.update(updates_data)
         return data
 
-    def get_development_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
+    def get_development_summary(self, up_to_chapter: int | None = None) -> list[str]:
         """Return development notes up to a chapter number."""
 
-        notes: List[str] = []
-        prefix = "development_in_chapter_"
+        notes: list[str] = []
+        prefix = kg_keys.DEVELOPMENT_PREFIX
         for key, val in sorted(self.updates.items()):
             if not key.startswith(prefix):
                 continue
-            try:
-                chap = int(key.split("_")[-1])
-            except (ValueError, IndexError):
+            chap = kg_keys.parse_development_key(key)
+            if chap is None:
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):
@@ -66,10 +65,10 @@ class WorldItem(BaseModel):
     name: str
     created_chapter: int = 0
     is_provisional: bool = False
-    properties: Dict[str, Any] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, category: str, name: str, data: Dict[str, Any]) -> "WorldItem":
+    def from_dict(cls, category: str, name: str, data: dict[str, Any]) -> WorldItem:
         """Create a ``WorldItem`` from a raw dictionary."""
 
         if not category or not isinstance(category, str) or not category.strip():
@@ -108,7 +107,7 @@ class WorldItem(BaseModel):
             properties=props,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the item to a flat dictionary."""
 
         data = self.model_dump(exclude={"id", "category", "name"})
@@ -116,17 +115,16 @@ class WorldItem(BaseModel):
         data.update(properties_data)
         return data
 
-    def get_elaboration_summary(self, up_to_chapter: Optional[int] = None) -> List[str]:
+    def get_elaboration_summary(self, up_to_chapter: int | None = None) -> list[str]:
         """Return elaboration notes up to a chapter number."""
 
-        notes: List[str] = []
-        prefix = "elaboration_in_chapter_"
+        notes: list[str] = []
+        prefix = kg_keys.ELABORATION_PREFIX
         for key, val in sorted(self.properties.items()):
             if not key.startswith(prefix):
                 continue
-            try:
-                chap = int(key.split("_")[-1])
-            except (ValueError, IndexError):
+            chap = kg_keys.parse_elaboration_key(key)
+            if chap is None:
                 continue
             if up_to_chapter is None or chap <= up_to_chapter:
                 if isinstance(val, str):

@@ -1,7 +1,7 @@
-import config
-from utils.helpers import _is_fill_in
+from config import settings
+from utils.text_utils import _is_fill_in
 
 
 def test_is_fill_in_helper():
     assert not _is_fill_in("abc")
-    assert _is_fill_in(config.FILL_IN)
+    assert _is_fill_in(settings.FILL_IN)

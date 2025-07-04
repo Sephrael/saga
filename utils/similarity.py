@@ -1,19 +1,17 @@
+# utils/similarity.py
 import asyncio
-import logging
-from typing import Optional, Tuple
+from typing import cast
 
 import numpy as np
-
+import structlog
 from core.llm_interface import llm_service
 
 from .text_processing import get_text_segments
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
-def numpy_cosine_similarity(
-    vec1: Optional[np.ndarray], vec2: Optional[np.ndarray]
-) -> float:
+def numpy_cosine_similarity(vec1: np.ndarray | None, vec2: np.ndarray | None) -> float:
     """Calculate cosine similarity between two numpy vectors."""
     if vec1 is None or vec2 is None:
         logger.debug("Cosine similarity: one or both vectors are None. Returning 0.0.")
@@ -47,12 +45,39 @@ def numpy_cosine_similarity(
     return float(np.clip(similarity, -1.0, 1.0))
 
 
+def batch_cosine_similarity(
+    query_vec: np.ndarray, candidate_vecs: list[np.ndarray]
+) -> np.ndarray:
+    """Return cosine similarities between ``query_vec`` and ``candidate_vecs``."""
+    if not candidate_vecs:
+        return np.array([], dtype=np.float32)
+
+    query = np.asarray(query_vec, dtype=np.float32).flatten()
+    matrix = np.asarray(candidate_vecs, dtype=np.float32)
+    if matrix.ndim == 1:
+        matrix = matrix.reshape(1, -1)
+
+    norm_query = np.linalg.norm(query)
+    norm_matrix = np.linalg.norm(matrix, axis=1)
+
+    valid_mask = (norm_matrix != 0.0) & (norm_query != 0.0)
+    similarities: np.ndarray = np.zeros(len(candidate_vecs), dtype=np.float32)
+    if norm_query != 0.0:
+        dot_products = matrix @ query
+        denom = norm_matrix * norm_query
+        denom[denom == 0.0] = 1.0
+        similarities = dot_products / denom
+    similarities = np.clip(similarities, -1.0, 1.0)
+    similarities[~valid_mask] = 0.0
+    return similarities
+
+
 async def find_semantically_closest_segment(
     original_doc: str,
     query_text: str,
     segment_type: str = "paragraph",
     min_similarity_threshold: float = 0.65,
-) -> Optional[Tuple[int, int, float]]:
+) -> tuple[int, int, float] | None:
     """Find the document segment most semantically similar to ``query_text``."""
     if not original_doc or not query_text:
         logger.debug(
@@ -76,7 +101,7 @@ async def find_semantically_closest_segment(
         )
         return None
 
-    best_match_info: Optional[Tuple[int, int, float]] = None
+    best_match_info: tuple[int, int, float] | None = None
     highest_similarity = -2.0
 
     segment_texts = [s[0] for s in segments_with_indices]
@@ -87,6 +112,8 @@ async def find_semantically_closest_segment(
         *segment_embeddings_tasks, return_exceptions=True
     )
 
+    valid_embeddings: list[np.ndarray] = []
+    valid_indices: list[int] = []
     for i, seg_embedding_or_exc in enumerate(segment_embeddings_results):
         if isinstance(seg_embedding_or_exc, Exception) or seg_embedding_or_exc is None:
             logger.warning(
@@ -96,13 +123,19 @@ async def find_semantically_closest_segment(
             )
             continue
 
-        seg_embedding = seg_embedding_or_exc
-        similarity = numpy_cosine_similarity(query_embedding, seg_embedding)
+        valid_embeddings.append(cast(np.ndarray, seg_embedding_or_exc))
+        valid_indices.append(i)
 
-        if similarity > highest_similarity:
-            highest_similarity = similarity
-            _, start_char, end_char = segments_with_indices[i]
-            best_match_info = (start_char, end_char, highest_similarity)
+    if not valid_embeddings:
+        return None
+
+    similarities = batch_cosine_similarity(query_embedding, valid_embeddings)
+    best_local_idx = int(similarities.argmax()) if similarities.size else -1
+    if best_local_idx >= 0:
+        highest_similarity = float(similarities[best_local_idx])
+        seg_idx = valid_indices[best_local_idx]
+        _, start_char, end_char = segments_with_indices[seg_idx]
+        best_match_info = (start_char, end_char, highest_similarity)
 
     if best_match_info and best_match_info[2] < min_similarity_threshold:
         logger.info(

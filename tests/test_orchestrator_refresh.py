@@ -1,9 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock
 
-from data_access import plot_queries
-from orchestration.nana_orchestrator import NANA_Orchestrator
+import pytest
 import utils
+from data_access import character_queries, plot_queries, world_queries
+from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 @pytest.fixture
@@ -23,3 +23,20 @@ async def test_refresh_plot_outline(orchestrator, monkeypatch):
     )
     await orchestrator.refresh_plot_outline()
     assert orchestrator.plot_outline["plot_points"] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_knowledge_cache(orchestrator, monkeypatch):
+    monkeypatch.setattr(
+        character_queries,
+        "get_character_profiles_from_db",
+        AsyncMock(return_value={"hero": object()}),
+    )
+    monkeypatch.setattr(
+        world_queries,
+        "get_world_building_from_db",
+        AsyncMock(return_value={"places": {}}),
+    )
+    await orchestrator.refresh_knowledge_cache()
+    assert "hero" in orchestrator.knowledge_cache.characters
+    assert "places" in orchestrator.knowledge_cache.world

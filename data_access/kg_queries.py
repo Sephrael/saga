@@ -1,22 +1,22 @@
 # data_access/kg_queries.py
-import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import structlog
 from async_lru import alru_cache
-
-import config
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_REL_CHAPTER_ADDED,
     NODE_LABELS,
+    RELATIONSHIP_TYPES,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Lookup table for canonical node labels to ensure consistent casing
-_CANONICAL_NODE_LABEL_MAP: Dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
+_CANONICAL_NODE_LABEL_MAP: dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
 
 
 def _to_pascal_case(text: str) -> str:
@@ -41,7 +41,7 @@ async def normalize_existing_relationship_types() -> None:
         logger.error("Error reading existing relationship types: %s", exc)
         return
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
     for record in results:
         current = record.get("t")
         if not current:
@@ -64,11 +64,11 @@ async def normalize_existing_relationship_types() -> None:
             )
 
 
-def _get_cypher_labels(entity_type: Optional[str]) -> str:
+def _get_cypher_labels(entity_type: str | None) -> str:
     """Helper to create a Cypher label string (e.g., :Character:Entity or :Person:Character:Entity)."""
 
     entity_label_suffix = ":Entity"  # All nodes get this
-    specific_labels_parts: List[str] = []
+    specific_labels_parts: list[str] = []
 
     if entity_type and entity_type.strip():
         cleaned = re.sub(r"[^a-zA-Z0-9_\s]+", "", entity_type)
@@ -103,25 +103,29 @@ def _get_cypher_labels(entity_type: Optional[str]) -> str:
     return "".join(final_ordered_labels) + entity_label_suffix
 
 
+def _labels_to_list(labels_cypher: str) -> list[str]:
+    """Convert a Cypher label string to a list of labels."""
+    return [lbl for lbl in labels_cypher.split(":") if lbl]
+
+
 async def add_kg_triples_batch_to_db(
-    structured_triples_data: List[Dict[str, Any]],
+    structured_triples_data: list[dict[str, Any]],
     chapter_number: int,
     is_from_flawed_draft: bool,
 ):
+    """Insert a batch of knowledge graph triples into Neo4j."""
+
     if not structured_triples_data:
         logger.info("Neo4j: add_kg_triples_batch_to_db: No structured triples to add.")
         return
 
-    statements_with_params: List[Tuple[str, Dict[str, Any]]] = []
+    triple_payload: list[dict[str, Any]] = []
 
     for triple_dict in structured_triples_data:
         subject_info = triple_dict.get("subject")
         predicate_str = triple_dict.get("predicate")
-
         object_entity_info = triple_dict.get("object_entity")
-        object_literal_val = triple_dict.get(
-            "object_literal"
-        )  # This will be a string from parsing
+        object_literal_val = triple_dict.get("object_literal")
         is_literal_object = triple_dict.get("is_literal_object", False)
 
         if not (
@@ -131,133 +135,136 @@ async def add_kg_triples_batch_to_db(
             and predicate_str
         ):
             logger.warning(
-                f"Neo4j (Batch): Invalid subject or predicate in triple dict: {triple_dict}"
+                "Neo4j (Batch): Invalid subject or predicate in triple dict: %s",
+                triple_dict,
             )
             continue
 
         subject_name = str(subject_info["name"]).strip()
-        subject_type = subject_info.get(
-            "type"
-        )  # This is a string like "Character", "WorldElement", etc.
+        subject_type = subject_info.get("type")
         predicate_clean = str(predicate_str).strip().upper().replace(" ", "_")
 
-        if not all([subject_name, predicate_clean]):
+        if not subject_name or not predicate_clean:
             logger.warning(
-                f"Neo4j (Batch): Empty subject name or predicate after stripping: {triple_dict}"
+                "Neo4j (Batch): Empty subject name or predicate after stripping: %s",
+                triple_dict,
             )
             continue
 
-        subject_labels_cypher = _get_cypher_labels(subject_type)
+        subject_labels_list = _labels_to_list(_get_cypher_labels(subject_type))
 
-        # Base parameters for the relationship
         rel_props = {
             "type": predicate_clean,
             KG_REL_CHAPTER_ADDED: chapter_number,
             KG_IS_PROVISIONAL: is_from_flawed_draft,
-            "confidence": 1.0,  # Default confidence
-            # Add other relationship metadata if available
+            "confidence": 1.0,
         }
-
-        params = {"subject_name_param": subject_name, "rel_props_param": rel_props}
 
         if is_literal_object:
             if object_literal_val is None:
                 logger.warning(
-                    f"Neo4j (Batch): Literal object is None for triple: {triple_dict}"
+                    "Neo4j (Batch): Literal object is None for triple: %s",
+                    triple_dict,
                 )
                 continue
-
-            # For literal objects, merge/create a ValueNode.
-            # The ValueNode is unique by its string value and type 'Literal'.
-            params["object_literal_value_param"] = str(
-                object_literal_val
-            )  # Ensure it's a string for ValueNode value
-            params["value_node_type_param"] = (
-                "Literal"  # Generic type for these literal ValueNodes
+            triple_payload.append(
+                {
+                    "subject_labels": subject_labels_list,
+                    "subject_name": subject_name,
+                    "object_labels": ["Entity", "ValueNode"],
+                    "object_props": {
+                        "value": str(object_literal_val),
+                        "type": "Literal",
+                    },
+                    "rel_props": rel_props,
+                }
             )
-
-            query = f"""
-            MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
-                ON CREATE SET s.created_ts = timestamp()
-            MERGE (o:Entity:ValueNode {{value: $object_literal_value_param, type: $value_node_type_param}})
-                ON CREATE SET o.created_ts = timestamp()
-
-            MERGE (s)-[r:DYNAMIC_REL]->(o)
-                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
-                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
-            """
-            statements_with_params.append((query, params))
-
         elif (
             object_entity_info
             and isinstance(object_entity_info, dict)
             and object_entity_info.get("name")
         ):
             object_name = str(object_entity_info["name"]).strip()
-            object_type = object_entity_info.get(
-                "type"
-            )  # String like "Location", "Item"
+            object_type = object_entity_info.get("type")
             if not object_name:
                 logger.warning(
-                    f"Neo4j (Batch): Empty object name for entity object in triple: {triple_dict}"
+                    "Neo4j (Batch): Empty object name for entity object in triple: %s",
+                    triple_dict,
                 )
                 continue
 
-            object_labels_cypher = _get_cypher_labels(object_type)
-            params["object_name_param"] = object_name
-
-            query = f"""
-            MERGE (s{subject_labels_cypher} {{name: $subject_name_param}})
-                ON CREATE SET s.created_ts = timestamp()
-            MERGE (o{object_labels_cypher} {{name: $object_name_param}})
-                ON CREATE SET o.created_ts = timestamp()
-
-            MERGE (s)-[r:DYNAMIC_REL]->(o)
-                ON CREATE SET r = $rel_props_param, r.created_ts = timestamp()
-                ON MATCH SET r += $rel_props_param, r.updated_ts = timestamp()
-            """
-            statements_with_params.append((query, params))
+            object_labels_list = _labels_to_list(_get_cypher_labels(object_type))
+            triple_payload.append(
+                {
+                    "subject_labels": subject_labels_list,
+                    "subject_name": subject_name,
+                    "object_labels": object_labels_list,
+                    "object_props": {"name": object_name},
+                    "rel_props": rel_props,
+                }
+            )
         else:
             logger.warning(
-                f"Neo4j (Batch): Invalid or missing object information in triple dict: {triple_dict}"
+                "Neo4j (Batch): Invalid or missing object information in triple dict: %s",
+                triple_dict,
             )
             continue
 
-    if not statements_with_params:
-        logger.info(
-            "Neo4j: add_kg_triples_batch_to_db: No valid statements generated from triples."
-        )
+    if not triple_payload:
+        logger.info("Neo4j: add_kg_triples_batch_to_db: No valid triples to process.")
         return
 
+    cypher = """
+    UNWIND $triples AS t
+    CALL apoc.merge.node(t.subject_labels, {name: t.subject_name}) YIELD node AS s
+    SET s.created_ts = coalesce(s.created_ts, timestamp())
+    WITH s, t
+    CALL apoc.merge.node(t.object_labels, t.object_props) YIELD node AS o
+    SET o.created_ts = coalesce(o.created_ts, timestamp())
+    WITH s, o, t
+    MERGE (s)-[r:DYNAMIC_REL {type: t.rel_props.type}]->(o)
+    ON CREATE SET r += t.rel_props, r.created_ts = timestamp()
+    ON MATCH SET r += t.rel_props, r.updated_ts = timestamp()
+    """
+
     try:
-        await neo4j_manager.execute_cypher_batch(statements_with_params)
+        await neo4j_manager.execute_write_query(cypher, {"triples": triple_payload})
         logger.info(
-            f"Neo4j: Batch processed {len(statements_with_params)} KG triple statements."
+            "Neo4j: Batch processed %d KG triples via UNWIND.",
+            len(triple_payload),
         )
     except Exception as e:
-        # Log first few problematic params for debugging, if any
-        first_few_params_str = (
-            str([p_tuple[1] for p_tuple in statements_with_params[:2]])
-            if statements_with_params
-            else "N/A"
-        )
         logger.error(
-            f"Neo4j: Error in batch adding KG triples. First few params: {first_few_params_str}. Error: {e}",
+            "Neo4j: Error in batch adding KG triples with UNWIND: %s",
+            e,
             exc_info=True,
         )
         raise
 
 
 async def query_kg_from_db(
-    subject: Optional[str] = None,
-    predicate: Optional[str] = None,
-    obj_val: Optional[str] = None,
-    chapter_limit: Optional[int] = None,
+    subject: str | None = None,
+    predicate: str | None = None,
+    obj_val: str | None = None,
+    chapter_limit: int | None = None,
     include_provisional: bool = True,
-    limit_results: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    limit_results: int | None = None,
+) -> list[dict[str, Any]]:
+    """Query dynamic relationships from the graph with optional filters.
+
+    Args:
+        subject: Subject entity name to match.
+        predicate: Relationship type to match.
+        obj_val: Object entity or literal value to match.
+        chapter_limit: Only consider relationships up to this chapter.
+        include_provisional: Include provisional relationships when ``True``.
+        limit_results: Maximum number of records to return.
+
+    Returns:
+        A list of matching relationship dictionaries.
+    """
     conditions = []
-    parameters: Dict[str, Any] = {}
+    parameters: dict[str, str] = {}
     match_clause = "MATCH (s:Entity)-[r:DYNAMIC_REL]->(o) "
 
     if subject is not None:
@@ -278,7 +285,7 @@ async def query_kg_from_db(
         parameters["object_param"] = obj_val_stripped
     if chapter_limit is not None:
         conditions.append(f"r.{KG_REL_CHAPTER_ADDED} <= $chapter_limit_param")
-        parameters["chapter_limit_param"] = chapter_limit
+        parameters["chapter_limit_param"] = str(chapter_limit)
     if not include_provisional:
         conditions.append(
             f"(r.{KG_IS_PROVISIONAL} = FALSE OR r.{KG_IS_PROVISIONAL} IS NULL)"
@@ -302,12 +309,14 @@ async def query_kg_from_db(
         else ""
     )
 
+    parameters = {k: v for k, v in parameters.items() if v is not None}
+
     full_query = (
         match_clause + where_clause + return_clause + order_clause + limit_clause_str
     )
     try:
         results = await neo4j_manager.execute_read_query(full_query, parameters)
-        triples_list: List[Dict[str, Any]] = (
+        triples_list: list[dict[str, Any]] = (
             [dict(record) for record in results] if results else []
         )
         logger.debug(
@@ -325,9 +334,11 @@ async def query_kg_from_db(
 async def get_most_recent_value_from_db(
     subject: str,
     predicate: str,
-    chapter_limit: Optional[int] = None,
+    chapter_limit: int | None = None,
     include_provisional: bool = False,
-) -> Optional[Any]:
+) -> Any | None:
+    """Get the newest relationship value for ``subject`` and ``predicate``."""
+
     if not subject.strip() or not predicate.strip():
         logger.warning(
             f"Neo4j: get_most_recent_value_from_db: empty subject or predicate. S='{subject}', P='{predicate}'"
@@ -365,13 +376,13 @@ async def get_most_recent_value_from_db(
     return None
 
 
-async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
+async def get_novel_info_property_from_db(property_key: str) -> Any | None:
     """Return a property value from the NovelInfo node."""
     if not property_key.strip():
         logger.warning("Neo4j: empty property key for NovelInfo query")
         return None
 
-    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
     query = f"MATCH (ni:NovelInfo:Entity {{id: $novel_id_param}}) RETURN ni.{property_key} AS value"
     try:
         results = await neo4j_manager.execute_read_query(
@@ -388,8 +399,8 @@ async def get_novel_info_property_from_db(property_key: str) -> Optional[Any]:
 
 
 async def get_chapter_context_for_entity(
-    entity_name: Optional[str] = None, entity_id: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    entity_name: str | None = None, entity_id: str | None = None
+) -> list[dict[str, Any]]:
     """
     Finds chapters where an entity was mentioned or involved to provide context for enrichment.
     Searches by name for Characters/ValueNodes or by ID for WorldElements.
@@ -400,7 +411,12 @@ async def get_chapter_context_for_entity(
     match_clause = (
         "MATCH (e {id: $id_param})" if entity_id else "MATCH (e {name: $name_param})"
     )
-    params = {"id_param": entity_id} if entity_id else {"name_param": entity_name}
+
+    params: dict[str, str] = {}
+    if entity_id is not None:
+        params["id_param"] = entity_id
+    elif entity_name is not None:
+        params["name_param"] = entity_name
 
     query = f"""
     {match_clause}
@@ -422,7 +438,7 @@ async def get_chapter_context_for_entity(
     WHERE chapter_num IS NOT NULL AND chapter_num > 0
 
     // Now fetch the chapter data
-    MATCH (c:{config.NEO4J_VECTOR_NODE_LABEL} {{number: chapter_num}})
+    MATCH (c:{settings.NEO4J_VECTOR_NODE_LABEL} {{number: chapter_num}})
     RETURN c.number as chapter_number, c.summary as summary, c.text as text
     ORDER BY c.number DESC
     LIMIT 5 // Limit context to most recent 5 chapters
@@ -439,8 +455,8 @@ async def get_chapter_context_for_entity(
 
 
 async def find_contradictory_trait_characters(
-    contradictory_trait_pairs: List[Tuple[str, str]],
-) -> List[Dict[str, Any]]:
+    contradictory_trait_pairs: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
     """
     Finds characters who have contradictory traits based on a provided list of pairs.
     e.g. [('Brave', 'Cowardly'), ('Honest', 'Deceitful')]
@@ -469,7 +485,7 @@ async def find_contradictory_trait_characters(
     return all_findings
 
 
-async def find_post_mortem_activity() -> List[Dict[str, Any]]:
+async def find_post_mortem_activity() -> list[dict[str, Any]]:
     """
     Finds characters who have relationships or activities recorded in chapters
     after they were marked as dead.
@@ -502,14 +518,14 @@ async def find_post_mortem_activity() -> List[Dict[str, Any]]:
 
 async def find_candidate_duplicate_entities(
     similarity_threshold: float = 0.85, limit: int = 50
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Finds pairs of entities with similar names using APOC's Levenshtein distance.
     This requires the APOC plugin to be installed in Neo4j.
     """
     query = """
     MATCH (e1:Entity), (e2:Entity)
-    WHERE id(e1) < id(e2)
+    WHERE elementId(e1) < elementId(e2)
       AND e1.name IS NOT NULL AND e2.name IS NOT NULL
       AND NOT e1:ValueNode AND NOT e2:ValueNode
     WITH e1, e2, apoc.text.distance(e1.name, e2.name) AS distance
@@ -542,7 +558,7 @@ async def find_candidate_duplicate_entities(
 
 async def get_entity_context_for_resolution(
     entity_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Gathers comprehensive context for an entity to help an LLM decide on a merge.
     """
@@ -610,7 +626,7 @@ async def merge_entities(target_id: str, source_id: str) -> bool:
 
 
 @alru_cache(maxsize=1)
-async def get_defined_node_labels() -> List[str]:
+async def get_defined_node_labels() -> list[str]:
     """Queries the database for all defined node labels and caches the result."""
     try:
         results = await neo4j_manager.execute_read_query("CALL db.labels() YIELD label")
@@ -623,11 +639,13 @@ async def get_defined_node_labels() -> List[str]:
     except Exception:
         logger.error("Failed to query defined node labels from Neo4j.", exc_info=True)
         # Fallback to constants if DB query fails
-        return list(config.NODE_LABELS)
+        return list(
+            NODE_LABELS
+        )  # Reverted: This should use the imported constant, not settings
 
 
 @alru_cache(maxsize=1)
-async def get_defined_relationship_types() -> List[str]:
+async def get_defined_relationship_types() -> list[str]:
     """Queries the database for all defined relationship types and caches the result."""
     try:
         results = await neo4j_manager.execute_read_query(
@@ -639,7 +657,9 @@ async def get_defined_relationship_types() -> List[str]:
             "Failed to query defined relationship types from Neo4j.", exc_info=True
         )
         # Fallback to constants if DB query fails
-        return list(config.RELATIONSHIP_TYPES)
+        return list(
+            RELATIONSHIP_TYPES
+        )  # Reverted: This should use the imported constant, not settings
 
 
 async def promote_dynamic_relationships() -> int:
@@ -652,7 +672,7 @@ async def promote_dynamic_relationships() -> int:
     CALL apoc.create.relationship(
         s,
         r.type,
-        apoc.map.removeKey(properties(r), 'type'),
+        r {.*, type: null},
         o
     ) YIELD rel
     DELETE r
@@ -687,12 +707,12 @@ async def deduplicate_relationships() -> int:
 
 async def fetch_unresolved_dynamic_relationships(
     limit: int = 50,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fetch dynamic relationships lacking a specific type."""
     query = """
     MATCH (s:Entity)-[r:DYNAMIC_REL]->(o:Entity)
     WHERE r.type IS NULL OR r.type = 'UNKNOWN'
-    RETURN id(r) AS rel_id,
+    RETURN elementId(r) AS rel_id,
            s.name AS subject,
            labels(s) AS subject_labels,
            coalesce(s.description, '') AS subject_desc,
@@ -712,9 +732,9 @@ async def fetch_unresolved_dynamic_relationships(
         return []
 
 
-async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
+async def update_dynamic_relationship_type(rel_id: str, new_type: str) -> None:
     """Update a dynamic relationship's type."""
-    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE id(r) = $id SET r.type = $type"
+    query = "MATCH ()-[r:DYNAMIC_REL]->() WHERE elementId(r) = $id SET r.type = $type"
     try:
         await neo4j_manager.execute_write_query(query, {"id": rel_id, "type": new_type})
     except Exception as exc:  # pragma: no cover - narrow DB errors
@@ -725,7 +745,7 @@ async def update_dynamic_relationship_type(rel_id: int, new_type: str) -> None:
 
 async def get_shortest_path_length_between_entities(
     name1: str, name2: str, max_depth: int = 4
-) -> Optional[int]:
+) -> int | None:
     """Return the shortest path length between two entities if it exists."""
     if max_depth <= 0:
         return None

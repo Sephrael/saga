@@ -1,4 +1,20 @@
+# kg_maintainer/__init__.py
 """Package consolidating KG maintainer utilities."""
+
+import importlib
+
+from parsing import (
+    __name__ as _parsing_name,
+)
+from parsing import (
+    parse_unified_character_updates,
+    parse_unified_world_updates,
+)
+
+from . import merge as merge
+from . import models as models
+
+parsing = importlib.import_module(_parsing_name)
 
 from .merge import (
     merge_character_profile_updates,
@@ -13,10 +29,6 @@ from .models import (
     SceneDetail,
     WorldItem,
 )
-from .parsing import (
-    parse_unified_character_updates,
-    parse_unified_world_updates,
-)
 
 __all__ = [
     "AgentStateData",
@@ -30,4 +42,7 @@ __all__ = [
     "parse_unified_world_updates",
     "merge_character_profile_updates",
     "merge_world_item_updates",
+    "merge",
+    "models",
+    "parsing",
 ]

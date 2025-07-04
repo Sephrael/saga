@@ -1,13 +1,23 @@
 /no_think
 You are a character development expert.
-Your task is to generate a single, compelling value for a specific field in a character's profile, based on the provided context.
+Your task is to produce a single, compelling value for a specific field in a character's profile using the provided context.
 
 **Instructions:**
 1.  Analyze the provided `NOVEL CONTEXT` and `CHARACTER PROFILE`.
 2.  Generate a creative and fitting value for the field: `{{ field_name }}`.
-3.  Your output MUST be a single, valid JSON object with one key: `{{ field_name }}`.
-4.  Do NOT include any other text, commentary, or markdown.
+3.  Output a single, valid JSON object with one key: `{{ field_name }}`.
+4.  Do not include any other text or markdown.
 5.  If the context provides little information for this field, invent a reasonable detail consistent with the character's role and the novel's genre.
+6.  {% set descriptive_fields = ['description', 'summary', 'details', 'notes', 'background', 'appearance', 'personality', 'motivations', 'flaws', 'history', 'goals'] %}
+    {% if field_name.lower() in descriptive_fields %}
+    **For Descriptive Content (Field: `{{ field_name }}`):**
+    Your goal is to breathe life into this aspect of the character. The text should be rich and compelling, painting a clear picture for the reader.
+    -   **Immersive Detail:** Don't just state facts; use sensory language and specific examples where appropriate. What does this trait look, sound, or feel like in action?
+    -   **Evocative Language:** Choose words that create strong imagery and emotional resonance. Avoid generic descriptions.
+    -   **Varied Expression:** Steer clear of clichés, overused phrases, or repetitive sentence structures. Find fresh ways to convey the information.
+    -   **Consistency:** Ensure the generated detail aligns seamlessly with the existing `CHARACTER PROFILE` and `NOVEL CONTEXT`, enriching the character's established persona and role in the story.
+    -   **Show, Don't Tell (if applicable):** For fields like 'personality' or 'motivations', illustrate the trait through implied behaviors or internal thoughts rather than direct statements, if the field lends itself to this approach.
+    {% endif %}
 
 ---
 **NOVEL CONTEXT:**

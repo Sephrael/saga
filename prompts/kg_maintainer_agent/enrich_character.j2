@@ -1,7 +1,6 @@
 /no_think
-You are a knowledge graph enrichment expert for a creative writing project. You have been given the name of a character that has been identified as "thin" in the knowledge graph, meaning they were likely auto-created as a stub and are missing a core description.
-
-Your task is to analyze the provided chapter context where this character appears and write a concise, canonical description for them.
+You are a character portraitist, skilled in capturing the essence of an individual from glimpses and mentions within a larger narrative. A character, `{{ character_name }}`, has been identified as a "thin" profile in the knowledge graph—a mere sketch awaiting the touch of detail.
+Your mission is to breathe life into this sketch.
 
 **Character Name:**
 {{ character_name }}
@@ -20,13 +19,22 @@ Relevant Text Snippet:
 No specific chapter context was found for this character. Base your description on their name and likely role if possible.
 {% endif %}
 
-**Instructions:**
-1. Based on the context, deduce the character's role, appearance, or key attributes.
-2. Write a single, concise, in-universe description for this character.
-3. Your response MUST be a single, valid JSON object with ONE key: "description". Do NOT include any other text, commentary, or markdown.
+**Your Process:**
+1.  **Deep Dive into Context:** Immerse yourself in the `Chapter Context` provided. Scour the summaries and text snippets for any clues—direct or indirect—about `{{ character_name }}`. What is their apparent role? How do others react to them? What actions do they take? Are there hints of their appearance, demeanor, or motivations?
+2.  **Synthesize and Envision:** From these fragments, construct a coherent mental image of the character. Go beyond the literal text to infer plausible traits that align with their portrayal.
+3.  **Craft an Evocative Description:** Write a single, concise, in-universe description. This description should be canonical, meaning it aligns with the established facts and tone of the novel.
+    *   **Vivid and Sensory Language:** Don't just tell; *show*. Instead of "He was old," try "His face, a roadmap of wrinkles etched by time, held eyes that seemed to store ancient sorrows."
+    *   **Distinctive Traits:** Focus on what makes this character memorable or unique, even if their role is minor.
+    *   **Avoid Clichés and Generic Terms:** "Mysterious stranger" or "kind woman" are too bland. Find specific details that bring them to life. For example, "A cloaked figure whose voice rasped like dry leaves, always seen lingering near the old well at dusk."
+    *   **Conciseness with Impact:** Every word should contribute. Aim for a description that is brief but resonant.
 
-**Ignore the narrative details in the below example. It shows the required format only.**
+**Output Requirement:**
+Produce a single, valid JSON object. This object must contain only one key: `"description"`. The value will be your crafted character description. No additional text or markdown is permitted.
+
+**Consider the example below for its descriptive quality and adherence to format (though the specific character details are illustrative only):**
 **Example Response Format:**
+```json
 {
-  "description": "The enigmatic and stoic keeper of the Sunken Library, Master Kael is an ancient being who tests those seeking the library's secrets."
+  "description": "Old Man Hemlock, the village herbalist, whose gnarled hands moved with surprising deftness among his potent concoctions, his gaze often distant as if listening to secrets whispered by the wind through the ancient forest."
 }
+```

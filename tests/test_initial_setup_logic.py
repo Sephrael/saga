@@ -2,8 +2,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-import config
+from config import settings
 from initialization.bootstrappers.world_bootstrapper import (
     WORLD_CATEGORY_MAP_NORMALIZED_TO_INTERNAL,
     WORLD_DETAIL_LIST_INTERNAL_KEYS,
@@ -67,7 +66,7 @@ async def test_valid_json_output_from_llm(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ) as mocked_llm_call:
         wb, _ = await generate_world_building_logic(
@@ -120,7 +119,7 @@ async def test_invalid_json_output_decode_error(agent_instance):
     initial_setting_desc = agent_instance.plot_outline["setting"]
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -162,7 +161,7 @@ async def test_llm_provides_string_for_expected_list(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -197,7 +196,7 @@ async def test_llm_provides_integer_for_expected_list(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -209,7 +208,7 @@ async def test_llm_provides_integer_for_expected_list(agent_instance):
     wb = agent_instance.world_building
     assert "Magic System" in wb["systems"]
     # The code should replace this with a fill-in placeholder list
-    assert wb["systems"]["Magic System"]["rules"] == [config.FILL_IN]
+    assert wb["systems"]["Magic System"]["rules"] == [settings.FILL_IN]
 
 
 @pytest.mark.asyncio
@@ -235,7 +234,7 @@ async def test_llm_output_missing_category(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -279,7 +278,7 @@ async def test_llm_output_empty_list_for_list_field(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -290,9 +289,9 @@ async def test_llm_output_empty_list_for_list_field(agent_instance):
 
     wb = agent_instance.world_building
     # The current logic, if an empty list is provided by LLM for a list key,
-    # and the existing value was [Fill-in] or None, it will replace it with [config.FILL_IN]
+    # and the existing value was [Fill-in] or None, it will replace it with [settings.FILL_IN]
     # This is because `processed_list` will be empty, and it hits the `elif utils._is_fill_in(existing_item_val) or existing_item_val is None:`
-    assert wb["factions"]["Silent Monks"]["goals"] == [config.FILL_IN]
+    assert wb["factions"]["Silent Monks"]["goals"] == [settings.FILL_IN]
 
 
 @pytest.mark.asyncio
@@ -302,7 +301,7 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
         "source": "user_supplied_yaml",  # Mark as user-supplied
         "_overview_": {
             "description": "User's original world description.",
-            "mood": config.FILL_IN,  # User wants LLM to fill this
+            "mood": settings.FILL_IN,  # User wants LLM to fill this
         },
         "locations": {
             "User Keep": {
@@ -356,7 +355,7 @@ async def test_existing_user_data_preserved_and_llm_fills_gaps(agent_instance):
     )
 
     with patch(
-        "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+        "initialization.bootstrappers.common.llm_service.async_call_llm",
         AsyncMock(return_value=mock_llm_output),
     ):
         wb, _ = await generate_world_building_logic(
@@ -473,7 +472,7 @@ async def test_generate_world_building_mixed_llm_output_format(agent_instance):
     # Patch the global list within the 'world_bootstrapper' module for the duration of this test
     with (
         patch(
-            "initialization.bootstrappers.world_bootstrapper.llm_service.async_call_llm",
+            "initialization.bootstrappers.common.llm_service.async_call_llm",
             AsyncMock(return_value=mock_llm_return),
         ),
         patch(

@@ -1,6 +1,9 @@
-# Python cache and logs
+# Python cache, logs, venv, and neo4j
 __pycache__/
+*/__pycache__
 *.py[cod]
+.venv/
+neo4j/
 
 # Test and coverage outputs
 .coverage
@@ -8,7 +11,7 @@ htmlcov/
 .pytest_cache/
 
 # Generated novel output
-novel_output/
+novel_output-*/
 
 # OS files
 .DS_Store

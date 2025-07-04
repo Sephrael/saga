@@ -1,28 +1,32 @@
-import pytest
 from unittest.mock import AsyncMock
 
-from kg_maintainer.models import WorldItem
-import processing.revision_logic as revision_logic
+import processing.patch as patch_generator
+import pytest
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
+from kg_maintainer.models import WorldItem
+from processing.revision_manager import RevisionManager
+
+from models import EvaluationResult, ProblemDetail
 
 
 @pytest.mark.asyncio
 async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
     world_item = WorldItem.from_dict("Places", "City", {"description": "d"})
     world_building = {"Places": {"City": world_item}}
-    eval_result = {
-        "needs_revision": True,
-        "problems_found": [
-            {
-                "issue_category": "style",
-                "problem_description": "d",
-                "quote_from_original_text": "Hello",
-                "sentence_char_start": 0,
-                "sentence_char_end": 5,
-                "suggested_fix_focus": "fix",
-            }
+    eval_result = EvaluationResult(
+        needs_revision=True,
+        reasons=[],
+        problems_found=[
+            ProblemDetail(
+                issue_category="style",
+                problem_description="d",
+                quote_from_original_text="Hello",
+                sentence_char_start=0,
+                sentence_char_end=5,
+                suggested_fix_focus="fix",
+            )
         ],
-    }
+    )
 
     async def fake_generate(*_args, **_kwargs):
         return [
@@ -33,27 +37,31 @@ async def test_revision_logic_passes_canonical_world_ids(monkeypatch):
         return "Hi world", [(0, 5)]
 
     async def fake_evaluate(*args, **kwargs):
-        assert args[2] == {"Places": [world_item.id]}
-        return {"problems_found": []}, None
+        assert args[5] == "ctx"
+        return EvaluationResult(
+            needs_revision=False, reasons=[], problems_found=[]
+        ), None
 
     monkeypatch.setattr(
-        revision_logic, "_generate_patch_instructions_logic", fake_generate
+        patch_generator, "_generate_patch_instructions_logic", fake_generate
     )
-    monkeypatch.setattr(revision_logic, "_apply_patches_to_text", fake_apply)
+    monkeypatch.setattr(patch_generator, "_apply_patches_to_text", fake_apply)
     monkeypatch.setattr(
         ComprehensiveEvaluatorAgent,
         "evaluate_chapter_draft",
         AsyncMock(side_effect=fake_evaluate),
     )
 
-    res, _ = await revision_logic.revise_chapter_draft_logic(
-        {},
+    manager = RevisionManager()
+    res, _ = await manager.revise_chapter(
+        {"plot_points": ["focus"]},
         {},
         world_building,
         "Hello world",
         1,
         eval_result,
-        "",
+        "ctx",
         None,
+        revision_cycle=0,
     )
     assert res is not None

@@ -1,8 +1,11 @@
-# core_db/base_db_manager.py
-import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+# core/db_manager.py
+import asyncio
+from typing import Any
 
 import numpy as np
+import structlog
+from config import settings
+from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
 from neo4j import (  # type: ignore
     AsyncDriver,
     AsyncGraphDatabase,
@@ -10,33 +13,40 @@ from neo4j import (  # type: ignore
 )
 from neo4j.exceptions import ServiceUnavailable  # type: ignore
 
-import config
-from kg_constants import NODE_LABELS, RELATIONSHIP_TYPES
-
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class Neo4jManagerSingleton:
-    _instance = None
+    _instance: "Neo4jManagerSingleton | None" = None
+    _initialized_flag: bool
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Neo4jManagerSingleton":
         if not cls._instance:
-            cls._instance = super(Neo4jManagerSingleton, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized_flag = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized_flag:
             return
 
-        self.logger = logging.getLogger(__name__)
-        self.driver: Optional[AsyncDriver] = None
+        self.logger = structlog.get_logger(__name__)
+        self.driver: AsyncDriver | None = None
         self._initialized_flag = True
         self.logger.info(
             "Neo4jManagerSingleton initialized. Call connect() to establish connection."
         )
 
-    async def connect(self):
+    async def __aenter__(self) -> "Neo4jManagerSingleton":
+        await self.connect()
+        return self
+
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+    ) -> None:
+        await self.close()
+
+    async def connect(self, max_retries: int = settings.NEO4J_CONNECT_RETRIES) -> None:
         if self.driver:
             self.logger.info(
                 "Existing driver instance found. Attempting to close it before creating a new connection."
@@ -50,26 +60,38 @@ class Neo4jManagerSingleton:
             finally:
                 self.driver = None
 
-        try:
-            self.driver = AsyncGraphDatabase.driver(
-                config.NEO4J_URI, auth=(config.NEO4J_USER, config.NEO4J_PASSWORD)
-            )
-            await self.driver.verify_connectivity()
-            self.logger.info(f"Successfully connected to Neo4j at {config.NEO4J_URI}")
-        except ServiceUnavailable as e:
-            self.logger.critical(
-                f"Neo4j connection failed: {e}. Ensure the Neo4j database is running and accessible."
-            )
+        for attempt in range(max_retries):
+            try:
+                self.driver = AsyncGraphDatabase.driver(
+                    settings.NEO4J_URI,
+                    auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                )
+                await self.driver.verify_connectivity()
+                self.logger.info(
+                    f"Successfully connected to Neo4j at {settings.NEO4J_URI}"
+                )
+                return
+            except ServiceUnavailable as e:
+                self.logger.warning(
+                    f"Neo4j connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Unexpected error during Neo4j connection attempt {attempt + 1}: {e}",
+                    exc_info=True,
+                )
             self.driver = None
-            raise
-        except Exception as e:
-            self.logger.critical(
-                f"Unexpected error during Neo4j connection: {e}", exc_info=True
-            )
-            self.driver = None
-            raise
+            if attempt < max_retries - 1:
+                delay = settings.NEO4J_RETRY_DELAY_SECONDS * (2**attempt)
+                self.logger.info(f"Retrying Neo4j connection in {delay:.2f} seconds...")
+                await asyncio.sleep(delay)
 
-    async def close(self):
+        self.logger.critical(
+            f"Failed to connect to Neo4j after {max_retries} attempts."
+        )
+        raise ConnectionError("Failed to connect to Neo4j")
+
+    async def close(self) -> None:
         if self.driver:
             try:
                 await self.driver.close()
@@ -83,7 +105,7 @@ class Neo4jManagerSingleton:
         else:
             self.logger.info("No active Neo4j driver to close (driver was None).")
 
-    async def _ensure_connected(self):
+    async def _ensure_connected(self) -> None:
         if self.driver is None:
             self.logger.info("Driver is None, attempting to connect.")
             await self.connect()
@@ -95,38 +117,38 @@ class Neo4jManagerSingleton:
         self,
         tx: AsyncManagedTransaction,
         query: str,
-        parameters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        parameters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         self.logger.debug(f"Executing Cypher query: {query} with params: {parameters}")
         result_cursor = await tx.run(query, parameters)
         return await result_cursor.data()
 
     async def execute_read_query(
-        self, query: str, parameters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        self, query: str, parameters: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
             return await session.execute_read(self._execute_query_tx, query, parameters)
 
     async def execute_write_query(
-        self, query: str, parameters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        self, query: str, parameters: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
             return await session.execute_write(
                 self._execute_query_tx, query, parameters
             )
 
     async def execute_cypher_batch(
-        self, cypher_statements_with_params: List[Tuple[str, Dict[str, Any]]]
-    ):
+        self, cypher_statements_with_params: list[tuple[str, dict[str, Any]]]
+    ) -> None:
         if not cypher_statements_with_params:
             self.logger.info("execute_cypher_batch: No statements to execute.")
             return
 
         await self._ensure_connected()
-        async with self.driver.session(database=config.NEO4J_DATABASE) as session:  # type: ignore
-            tx: Optional[AsyncManagedTransaction] = None
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:  # type: ignore
+            tx: AsyncManagedTransaction | None = None
             try:
                 tx = await session.begin_transaction()
                 for query, params in cypher_statements_with_params:
@@ -165,6 +187,80 @@ class Neo4jManagerSingleton:
                         )
                 raise
 
+    async def _run_schema_operations(
+        self, queries: list[str], description: str
+    ) -> None:
+        ops: list[tuple[str, dict[str, Any]]] = [(q, {}) for q in queries]
+        try:
+            await self.execute_cypher_batch(ops)
+            self.logger.info(f"Successfully executed {description} batch.")
+        except Exception as e:
+            self.logger.error(
+                f"Error during {description} batch execution: {e}", exc_info=True
+            )
+            self.logger.warning(
+                "Attempting to apply operations individually as a fallback."
+            )
+            for query_text in queries:
+                try:
+                    await self.execute_write_query(query_text)
+                    self.logger.info(
+                        f"Fallback: Successfully applied operation: '{query_text[:100]}...'"
+                    )
+                except Exception as individual_e:
+                    self.logger.warning(
+                        f"Fallback: Failed to apply operation '{query_text[:100]}...': {individual_e}"
+                    )
+
+    async def _create_constraints(self) -> None:
+        queries = [
+            "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
+            "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
+            f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
+            "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
+            "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
+            "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
+            "CREATE CONSTRAINT trait_name_unique IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE",
+            "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
+            "CREATE CONSTRAINT valueNode_value_type_unique IF NOT EXISTS FOR (vn:ValueNode) REQUIRE (vn.value, vn.type) IS UNIQUE",
+            "CREATE CONSTRAINT developmentEvent_id_unique IF NOT EXISTS FOR (dev:DevelopmentEvent) REQUIRE dev.id IS UNIQUE",
+            "CREATE CONSTRAINT worldElaborationEvent_id_unique IF NOT EXISTS FOR (elab:WorldElaborationEvent) REQUIRE elab.id IS UNIQUE",
+        ]
+        await self._run_schema_operations(queries, "constraint")
+
+    async def _create_indexes(self) -> None:
+        queries = [
+            "CREATE INDEX entity_name_property_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
+            "CREATE INDEX entity_is_provisional_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
+            "CREATE INDEX entity_is_deleted_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_deleted)",
+            "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
+            "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
+            "CREATE INDEX worldElaborationEvent_chapter_updated IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
+            "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
+            "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
+            "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
+            "CREATE INDEX dynamicRel_source_profile_managed IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.source_profile_managed)",
+            "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
+            "CREATE INDEX worldElement_name_property_idx IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
+            "CREATE INDEX entity_description_idx IF NOT EXISTS FOR (e:Entity) ON (e.description)",
+            "CREATE INDEX entity_created_chapter_idx IF NOT EXISTS FOR (e:Entity) ON (e.created_chapter)",
+            "CREATE INDEX plotPoint_description_idx IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.description)",
+            "CREATE INDEX valueNode_value_idx IF NOT EXISTS FOR (vn:ValueNode) ON (vn.value)",
+            f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
+        ]
+        await self._run_schema_operations(queries, "index")
+
+    async def _create_vector_index(self) -> None:
+        query = f"""
+        CREATE VECTOR INDEX {settings.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
+        FOR (c:{settings.NEO4J_VECTOR_NODE_LABEL}) ON (c.{settings.NEO4J_VECTOR_PROPERTY_NAME})
+        OPTIONS {{indexConfig: {{
+            `vector.dimensions`: {settings.NEO4J_VECTOR_DIMENSIONS},
+            `vector.similarity_function`: '{settings.NEO4J_VECTOR_SIMILARITY_FUNCTION}'
+        }}}}
+        """
+        await self._run_schema_operations([query], "vector index")
+
     async def create_db_schema(self) -> None:
         """Create and verify Neo4j indexes and constraints.
 
@@ -176,38 +272,10 @@ class Neo4jManagerSingleton:
             "Creating/verifying Neo4j schema elements (batch execution)..."
         )
 
-        core_constraints_queries = [
-            "CREATE CONSTRAINT entity_id_unique IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE",
-            "CREATE CONSTRAINT novelInfo_id_unique IF NOT EXISTS FOR (n:NovelInfo) REQUIRE n.id IS UNIQUE",
-            f"CREATE CONSTRAINT chapter_number_unique IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) REQUIRE c.number IS UNIQUE",
-            "CREATE CONSTRAINT character_name_unique IF NOT EXISTS FOR (char:Character) REQUIRE char.name IS UNIQUE",
-            "CREATE CONSTRAINT worldElement_id_unique IF NOT EXISTS FOR (we:WorldElement) REQUIRE we.id IS UNIQUE",
-            "CREATE CONSTRAINT worldContainer_id_unique IF NOT EXISTS FOR (wc:WorldContainer) REQUIRE wc.id IS UNIQUE",
-            "CREATE CONSTRAINT trait_name_unique IF NOT EXISTS FOR (t:Trait) REQUIRE t.name IS UNIQUE",
-            "CREATE CONSTRAINT plotPoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
-            "CREATE CONSTRAINT valueNode_value_type_unique IF NOT EXISTS FOR (vn:ValueNode) REQUIRE (vn.value, vn.type) IS UNIQUE",
-            "CREATE CONSTRAINT developmentEvent_id_unique IF NOT EXISTS FOR (dev:DevelopmentEvent) REQUIRE dev.id IS UNIQUE",
-            "CREATE CONSTRAINT worldElaborationEvent_id_unique IF NOT EXISTS FOR (elab:WorldElaborationEvent) REQUIRE elab.id IS UNIQUE",
-        ]
+        await self._create_constraints()
+        await self._create_indexes()
+        await self._create_vector_index()
 
-        index_queries = [
-            "CREATE INDEX entity_name_property_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
-            "CREATE INDEX entity_is_provisional_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_provisional)",
-            "CREATE INDEX entity_is_deleted_idx IF NOT EXISTS FOR (e:Entity) ON (e.is_deleted)",
-            "CREATE INDEX plotPoint_sequence IF NOT EXISTS FOR (pp:PlotPoint) ON (pp.sequence)",
-            "CREATE INDEX developmentEvent_chapter_updated IF NOT EXISTS FOR (d:DevelopmentEvent) ON (d.chapter_updated)",
-            "CREATE INDEX worldElaborationEvent_chapter_updated IF NOT EXISTS FOR (we:WorldElaborationEvent) ON (we.chapter_updated)",
-            "CREATE INDEX dynamicRel_chapter_added IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.chapter_added)",
-            "CREATE INDEX dynamicRel_type IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.type)",
-            "CREATE INDEX dynamicRel_is_provisional IF NOT EXISTS FOR ()-[r:DYNAMIC_REL]-() ON (r.is_provisional)",
-            "CREATE INDEX worldElement_category IF NOT EXISTS FOR (we:WorldElement) ON (we.category)",
-            "CREATE INDEX worldElement_name_property_idx IF NOT EXISTS FOR (we:WorldElement) ON (we.name)",
-            f"CREATE INDEX chapter_is_provisional IF NOT EXISTS FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.is_provisional)",
-        ]
-
-        # Ensure schema tokens exist to avoid Neo4j warnings when
-        # matching on types that have not been used yet. Creating
-        # and immediately deleting a dummy node/relationship is sufficient.
         relationship_type_queries = [
             (
                 f"CREATE (a:__RelTypePlaceholder)-[:{rel_type}]->"
@@ -219,58 +287,15 @@ class Neo4jManagerSingleton:
             f"CREATE (a:`{label}`) WITH a DELETE a" for label in NODE_LABELS
         ]
 
-        vector_index_query = f"""
-        CREATE VECTOR INDEX {config.NEO4J_VECTOR_INDEX_NAME} IF NOT EXISTS
-        FOR (c:{config.NEO4J_VECTOR_NODE_LABEL}) ON (c.{config.NEO4J_VECTOR_PROPERTY_NAME})
-        OPTIONS {{indexConfig: {{
-            `vector.dimensions`: {config.NEO4J_VECTOR_DIMENSIONS},
-            `vector.similarity_function`: '{config.NEO4J_VECTOR_SIMILARITY_FUNCTION}'
-        }}}}
-        """
-
-        schema_ops_queries = (
-            core_constraints_queries
-            + index_queries
-            + [vector_index_query]
-            + relationship_type_queries
-            + node_label_queries
+        await self._run_schema_operations(
+            relationship_type_queries + node_label_queries, "schema token"
         )
-
-        schema_ops_with_params: List[Tuple[str, Dict[str, Any]]] = [
-            (query, {}) for query in schema_ops_queries
-        ]
-
-        try:
-            await self.execute_cypher_batch(schema_ops_with_params)
-            self.logger.info(
-                f"Successfully executed batch of {len(schema_ops_with_params)} schema operations (constraints, indexes, and type tokens)."
-            )
-        except Exception as e:
-            self.logger.error(
-                f"Error during schema operation batch execution: {e}. Some schema elements might not be created/verified.",
-                exc_info=True,
-            )
-            self.logger.warning(
-                "Attempting to apply schema operations individually as a fallback."
-            )
-            for query_text in schema_ops_queries:
-                try:
-                    await self.execute_write_query(query_text)
-                    self.logger.info(
-                        f"Fallback: Successfully applied schema operation: '{query_text[:100]}...'"
-                    )
-                except Exception as individual_e:
-                    self.logger.warning(
-                        f"Fallback: Failed to apply schema operation '{query_text[:100]}...': {individual_e}"
-                    )
 
         self.logger.info(
             "Neo4j schema (indexes, constraints, labels, relationship types, vector index) verification process complete."
         )
 
-    def embedding_to_list(
-        self, embedding: Optional[np.ndarray]
-    ) -> Optional[List[float]]:
+    def embedding_to_list(self, embedding: np.ndarray | None) -> list[float] | None:
         if embedding is None:
             return None
         if not isinstance(embedding, np.ndarray):
@@ -286,12 +311,12 @@ class Neo4jManagerSingleton:
         return embedding.astype(np.float32).tolist()
 
     def list_to_embedding(
-        self, embedding_list: Optional[List[Union[float, int]]]
-    ) -> Optional[np.ndarray]:
+        self, embedding_list: list[float | int] | None
+    ) -> np.ndarray | None:
         if embedding_list is None:
             return None
         try:
-            return np.array(embedding_list, dtype=config.EMBEDDING_DTYPE)
+            return np.array(embedding_list, dtype=settings.EMBEDDING_DTYPE)
         except Exception as e:
             self.logger.error(
                 f"Error converting list to numpy embedding: {e}", exc_info=True

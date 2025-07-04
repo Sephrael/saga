@@ -1,23 +1,24 @@
 from unittest.mock import AsyncMock
 
-import pytest
-
 import config
+import pytest
 import utils
 from core.db_manager import neo4j_manager
+from core.llm_interface import llm_service
 from data_access import chapter_queries
+from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator
 
 
 @pytest.mark.asyncio
 async def test_dynamic_chapter_adjustment(monkeypatch):
     monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
-    monkeypatch.setattr(config, "CHAPTERS_PER_RUN", 3)
+    monkeypatch.setattr(config.settings, "CHAPTERS_PER_RUN", 3)
 
     orch = NANA_Orchestrator()
     monkeypatch.setattr(orch, "_update_rich_display", lambda *a, **k: None)
 
-    orch.plot_outline = {"title": "T", "plot_points": ["p1", "p2"]}
+    orch.plot_outline = PlotOutline(title="T", plot_points=["p1", "p2"])
     orch.chapter_count = 0
 
     calls = []
@@ -54,9 +55,12 @@ async def test_dynamic_chapter_adjustment(monkeypatch):
     )
     monkeypatch.setattr(orch.display, "start", lambda: None)
     monkeypatch.setattr(orch.display, "stop", AsyncMock())
+    llm_close = AsyncMock()
+    monkeypatch.setattr(llm_service, "aclose", llm_close)
     monkeypatch.setattr(orch, "_validate_critical_configs", lambda: True)
 
     await orch.run_novel_generation_loop()
 
     assert calls == [1, 2, 3]
     assert orch.chapter_count == 3
+    llm_close.assert_awaited_once()

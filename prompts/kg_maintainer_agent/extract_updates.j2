@@ -1,7 +1,5 @@
-{% if no_think %}
 /no_think
-{% endif %}
-You are an expert knowledge graph extractor for a creative writing project. Your task is to analyze the provided chapter text and extract two types of information:
+You are an expert knowledge graph extractor for a creative writing project. Analyze the provided chapter text and extract two types of information:
 1.  **Character and World Updates:** Detailed updates for character profiles and world-building elements based on events in the chapter.
 2.  **Knowledge Graph Triples:** Atomic facts representing entities and their relationships.
 
@@ -9,6 +7,7 @@ You are an expert knowledge graph extractor for a creative writing project. Your
 - Title: {{ novel_title }}
 - Genre: {{ novel_genre }}
 - Protagonist: {{ protagonist }}
+- Known Characters: {{ character_names | join(', ') }}
 
 **Canonical Schema Information (Your output MUST conform to this):**
 - **Available Node Labels:** {{ available_node_labels | join(', ') }}
@@ -16,10 +15,16 @@ You are an expert knowledge graph extractor for a creative writing project. Your
 
 **Instructions for Output:**
 - Your entire response MUST be a single, valid JSON object.
-- The JSON object must have three top-level keys: `character_updates`, `world_updates`, and `kg_triples`.
-- For `kg_triples`, provide a list of strings, where each string is a triple in the format: "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | ObjectEntityType:ObjectName" or "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | LiteralValue".
+- The JSON object must contain three top-level keys: `character_updates`, `world_updates`, and `kg_triples`.
+- For `kg_triples`, provide a list of strings where each string is a triple formatted as "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | ObjectEntityType:ObjectName" or "SubjectEntityType:SubjectName | PREDICATE_IN_SNAKE_CASE | LiteralValue".
 - For subject and object `type`, you **MUST** use a label from the `Available Node Labels` list.
-- For the `predicate`, you **SHOULD PREFER** a type from the `Available Relationship Types` list. You may create a new, logical relationship type if absolutely necessary.
+- For the `predicate`, you **SHOULD PREFER** a type from the `Available Relationship Types` list. Create a new relationship type only if absolutely necessary.
+- **Rich Descriptive Quality for Textual Fields:** Within the `character_updates` and `world_updates` sections, all string values intended for descriptions (e.g., a character's 'description' or 'status', a location's 'atmosphere', or any 'development_in_chapter...' or 'elaboration_in_chapter...' field) demand careful crafting.
+    -   **Evocative and Specific Language:** The language must be informative, concise, yet also engaging and vivid. Paint a picture with words. Instead of "Character was sad," consider "A shadow of grief clung to CharacterName, evident in their downcast eyes and the tremor in their voice."
+    -   **Capture Nuance:** Reflect the subtleties of changes or states. "Status: Wounded" is less informative than "Status: Recovering from a poisoned blade, mobility still impaired."
+    -   **Avoid Clichés and Generic Phrasing:** Actively shun tired expressions or vague statements. Strive for originality and precision that brings the character or world element to life.
+    -   **Strictly Text-Based:** All generated descriptions must be derived *exclusively* from the provided `Chapter {{ chapter_number }} Text to Analyze`. Do not introduce outside information or make assumptions beyond what the text supports.
+    -   **Consistency in Tone:** The descriptions should align with the overall tone and style of a detailed knowledge base for a creative novel.
 
 ---
 **Chapter {{ chapter_number }} Text to Analyze:**
@@ -27,6 +32,11 @@ You are an expert knowledge graph extractor for a creative writing project. Your
 {{ chapter_text }}
 ```
 ---
+{% if fill_in_context %}
+Additional provisional context:
+{{ fill_in_context }}
+---
+{% endif %}
 
 **Ignore the narrative details in the below example. It shows the required format only.**
 **Example of Final JSON Output Structure:**

@@ -1,23 +1,24 @@
 import json
-import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-import config
+import kg_constants as kg_keys
+import structlog
+from config import settings
 from kg_constants import (
     KG_IS_PROVISIONAL,
     KG_NODE_CREATED_CHAPTER,
 )
 from kg_maintainer.models import WorldItem
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def generate_world_element_node_cypher(
     item: WorldItem, chapter_number_for_delta: int = 0
-) -> List[Tuple[str, Dict[str, Any]]]:
+) -> list[tuple[str, dict[str, Any]]]:
     """Create Cypher statements for a world element update."""
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     node_props = {
         "name": item.name,
@@ -26,8 +27,8 @@ def generate_world_element_node_cypher(
     }
     node_props["is_deleted"] = False
 
-    current_chapter_source_quality_key = (
-        f"source_quality_chapter_{chapter_number_for_delta}"
+    current_chapter_source_quality_key = kg_keys.source_quality_key(
+        chapter_number_for_delta
     )
     if (
         isinstance(item.properties, dict)
@@ -41,15 +42,15 @@ def generate_world_element_node_cypher(
     if isinstance(item.properties, dict):
         for key, value in item.properties.items():
             if (
-                isinstance(value, (str, int, float, bool))
+                isinstance(value, str | int | float | bool)
                 and key not in node_props
-                and not key.startswith("elaboration_in_chapter_")
-                and not key.startswith("source_quality_chapter_")
-                and not key.startswith("added_in_chapter_")
+                and not key.startswith(kg_keys.ELABORATION_PREFIX)
+                and not key.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
+                and not key.startswith(kg_keys.ADDED_PREFIX)
                 and key not in ["goals", "rules", "key_elements", "traits"]
             ):
                 node_props[key] = value
-            elif isinstance(value, (list, dict)) and key not in [
+            elif isinstance(value, list | dict) and key not in [
                 "goals",
                 "rules",
                 "key_elements",
@@ -88,7 +89,10 @@ def generate_world_element_node_cypher(
             MATCH (we:WorldElement:Entity {id: $we_id})
             MERGE (wc)-[:CONTAINS_ELEMENT]->(we)
             """,
-            {"wc_id": config.MAIN_WORLD_CONTAINER_NODE_ID, "we_id": item.id},
+            {
+                "wc_id": settings.MAIN_WORLD_CONTAINER_NODE_ID,
+                "we_id": item.id,
+            },
         )
     )
 
@@ -132,7 +136,7 @@ def generate_world_element_node_cypher(
                             )
                         )
 
-    elab_event_key = f"elaboration_in_chapter_{chapter_number_for_delta}"
+    elab_event_key = kg_keys.elaboration_key(chapter_number_for_delta)
     if isinstance(item.properties, dict) and elab_event_key in item.properties:
         elab_summary = item.properties[elab_event_key]
         if isinstance(elab_summary, str) and elab_summary.strip():

@@ -1,13 +1,18 @@
 /no_think
 You are a master storyteller and plot architect.
-Your task is to generate a list of key plot points to complete a novel's narrative arc.
+Your task is to create a list of key plot points to complete the novel's narrative arc.
 
 **Instructions:**
 1.  Analyze the provided `NOVEL CONTEXT`.
 2.  Generate `{{ list_count }}` distinct, sequential, and compelling plot points that logically follow from the context.
-3.  Each plot point should be a concise sentence or two describing a major event or turning point in the story.
-4.  Your output MUST be a single, valid JSON object with one key: `plot_points`. The value must be a JSON array of strings.
-5.  Do NOT include any other text, commentary, or markdown.
+3.  Each plot point must be a concise yet evocative sentence or two, encapsulating a significant event, a crucial character decision, or a pivotal turning point that propels the narrative forward.
+    -   **Dynamic Action:** Employ active, vigorous language. Focus on what happens, what changes, or what is revealed.
+    -   **Narrative Momentum:** Ensure each point logically builds upon the last (if applicable from context) and introduces a fresh, compelling development. Avoid stagnation or repetition in themes or outcomes across consecutive points.
+    -   **Varied Structure:** Vary sentence construction and vocabulary across plot points to maintain reader engagement and avoid a monotonous feel.
+    -   **Impact and Consequence:** Briefly hint at the immediate impact or consequences of the event within the plot point itself, showing its significance.
+    -   **Organic Progression:** These points should feel like natural evolutions of the story, emerging from established character motivations and prior events rather than appearing as arbitrary or forced incidents.
+4.  Output a single, valid JSON object with one key: `plot_points`. The value must be a JSON array of strings.
+5.  Do not include any other text or markdown.
 6.  If the context leaves gaps, invent plot points that logically bridge the provided material.
 
 ---

@@ -1,15 +1,81 @@
 import asyncio
+import hashlib
 import time
 
-import numpy as np
-import pytest
-
 import config
-import processing.revision_logic as chapter_revision_logic
+import numpy as np
+import processing.patch as patch_generator
+import pytest
 import utils
 from agents.patch_validation_agent import PatchValidationAgent
+from config import settings
 from core.llm_interface import llm_service
-from processing.revision_logic import _apply_patches_to_text
+from processing.patch import _apply_patches_to_text, locate_patch_targets
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_direct():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "target_char_start": 0,
+        "target_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greeting",
+    }
+    res = await locate_patch_targets("Hello world", patch, None)
+    assert res == (0, 5)
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_semantic(monkeypatch):
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+
+    async def fake_find(*_args, **_kwargs):
+        return (0, 5)
+
+    monkeypatch.setattr(
+        patch_generator.apply,
+        "_find_sentence_via_embeddings",
+        fake_find,
+    )
+    res = await locate_patch_targets(
+        "Hello world",
+        patch,
+        [(0, 5, object())],
+    )
+    assert res == (0, 5)
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_sentence_offsets():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "sentence_char_start": 2,
+        "sentence_char_end": 7,
+        "target_char_start": 0,
+        "target_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+    res = await locate_patch_targets("A Hello world", patch, None)
+    assert res == (2, 7)
+
+
+@pytest.mark.asyncio
+async def test_locate_patch_targets_quote_offsets():
+    patch = {
+        "original_problem_quote_text": "Hello",
+        "quote_char_start": 0,
+        "quote_char_end": 5,
+        "replace_with": "Hi",
+        "reason_for_change": "greet",
+    }
+    res = await locate_patch_targets("Hello world", patch, None)
+    assert res == (0, 5)
 
 
 @pytest.mark.asyncio
@@ -124,6 +190,28 @@ async def test_skip_repatch_same_segment(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_deletion_patch(monkeypatch):
+    original = "Hello world!"
+    patches = [
+        {
+            "original_problem_quote_text": "Hello ",
+            "target_char_start": 0,
+            "target_char_end": 6,
+            "replace_with": "",
+            "reason_for_change": "remove greeting",
+        }
+    ]
+
+    async def fake_embed(_text: str) -> np.ndarray:
+        return np.array([0.5, 0.5])
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
+    assert result == "world!"
+
+
+@pytest.mark.asyncio
 async def test_multiple_patches_applied(monkeypatch):
     original = "Hello world! Bye world!"
     patches = [
@@ -197,16 +285,52 @@ async def test_duplicate_patch_skipped(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_overlap_detected_with_derived_spans(monkeypatch):
+    original = "Hello world!"
+    patches = [
+        {
+            "original_problem_quote_text": "Hello",
+            "sentence_char_start": 0,
+            "sentence_char_end": 5,
+            "target_char_start": 6,
+            "target_char_end": 11,
+            "replace_with": "Hi",
+            "reason_for_change": "greeting",
+        },
+        {
+            "original_problem_quote_text": "Hello again",
+            "quote_char_start": 0,
+            "quote_char_end": 5,
+            "replace_with": "Hey",
+            "reason_for_change": "greeting2",
+        },
+    ]
+
+    embeddings = {
+        "Hello": np.array([1.0, 0.0]),
+        "Hi": np.array([0.0, 1.0]),
+        "Hey": np.array([0.0, 1.0]),
+    }
+
+    async def fake_embed(text: str) -> np.ndarray:
+        return embeddings.get(text, np.array([0.0, 0.0]))
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+
+    result, _ = await _apply_patches_to_text(original, patches, None, None)
+    assert result == "Hi world!"
+
+
+@pytest.mark.asyncio
 async def test_patch_validation_toggle(monkeypatch):
-    config.settings.AGENT_ENABLE_PATCH_VALIDATION = False
-    config.AGENT_ENABLE_PATCH_VALIDATION = False
+    settings.AGENT_ENABLE_PATCH_VALIDATION = False
 
     called = False
 
     async def fake_validate(*_args, **_kwargs):
         nonlocal called
         called = True
-        return True, None
+        return True, None, None
 
     monkeypatch.setattr(PatchValidationAgent, "validate_patch", fake_validate)
 
@@ -231,7 +355,12 @@ async def test_patch_validation_toggle(monkeypatch):
         )
 
     monkeypatch.setattr(
-        chapter_revision_logic,
+        patch_generator,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+    monkeypatch.setattr(
+        patch_generator.instructions,
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )
@@ -248,7 +377,7 @@ async def test_patch_validation_toggle(monkeypatch):
     ]
 
     validator = PatchValidationAgent()
-    result, _ = await chapter_revision_logic._generate_patch_instructions_logic(
+    result, _ = await patch_generator._generate_patch_instructions_logic(
         {},
         "Hello world",
         problems,
@@ -265,20 +394,20 @@ async def test_patch_validation_toggle(monkeypatch):
 @pytest.mark.asyncio
 async def test_patch_validation_scores(monkeypatch):
     async def fake_call(*_args, **_kwargs):
-        return "85 good", None
+        return "YES\nok", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call)
 
     agent = PatchValidationAgent()
-    ok, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok, reason, _ = await agent.validate_patch("ctx", {"replace_with": "x"}, [])
     assert ok
 
     async def fake_call_low(*_args, **_kwargs):
-        return "60 needs work", None
+        return "NO\nbad", None
 
     monkeypatch.setattr(llm_service, "async_call_llm", fake_call_low)
     agent2 = PatchValidationAgent()
-    ok2, _ = await agent2.validate_patch("ctx", {"replace_with": "x"}, [])
+    ok2, reason2, _ = await agent2.validate_patch("ctx", {"replace_with": "x"}, [])
     assert not ok2
 
 
@@ -292,11 +421,32 @@ async def test_sentence_embedding_cache(monkeypatch):
         call_count += 1
         return np.array([1.0])
 
+    monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
     monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
     cache: dict[str, list[tuple[int, int, object]]] = {}
-    await chapter_revision_logic._get_sentence_embeddings(text, cache)
-    await chapter_revision_logic._get_sentence_embeddings(text, cache)
+    await patch_generator._get_sentence_embeddings(text, cache)
+    await patch_generator._get_sentence_embeddings(text, cache)
     assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_sentence_embedding_cache_eviction(monkeypatch):
+    monkeypatch.setattr(utils, "load_spacy_model_if_needed", lambda: None)
+    monkeypatch.setattr(config.settings, "SENTENCE_EMBEDDING_CACHE_SIZE", 2)
+    cache = patch_generator.apply.LRUDict(settings.SENTENCE_EMBEDDING_CACHE_SIZE)
+    monkeypatch.setattr(patch_generator.apply, "_sentence_embedding_cache", cache)
+
+    async def fake_embed(_text: str) -> np.ndarray:
+        return np.array([1.0])
+
+    monkeypatch.setattr(llm_service, "async_get_embedding", fake_embed)
+    await patch_generator._get_sentence_embeddings("A. B.")
+    await patch_generator._get_sentence_embeddings("C. D.")
+    assert len(cache) == 2
+    key1 = hashlib.sha256(b"A. B.").hexdigest()
+    await patch_generator._get_sentence_embeddings("E. F.")
+    assert len(cache) == 2
+    assert key1 not in cache
 
 
 @pytest.mark.asyncio
@@ -345,10 +495,15 @@ async def test_patch_generation_concurrent(monkeypatch):
         )
 
     async def fake_validate(*_args, **_kwargs):
-        return True, None
+        return True, None, None
 
     monkeypatch.setattr(
-        chapter_revision_logic,
+        patch_generator,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+    monkeypatch.setattr(
+        patch_generator.instructions,
         "_generate_single_patch_instruction_llm",
         fake_generate,
     )
@@ -369,7 +524,7 @@ async def test_patch_generation_concurrent(monkeypatch):
     ]
 
     start = time.monotonic()
-    res, _ = await chapter_revision_logic._generate_patch_instructions_logic(
+    res, _ = await patch_generator._generate_patch_instructions_logic(
         {},
         "Hello world",
         problems,
@@ -382,8 +537,7 @@ async def test_patch_generation_concurrent(monkeypatch):
     assert len(res) == 3
     assert duration < 0.25
 
-    config.settings.AGENT_ENABLE_PATCH_VALIDATION = True
-    config.AGENT_ENABLE_PATCH_VALIDATION = True
+    settings.AGENT_ENABLE_PATCH_VALIDATION = True
 
 
 @pytest.mark.asyncio
@@ -415,5 +569,50 @@ async def test_deduplicate_problems():
         },
     ]
 
-    result = chapter_revision_logic._deduplicate_problems(problems)
+    result = patch_generator._deduplicate_problems(problems)
     assert len(result) == 2
+
+
+@pytest.mark.asyncio
+async def test_deletion_keyword_triggers_empty_patch(monkeypatch):
+    called = False
+
+    async def fake_generate(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return None, None
+
+    monkeypatch.setattr(
+        patch_generator,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+    monkeypatch.setattr(
+        patch_generator.instructions,
+        "_generate_single_patch_instruction_llm",
+        fake_generate,
+    )
+
+    problems = [
+        {
+            "issue_category": "clarity",
+            "problem_description": "irrelevant text",
+            "quote_from_original_text": "bad text",
+            "sentence_char_start": 0,
+            "sentence_char_end": 8,
+            "suggested_fix_focus": "delete this",
+        }
+    ]
+
+    res, _ = await patch_generator._generate_patch_instructions_logic(
+        {},
+        "bad text",
+        problems,
+        1,
+        "",
+        None,
+        PatchValidationAgent(),
+    )
+
+    assert res and res[0]["replace_with"] == ""
+    assert not called

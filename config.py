@@ -6,9 +6,8 @@ Uses Pydantic BaseSettings for automatic environment variable loading.
 from __future__ import annotations
 
 import json
-import logging as stdlib_logging
 import os
-from typing import List, Optional
+from typing import Any
 
 import structlog
 from dotenv import load_dotenv
@@ -21,14 +20,14 @@ logger = structlog.get_logger()
 
 
 async def _load_list_from_json_async(
-    file_path: str, default_if_missing: Optional[List[str]] = None
-) -> List[str]:
+    file_path: str, default_if_missing: list[str] | None = None
+) -> list[str]:
     """Load a list of strings from a JSON file asynchronously."""
     if default_if_missing is None:
         default_if_missing = []
     try:
         if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list) and all(
                     isinstance(item, str) for item in data
@@ -78,20 +77,35 @@ class SagaSettings(BaseSettings):
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "saga_password"
-    NEO4J_DATABASE: Optional[str] = "neo4j"
+    NEO4J_DATABASE: str | None = "neo4j"
+    NEO4J_CONNECT_RETRIES: int = 3
+    NEO4J_RETRY_DELAY_SECONDS: float = 2.0
 
     # Neo4j Vector Index Configuration
     NEO4J_VECTOR_INDEX_NAME: str = "chapterEmbeddings"
     NEO4J_VECTOR_NODE_LABEL: str = "Chapter"
-    NEO4J_VECTOR_PROPERTY_NAME: str = "embedding_vector"
+    NEO4J_VECTOR_PROPERTY_NAME: str = "text_embedding"
     NEO4J_VECTOR_DIMENSIONS: int = 768
     NEO4J_VECTOR_SIMILARITY_FUNCTION: str = "cosine"
 
+    # Knowledge Graph Property Names
+    KG_REL_CHAPTER_ADDED: str = "chapter_added"
+    KG_NODE_CREATED_CHAPTER: str = "created_chapter"
+    KG_NODE_CHAPTER_UPDATED: str = "chapter_updated"
+    KG_IS_PROVISIONAL: str = "is_provisional"
+
+    # Chapter-based Property Prefixes
+    ELABORATION_PREFIX: str = "elaboration_in_chapter_"
+    DEVELOPMENT_PREFIX: str = "development_in_chapter_"
+    SOURCE_QUALITY_PREFIX: str = "source_quality_chapter_"
+    ADDED_PREFIX: str = "added_in_chapter_"
+    UPDATED_PREFIX: str = "updated_in_chapter_"
+
     # Base Model Definitions
-    LARGE_MODEL: str = "Qwen3-14B-Q4"
-    MEDIUM_MODEL: str = "Qwen3-8B-Q4"
-    SMALL_MODEL: str = "Qwen3-4B-Q4"
-    NARRATOR_MODEL: str = "Qwen3-14B-Q4"
+    LARGE_MODEL: str = "Qwen3-14B"
+    MEDIUM_MODEL: str = "Qwen3-8B"
+    SMALL_MODEL: str = "Qwen3-4B"
+    NARRATOR_MODEL: str = "Qwen3-14B"
 
     # Temperature Settings
     TEMPERATURE_INITIAL_SETUP: float = 0.8
@@ -118,15 +132,15 @@ class SagaSettings(BaseSettings):
     MAX_CONCURRENT_LLM_CALLS: int = 4
 
     # Dynamic Model Assignments (set from base models if not specified in env)
-    FALLBACK_GENERATION_MODEL: Optional[str] = None
-    MAIN_GENERATION_MODEL: Optional[str] = None
-    KNOWLEDGE_UPDATE_MODEL: Optional[str] = None
-    INITIAL_SETUP_MODEL: Optional[str] = None
-    PLANNING_MODEL: Optional[str] = None
-    DRAFTING_MODEL: Optional[str] = None
-    REVISION_MODEL: Optional[str] = None
-    EVALUATION_MODEL: Optional[str] = None
-    PATCH_GENERATION_MODEL: Optional[str] = None
+    FALLBACK_GENERATION_MODEL: str | None = None
+    MAIN_GENERATION_MODEL: str | None = None
+    KNOWLEDGE_UPDATE_MODEL: str | None = None
+    INITIAL_SETUP_MODEL: str | None = None
+    PLANNING_MODEL: str | None = None
+    DRAFTING_MODEL: str | None = None
+    REVISION_MODEL: str | None = None
+    EVALUATION_MODEL: str | None = None
+    PATCH_GENERATION_MODEL: str | None = None
 
     LLM_TOP_P: float = 0.8
 
@@ -172,7 +186,8 @@ class SagaSettings(BaseSettings):
     MAX_CONTEXT_TOKENS: int = 40960
     MAX_GENERATION_TOKENS: int = 16384
     CONTEXT_CHAPTER_COUNT: int = 5
-    CHAPTERS_PER_RUN: int = 3
+    CHAPTERS_PER_RUN: int = 4
+    PLOT_POINT_CHAPTER_SPAN: int = 2
     KG_HEALING_INTERVAL: int = 2
     TARGET_PLOT_POINTS_INITIAL_GENERATION: int = 18
 
@@ -181,9 +196,28 @@ class SagaSettings(BaseSettings):
     SUMMARY_CACHE_SIZE: int = 32
     KG_TRIPLE_EXTRACTION_CACHE_SIZE: int = 16
     TOKENIZER_CACHE_SIZE: int = 10
+    SENTENCE_EMBEDDING_CACHE_SIZE: int = 32
+    LLM_CALL_CACHE_SIZE: int = 32
+    WORLD_QUERY_CACHE_SIZE: int = 32
 
     # Reranking Configuration
     ENABLE_RERANKING: bool = False
+    CONTEXT_CACHE_SIZE: int = 16
+    CONTEXT_CACHE_TTL: float = 600.0
+    CONTEXT_PROFILES: dict[str, dict[str, Any]] = {
+        "default": {
+            "max_tokens": 40960,
+            "providers": [
+                "chapter_generation.context_providers.SemanticHistoryProvider",
+                "chapter_generation.context_providers.StateContextProvider",
+                "chapter_generation.context_providers.CanonProvider",
+                "chapter_generation.context_providers.KGFactProvider",
+                "chapter_generation.context_providers.KGReasoningProvider",
+                "chapter_generation.context_providers.PlanProvider",
+                "chapter_generation.context_providers.UserNoteProvider",
+            ],
+        }
+    }
     RERANKER_CANDIDATE_COUNT: int = 15
 
     # Agentic Planning & Prompt Context Snippets
@@ -191,8 +225,8 @@ class SagaSettings(BaseSettings):
     MAX_PLANNING_TOKENS: int = 16384
     TARGET_SCENES_MIN: int = 4
     TARGET_SCENES_MAX: int = 6
-    PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 80
-    PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 120
+    PLANNING_CONTEXT_MAX_CHARS_PER_PROFILE_DESC: int = 1024
+    PLANNING_CONTEXT_MAX_RECENT_DEV_PER_PROFILE: int = 1024
     PLANNING_CONTEXT_MAX_CHARACTERS_IN_SNIPPET: int = 5
     PLANNING_CONTEXT_MAX_LOCATIONS_IN_SNIPPET: int = 3
     PLANNING_CONTEXT_MAX_FACTIONS_IN_SNIPPET: int = 2
@@ -206,14 +240,17 @@ class SagaSettings(BaseSettings):
     AGENT_ENABLE_PATCH_VALIDATION: bool = True
     MAX_PATCH_INSTRUCTIONS_TO_GENERATE: int = 5
     PATCH_GENERATION_ATTEMPTS: int = 1
+    ENABLE_STRATEGIC_REWRITES: bool = True
+    REWRITE_TRIGGER_PROBLEM_COUNT: int = 6
+    DEFER_FULL_REWRITE_UNTIL_LAST_CYCLE: bool = False
     MAX_CHARS_FOR_PATCH_CONTEXT_WINDOW: int = 16384
     PATCH_VALIDATION_THRESHOLD: int = 70
     REVISION_COHERENCE_THRESHOLD: float = 0.60
     REVISION_SIMILARITY_ACCEPTANCE: float = 0.995
-    POST_PATCH_PROBLEM_THRESHOLD: int = 0
+    POST_PATCH_PROBLEM_THRESHOLD: int = 2
     MAX_REVISION_CYCLES_PER_CHAPTER: int = 2
-    MAX_SUMMARY_TOKENS: int = 4096
-    MAX_KG_TRIPLE_TOKENS: int = 8192
+    MAX_SUMMARY_TOKENS: int = 16384
+    MAX_KG_TRIPLE_TOKENS: int = 16384
     MAX_PREPOP_KG_TOKENS: int = 16384
 
     MIN_ACCEPTABLE_DRAFT_LENGTH_DEFAULT: int = 12000
@@ -224,16 +261,21 @@ class SagaSettings(BaseSettings):
 
     # De-duplication Configuration
     DEDUPLICATION_USE_SEMANTIC: bool = True
-    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.85
+    DEDUPLICATION_SEMANTIC_THRESHOLD: float = 0.70
     DEDUPLICATION_MIN_SEGMENT_LENGTH: int = 150
 
+    # Repetition Tracking
+    REPETITION_TRACKER_NGRAM_SIZE: int = 4
+    REPETITION_TRACKER_THRESHOLD: int = 5
+    REPETITION_STATS_FILE: str = "repetition_stats.json"
+
     # Logging & UI
-    LOG_LEVEL_STR: str = Field("INFO", alias="LOG_LEVEL")
+    LOG_LEVEL_STR: str = Field("INFO", alias="AGENT_LOG_LEVEL")
     LOG_FORMAT: str = (
         "%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s"
     )
     LOG_DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
-    LOG_FILE: Optional[str] = "saga_run.log"
+    LOG_FILE: str | None = "saga_run.log"
     ENABLE_RICH_PROGRESS: bool = True
 
     # Novel Configuration (Defaults / Placeholders)
@@ -243,21 +285,21 @@ class SagaSettings(BaseSettings):
     CONFIGURED_SETTING_DESCRIPTION: str = (
         "a remote outpost on the surface of Jupiter's moon, Callisto"
     )
-    DEFAULT_PROTAGONIST_NAME: str = "Ilya Lakatos"
-    DEFAULT_PLOT_OUTLINE_TITLE: str = "Untitled Narrative"
+    DEFAULT_PROTAGONIST_NAME: str = "Ilya"
+    DEFAULT_PLOT_OUTLINE_TITLE: str = "[Fill-in]"
 
     MAIN_NOVEL_INFO_NODE_ID: str = "main_novel_info"
     MAIN_CHARACTERS_CONTAINER_NODE_ID: str = "main_characters_container"
     MAIN_WORLD_CONTAINER_NODE_ID: str = "main_world_container"
 
     @model_validator(mode="after")
-    def set_dynamic_model_defaults(self) -> "SagaSettings":
+    def set_dynamic_model_defaults(self) -> SagaSettings:
         if self.FALLBACK_GENERATION_MODEL is None:
             self.FALLBACK_GENERATION_MODEL = self.MEDIUM_MODEL
         if self.MAIN_GENERATION_MODEL is None:
             self.MAIN_GENERATION_MODEL = self.NARRATOR_MODEL
         if self.KNOWLEDGE_UPDATE_MODEL is None:
-            self.KNOWLEDGE_UPDATE_MODEL = self.MEDIUM_MODEL
+            self.KNOWLEDGE_UPDATE_MODEL = self.SMALL_MODEL
         if self.INITIAL_SETUP_MODEL is None:
             self.INITIAL_SETUP_MODEL = self.MEDIUM_MODEL
         if self.PLANNING_MODEL is None:
@@ -283,11 +325,11 @@ _DEFAULT_PROTAGONISTS_LIST = ["a reluctant hero", "a cynical detective"]
 _DEFAULT_CONFLICTS_LIST = ["man vs self", "man vs society"]
 
 # These will be populated by load_unhinged_data_async
-UNHINGED_GENRES: List[str] = []
-UNHINGED_THEMES: List[str] = []
-UNHINGED_SETTINGS_ARCHETYPES: List[str] = []
-UNHINGED_PROTAGONIST_ARCHETYPES: List[str] = []
-UNHINGED_CONFLICT_TYPES: List[str] = []
+UNHINGED_GENRES: list[str] = []
+UNHINGED_THEMES: list[str] = []
+UNHINGED_SETTINGS_ARCHETYPES: list[str] = []
+UNHINGED_PROTAGONIST_ARCHETYPES: list[str] = []
+UNHINGED_CONFLICT_TYPES: list[str] = []
 
 
 async def load_unhinged_data_async() -> None:
@@ -326,21 +368,37 @@ settings = SagaSettings()
 
 
 # --- Reconstruct objects for backward compatibility ---
-class ModelsCompat:
-    pass
+class _ModelsConfig:  # Renamed from ModelsCompat, made "private"
+    LARGE: str
+    MEDIUM: str
+    SMALL: str
+    NARRATOR: str
 
 
-class TempsCompat:
-    pass
+class _TemperaturesConfig:  # Renamed from TempsCompat, made "private"
+    INITIAL_SETUP: float
+    DRAFTING: float
+    REVISION: float
+    PLANNING: float
+    EVALUATION: float
+    CONSISTENCY_CHECK: float
+    KG_EXTRACTION: float
+    SUMMARY: float
+    PATCH: float
+    DEFAULT: float
 
 
-Models = ModelsCompat()
+# It's better to instantiate these after settings is fully validated and available.
+# However, for minimal changes to existing code that might use config.Models directly at import time,
+# we define them here and assign later. MyPy will understand the attributes are there.
+
+Models = _ModelsConfig()  # Instance of the renamed class
 Models.LARGE = settings.LARGE_MODEL
 Models.MEDIUM = settings.MEDIUM_MODEL
 Models.SMALL = settings.SMALL_MODEL
 Models.NARRATOR = settings.NARRATOR_MODEL
 
-Temperatures = TempsCompat()
+Temperatures = _TemperaturesConfig()  # Instance of the renamed class
 Temperatures.INITIAL_SETUP = settings.TEMPERATURE_INITIAL_SETUP
 Temperatures.DRAFTING = settings.TEMPERATURE_DRAFTING
 Temperatures.REVISION = settings.TEMPERATURE_REVISION
@@ -354,8 +412,12 @@ Temperatures.DEFAULT = 0.6  # Set default explicitly
 
 
 # Update module level variables for backward compatibility
-for _field in settings.model_fields:
-    globals()[_field] = getattr(settings, _field)
+# Removing this loop:
+# for _field in settings.model_fields:
+#     globals()[_field] = getattr(settings, _field)
+# Code should import 'settings' object directly, e.g., 'from config import settings'
+# and access attributes via 'settings.MY_SETTING'.
+# The Models and Temperatures objects above are kept for specific backward compatibility uses if needed.
 
 
 PLOT_OUTLINE_FILE = os.path.join(settings.BASE_OUTPUT_DIR, settings.PLOT_OUTLINE_FILE)
@@ -366,6 +428,9 @@ WORLD_BUILDER_FILE = os.path.join(settings.BASE_OUTPUT_DIR, settings.WORLD_BUILD
 CHAPTERS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.CHAPTERS_DIR)
 CHAPTER_LOGS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.CHAPTER_LOGS_DIR)
 DEBUG_OUTPUTS_DIR = os.path.join(settings.BASE_OUTPUT_DIR, settings.DEBUG_OUTPUTS_DIR)
+REPETITION_STATS_FILE_PATH = os.path.join(
+    settings.BASE_OUTPUT_DIR, settings.REPETITION_STATS_FILE
+)
 UNHINGED_GENRES_FILE = os.path.join(
     settings.UNHINGED_DATA_DIR, settings.UNHINGED_GENRES_FILE
 )
@@ -388,34 +453,3 @@ os.makedirs(settings.BASE_OUTPUT_DIR, exist_ok=True)
 os.makedirs(CHAPTERS_DIR, exist_ok=True)
 os.makedirs(CHAPTER_LOGS_DIR, exist_ok=True)
 os.makedirs(DEBUG_OUTPUTS_DIR, exist_ok=True)
-
-# Configure structlog
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
-
-formatter = structlog.stdlib.ProcessorFormatter(
-    foreign_pre_chain=[
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-    ],
-    processors=[structlog.dev.ConsoleRenderer()],
-)
-
-handler = stdlib_logging.StreamHandler()
-if settings.LOG_FILE:
-    handler = stdlib_logging.FileHandler(
-        os.path.join(settings.BASE_OUTPUT_DIR, settings.LOG_FILE)
-    )
-handler.setFormatter(formatter)
-root_logger = stdlib_logging.getLogger()
-root_logger.addHandler(handler)
-root_logger.setLevel(settings.LOG_LEVEL_STR)

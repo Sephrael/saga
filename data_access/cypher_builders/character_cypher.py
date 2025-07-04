@@ -1,48 +1,48 @@
-from typing import Any, Dict, List, Tuple
+# data_access/cypher_builders/character_cypher.py
+from typing import Any
 
+import kg_constants as kg_keys
 import structlog
-
-import config
 import utils
+from config import settings
 from kg_constants import KG_IS_PROVISIONAL, KG_REL_CHAPTER_ADDED
 from kg_maintainer.models import CharacterProfile
 
-TRAIT_NAME_TO_CANONICAL: Dict[str, str] = {}
+TRAIT_NAME_TO_CANONICAL: dict[str, str] = {}
 
 logger = structlog.get_logger(__name__)
 
 
 def generate_character_node_cypher(
     profile: CharacterProfile, chapter_number_for_delta: int = 0
-) -> List[Tuple[str, Dict[str, Any]]]:
+) -> list[tuple[str, dict[str, Any]]]:
     """Create Cypher statements for a character update."""
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     props_from_profile = profile.to_dict()
     # Create a clean property dictionary for the node, excluding complex types.
     basic_props = {
         k: v
         for k, v in props_from_profile.items()
-        if isinstance(v, (str, int, float, bool))
+        if isinstance(v, str | int | float | bool)
         and k not in ["name", "traits", "relationships"]
-        and not k.startswith("development_in_chapter_")
-        and not k.startswith("source_quality_chapter_")
+        and not k.startswith(kg_keys.DEVELOPMENT_PREFIX)
+        and not k.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
     }
 
     # Add any updates from the profile's 'updates' field.
     if isinstance(profile.updates, dict):
         for k_update, v_update in profile.updates.items():
             if (
-                isinstance(v_update, (str, int, float, bool))
-                and not k_update.startswith("development_in_chapter_")
-                and not k_update.startswith("source_quality_chapter_")
-            ):
-                if k_update not in basic_props:
-                    basic_props[k_update] = v_update
+                isinstance(v_update, str | int | float | bool)
+                and not k_update.startswith(kg_keys.DEVELOPMENT_PREFIX)
+                and not k_update.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
+            ) and k_update not in basic_props:
+                basic_props[k_update] = v_update
 
     # Determine provisional status based on the current chapter's update source.
-    current_chapter_source_quality_key = (
-        f"source_quality_chapter_{chapter_number_for_delta}"
+    current_chapter_source_quality_key = kg_keys.source_quality_key(
+        chapter_number_for_delta
     )
     if (
         isinstance(profile.updates, dict)
@@ -80,7 +80,10 @@ def generate_character_node_cypher(
             MATCH (c:Character:Entity {name: $name})
             MERGE (ni)-[:HAS_CHARACTER]->(c)
             """,
-            {"novel_id": config.MAIN_NOVEL_INFO_NODE_ID, "name": profile.name},
+            {
+                "novel_id": settings.MAIN_NOVEL_INFO_NODE_ID,
+                "name": profile.name,
+            },
         )
     )
 
@@ -97,17 +100,19 @@ def generate_character_node_cypher(
                             MATCH (c:Character:Entity {name: $name})
                             MERGE (t:Trait:Entity {name: $trait_name})
                                 ON CREATE SET t.created_ts = timestamp()
-                            MERGE (c)-[:HAS_TRAIT]->(t)
+                            MERGE (c)-[r:HAS_TRAIT]->(t)
+                            SET r.chapter_added = $chapter_number_for_delta
                             """,
                             {
                                 "name": profile.name,
                                 "trait_name": canonical,
+                                "chapter_number_for_delta": chapter_number_for_delta,
                             },
                         )
                     )
 
     # Process and link development events for the current chapter.
-    dev_event_key = f"development_in_chapter_{chapter_number_for_delta}"
+    dev_event_key = kg_keys.development_key(chapter_number_for_delta)
     if isinstance(profile.updates, dict) and dev_event_key in profile.updates:
         dev_event_summary = profile.updates[dev_event_key]
         if isinstance(dev_event_summary, str) and dev_event_summary.strip():
@@ -149,7 +154,7 @@ def generate_character_node_cypher(
         for target_char_name, rel_detail in profile.relationships.items():
             if isinstance(target_char_name, str) and target_char_name.strip():
                 rel_type_str = "RELATED_TO"
-                rel_cypher_props: Dict[str, Any] = {}
+                rel_cypher_props: dict[str, Any] = {}
                 if isinstance(rel_detail, str) and rel_detail.strip():
                     rel_cypher_props["description"] = rel_detail.strip()
                     if rel_detail.isupper() and " " not in rel_detail:
@@ -161,7 +166,7 @@ def generate_character_node_cypher(
                         .replace(" ", "_")
                     )
                     for k_rel, v_rel in rel_detail.items():
-                        if isinstance(v_rel, (str, int, float, bool)):
+                        if isinstance(v_rel, str | int | float | bool):
                             rel_cypher_props[k_rel] = v_rel
                     rel_cypher_props.pop("type", None)
 

@@ -1,9 +1,8 @@
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import structlog
-
-import config
+from config import settings
 from core.llm_interface import llm_service
 from prompt_renderer import render_prompt
 
@@ -12,11 +11,11 @@ logger = structlog.get_logger(__name__)
 
 async def bootstrap_field(
     field_name: str,
-    context_data: Dict[str, Any],
+    context_data: dict[str, Any],
     prompt_template_path: str,
     is_list: bool = False,
     list_count: int = 1,
-) -> Tuple[Any, Optional[Dict[str, int]]]:
+) -> tuple[Any, dict[str, int] | None]:
     """Call LLM to fill a single field or list of fields."""
     logger.info("Bootstrapping field: '%s'...", field_name)
     prompt = render_prompt(
@@ -25,9 +24,9 @@ async def bootstrap_field(
     )
 
     response_text, usage_data = await llm_service.async_call_llm(
-        model_name=config.INITIAL_SETUP_MODEL,
+        model_name=settings.INITIAL_SETUP_MODEL,
         prompt=prompt,
-        temperature=config.Temperatures.INITIAL_SETUP,
+        temperature=settings.TEMPERATURE_INITIAL_SETUP,
         stream_to_disk=False,
         auto_clean_response=True,
     )

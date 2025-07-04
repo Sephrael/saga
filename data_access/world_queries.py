@@ -1,11 +1,11 @@
 # data_access/world_queries.py
-import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from async_lru import alru_cache  # type: ignore
-
-import config
+import kg_constants as kg_keys
+import structlog
 import utils
+from async_lru import alru_cache  # type: ignore
+from config import settings
 from core.db_manager import neo4j_manager
 from kg_constants import (
     KG_IS_PROVISIONAL,
@@ -16,13 +16,13 @@ from kg_maintainer.models import WorldItem
 
 from .cypher_builders.world_cypher import generate_world_element_node_cypher
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Mapping from normalized world item names to canonical IDs
-WORLD_NAME_TO_ID: Dict[str, str] = {}
+WORLD_NAME_TO_ID: dict[str, str] = {}
 
 
-def resolve_world_name(name: str) -> Optional[str]:
+def resolve_world_name(name: str) -> str | None:
     """Return canonical world item ID for a display name if known."""
     if not name:
         return None
@@ -30,8 +30,8 @@ def resolve_world_name(name: str) -> Optional[str]:
 
 
 def get_world_item_by_name(
-    world_data: Dict[str, Dict[str, WorldItem]], name: str
-) -> Optional[WorldItem]:
+    world_data: dict[str, dict[str, WorldItem]], name: str
+) -> WorldItem | None:
     """Retrieve a WorldItem from cached data using a fuzzy name lookup."""
     item_id = resolve_world_name(name)
     if not item_id:
@@ -46,13 +46,13 @@ def get_world_item_by_name(
 
 
 async def sync_world_items(
-    world_items: Dict[str, Dict[str, WorldItem]],
+    world_items: dict[str, dict[str, WorldItem]],
     chapter_number: int,
     full_sync: bool = False,
 ) -> bool:
     """Persist world element data to Neo4j."""
     WORLD_NAME_TO_ID.clear()
-    for cat, items in world_items.items():
+    for _cat, items in world_items.items():
         if not isinstance(items, dict):
             continue
         for item in items.values():
@@ -65,7 +65,7 @@ async def sync_world_items(
         }
         return await sync_full_state_from_object_to_db(world_dict)
 
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
     count = 0
     for category_items in world_items.values():
         if not isinstance(category_items, dict):
@@ -95,14 +95,16 @@ async def sync_world_items(
         return False
 
 
-async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
+async def sync_full_state_from_object_to_db(world_data: dict[str, Any]) -> bool:
+    """Persist the entire world-building state to Neo4j."""
+
     logger.info("Synchronizing world building data to Neo4j (non-destructive)...")
 
-    novel_id_param = config.MAIN_NOVEL_INFO_NODE_ID
+    novel_id_param = settings.MAIN_NOVEL_INFO_NODE_ID
     wc_id_param = (
-        config.MAIN_WORLD_CONTAINER_NODE_ID
+        settings.MAIN_WORLD_CONTAINER_NODE_ID
     )  # Unique ID for the WorldContainer
-    statements: List[Tuple[str, Dict[str, Any]]] = []
+    statements: list[tuple[str, dict[str, Any]]] = []
 
     # 1. Synchronize WorldContainer (_overview_)
     overview_details = world_data.get("_overview_", {})
@@ -111,14 +113,14 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             "id": wc_id_param,  # Ensure ID is part of props for SET
             "overview_description": str(overview_details.get("description", "")),
             KG_IS_PROVISIONAL: overview_details.get(
-                f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
+                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
             )
             == "provisional_from_unrevised_draft",
         }
         # Add other direct properties from overview_details if any
         for k_overview, v_overview in overview_details.items():
             if (
-                isinstance(v_overview, (str, int, float, bool))
+                isinstance(v_overview, str | int | float | bool)
                 and k_overview not in wc_props
             ):
                 wc_props[k_overview] = v_overview
@@ -146,7 +148,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
         )
 
     # 2. Collect all WorldElement IDs from input data
-    all_input_we_ids: Set[str] = set()
+    all_input_we_ids: set[str] = set()
     for category_str, items_dict_value in world_data.items():
         if category_str == "_overview_" or not isinstance(items_dict_value, dict):
             continue
@@ -156,7 +158,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
         ) in items_dict_value.items():  # Iterate through items in the category
             # Ensure item_name_str itself is not a reserved key
             if item_name_str.startswith(
-                ("_", "source_quality_chapter_", "category_updated_in_chapter_")
+                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
             ):
                 continue
 
@@ -190,7 +192,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
             " RETURN we.id AS id"
         )
-        existing_db_we_ids: Set[str] = {
+        existing_db_we_ids: set[str] = {
             record["id"] for record in existing_we_records if record and record["id"]
         }
     except Exception as e:
@@ -220,7 +222,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
         for item_name_str, details_dict in items_category_dict.items():
             if not isinstance(details_dict, dict) or item_name_str.startswith(
-                ("_", "source_quality_chapter_", "category_updated_in_chapter_")
+                ("_", kg_keys.SOURCE_QUALITY_PREFIX, "category_updated_in_chapter_")
             ):
                 continue
 
@@ -251,7 +253,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             created_chap_num = details_dict.get(
                 KG_NODE_CREATED_CHAPTER,  # Check direct KG constant key first
                 details_dict.get(
-                    "created_chapter", config.KG_PREPOPULATION_CHAPTER_NUM
+                    "created_chapter",
+                    settings.KG_PREPOPULATION_CHAPTER_NUM,
                 ),
             )  # Fallback
 
@@ -259,8 +262,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
 
             # Provisional status: check specific source_quality_chapter_X, then KG_IS_PROVISIONAL, then 'is_provisional'
             is_prov = False
-            sq_key_for_created_chap = (
-                f"source_quality_chapter_{we_node_props[KG_NODE_CREATED_CHAPTER]}"
+            sq_key_for_created_chap = kg_keys.source_quality_key(
+                we_node_props[KG_NODE_CREATED_CHAPTER]
             )
             if (
                 details_dict.get(sq_key_for_created_chap)
@@ -281,11 +284,11 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             # Add other direct properties
             for k_detail, v_detail in details_dict.items():
                 if (
-                    isinstance(v_detail, (str, int, float, bool))
+                    isinstance(v_detail, str | int | float | bool)
                     and k_detail not in we_node_props
-                    and not k_detail.startswith("elaboration_in_chapter_")
-                    and not k_detail.startswith("added_in_chapter_")
-                    and not k_detail.startswith("source_quality_chapter_")
+                    and not k_detail.startswith(kg_keys.ELABORATION_PREFIX)
+                    and not k_detail.startswith(kg_keys.ADDED_PREFIX)
+                    and not k_detail.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
                     and k_detail
                     not in [
                         "goals",
@@ -332,7 +335,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                 "traits": "HAS_TRAIT_ASPECT",
             }
             for list_prop_key, rel_name_internal in list_prop_map.items():
-                current_prop_values: Set[str] = {
+                current_prop_values: set[str] = {
                     str(v).strip()
                     for v in details_dict.get(list_prop_key, [])
                     if isinstance(v, str) and str(v).strip()
@@ -384,16 +387,13 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
             )
             for key_str, value_val in details_dict.items():
                 if (
-                    key_str.startswith("elaboration_in_chapter_")
+                    key_str.startswith(kg_keys.ELABORATION_PREFIX)
                     and isinstance(value_val, str)
                     and value_val.strip()
                 ):
                     try:
-                        chap_num_val_str = key_str.split("_")[-1]
-                        chap_num_val = (
-                            int(chap_num_val_str) if chap_num_val_str.isdigit() else -1
-                        )
-                        if chap_num_val == -1:
+                        chap_num_val = kg_keys.parse_elaboration_key(key_str)
+                        if chap_num_val is None:
                             logger.warning(
                                 f"Could not parse chapter number from world elab key: {key_str} for item {item_name_str}"
                             )
@@ -405,7 +405,7 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
                         )
 
                         elab_is_provisional = False
-                        sq_key_for_elab_chap = f"source_quality_chapter_{chap_num_val}"
+                        sq_key_for_elab_chap = kg_keys.source_quality_key(chap_num_val)
                         if (
                             details_dict.get(sq_key_for_elab_chap)
                             == "provisional_from_unrevised_draft"
@@ -456,8 +456,8 @@ async def sync_full_state_from_object_to_db(world_data: Dict[str, Any]) -> bool:
         return False
 
 
-@alru_cache(maxsize=128)
-async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
+async def get_world_item_by_id(item_id: str) -> WorldItem | None:
     """Retrieve a single ``WorldItem`` from Neo4j by its ID or fall back to name."""
     logger.info("Loading world item '%s' from Neo4j...", item_id)
 
@@ -483,19 +483,19 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
         logger.warning("WorldElement missing category or name for id '%s'.", item_id)
         return None
 
-    item_detail: Dict[str, Any] = dict(we_node)
+    item_detail: dict[str, Any] = dict(we_node)
     item_detail.pop("created_ts", None)
     item_detail.pop("updated_ts", None)
 
     created_chapter_num = item_detail.pop(
-        KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM
+        KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
     )
     item_detail["created_chapter"] = int(created_chapter_num)
-    item_detail[f"added_in_chapter_{created_chapter_num}"] = True
+    item_detail[kg_keys.added_key(created_chapter_num)] = True
 
     if item_detail.pop(KG_IS_PROVISIONAL, False):
         item_detail["is_provisional"] = True
-        item_detail[f"source_quality_chapter_{created_chapter_num}"] = (
+        item_detail[kg_keys.source_quality_key(created_chapter_num)] = (
             "provisional_from_unrevised_draft"
         )
     else:
@@ -538,10 +538,10 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
             chapter_val = elab_rec.get("chapter")
             summary_val = elab_rec.get("summary")
             if chapter_val is not None and summary_val is not None:
-                elab_key = f"elaboration_in_chapter_{chapter_val}"
+                elab_key = kg_keys.elaboration_key(chapter_val)
                 item_detail[elab_key] = summary_val
                 if elab_rec.get(KG_IS_PROVISIONAL):
-                    item_detail[f"source_quality_chapter_{chapter_val}"] = (
+                    item_detail[kg_keys.source_quality_key(chapter_val)] = (
                         "provisional_from_unrevised_draft"
                     )
 
@@ -549,8 +549,8 @@ async def get_world_item_by_id(item_id: str) -> Optional[WorldItem]:
     return WorldItem.from_dict(category, item_name, item_detail)
 
 
-@alru_cache(maxsize=128)
-async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
+async def get_all_world_item_ids_by_category() -> dict[str, list[str]]:
     """Return all world item IDs grouped by category."""
     query = (
         "MATCH (we:WorldElement:Entity) "
@@ -558,7 +558,7 @@ async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
         "RETURN we.category AS category, we.id AS id"
     )
     results = await neo4j_manager.execute_read_query(query)
-    mapping: Dict[str, List[str]] = {}
+    mapping: dict[str, list[str]] = {}
     for record in results:
         category = record.get("category")
         item_id = record.get("id")
@@ -567,46 +567,97 @@ async def get_all_world_item_ids_by_category() -> Dict[str, List[str]]:
     return mapping
 
 
-async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
-    logger.info("Loading decomposed world building data from Neo4j...")
-    world_data: Dict[str, Dict[str, WorldItem]] = {}
-    wc_id_param = config.MAIN_WORLD_CONTAINER_NODE_ID
+@alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)
+async def get_world_building_from_db(
+    chapter_limit: int | None = None,
+) -> dict[str, dict[str, WorldItem]]:
+    """Load all world elements grouped by category from Neo4j, optionally up to a chapter limit."""
+
+    logger.info(
+        "Loading decomposed world building data from Neo4j%s...",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
+    )
+    world_data: dict[str, dict[str, WorldItem]] = {}
+    wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID
+
+    await fix_missing_world_element_core_fields()
 
     WORLD_NAME_TO_ID.clear()
 
-    # Load WorldContainer (_overview_)
+    # Load WorldContainer (_overview_) - typically not chapter-limited, but check properties if needed
     overview_query = "MATCH (wc:WorldContainer:Entity {id: $wc_id_param}) RETURN wc"
     overview_res_list = await neo4j_manager.execute_read_query(
         overview_query, {"wc_id_param": wc_id_param}
     )
     if overview_res_list and overview_res_list[0] and overview_res_list[0].get("wc"):
         wc_node = overview_res_list[0]["wc"]
-        overview_data = dict(wc_node)
-        overview_data.pop("created_ts", None)
-        overview_data.pop("updated_ts", None)
-        if overview_data.get(KG_IS_PROVISIONAL):
-            overview_data[
-                f"source_quality_chapter_{config.KG_PREPOPULATION_CHAPTER_NUM}"
+        overview_data_dict = dict(wc_node)
+        overview_data_dict.pop("created_ts", None)
+        overview_data_dict.pop("updated_ts", None)
+
+        # Note: Overview provisional status might be more complex if it aggregates chapter-specific info.
+        # For now, assume its KG_IS_PROVISIONAL is a general flag.
+        if overview_data_dict.get(KG_IS_PROVISIONAL):
+            # If overview itself can be provisional based on a chapter, this logic might need adjustment.
+            # Defaulting to KG_PREPOPULATION_CHAPTER_NUM for source_quality key.
+            overview_data_dict[
+                kg_keys.source_quality_key(settings.KG_PREPOPULATION_CHAPTER_NUM)
             ] = "provisional_from_unrevised_draft"
+
         world_data.setdefault("_overview_", {})["_overview_"] = WorldItem.from_dict(
             "_overview_",
             "_overview_",
-            overview_data,
+            overview_data_dict,
         )
         WORLD_NAME_TO_ID[utils._normalize_for_id("_overview_")] = (
-            utils._normalize_for_id("_overview_")
+            utils._normalize_for_id("_overview_")  # Should be wc_id_param
         )
 
-    # Load WorldElements and their details
-    we_query = (
-        "MATCH (we:WorldElement:Entity)"
-        " WHERE we.is_deleted IS NULL OR we.is_deleted = FALSE"
-        " RETURN we"
-    )
-    we_results = await neo4j_manager.execute_read_query(we_query)
+    we_params: dict[str, Any] = {"limit": chapter_limit}
+    chapter_filter = ""
+    if chapter_limit is not None:
+        chapter_filter = f"AND (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $limit)"
+
+    query = f"""
+    MATCH (we:WorldElement:Entity)
+    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
+
+    OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
+      WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
+    WITH we, collect(DISTINCT goal.value) AS goals
+
+    OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
+      WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
+    WITH we, goals, collect(DISTINCT rule.value) AS rules
+
+    OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
+      WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
+    WITH we, goals, rules, collect(DISTINCT kelem.value) AS key_elements
+
+    OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
+      WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
+    WITH we, goals, rules, key_elements, collect(DISTINCT trait.value) AS traits
+
+    OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+      WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
+    WITH we, goals, rules, key_elements, traits,
+        collect(DISTINCT {{
+            chapter: elab.{KG_NODE_CHAPTER_UPDATED},
+            summary: elab.summary,
+            prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
+        }}) AS elaborations
+
+    RETURN we, goals, rules, key_elements, traits, elaborations
+    ORDER BY we.category, we.name
+    """
+
+    we_results = await neo4j_manager.execute_read_query(query, we_params)
 
     if not we_results:
-        logger.info("No WorldElements found in Neo4j.")
+        logger.info(
+            "No WorldElements found in Neo4j%s.",
+            f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
+        )
         standard_categories = [
             "locations",
             "society",
@@ -624,7 +675,6 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
         if not we_node:
             continue
 
-        # These are the display/canonical versions from the node
         category = we_node.get("category")
         item_name = we_node.get("name")
         we_id = we_node.get("id")
@@ -635,89 +685,93 @@ async def get_world_building_from_db() -> Dict[str, Dict[str, WorldItem]]:
             )
             continue
 
-        world_data.setdefault(category, {})
+        item_detail_dict = dict(we_node)
+        item_detail_dict.pop("created_ts", None)
+        item_detail_dict.pop("updated_ts", None)
 
-        item_detail = dict(we_node)
-        item_detail.pop("created_ts", None)
-        item_detail.pop("updated_ts", None)
-
-        created_chapter_num = item_detail.pop(
-            KG_NODE_CREATED_CHAPTER, config.KG_PREPOPULATION_CHAPTER_NUM
+        created_chapter_num = item_detail_dict.pop(
+            KG_NODE_CREATED_CHAPTER, settings.KG_PREPOPULATION_CHAPTER_NUM
         )
-        item_detail["created_chapter"] = int(
-            created_chapter_num
-        )  # Ensure it's int and under standard key
-        item_detail[f"added_in_chapter_{created_chapter_num}"] = True
+        item_detail_dict["created_chapter"] = int(created_chapter_num)
+        item_detail_dict[kg_keys.added_key(created_chapter_num)] = True
 
-        if item_detail.pop(KG_IS_PROVISIONAL, False):
-            item_detail["is_provisional"] = True  # Ensure under standard key
-            item_detail[f"source_quality_chapter_{created_chapter_num}"] = (
+        is_provisional_at_creation = item_detail_dict.pop(KG_IS_PROVISIONAL, False)
+        item_detail_dict["is_provisional"] = is_provisional_at_creation
+        if is_provisional_at_creation:
+            item_detail_dict[kg_keys.source_quality_key(created_chapter_num)] = (
                 "provisional_from_unrevised_draft"
             )
-        else:
-            item_detail["is_provisional"] = False
 
-        list_prop_map = {
-            "goals": "HAS_GOAL",
-            "rules": "HAS_RULE",
-            "key_elements": "HAS_KEY_ELEMENT",
-            "traits": "HAS_TRAIT_ASPECT",
-        }
-        for list_prop_key, rel_name_internal in list_prop_map.items():
-            list_values_query = f"""
-            MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:{rel_name_internal}]->(v:ValueNode:Entity {{type: $value_node_type_param}})
-            RETURN v.value AS item_value
-            ORDER BY v.value ASC
-            """
-            list_val_res = await neo4j_manager.execute_read_query(
-                list_values_query,
-                {"we_id_param": we_id, "value_node_type_param": list_prop_key},
-            )
-            item_detail[list_prop_key] = sorted(
-                [
-                    res_item["item_value"]
-                    for res_item in list_val_res
-                    if res_item and res_item["item_value"] is not None
-                ]
-            )
-
-        elab_query = f"""
-        MATCH (:WorldElement:Entity {{id: $we_id_param}})-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-        RETURN elab.summary AS summary, elab.{KG_NODE_CHAPTER_UPDATED} AS chapter, elab.{KG_IS_PROVISIONAL} AS is_provisional
-        ORDER BY elab.chapter_updated ASC
-        """
-        elab_results = await neo4j_manager.execute_read_query(
-            elab_query, {"we_id_param": we_id}
+        item_detail_dict["goals"] = sorted(
+            [v for v in record.get("goals", []) if v is not None]
         )
-        if elab_results:
-            for elab_rec in elab_results:
-                chapter_val = elab_rec.get("chapter")
-                summary_val = elab_rec.get("summary")
-                if chapter_val is not None and summary_val is not None:
-                    elab_key = f"elaboration_in_chapter_{chapter_val}"
-                    item_detail[elab_key] = summary_val
-                    if elab_rec.get(KG_IS_PROVISIONAL):
-                        item_detail[f"source_quality_chapter_{chapter_val}"] = (
+        item_detail_dict["rules"] = sorted(
+            [v for v in record.get("rules", []) if v is not None]
+        )
+        item_detail_dict["key_elements"] = sorted(
+            [v for v in record.get("key_elements", []) if v is not None]
+        )
+        item_detail_dict["traits"] = sorted(
+            [v for v in record.get("traits", []) if v is not None]
+        )
+
+        actual_elaborations_count = 0
+        for elab_rec in record.get("elaborations", []):
+            chapter_val = elab_rec.get("chapter")
+            summary_val = elab_rec.get("summary")
+            if chapter_val is not None and summary_val is not None:
+                if chapter_limit is None or chapter_val <= chapter_limit:
+                    elab_key = kg_keys.elaboration_key(chapter_val)
+                    item_detail_dict[elab_key] = summary_val
+                    if elab_rec.get("prov"):
+                        item_detail_dict[kg_keys.source_quality_key(chapter_val)] = (
                             "provisional_from_unrevised_draft"
                         )
+                    actual_elaborations_count += 1
 
-        item_detail["id"] = we_id  # Add the canonical ID from the DB
-        world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
-            category,
-            item_name,
-            item_detail,
-        )
-        WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
+        item_detail_dict["id"] = we_id
 
+        # Add to world_data if it's not filtered out by chapter_limit on its creation
+        # (The main query for we_results already handles this if chapter_limit is set)
+        # OR if it has elaborations within the chapter_limit.
+        if (
+            chapter_limit is None
+            or (
+                created_chapter_num is not None and created_chapter_num <= chapter_limit
+            )
+            or actual_elaborations_count > 0
+        ):
+            world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
+                category, item_name, item_detail_dict
+            )
+            WORLD_NAME_TO_ID[utils._normalize_for_id(item_name)] = we_id
+        elif (
+            not (
+                created_chapter_num is not None and created_chapter_num <= chapter_limit
+            )
+            and actual_elaborations_count == 0
+            and chapter_limit is not None
+        ):
+            logger.debug(
+                f"WorldElement '{item_name}' (id: {we_id}) created in chapter {created_chapter_num} "
+                f"with no elaborations up to chapter {chapter_limit}, excluding."
+            )
+
+    num_elements_loaded = sum(
+        len(items) for cat, items in world_data.items() if cat != "_overview_"
+    )
     logger.info(
-        f"Successfully loaded and recomposed world building data ({len(we_results)} elements) from Neo4j."
+        f"Successfully loaded and recomposed world building data ({num_elements_loaded} elements) from Neo4j%s.",
+        f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     return world_data
 
 
 async def get_world_elements_for_snippet_from_db(
     category: str, chapter_limit: int, item_limit: int
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
+    """Return a subset of world elements for prompt context."""
+
     query = f"""
     MATCH (we:WorldElement:Entity {{category: $category_param}})
     WHERE (we.{KG_NODE_CREATED_CHAPTER} IS NULL OR we.{KG_NODE_CREATED_CHAPTER} <= $chapter_limit_param)
@@ -725,8 +779,8 @@ async def get_world_elements_for_snippet_from_db(
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
     WHERE elab.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param AND elab.{KG_IS_PROVISIONAL} = TRUE
     
-    WITH we, COLLECT(DISTINCT elab) AS provisional_elaborations_found
-    WITH we, ( we.{KG_IS_PROVISIONAL} = TRUE OR size(provisional_elaborations_found) > 0 ) AS is_item_provisional_overall
+    WITH we, COUNT(elab) AS provisional_elaborations_count
+    WITH we, ( we.{KG_IS_PROVISIONAL} = TRUE OR provisional_elaborations_count > 0 ) AS is_item_provisional_overall
     
     RETURN we.name AS name,
            we.description AS description, 
@@ -768,7 +822,7 @@ async def get_world_elements_for_snippet_from_db(
     return items
 
 
-async def find_thin_world_elements_for_enrichment() -> List[Dict[str, Any]]:
+async def find_thin_world_elements_for_enrichment() -> list[dict[str, Any]]:
     """Finds WorldElement nodes that are considered 'thin' (e.g., missing description)."""
     query = """
     MATCH (we:WorldElement)
@@ -782,3 +836,123 @@ async def find_thin_world_elements_for_enrichment() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error finding thin world elements: {e}", exc_info=True)
         return []
+
+
+async def fix_missing_world_element_core_fields() -> int:
+    """Populate missing ``id``, ``name``, or ``category`` on WorldElements."""
+
+    query = """
+    MATCH (we:WorldElement)
+    WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE)
+      AND (
+        we.id IS NULL OR trim(we.id) = "" OR
+        we.name IS NULL OR trim(we.name) = "" OR
+        we.category IS NULL OR trim(we.category) = ""
+      )
+    RETURN elementId(we) AS nid, we.id AS id, we.name AS name, we.category AS category
+    """
+
+    try:
+        results = await neo4j_manager.execute_read_query(query)
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Error fetching WorldElements missing core fields: %s",
+            exc,
+            exc_info=True,
+        )
+        return 0
+
+    if not results:
+        return 0
+
+    statements: list[tuple[str, dict[str, Any]]] = []
+
+    for rec in results:
+        neo_id = rec.get("nid")
+        if neo_id is None:
+            continue
+
+        w_id = rec.get("id")
+        name = rec.get("name")
+        category = rec.get("category")
+
+        if isinstance(w_id, str):
+            w_id = w_id.strip() or None
+        if isinstance(name, str):
+            name = name.strip() or None
+        if isinstance(category, str):
+            category = category.strip() or None
+
+        props: dict[str, Any] = {}
+
+        if not name and isinstance(w_id, str):
+            name_part = w_id.split("_", 1)[-1]
+            props["name"] = name_part.replace("_", " ").title()
+            name = props["name"]
+        elif not name:
+            props["name"] = "Unnamed Element"
+            name = props["name"]
+
+        if not category:
+            if isinstance(w_id, str):
+                props["category"] = w_id.split("_")[0]
+            else:
+                props["category"] = "unknown_category"
+            category = props["category"]
+
+        if not w_id and name:
+            props["id"] = (
+                f"{utils._normalize_for_id(category)}_{utils._normalize_for_id(name)}"
+            )
+
+        if props:
+            statements.append(
+                (
+                    "MATCH (we:WorldElement) WHERE elementId(we) = $nid SET we += $props",
+                    {"nid": neo_id, "props": props},
+                )
+            )
+
+    if not statements:
+        return 0
+
+    try:
+        await neo4j_manager.execute_cypher_batch(statements)
+        logger.info("Filled missing core fields for %d WorldElements.", len(statements))
+    except Exception as exc:  # pragma: no cover - narrow DB errors
+        logger.error(
+            "Error updating WorldElements with missing core fields: %s",
+            exc,
+            exc_info=True,
+        )
+        return 0
+
+    return len(statements)
+
+
+async def remove_world_element_trait_aspect(element_id: str, trait_value: str) -> bool:
+    """Remove a trait aspect from a world element."""
+    query = (
+        "MATCH (:WorldElement {id: $we_id})-"
+        "[r:HAS_TRAIT_ASPECT]->(v:ValueNode {type: 'traits', value: $trait})"
+        " DELETE r"
+    )
+    cleanup_query = (
+        "MATCH (v:ValueNode {type: 'traits', value: $trait})"
+        " WHERE NOT EXISTS((:WorldElement)-[:HAS_TRAIT_ASPECT]->(v))"
+        " DETACH DELETE v"
+    )
+    try:
+        await neo4j_manager.execute_write_query(
+            query, {"we_id": element_id, "trait": trait_value}
+        )
+        await neo4j_manager.execute_write_query(cleanup_query, {"trait": trait_value})
+        return True
+    except Exception as exc:  # pragma: no cover - log but return False
+        logger.error(
+            "Error removing trait '%s' from world element %s: %s",
+            trait_value,
+            element_id,
+            exc,
+        )
+        return False

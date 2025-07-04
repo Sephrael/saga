@@ -1,13 +1,16 @@
-# drafting_agent.py
-import logging
-from typing import Any, Dict, List, Optional, Tuple
+# agents/drafting_agent.py
+"""Generate initial chapter drafts."""
 
-import config
+from typing import Any
+
+import structlog
+from config import settings
 from core.llm_interface import count_tokens, llm_service, truncate_text_by_tokens
-from kg_maintainer.models import SceneDetail
 from prompt_renderer import render_prompt
 
-logger = logging.getLogger(__name__)
+from models import SceneDetail
+
+logger = structlog.get_logger(__name__)
 
 
 class DraftingAgent:
@@ -22,7 +25,7 @@ class DraftingAgent:
     statistics for further processing by the orchestrator.
     """
 
-    def __init__(self, model_name: str = config.DRAFTING_MODEL):
+    def __init__(self, model_name: str = settings.DRAFTING_MODEL):
         # We now only need a single, capable model for drafting.
         self.drafting_model = model_name
         logger.info(
@@ -31,12 +34,12 @@ class DraftingAgent:
 
     async def draft_chapter(
         self,
-        plot_outline: Dict[str, Any],
+        plot_outline: dict[str, Any],
         chapter_number: int,
         plot_point_focus: str,
         hybrid_context_for_draft: str,
-        chapter_plan: Optional[List[SceneDetail]],
-    ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, int]]]:
+        chapter_plan: list[SceneDetail] | None,
+    ) -> tuple[str | None, str | None, dict[str, int] | None]:
         """
         Generates the initial draft for a chapter.
 
@@ -55,13 +58,13 @@ class DraftingAgent:
             prompt = render_prompt(
                 "drafting_agent/draft_chapter_from_plot_point.j2",
                 {
-                    "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                    "enable_no_think": True,
                     "chapter_number": chapter_number,
                     "novel_title": plot_outline.get("title", "Untitled Novel"),
                     "novel_genre": plot_outline.get("genre", "Unknown Genre"),
                     "plot_point_focus": plot_point_focus,
                     "hybrid_context_for_draft": hybrid_context_for_draft,
-                    "min_length": config.MIN_ACCEPTABLE_DRAFT_LENGTH,
+                    "min_length": settings.MIN_ACCEPTABLE_DRAFT_LENGTH,
                 },
             )
 
@@ -71,12 +74,10 @@ class DraftingAgent:
             ) = await llm_service.async_call_llm(
                 model_name=self.drafting_model,
                 prompt=prompt,
-                temperature=config.Temperatures.DRAFTING,
-                max_tokens=config.MAX_GENERATION_TOKENS,
+                temperature=settings.TEMPERATURE_DRAFTING,
+                max_tokens=settings.MAX_GENERATION_TOKENS,
                 allow_fallback=True,
                 stream_to_disk=True,
-                frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
-                presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
                 auto_clean_response=True,
             )
 
@@ -101,9 +102,9 @@ class DraftingAgent:
                 f"DraftingAgent: Starting scene-by-scene draft for Chapter {chapter_number}..."
             )
 
-            all_scenes_prose: List[str] = []
-            all_raw_outputs: List[str] = []
-            total_usage_data: Dict[str, int] = {
+            all_scenes_prose: list[str] = []
+            all_raw_outputs: list[str] = []
+            total_usage_data: dict[str, int] = {
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
@@ -119,7 +120,7 @@ class DraftingAgent:
                 )
 
                 previous_scenes_prose = "\n\n".join(all_scenes_prose)
-                max_tokens_for_prev_scenes = config.MAX_GENERATION_TOKENS // 2
+                max_tokens_for_prev_scenes = settings.MAX_GENERATION_TOKENS // 2
                 previous_scenes_prose_for_prompt = truncate_text_by_tokens(
                     previous_scenes_prose,
                     self.drafting_model,
@@ -130,24 +131,24 @@ class DraftingAgent:
                 prompt = render_prompt(
                     "drafting_agent/draft_scene.j2",
                     {
-                        "no_think": config.ENABLE_LLM_NO_THINK_DIRECTIVE,
+                        "enable_no_think": True,
                         "chapter_number": chapter_number,
                         "novel_title": novel_title,
                         "novel_genre": novel_genre,
                         "scene_detail": scene_detail,
                         "hybrid_context_for_draft": hybrid_context_for_draft,
                         "previous_scenes_prose": previous_scenes_prose_for_prompt,
-                        "min_length_per_scene": config.MIN_ACCEPTABLE_DRAFT_LENGTH
+                        "min_length_per_scene": settings.MIN_ACCEPTABLE_DRAFT_LENGTH
                         // len(chapter_plan),
                     },
                 )
 
                 prompt_tokens = count_tokens(prompt, self.drafting_model)
                 available_for_generation = (
-                    config.MAX_CONTEXT_TOKENS - prompt_tokens - 200
+                    settings.MAX_CONTEXT_TOKENS - prompt_tokens - 200
                 )  # Safety buffer
                 max_gen_tokens = min(
-                    config.MAX_GENERATION_TOKENS // 2, available_for_generation
+                    settings.MAX_GENERATION_TOKENS // 2, available_for_generation
                 )
 
                 if max_gen_tokens < 300:
@@ -162,12 +163,10 @@ class DraftingAgent:
                 scene_prose, scene_usage_data = await llm_service.async_call_llm(
                     model_name=self.drafting_model,
                     prompt=prompt,
-                    temperature=config.Temperatures.DRAFTING,
+                    temperature=settings.TEMPERATURE_DRAFTING,
                     max_tokens=max_gen_tokens,
                     allow_fallback=True,
                     stream_to_disk=False,
-                    frequency_penalty=config.FREQUENCY_PENALTY_DRAFTING,
-                    presence_penalty=config.PRESENCE_PENALTY_DRAFTING,
                     auto_clean_response=True,
                 )
 
