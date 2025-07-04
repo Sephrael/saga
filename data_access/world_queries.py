@@ -622,11 +622,15 @@ async def get_world_building_from_db(
     MATCH (we:WorldElement:Entity)
     WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
     OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
+      WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
     OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
+      WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
     OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
+      WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
     OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
+      WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
-      WHERE $limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit
+      WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
     WITH we,
          collect(DISTINCT goal.value) AS goals,
          collect(DISTINCT rule.value) AS rules,
@@ -835,7 +839,7 @@ async def fix_missing_world_element_core_fields() -> int:
         we.name IS NULL OR trim(we.name) = "" OR
         we.category IS NULL OR trim(we.category) = ""
       )
-    RETURN id(we) AS nid, we.id AS id, we.name AS name, we.category AS category
+    RETURN elementId(we) AS nid, we.id AS id, we.name AS name, we.category AS category
     """
 
     try:
@@ -894,7 +898,7 @@ async def fix_missing_world_element_core_fields() -> int:
         if props:
             statements.append(
                 (
-                    "MATCH (we:WorldElement) WHERE id(we) = $nid SET we += $props",
+                    "MATCH (we:WorldElement) WHERE elementId(we) = $nid SET we += $props",
                     {"nid": neo_id, "props": props},
                 )
             )
