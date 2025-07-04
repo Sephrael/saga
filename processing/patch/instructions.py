@@ -428,6 +428,49 @@ async def _generate_patch_instructions_logic(
         usage_acc = TokenUsage()
         validation_reason: str | None = None
 
+        combined_fix_text = (
+            f"{group_problem.suggested_fix_focus} {group_problem.rewrite_instruction or ''}"
+        ).lower()
+        deletion_keywords = ("delete", "remove", "cut", "omit")
+        if any(kw in combined_fix_text for kw in deletion_keywords):
+            target_start_for_patch = group_problem.sentence_char_start
+            target_end_for_patch = group_problem.sentence_char_end
+            original_quote = group_problem.quote_from_original_text
+            if (
+                original_quote != "N/A - General Issue"
+                and (target_start_for_patch is None or target_end_for_patch is None)
+                and (
+                    group_problem.quote_char_start is not None
+                    and group_problem.quote_char_end is not None
+                )
+            ):
+                logger.warning(
+                    "Patch for Ch %s: Problem '%s' had specific text but no sentence offsets. PatchInstruction will use quote offsets (%s-%s). Application will use semantic search.",
+                    chapter_number,
+                    original_quote[:50],
+                    group_problem.quote_char_start,
+                    group_problem.quote_char_end,
+                )
+                target_start_for_patch = group_problem.quote_char_start
+                target_end_for_patch = group_problem.quote_char_end
+            elif original_quote != "N/A - General Issue" and (
+                target_start_for_patch is None or target_end_for_patch is None
+            ):
+                logger.error(
+                    "Patch for Ch %s: Problem '%s' specific text but NO OFFSETS (sentence or quote). Patch will likely fail to apply precisely.",
+                    chapter_number,
+                    original_quote[:50],
+                )
+
+            patch_instr = PatchInstruction(
+                original_problem_quote_text=original_quote,
+                target_char_start=target_start_for_patch,
+                target_char_end=target_end_for_patch,
+                replace_with="",
+                reason_for_change=f"Fixing '{group_problem.issue_category}': {group_problem.problem_description}",
+            )
+            return patch_instr, usage_acc
+
         for _ in range(settings.PATCH_GENERATION_ATTEMPTS):
             patch_instr_tmp, usage = await _generate_single_patch_instruction_llm(
                 plot_outline,

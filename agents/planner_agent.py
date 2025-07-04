@@ -1,4 +1,4 @@
-# planner_agent.py
+# agents/planner_agent.py
 import json
 import re
 from typing import Any
@@ -35,6 +35,8 @@ SCENE_PLAN_LIST_INTERNAL_KEYS = [
 
 
 class PlannerAgent:
+    """LLM-powered scene planner for chapter outlines."""
+
     def __init__(self, model_name: str = settings.PLANNING_MODEL):
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
