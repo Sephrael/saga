@@ -621,22 +621,28 @@ async def get_world_building_from_db(
     query = f"""
     MATCH (we:WorldElement:Entity)
     WHERE (we.is_deleted IS NULL OR we.is_deleted = FALSE) {chapter_filter}
+
     OPTIONAL MATCH (we)-[g:HAS_GOAL]->(goal:ValueNode:Entity {{type: 'goals'}})
       WHERE goal.value IS NOT NULL AND trim(goal.value) <> ""
+    WITH we, collect(DISTINCT goal.value) AS goals
+
     OPTIONAL MATCH (we)-[ru:HAS_RULE]->(rule:ValueNode:Entity {{type: 'rules'}})
       WHERE rule.value IS NOT NULL AND trim(rule.value) <> ""
+    WITH we, goals, collect(DISTINCT rule.value) AS rules
+
     OPTIONAL MATCH (we)-[ke:HAS_KEY_ELEMENT]->(kelem:ValueNode:Entity {{type: 'key_elements'}})
       WHERE kelem.value IS NOT NULL AND trim(kelem.value) <> ""
+    WITH we, goals, rules, collect(DISTINCT kelem.value) AS key_elements
+
     OPTIONAL MATCH (we)-[tr:HAS_TRAIT_ASPECT]->(trait:ValueNode:Entity {{type: 'traits'}})
       WHERE trait.value IS NOT NULL AND trim(trait.value) <> ""
+    WITH we, goals, rules, key_elements, collect(DISTINCT trait.value) AS traits
+
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
       WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
-    WITH we,
-         collect(DISTINCT goal.value) AS goals,
-         collect(DISTINCT rule.value) AS rules,
-         collect(DISTINCT kelem.value) AS key_elements,
-         collect(DISTINCT trait.value) AS traits,
+    WITH we, goals, rules, key_elements, traits,
          collect(DISTINCT {{chapter: elab.{KG_NODE_CHAPTER_UPDATED}, summary: elab.summary, prov: elab.{KG_IS_PROVISIONAL}}}) AS elaborations
+    
     RETURN we, goals, rules, key_elements, traits, elaborations
     ORDER BY we.category, we.name
     """
