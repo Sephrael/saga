@@ -104,6 +104,7 @@ class NANA_Orchestrator:
         self.knowledge_cache = KnowledgeCache()
         self.token_accountant = TokenAccountant()
         self.total_tokens_generated_this_run: int = 0
+        self.completed_plot_points: set[str] = set()
 
         self.next_chapter_context: str | None = None
         self.last_chapter_end_state: ChapterEndState | None = None
@@ -205,6 +206,9 @@ class NANA_Orchestrator:
         if isinstance(result, dict):
             self.plot_outline = PlotOutline(**result)
             self._update_novel_props_cache()
+            self.completed_plot_points = set(
+                await plot_queries.get_completed_plot_points()
+            )
         else:
             logger.error("Failed to refresh plot outline from DB: %s", result)
 
@@ -250,6 +254,7 @@ class NANA_Orchestrator:
             )
 
         self._update_novel_props_cache()
+        self.completed_plot_points = set(await plot_queries.get_completed_plot_points())
         await self.refresh_knowledge_cache()
         logger.info("NANA Orchestrator async_init_orchestrator complete.")
         self._update_rich_display(step="Orchestrator Initialized")
@@ -822,6 +827,9 @@ class NANA_Orchestrator:
                     novel_chapter_number,
                     root_cause,
                 )
+                lower_cause = root_cause.lower()
+                if "character profile" in lower_cause or "world element" in lower_cause:
+                    await self.kg_maintainer_agent.heal_and_enrich_kg()
 
         return (
             current_text,
@@ -900,6 +908,7 @@ class NANA_Orchestrator:
             plot_point_index,
             (novel_chapter_number - 1) % settings.PLOT_POINT_CHAPTER_SPAN + 1,
             planning_context,
+            list(self.completed_plot_points),
         )
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.CHAPTER_PLANNING.value}", plan_usage
@@ -1271,6 +1280,14 @@ class NANA_Orchestrator:
         )
 
         self.last_chapter_end_state = end_state
+
+        if novel_chapter_number % settings.PLOT_POINT_CHAPTER_SPAN == 0:
+            pp_focus, pp_index = get_plot_point_info(
+                self.plot_outline, novel_chapter_number
+            )
+            if pp_focus is not None and pp_index >= 0:
+                await plot_queries.mark_plot_point_completed(pp_index)
+                self.completed_plot_points.add(pp_focus)
 
         await self.refresh_plot_outline()
         if neo4j_manager.driver is not None:

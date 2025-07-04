@@ -152,6 +152,7 @@ class PlannerAgent:
         plot_point_index: int,
         plot_point_progress_chapter: int,
         chapter_context: str,
+        forbidden_locations: list[str] | None = None,
     ) -> tuple[list[SceneDetail] | None, dict[str, int] | None]:
         """Generate a detailed scene plan for a chapter.
 
@@ -162,6 +163,7 @@ class PlannerAgent:
             plot_point_index: Index of the active plot point in the outline.
             plot_point_progress_chapter: Chapter count within the current plot point span (1-based).
             chapter_context: Context string for planning.
+            forbidden_locations: Locations or plot points that must be avoided.
 
         Returns:
             The planned scenes and token usage data.
@@ -278,6 +280,7 @@ class PlannerAgent:
                 "future_plot_context_str": future_plot_context_str,
                 "chapter_context": context_summary_str,
                 "few_shot_scene_plan_example_str": few_shot_scene_plan_example_str,
+                "forbidden_locations": forbidden_locations or [],
             },
         )
         logger.info(

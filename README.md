@@ -122,6 +122,9 @@ re-evaluated and may loop through additional revision cycles up to
    draft is shorter than `MIN_ACCEPTABLE_DRAFT_LENGTH`, or when repeated cycles
    exceed `MAX_REVISION_CYCLES_PER_CHAPTER`. In these cases `RevisionManager`
    instructs the `DraftingAgent` to perform a complete rewrite.
+6. **Knowledge Graph Healing:** When root cause analysis reveals conflicts with
+   character profiles or world elements, the orchestrator now calls
+   `KGMaintainerAgent.heal_and_enrich_kg()` before the next revision attempt.
 
 ```mermaid
 flowchart TD

@@ -315,3 +315,29 @@ async def get_last_plot_point_id() -> str | None:
     """
     result = await neo4j_manager.execute_read_query(query)
     return result[0].get("id") if result and result[0] else None
+
+
+async def mark_plot_point_completed(plot_point_index: int) -> None:
+    """Set the ``status`` property of a plot point to ``"completed"``."""
+
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID
+    pp_id = f"pp_{novel_id}_{plot_point_index + 1}"
+    query = """
+    MATCH (pp:PlotPoint:Entity {id: $pp_id})
+    SET pp.status = 'completed', pp.completed_ts = timestamp()
+    """
+    await neo4j_manager.execute_write_query(query, {"pp_id": pp_id})
+
+
+async def get_completed_plot_points() -> list[str]:
+    """Return descriptions of plot points marked as completed."""
+
+    novel_id = settings.MAIN_NOVEL_INFO_NODE_ID
+    query = """
+    MATCH (:NovelInfo:Entity {id: $novel_id})-[:HAS_PLOT_POINT]->(pp:PlotPoint:Entity)
+    WHERE pp.status = 'completed'
+    RETURN pp.description AS desc
+    ORDER BY pp.sequence ASC
+    """
+    result = await neo4j_manager.execute_read_query(query, {"novel_id": novel_id})
+    return [r.get("desc") for r in result if r and r.get("desc")]
