@@ -641,8 +641,12 @@ async def get_world_building_from_db(
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
       WHERE ($limit IS NULL OR elab.{KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
     WITH we, goals, rules, key_elements, traits,
-         collect(DISTINCT {{chapter: elab.{KG_NODE_CHAPTER_UPDATED}, summary: elab.summary, prov: elab.{KG_IS_PROVISIONAL}}}) AS elaborations
-    
+        collect(DISTINCT {{
+            chapter: elab.{KG_NODE_CHAPTER_UPDATED},
+            summary: elab.summary,
+            prov: coalesce(elab.{KG_IS_PROVISIONAL}, false)
+        }}) AS elaborations
+
     RETURN we, goals, rules, key_elements, traits, elaborations
     ORDER BY we.category, we.name
     """
@@ -775,8 +779,8 @@ async def get_world_elements_for_snippet_from_db(
     OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
     WHERE elab.{KG_NODE_CHAPTER_UPDATED} <= $chapter_limit_param AND elab.{KG_IS_PROVISIONAL} = TRUE
     
-    WITH we, COLLECT(DISTINCT elab) AS provisional_elaborations_found
-    WITH we, ( we.{KG_IS_PROVISIONAL} = TRUE OR size(provisional_elaborations_found) > 0 ) AS is_item_provisional_overall
+    WITH we, COUNT(elab) AS provisional_elaborations_count
+    WITH we, ( we.{KG_IS_PROVISIONAL} = TRUE OR provisional_elaborations_count > 0 ) AS is_item_provisional_overall
     
     RETURN we.name AS name,
            we.description AS description, 
