@@ -83,6 +83,76 @@ def _ensure_dev_key(char_name: str, attrs: dict[str, Any], chapter_number: int) 
         )
 
 
+def _parse_triple_line(
+    line: str, line_num: int, logger_obj: logging.Logger
+) -> tuple[dict[str, str | None], str, str] | None:
+    """Return parsed parts if line is valid; otherwise ``None``."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("//"):
+        return None
+    parts = [p.strip() for p in stripped.split("|")]
+    if len(parts) < 3:
+        logger_obj.warning(
+            "Line %s: Malformed triple (expected 3 parts): '%s'",
+            line_num + 1,
+            line,
+        )
+        return None
+    subject_text, predicate_text, object_text = parts[:3]
+    if len(parts) > 3:
+        logger_obj.debug(
+            "Line %s: extra parts ignored: '%s' from '%s'",
+            line_num + 1,
+            " | ".join(parts[3:]),
+            line,
+        )
+    subject_details = _get_entity_type_and_name_from_text(subject_text)
+    predicate_str = predicate_text.strip().upper().replace(" ", "_")
+    if not subject_details.get("name") or not predicate_str:
+        logger_obj.warning(
+            "Line %s: Missing subject name or predicate: S='%s', P='%s'",
+            line_num + 1,
+            subject_text,
+            predicate_text,
+        )
+        return None
+    return subject_details, predicate_str, object_text
+
+
+def _parse_object_payload(
+    object_text: str, line_num: int, logger_obj: logging.Logger
+) -> tuple[dict[str, str | None] | None, str | None, bool]:
+    """Return object payload components for a triple."""
+    object_entity_payload: dict[str, str | None] | None = None
+    object_literal_payload: str | None = None
+    is_literal_object = True
+    if ":" in object_text:
+        obj_parts_check = object_text.split(":", 1)
+        if (
+            len(obj_parts_check) == 2
+            and obj_parts_check[0].strip()
+            and obj_parts_check[1].strip()
+        ):
+            potential_obj_type = obj_parts_check[0].strip()
+            if potential_obj_type[0].isupper() and " " not in potential_obj_type:
+                object_entity_payload = _get_entity_type_and_name_from_text(object_text)
+                is_literal_object = False
+    if is_literal_object:
+        object_literal_payload = object_text.strip().strip('"').strip("'")
+    if not is_literal_object and (
+        not object_entity_payload or not object_entity_payload.get("name")
+    ):
+        logger_obj.debug(
+            "Line %s: Object '%s' looked like entity but parsed no name. Reverting to literal.",
+            line_num + 1,
+            object_text,
+        )
+        object_literal_payload = object_text.strip()
+        is_literal_object = True
+        object_entity_payload = None
+    return object_entity_payload, object_literal_payload, is_literal_object
+
+
 def parse_rdf_triples_with_rdflib(
     text_block: str,
     rdf_format: str = "turtle",
@@ -96,76 +166,15 @@ def parse_rdf_triples_with_rdflib(
 
     lines = text_block.strip().splitlines()
     for line_num, line in enumerate(lines):
-        line = line.strip()
-        if not line or line.startswith("#") or line.startswith("//"):
+        parsed_line = _parse_triple_line(line, line_num, logger_func)
+        if not parsed_line:
             continue
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 3:
-            logger_func.warning(
-                "Line %s: Malformed triple (expected 3 parts): '%s'",
-                line_num + 1,
-                line,
-            )
-            continue
-
-        subject_text, predicate_text, object_text = parts[:3]
-        if len(parts) > 3:
-            logger_func.debug(
-                "Line %s: extra parts ignored: '%s' from '%s'",
-                line_num + 1,
-                " | ".join(parts[3:]),
-                line,
-            )
-
-        subject_details = _get_entity_type_and_name_from_text(subject_text)
-        predicate_str = predicate_text.strip().upper().replace(" ", "_")
-        if not subject_details.get("name") or not predicate_str:
-            logger_func.warning(
-                "Line %s: Missing subject name or predicate: S='%s', P='%s'",
-                line_num + 1,
-                subject_text,
-                predicate_text,
-            )
-            continue
-
-        object_entity_payload: dict[str, str | None] | None = None
-        object_literal_payload: str | None = None
-        is_literal_object = True
-        if ":" in object_text:
-            obj_parts_check = object_text.split(":", 1)
-            if (
-                len(obj_parts_check) == 2
-                and obj_parts_check[0].strip()
-                and obj_parts_check[1].strip()
-            ):
-                potential_obj_type = obj_parts_check[0].strip()
-                if potential_obj_type[0].isupper() and " " not in potential_obj_type:
-                    object_entity_payload = _get_entity_type_and_name_from_text(
-                        object_text
-                    )
-                    is_literal_object = False
-        if is_literal_object:
-            object_literal_payload = object_text.strip()
-            if object_literal_payload.startswith(
-                '"'
-            ) and object_literal_payload.endswith('"'):
-                object_literal_payload = object_literal_payload[1:-1]
-            if object_literal_payload.startswith(
-                "'"
-            ) and object_literal_payload.endswith("'"):
-                object_literal_payload = object_literal_payload[1:-1]
-        if not is_literal_object and (
-            not object_entity_payload or not object_entity_payload.get("name")
-        ):
-            logger_func.debug(
-                "Line %s: Object '%s' looked like entity but parsed no name. Reverting to literal.",
-                line_num + 1,
-                object_text,
-            )
-            object_literal_payload = object_text.strip()
-            is_literal_object = True
-            object_entity_payload = None
-
+        subject_details, predicate_str, object_text = parsed_line
+        (
+            object_entity_payload,
+            object_literal_payload,
+            is_literal_object,
+        ) = _parse_object_payload(object_text, line_num, logger_func)
         triples_list.append(
             {
                 "subject": subject_details,

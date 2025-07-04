@@ -137,6 +137,100 @@ async def locate_patch_targets(
     return None
 
 
+def _extract_candidate_spans(
+    patch: PatchInstruction, target_span: tuple[int, int]
+) -> list[tuple[int, int]]:
+    """Return all potential spans for a patch."""
+    candidate_spans = [target_span]
+    for s_key, e_key in [
+        ("sentence_char_start", "sentence_char_end"),
+        ("quote_char_start", "quote_char_end"),
+        ("target_char_start", "target_char_end"),
+    ]:
+        span_start = patch.get(s_key)
+        span_end = patch.get(e_key)
+        if span_start is not None and span_end is not None:
+            candidate_spans.append((span_start, span_end))
+    return candidate_spans
+
+
+def _is_overlapping(
+    candidate_spans: list[tuple[int, int]],
+    already_patched_spans: list[tuple[int, int]],
+    replacements: list[tuple[int, int, str]],
+) -> bool:
+    """Return True if spans overlap with existing or queued edits."""
+    return any(
+        max(c_start, old_start) < min(c_end, old_end)
+        for c_start, c_end in candidate_spans
+        for old_start, old_end in already_patched_spans
+    ) or any(
+        max(c_start, r_start) < min(c_end, r_end)
+        for c_start, c_end in candidate_spans
+        for r_start, r_end, _ in replacements
+    )
+
+
+async def _skip_reason(original_segment: str, replacement_text: str) -> str | None:
+    """Return a reason string if patch should be skipped."""
+    if replacement_text.strip() == original_segment.strip():
+        return "identical"
+    if replacement_text.strip() and original_segment.strip():
+        orig_emb, repl_emb = await asyncio.gather(
+            llm_service.async_get_embedding(original_segment),
+            llm_service.async_get_embedding(replacement_text),
+        )
+        if (
+            orig_emb is not None
+            and repl_emb is not None
+            and utils.numpy_cosine_similarity(orig_emb, repl_emb)
+            >= settings.REVISION_SIMILARITY_ACCEPTANCE
+        ):
+            return "similar"
+    return None
+
+
+def _build_ops(
+    original_text: str,
+    already_patched_spans: list[tuple[int, int]],
+    replacements: list[tuple[int, int, str]],
+) -> list[dict[str, Any]]:
+    """Return a combined list of operations sorted by start index."""
+    ops: list[dict[str, Any]] = []
+    for start, end in already_patched_spans:
+        ops.append(
+            {
+                "type": "old",
+                "start": start,
+                "end": end,
+                "text": original_text[start:end],
+            }
+        )
+    for start, end, text in replacements:
+        ops.append({"type": "new", "start": start, "end": end, "text": text})
+    ops.sort(key=lambda x: x["start"])
+    return ops
+
+
+def _apply_ops(
+    original_text: str, ops: list[dict[str, Any]]
+) -> tuple[str, list[tuple[int, int]]]:
+    """Apply operations and return new text and protected spans."""
+    result_parts: list[str] = []
+    all_spans: list[tuple[int, int]] = []
+    last_original_end = 0
+    for op in ops:
+        result_parts.append(original_text[last_original_end : op["start"]])
+        new_span_start = len("".join(result_parts))
+        result_parts.append(op["text"])
+        new_span_end = len("".join(result_parts))
+        if new_span_end > new_span_start:
+            all_spans.append((new_span_start, new_span_end))
+        last_original_end = op["end"]
+    result_parts.append(original_text[last_original_end:])
+    return "".join(result_parts), sorted(all_spans)
+
+
 async def _apply_patches_to_text(
     original_text: str,
     patch_instructions: list[PatchInstruction],
@@ -163,25 +257,10 @@ async def _apply_patches_to_text(
 
         segment_start, segment_end = target_span
 
-        candidate_spans = [(segment_start, segment_end)]
-        for s_key, e_key in [
-            ("sentence_char_start", "sentence_char_end"),
-            ("quote_char_start", "quote_char_end"),
-            ("target_char_start", "target_char_end"),
-        ]:
-            span_start = patch.get(s_key)
-            span_end = patch.get(e_key)
-            if span_start is not None and span_end is not None:
-                candidate_spans.append((span_start, span_end))
+        candidate_spans = _extract_candidate_spans(patch, target_span)
 
-        is_overlapping = any(
-            max(c_start, old_start) < min(c_end, old_end)
-            for c_start, c_end in candidate_spans
-            for old_start, old_end in already_patched_spans
-        ) or any(
-            max(c_start, r_start) < min(c_end, r_end)
-            for c_start, c_end in candidate_spans
-            for r_start, r_end, _ in replacements
+        is_overlapping = _is_overlapping(
+            candidate_spans, already_patched_spans, replacements
         )
 
         if is_overlapping:
@@ -194,32 +273,16 @@ async def _apply_patches_to_text(
             continue
 
         original_segment = original_text[segment_start:segment_end]
-        if replacement_text.strip() == original_segment.strip():
+        reason = await _skip_reason(original_segment, replacement_text)
+        if reason:
             logger.info(
-                "Patch %s: replacement identical to original segment %s-%s. Skipping.",
+                "Patch %s: replacement %s to original segment %s-%s. Skipping.",
                 patch_idx + 1,
+                reason,
                 segment_start,
                 segment_end,
             )
             continue
-        if replacement_text.strip() and original_segment.strip():
-            orig_emb, repl_emb = await asyncio.gather(
-                llm_service.async_get_embedding(original_segment),
-                llm_service.async_get_embedding(replacement_text),
-            )
-            if (
-                orig_emb is not None
-                and repl_emb is not None
-                and utils.numpy_cosine_similarity(orig_emb, repl_emb)
-                >= settings.REVISION_SIMILARITY_ACCEPTANCE
-            ):
-                logger.info(
-                    "Patch %s: replacement highly similar to original segment %s-%s. Skipping.",
-                    patch_idx + 1,
-                    segment_start,
-                    segment_end,
-                )
-                continue
 
         replacements.append((segment_start, segment_end, replacement_text))
         log_action = "DELETION" if not replacement_text.strip() else "REPLACEMENT"
@@ -235,38 +298,8 @@ async def _apply_patches_to_text(
         logger.info("No non-overlapping patches to apply in this cycle.")
         return original_text, already_patched_spans
 
-    all_ops: list[dict[str, Any]] = []
-    for start, end in already_patched_spans:
-        all_ops.append(
-            {
-                "type": "old",
-                "start": start,
-                "end": end,
-                "text": original_text[start:end],
-            }
-        )
-    for start, end, text in replacements:
-        all_ops.append({"type": "new", "start": start, "end": end, "text": text})
-
-    all_ops.sort(key=lambda x: x["start"])
-
-    result_parts = []
-    all_spans_in_new_text = []
-    last_original_end = 0
-
-    for op in all_ops:
-        result_parts.append(original_text[last_original_end : op["start"]])
-        new_span_start = len("".join(result_parts))
-        result_parts.append(op["text"])
-        new_span_end = len("".join(result_parts))
-        if new_span_end > new_span_start:
-            all_spans_in_new_text.append((new_span_start, new_span_end))
-        last_original_end = op["end"]
-
-    result_parts.append(original_text[last_original_end:])
-
-    patched_text = "".join(result_parts)
-    final_spans = sorted(all_spans_in_new_text)
+    all_ops = _build_ops(original_text, already_patched_spans, replacements)
+    patched_text, final_spans = _apply_ops(original_text, all_ops)
 
     num_deletions = sum(1 for _, _, txt in replacements if not txt.strip())
     num_replacements = len(replacements) - num_deletions
