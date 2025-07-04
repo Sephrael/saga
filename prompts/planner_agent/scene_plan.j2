@@ -10,6 +10,11 @@ You are a visionary "showrunner" and master novelist, celebrated for your abilit
 - **Current Major Plot Point (PP {{ plot_point_index_plus1 }}/{{ total_plot_points_in_novel }}):**
   {{ plot_point_focus }}
 - **Future Plot Context:** {{ future_plot_context_str if future_plot_context_str else "N/A" }}
+- **Forbidden Locations/Plot Points:**
+{% if forbidden_locations %}
+{% for loc in forbidden_locations %}- {{ loc }}
+{% endfor %}
+{% else %}None{% endif %}
 
 **Instructions for Planning:**
 1.  **Create a Narrative Arc:** Advance the current major plot point with a clear beginning, middle, and end for this chapter. The point does not need to be fully resolved yet; focus on smaller beats that move it forward.

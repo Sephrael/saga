@@ -2,6 +2,7 @@
 from typing import Any
 
 import structlog
+import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.patch_validation_agent import NoOpPatchValidator, PatchValidationAgent
 from config import settings
@@ -180,6 +181,69 @@ class RevisionManager:
             use_patched_text_as_final,
             cumulative_usage if cumulative_usage.total_tokens > 0 else None,
         )
+
+    async def _rewrite_problem_scenes(
+        self,
+        plot_outline: dict[str, Any],
+        original_text: str,
+        chapter_number: int,
+        problems_to_fix: list[ProblemDetail],
+        hybrid_context_for_revision: str,
+        chapter_plan: list[SceneDetail] | None,
+    ) -> tuple[str, str, TokenUsage | None]:
+        """Rewrite only the paragraphs containing flagged problems."""
+
+        paragraphs = utils.get_text_segments(original_text, "paragraph")
+        para_texts = [p[0] for p in paragraphs]
+        usage_total = TokenUsage()
+
+        for idx, (_txt, start, end) in enumerate(paragraphs):
+            probs = [
+                p
+                for p in problems_to_fix
+                if (
+                    (
+                        p.sentence_char_start is not None
+                        and start <= p.sentence_char_start < end
+                    )
+                    or (
+                        p.quote_char_start is not None
+                        and start <= p.quote_char_start < end
+                    )
+                )
+            ]
+            if not probs:
+                continue
+            issues = "\n".join(
+                f"- {p.problem_description} (Fix: {p.suggested_fix_focus})"
+                for p in probs
+            )
+            plan_str = ""
+            if chapter_plan:
+                plan_str = _get_formatted_scene_plan_from_agent_or_fallback(
+                    chapter_plan,
+                    settings.REVISION_MODEL,
+                    settings.MAX_CONTEXT_TOKENS // 4,
+                )
+            prompt = (
+                f"Rewrite the following paragraph from chapter {chapter_number} addressing:\n{issues}\n"
+                f"Paragraph:\n{_txt}\n"
+                f"{plan_str}\nContext:\n{hybrid_context_for_revision}"
+            )
+            new_para, usage = await llm_service.async_call_llm(
+                model_name=settings.REVISION_MODEL,
+                prompt=prompt,
+                temperature=settings.TEMPERATURE_REVISION,
+                max_tokens=settings.MAX_REVISION_TOKENS,
+                allow_fallback=True,
+                stream_to_disk=False,
+                auto_clean_response=True,
+            )
+            usage_total.add(usage)
+            para_texts[idx] = llm_service.clean_model_response(new_para)
+
+        new_text = "\n\n".join(para_texts)
+        return new_text, new_text, usage_total if usage_total.total_tokens > 0 else None
 
     async def _perform_full_rewrite(
         self,
@@ -520,7 +584,30 @@ class RevisionManager:
             and not self._should_defer_full_rewrite(revision_cycle)
         ):
             logger.info(
-                "Proceeding with full chapter rewrite for Ch %s as patching was ineffective or disabled.",
+                "Attempting targeted scene rewrite for Ch %s before full rewrite.",
+                chapter_number,
+            )
+            (
+                final_revised_text,
+                final_raw_llm_output,
+                rewrite_usage,
+            ) = await self._rewrite_problem_scenes(
+                plot_outline,
+                original_text,
+                chapter_number,
+                problems_to_fix,
+                hybrid_context_for_revision,
+                chapter_plan,
+            )
+            _add_usage(rewrite_usage)
+            final_spans_for_next_cycle = []
+        if (
+            not final_revised_text
+            and evaluation_result.needs_revision
+            and not self._should_defer_full_rewrite(revision_cycle)
+        ):
+            logger.info(
+                "Proceeding with full chapter rewrite for Ch %s as targeted rewrite was ineffective.",
                 chapter_number,
             )
             (
