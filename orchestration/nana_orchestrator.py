@@ -732,6 +732,7 @@ class NANA_Orchestrator:
                 evaluation_result,
                 hybrid_context_for_draft,
                 chapter_plan,
+                revision_cycle=attempt - 1,
                 is_from_flawed_source=is_from_flawed_source_for_kg,
                 already_patched_spans=patched_spans,
                 continuity_problems=continuity_problems,

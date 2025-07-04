@@ -29,6 +29,13 @@ logger = structlog.get_logger(__name__)
 class RevisionManager:
     """Coordinate chapter revision via patches and rewrites."""
 
+    def _should_defer_full_rewrite(self, cycle: int) -> bool:
+        """Return ``True`` if full rewrite should be deferred for this cycle."""
+
+        if not settings.DEFER_FULL_REWRITE_UNTIL_LAST_CYCLE:
+            return False
+        return cycle < settings.MAX_REVISION_CYCLES_PER_CHAPTER - 1
+
     def identify_root_cause(
         self,
         problems: list[dict[str, Any]],
@@ -356,6 +363,7 @@ class RevisionManager:
         evaluation_result: EvaluationResult,
         hybrid_context_for_revision: str,
         chapter_plan: list[SceneDetail] | None,
+        revision_cycle: int,
         is_from_flawed_source: bool = False,
         already_patched_spans: list[tuple[int, int]] | None = None,
         continuity_problems: list[ProblemDetail] | None = None,
@@ -374,6 +382,7 @@ class RevisionManager:
                 continuity with previous chapters.
             chapter_plan: Optional scene plan used when agentic planning is
                 enabled.
+            revision_cycle: Current revision attempt number (0-indexed).
             is_from_flawed_source: Whether the original text came from a flawed
                 generation process.
             already_patched_spans: Spans previously protected from further
@@ -443,7 +452,11 @@ class RevisionManager:
             revision_reason_str,
         )
 
-        if is_deeply_flawed and settings.ENABLE_STRATEGIC_REWRITES:
+        if (
+            is_deeply_flawed
+            and settings.ENABLE_STRATEGIC_REWRITES
+            and not self._should_defer_full_rewrite(revision_cycle)
+        ):
             logger.info(
                 "Deeply flawed draft detected. Proceeding directly to full chapter rewrite."
             )
@@ -501,7 +514,11 @@ class RevisionManager:
                 "Ch %s: Using patched text as the revised version.", chapter_number
             )
 
-        if not final_revised_text and evaluation_result.needs_revision:
+        if (
+            not final_revised_text
+            and evaluation_result.needs_revision
+            and not self._should_defer_full_rewrite(revision_cycle)
+        ):
             logger.info(
                 "Proceeding with full chapter rewrite for Ch %s as patching was ineffective or disabled.",
                 chapter_number,
@@ -522,6 +539,18 @@ class RevisionManager:
             )
             final_spans_for_next_cycle = []
             _add_usage(rewrite_usage)
+        elif (
+            not final_revised_text
+            and evaluation_result.needs_revision
+            and self._should_defer_full_rewrite(revision_cycle)
+        ):
+            logger.info(
+                "Deferring full rewrite for Ch %s until later cycle.",
+                chapter_number,
+            )
+            final_revised_text = original_text
+            final_raw_llm_output = "Rewrite deferred"
+            final_spans_for_next_cycle = already_patched_spans
 
         if not final_revised_text:
             logger.error(

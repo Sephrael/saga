@@ -159,6 +159,7 @@ async def test_revision_manager_full_rewrite(monkeypatch):
         eval_result,
         "ctx",
         None,
+        revision_cycle=0,
     )
 
     assert res[0] == "Rewrite done"
@@ -304,6 +305,7 @@ async def test_revision_manager_uses_noop_validator(monkeypatch):
         eval_result,
         "ctx",
         None,
+        revision_cycle=0,
     )
 
     assert isinstance(received, NoOpPatchValidator)
@@ -400,3 +402,54 @@ async def test_patch_cycle_receives_extra_problems(monkeypatch):
         in (p["issue_category"] if isinstance(p, dict) else p.issue_category)
         for p in captured["problems"]
     )
+
+
+@pytest.mark.asyncio
+async def test_defer_full_rewrite_until_last_cycle(monkeypatch):
+    monkeypatch.setattr(settings, "DEFER_FULL_REWRITE_UNTIL_LAST_CYCLE", True)
+    monkeypatch.setattr(settings, "MAX_REVISION_CYCLES_PER_CHAPTER", 3)
+
+    async def fake_patch(*_a, **_k):
+        return "patched", [], False, None
+
+    called = {"rewrite": 0}
+
+    async def fake_rewrite(*_a, **_k):
+        called["rewrite"] += 1
+        return "rewritten", "raw", None
+
+    manager = RevisionManager()
+    monkeypatch.setattr(manager, "_patch_revision_cycle", fake_patch)
+    monkeypatch.setattr(manager, "_perform_full_rewrite", fake_rewrite)
+
+    eval_result = EvaluationResult(
+        needs_revision=True, reasons=["bad"], problems_found=[]
+    )
+
+    await manager.revise_chapter(
+        {"plot_points": ["a"]},
+        {},
+        {},
+        "text",
+        1,
+        eval_result,
+        "ctx",
+        None,
+        revision_cycle=0,
+    )
+
+    assert called["rewrite"] == 0
+
+    await manager.revise_chapter(
+        {"plot_points": ["a"]},
+        {},
+        {},
+        "text",
+        1,
+        eval_result,
+        "ctx",
+        None,
+        revision_cycle=2,
+    )
+
+    assert called["rewrite"] == 1
