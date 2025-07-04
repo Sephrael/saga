@@ -3,14 +3,13 @@
 
 import asyncio
 import time  # For Rich display updates
-from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.drafting_agent import DraftingAgent
-from agents.finalize_agent import FinalizationResult, FinalizeAgent
+from agents.finalize_agent import FinalizeAgent
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from agents.planner_agent import PlannerAgent
 from chapter_generation import (
@@ -36,11 +35,9 @@ from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
 from kg_maintainer.models import (
-    CharacterProfile,
     EvaluationResult,
     ProblemDetail,
     SceneDetail,
-    WorldItem,
 )
 from processing.repetition_analyzer import RepetitionAnalyzer
 from processing.repetition_tracker import RepetitionTracker
@@ -54,27 +51,14 @@ from models.agent_models import ChapterEndState
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
 from orchestration.chapter_generation_runner import ChapterGenerationRunner
+from orchestration.knowledge_service import KnowledgeService
+from orchestration.models import KnowledgeCache, RevisionOutcome
+from orchestration.output_service import OutputService
+from orchestration.prerequisite_service import PrerequisiteService
 from orchestration.service_layer import ChapterServiceLayer
 from orchestration.token_accountant import Stage, TokenAccountant
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass
-class RevisionOutcome:
-    """Final text after processing and whether it is marked flawed."""
-
-    text: str | None
-    raw_llm_output: str | None
-    is_flawed: bool
-
-
-@dataclass
-class KnowledgeCache:
-    """In-memory cache for KG data used during chapter generation."""
-
-    characters: dict[str, CharacterProfile] = field(default_factory=dict)
-    world: dict[str, dict[str, WorldItem]] = field(default_factory=dict)
 
 
 class NANA_Orchestrator:
@@ -102,6 +86,9 @@ class NANA_Orchestrator:
         self.chapter_count: int = 0
         self.novel_props_cache: dict[str, Any] = {}
         self.knowledge_cache = KnowledgeCache()
+        self.knowledge_service = KnowledgeService(self)
+        self.output_service = OutputService(self)
+        self.prerequisite_service = PrerequisiteService(self)
         self.token_accountant = TokenAccountant()
         self.total_tokens_generated_this_run: int = 0
         self.completed_plot_points: set[str] = set()
@@ -139,91 +126,25 @@ class NANA_Orchestrator:
         self._update_rich_display()
 
     async def _generate_plot_points_from_kg(self, count: int) -> None:
-        """Generate and persist additional plot points using the planner agent."""
-        if count <= 0:
-            return
-
-        summaries: list[str] = []
-        start = max(1, self.chapter_count - settings.CONTEXT_CHAPTER_COUNT + 1)
-        for i in range(start, self.chapter_count + 1):
-            chap = await chapter_repository.get_chapter_data(i)
-            if chap and (chap.get("summary") or chap.get("text")):
-                summaries.append((chap.get("summary") or chap.get("text", "")).strip())
-
-        combined_summary = "\n".join(summaries)
-        if not combined_summary.strip():
-            logger.warning("No summaries available for continuation planning.")
-            return
-
-        new_points, usage = await self.planner_agent.plan_continuation(
-            combined_summary, count
-        )
-        self._accumulate_tokens(Stage.PLAN_CONTINUATION.value, usage)
-        if not new_points:
-            logger.error("Failed to generate continuation plot points.")
-            return
-
-        for desc in new_points:
-            if await plot_queries.plot_point_exists(desc):
-                logger.info("Plot point already exists, skipping: %s", desc)
-                continue
-            prev_id = await plot_queries.get_last_plot_point_id()
-            await self.kg_maintainer_agent.add_plot_point(desc, prev_id or "")
-            self.plot_outline.setdefault("plot_points", []).append(desc)
-        self._update_novel_props_cache()
+        """Delegate to :class:`KnowledgeService` for plot point generation."""
+        await self.knowledge_service.generate_plot_points_from_kg(count)
 
     def load_state_from_user_model(self, model: UserStoryInputModel) -> None:
         """Populate orchestrator state from a user-provided model."""
         plot_outline, _, _ = convert_model_to_objects(model)
         self.plot_outline = plot_outline
 
-    def _update_novel_props_cache(self):
-        self.novel_props_cache = {
-            "title": self.plot_outline.get(
-                "title", settings.DEFAULT_PLOT_OUTLINE_TITLE
-            ),
-            "genre": self.plot_outline.get("genre", settings.CONFIGURED_GENRE),
-            "theme": self.plot_outline.get("theme", settings.CONFIGURED_THEME),
-            "protagonist_name": self.plot_outline.get(
-                "protagonist_name", settings.DEFAULT_PROTAGONIST_NAME
-            ),
-            "character_arc": self.plot_outline.get("character_arc", "N/A"),
-            "logline": self.plot_outline.get("logline", "N/A"),
-            "setting": self.plot_outline.get(
-                "setting", settings.CONFIGURED_SETTING_DESCRIPTION
-            ),
-            "narrative_style": self.plot_outline.get("narrative_style", "N/A"),
-            "tone": self.plot_outline.get("tone", "N/A"),
-            "pacing": self.plot_outline.get("pacing", "N/A"),
-            "plot_points": self.plot_outline.get("plot_points", []),
-            "plot_outline_full": self.plot_outline,
-        }
-        self._update_rich_display()
+    def _update_novel_props_cache(self) -> None:
+        """Delegate to :class:`KnowledgeService` to refresh property cache."""
+        self.knowledge_service.update_novel_props_cache()
 
     async def refresh_plot_outline(self) -> None:
-        """Reload plot outline from the database."""
-        result = await plot_queries.get_plot_outline_from_db()
-        if isinstance(result, dict):
-            self.plot_outline = PlotOutline(**result)
-            self._update_novel_props_cache()
-            self.completed_plot_points = set(
-                await plot_queries.get_completed_plot_points()
-            )
-        else:
-            logger.error("Failed to refresh plot outline from DB: %s", result)
+        """Reload plot outline from the database via :class:`KnowledgeService`."""
+        await self.knowledge_service.refresh_plot_outline()
 
     async def refresh_knowledge_cache(self) -> None:
-        """Reload character profiles and world building into the cache."""
-        logger.info("Refreshing knowledge cache from Neo4j...")
-        self.knowledge_cache.characters = (
-            await character_queries.get_character_profiles_from_db()
-        )
-        self.knowledge_cache.world = await world_queries.get_world_building_from_db()
-        logger.info(
-            "Knowledge cache refreshed: %d characters, %d world categories.",
-            len(self.knowledge_cache.characters),
-            len(self.knowledge_cache.world),
-        )
+        """Reload character profiles and world building caches."""
+        await self.knowledge_service.refresh_knowledge_cache()
 
     async def async_init_orchestrator(self):
         logger.info("NANA Orchestrator async_init_orchestrator started...")
@@ -316,40 +237,19 @@ class NANA_Orchestrator:
 
     async def _save_chapter_text_and_log(
         self, chapter_number: int, final_text: str, raw_llm_log: str | None
-    ):
-        try:
-            await self.file_manager.save_chapter_and_log(
-                chapter_number, final_text, raw_llm_log or "N/A"
-            )
-            logger.info(
-                f"Saved chapter text and raw LLM log files for ch {chapter_number}."
-            )
-        except OSError as e:
-            logger.error(
-                f"Failed writing chapter text/log files for ch {chapter_number}: {e}",
-                exc_info=True,
-            )
+    ) -> None:
+        """Delegate to :class:`OutputService` for persistence."""
+        await self.output_service.save_chapter_text_and_log(
+            chapter_number, final_text, raw_llm_log
+        )
 
     async def _save_debug_output(
         self, chapter_number: int, stage_description: str, content: Any
-    ):
-        if content is None:
-            return
-        content_str = str(content) if not isinstance(content, str) else content
-        if not content_str.strip():
-            return
-        try:
-            await self.file_manager.save_debug_output(
-                chapter_number, stage_description, content_str
-            )
-            logger.debug(
-                f"Saved debug output for Ch {chapter_number}, Stage '{stage_description}' to file system"
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to save debug output (Ch {chapter_number}, Stage '{stage_description}'): {e}",
-                exc_info=True,
-            )
+    ) -> None:
+        """Delegate to :class:`OutputService` for debug logs."""
+        await self.output_service.save_debug_output(
+            chapter_number, stage_description, content
+        )
 
     async def perform_deduplication(
         self, text_to_dedup: str, chapter_number: int
@@ -876,141 +776,8 @@ class NANA_Orchestrator:
     async def _prepare_chapter_prerequisites(
         self, novel_chapter_number: int
     ) -> PrerequisiteData:
-        """Gather planning and context needed before drafting a chapter."""
-        self._update_rich_display(
-            step=f"Ch {novel_chapter_number} - Preparing Prerequisites"
-        )
-
-        plot_point_focus, plot_point_index = get_plot_point_info(
-            self.plot_outline, novel_chapter_number
-        )
-        if plot_point_focus is None:
-            logger.error(
-                f"NANA: Ch {novel_chapter_number} prerequisite check failed: no concrete plot point focus (index {plot_point_index})."
-            )
-            return PrerequisiteData(None, -1, None, None)
-
-        self._update_novel_props_cache()
-
-        planning_context = self.next_chapter_context
-        if planning_context is None:
-            planning_context = await self.context_service.build_hybrid_context(
-                self,
-                novel_chapter_number,
-                None,
-                None,
-                profile_name=ContextProfileName.DEFAULT,
-            )
-        chapter_plan_result, plan_usage = await self.planner_agent.plan_chapter_scenes(
-            self.plot_outline,
-            novel_chapter_number,
-            plot_point_focus,
-            plot_point_index,
-            (novel_chapter_number - 1) % settings.PLOT_POINT_CHAPTER_SPAN + 1,
-            planning_context,
-            list(self.completed_plot_points),
-        )
-        self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-{Stage.CHAPTER_PLANNING.value}", plan_usage
-        )
-
-        chapter_plan: list[SceneDetail] | None = chapter_plan_result
-
-        if (
-            settings.ENABLE_SCENE_PLAN_VALIDATION
-            and chapter_plan is not None
-            and settings.ENABLE_WORLD_CONTINUITY_CHECK
-        ):
-            (
-                plan_problems,
-                usage,
-            ) = await self.evaluator_agent.check_scene_plan_consistency(
-                self.plot_outline,
-                chapter_plan,
-                novel_chapter_number,
-                planning_context,
-            )
-            self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-{Stage.PLAN_CONSISTENCY.value}", usage
-            )
-            await self._save_debug_output(
-                novel_chapter_number,
-                "scene_plan_consistency_problems",
-                plan_problems,
-            )
-            if plan_problems:
-                logger.warning(
-                    f"NANA: Ch {novel_chapter_number} scene plan has {len(plan_problems)} consistency issues."
-                )
-
-        self.missing_references["characters"].clear()
-        self.missing_references["locations"].clear()
-        prev_state = await self._load_previous_end_state(novel_chapter_number - 1)
-        if chapter_plan and prev_state is not None:
-            known_chars = {c.name for c in prev_state.character_states}
-            known_locs = {c.location for c in prev_state.character_states}
-            known_locs.update(prev_state.key_world_changes.keys())
-            for scene in chapter_plan:
-                for name in scene.get("characters_involved", []):
-                    if name not in known_chars:
-                        self.missing_references["characters"].add(name)
-                setting = scene.get("setting_details")
-                if setting and setting not in known_locs:
-                    self.missing_references["locations"].add(setting)
-
-        hybrid_context_for_draft = self.next_chapter_context
-        if hybrid_context_for_draft is None:
-            await self.refresh_plot_outline()
-            if neo4j_manager.driver is not None:
-                await self.refresh_knowledge_cache()
-            else:
-                logger.warning(
-                    "Neo4j driver not initialized. Skipping knowledge cache refresh."
-                )
-            hybrid_context_for_draft = await self.context_service.build_hybrid_context(
-                self,
-                novel_chapter_number,
-                chapter_plan,
-                None,
-                profile_name=ContextProfileName.DEFAULT,
-                missing_entities=list(
-                    self.missing_references["characters"]
-                    | self.missing_references["locations"]
-                ),
-            )
-        else:
-            self.next_chapter_context = None
-
-        fill_in_lines = [
-            chunk.text for chunk in self.context_service.llm_fill_chunks if chunk.text
-        ]
-        if self.pending_fill_ins:
-            fill_in_lines = self.pending_fill_ins + fill_in_lines
-            self.pending_fill_ins = []
-        fill_in_context = "\n".join(fill_in_lines) or None
-
-        if settings.ENABLE_AGENTIC_PLANNING and chapter_plan is None:
-            logger.warning(
-                f"NANA: Ch {novel_chapter_number}: Planning Agent failed or plan invalid. Proceeding with plot point focus only."
-            )
-        await self._save_debug_output(
-            novel_chapter_number,
-            "scene_plan",
-            chapter_plan if chapter_plan else "No plan generated.",
-        )
-        await self._save_debug_output(
-            novel_chapter_number,
-            "hybrid_context_for_draft",
-            hybrid_context_for_draft,
-        )
-
-        return PrerequisiteData(
-            plot_point_focus=plot_point_focus,
-            plot_point_index=plot_point_index,
-            chapter_plan=chapter_plan,
-            hybrid_context_for_draft=hybrid_context_for_draft,
-            fill_in_context=fill_in_context,
-        )
+        """Gather planning and context needed before drafting."""
+        return await self.prerequisite_service.gather(novel_chapter_number)
 
     async def _draft_initial_chapter_text(
         self,
@@ -1130,57 +897,14 @@ class NANA_Orchestrator:
         is_from_flawed_source_for_kg: bool,
         fill_in_context: str | None,
     ) -> tuple[str | None, ChapterEndState | None]:
-        """Finalize, persist, and summarize a chapter."""
-
-        self._update_rich_display(step=f"Ch {novel_chapter_number} - Finalization")
-
-        result: FinalizationResult = await self.finalize_agent.finalize_chapter(
-            self.plot_outline,
-            await character_queries.get_character_profiles_from_db(),
-            await world_queries.get_world_building_from_db(),
+        """Delegate to :class:`OutputService` for finalization."""
+        return await self.output_service.finalize_and_save_chapter(
             novel_chapter_number,
             final_text_to_process,
             final_raw_llm_output,
             is_from_flawed_source_for_kg,
-            fill_in_context=fill_in_context,
+            fill_in_context,
         )
-
-        self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-{Stage.SUMMARIZATION.value}",
-            result.get("summary_usage"),
-        )
-        self._accumulate_tokens(
-            f"Ch{novel_chapter_number}-{Stage.KG_EXTRACTION_MERGE.value}",
-            result.get("kg_usage"),
-        )
-        await self._save_debug_output(
-            novel_chapter_number, "final_summary", result.get("summary")
-        )
-
-        if result.get("embedding") is None:
-            logger.error(
-                "NANA CRITICAL: Failed to generate embedding for final text of Chapter %s. Text saved to file system only.",
-                novel_chapter_number,
-            )
-            await self._save_chapter_text_and_log(
-                novel_chapter_number,
-                final_text_to_process,
-                final_raw_llm_output,
-            )
-            self._update_rich_display(
-                step=f"Ch {novel_chapter_number} Failed - No Embedding"
-            )
-            return None, result.get("chapter_end_state")
-
-        await self._save_chapter_text_and_log(
-            novel_chapter_number, final_text_to_process, final_raw_llm_output
-        )
-
-        self.repetition_tracker.update_from_text(final_text_to_process)
-
-        self.chapter_count = max(self.chapter_count, novel_chapter_number)
-
-        return final_text_to_process, result.get("chapter_end_state")
 
     async def _validate_plot_outline(self, novel_chapter_number: int) -> bool:
         if (
