@@ -138,6 +138,58 @@ def _add_world_details(
                 )
 
 
+def _extract_main_character(model: UserStoryInputModel) -> ProtagonistModel | None:
+    """Return the primary protagonist from ``model``."""
+    return model.protagonist or (
+        model.characters.protagonist if model.characters else None
+    )
+
+
+def _handle_antagonist(
+    model: UserStoryInputModel, characters: dict[str, CharacterProfile]
+) -> None:
+    """Add antagonist character profile if present."""
+    antagonist = model.antagonist or (
+        model.characters.antagonist if model.characters else None
+    )
+    if antagonist:
+        _add_character_profile(characters, antagonist, antagonist.role or "antagonist")
+
+
+def _add_supporting_characters(
+    model: UserStoryInputModel, characters: dict[str, CharacterProfile]
+) -> None:
+    """Add supporting and other key characters from ``model``."""
+    if model.other_key_characters:
+        for _name, info in model.other_key_characters.items():
+            _add_character_profile(characters, info, "other_key_character")
+
+    if model.characters and model.characters.supporting_characters:
+        for info in model.characters.supporting_characters:
+            _add_character_profile(
+                characters, info, info.role or "supporting_character"
+            )
+
+
+def _apply_plot_elements(
+    plot_outline: dict[str, Any], elements: PlotElementsModel
+) -> None:
+    """Merge plot element data into ``plot_outline``."""
+    plot_outline["inciting_incident"] = elements.inciting_incident
+    plot_outline["plot_points"] = elements.plot_points
+    plot_outline["central_conflict"] = elements.central_conflict
+    plot_outline["stakes"] = elements.stakes
+
+
+def _merge_style_and_tone(
+    plot_outline: dict[str, Any], style_data: dict[str, Any]
+) -> None:
+    """Merge style and tone information into ``plot_outline``."""
+    for key in ("narrative_style", "tone", "pacing"):
+        if key in style_data:
+            plot_outline[key] = style_data[key]
+
+
 def user_story_to_objects(
     model: UserStoryInputModel,
 ) -> tuple[
@@ -154,51 +206,24 @@ def user_story_to_objects(
         if model.novel_concept.setting is not None:
             plot_outline["setting"] = model.novel_concept.setting
 
-    main_char_model = model.protagonist or (
-        model.characters.protagonist if model.characters else None
-    )
+    main_char_model = _extract_main_character(model)
     if main_char_model:
         plot_outline["protagonist_name"] = main_char_model.name
         _add_character_profile(
             characters, main_char_model, main_char_model.role or "protagonist"
         )
 
-    antagonist_model = model.antagonist
-    if not antagonist_model and model.characters:
-        antagonist_model = model.characters.antagonist
-    if antagonist_model:
-        _add_character_profile(
-            characters,
-            antagonist_model,
-            antagonist_model.role or "antagonist",
-        )
-
-    if model.other_key_characters:
-        for _name, info in model.other_key_characters.items():
-            _add_character_profile(characters, info, "other_key_character")
-
-    if model.characters and model.characters.supporting_characters:
-        for info in model.characters.supporting_characters:
-            _add_character_profile(
-                characters, info, info.role or "supporting_character"
-            )
+    _handle_antagonist(model, characters)
+    _add_supporting_characters(model, characters)
 
     if model.plot_elements:
-        plot_outline["inciting_incident"] = model.plot_elements.inciting_incident
-        plot_outline["plot_points"] = model.plot_elements.plot_points
-        plot_outline["central_conflict"] = model.plot_elements.central_conflict
-        plot_outline["stakes"] = model.plot_elements.stakes
+        _apply_plot_elements(plot_outline, model.plot_elements)
 
     if model.setting:
         _add_world_items_from_setting(model.setting, world_items)
 
     if model.style_and_tone:
-        if "narrative_style" in model.style_and_tone:
-            plot_outline["narrative_style"] = model.style_and_tone["narrative_style"]
-        if "tone" in model.style_and_tone:
-            plot_outline["tone"] = model.style_and_tone["tone"]
-        if "pacing" in model.style_and_tone:
-            plot_outline["pacing"] = model.style_and_tone["pacing"]
+        _merge_style_and_tone(plot_outline, model.style_and_tone)
 
     if model.world_details:
         _add_world_details(model.world_details, world_items)

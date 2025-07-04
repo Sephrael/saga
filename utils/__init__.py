@@ -101,105 +101,113 @@ async def deduplicate_text_segments(
     if not segments_with_offsets:
         return original_text, 0
 
-    num_segments = len(segments_with_offsets)
-    indices_to_remove = set()
+    indices = await _find_duplicate_indices(
+        segments_with_offsets,
+        similarity_threshold,
+        use_semantic_comparison,
+        min_segment_length_chars,
+        prefer_newer,
+    )
 
-    embeddings: list[np.ndarray | None] = []
-    normalized_texts: list[str] = []
+    if not indices:
+        return original_text, 0
 
-    if use_semantic_comparison:
-        tasks = [
-            llm_service.async_get_embedding(seg_text)
-            for seg_text, _, _ in segments_with_offsets
-        ]
+    cleaned_text = remove_spans_from_text(
+        original_text, [segments_with_offsets[i][1:] for i in sorted(indices)]
+    )
+    cleaned_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", cleaned_text)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text).strip()
+
+    return cleaned_text, len(original_text) - len(cleaned_text)
+
+
+async def _prepare_segment_representations(
+    segments: list[tuple[str, int, int]], use_semantic: bool
+) -> tuple[list[np.ndarray | None], list[str]]:
+    """Return embeddings or normalized texts for ``segments``."""
+    if use_semantic:
+        tasks = [llm_service.async_get_embedding(seg[0]) for seg in segments]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         embeddings = [
             res if not isinstance(res, Exception) else None for res in results
         ]
-    else:
-        normalized_texts = [
-            _normalize_text_for_matching(seg[0]) for seg in segments_with_offsets
-        ]
+        return embeddings, []
+    normalized = [_normalize_text_for_matching(seg[0]) for seg in segments]
+    return [], normalized
 
-    iteration_range = (
+
+def _is_duplicate_segment(
+    i: int,
+    j: int,
+    segments: list[tuple[str, int, int]],
+    embeddings: list[np.ndarray | None],
+    normalized: list[str],
+    threshold: float,
+    use_semantic: bool,
+) -> bool:
+    """Return ``True`` if segments ``i`` and ``j`` are duplicates."""
+    text_i = segments[i][0]
+    text_j = segments[j][0]
+    if use_semantic:
+        emb_i = embeddings[i] if embeddings else None
+        emb_j = embeddings[j] if embeddings else None
+        if emb_i is not None and emb_j is not None:
+            similarity = numpy_cosine_similarity(emb_i, emb_j)
+            if similarity > threshold:
+                return True
+        return _normalize_text_for_matching(text_i) == _normalize_text_for_matching(
+            text_j
+        )
+    return normalized[i] == normalized[j]
+
+
+async def _find_duplicate_indices(
+    segments: list[tuple[str, int, int]],
+    threshold: float,
+    use_semantic: bool,
+    min_length: int,
+    prefer_newer: bool,
+) -> set[int]:
+    """Return set of indices for segments that should be removed."""
+    embeddings, normalized = await _prepare_segment_representations(
+        segments, use_semantic
+    )
+    num_segments = len(segments)
+    indices_to_remove: set[int] = set()
+
+    outer_range = (
         range(num_segments - 1, -1, -1) if prefer_newer else range(num_segments)
     )
 
-    for i in iteration_range:
+    for i in outer_range:
         if i in indices_to_remove:
             continue
-
-        text_i, start_i, end_i = segments_with_offsets[i]
-        if len(text_i) < min_segment_length_chars:
+        if len(segments[i][0]) < min_length:
             continue
-
         inner_range = (
             range(i - 1, -1, -1) if prefer_newer else range(i + 1, num_segments)
         )
-
         for j in inner_range:
             if j in indices_to_remove:
                 continue
-
-            text_j, start_j, end_j = segments_with_offsets[j]
-            if len(text_j) < min_segment_length_chars:
+            if len(segments[j][0]) < min_length:
                 continue
-
-            is_duplicate = False
-            if use_semantic_comparison:
-                emb_i = embeddings[i] if embeddings else None
-                emb_j = embeddings[j] if embeddings else None
-                if emb_i is not None and emb_j is not None:
-                    similarity = numpy_cosine_similarity(emb_i, emb_j)
-                    if similarity > similarity_threshold:
-                        is_duplicate = True
-                else:
-                    is_duplicate = _normalize_text_for_matching(
-                        text_i
-                    ) == _normalize_text_for_matching(text_j)
-            else:
-                is_duplicate = normalized_texts[i] == normalized_texts[j]
-
-            if is_duplicate:
+            if _is_duplicate_segment(
+                i, j, segments, embeddings, normalized, threshold, use_semantic
+            ):
                 indices_to_remove.add(j)
-                method_used = (
-                    "semantic" if use_semantic_comparison else "normalized string"
-                )
+                method_used = "semantic" if use_semantic else "normalized string"
                 logger.info(
                     "De-duplication: Marking segment (idx %d, chars %d-%d) for removal as duplicate of (idx %d, chars %d-%d). Method: %s.",
                     j,
-                    start_j,
-                    end_j,
+                    segments[j][1],
+                    segments[j][2],
                     i,
-                    start_i,
-                    end_i,
+                    segments[i][1],
+                    segments[i][2],
                     method_used,
                 )
-
-    if not indices_to_remove:
-        return original_text, 0
-
-    spans_to_remove_offsets = [
-        segments_with_offsets[i][1:] for i in sorted(indices_to_remove)
-    ]
-    spans_to_remove_offsets.sort(key=lambda x: x[0])
-
-    new_text_parts: list[str] = []
-    last_pos = 0
-    for start, end in spans_to_remove_offsets:
-        if start > last_pos:
-            new_text_parts.append(original_text[last_pos:start])
-        last_pos = max(last_pos, end)
-
-    if last_pos < len(original_text):
-        new_text_parts.append(original_text[last_pos:])
-
-    deduplicated_text = "".join(new_text_parts)
-    deduplicated_text = re.sub(r"\n\s*\n(\s*\n)+", "\n\n", deduplicated_text)
-    deduplicated_text = re.sub(r"\n{3,}", "\n\n", deduplicated_text).strip()
-
-    characters_removed_count = len(original_text) - len(deduplicated_text)
-    return deduplicated_text, characters_removed_count
+    return indices_to_remove
 
 
 def remove_spans_from_text(text: str, spans: list[tuple[int, int]]) -> str:
