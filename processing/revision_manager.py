@@ -234,7 +234,7 @@ class RevisionManager:
                 model_name=settings.REVISION_MODEL,
                 prompt=prompt,
                 temperature=settings.TEMPERATURE_REVISION,
-                max_tokens=settings.MAX_REVISION_TOKENS,
+                max_tokens=4096,
                 allow_fallback=True,
                 stream_to_disk=False,
                 auto_clean_response=True,
