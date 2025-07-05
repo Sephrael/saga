@@ -1,3 +1,4 @@
+# utils/text_processing.py
 import re
 from typing import TYPE_CHECKING
 
@@ -101,6 +102,130 @@ def _token_similarity(a: str, b: str) -> float:
     return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
 
 
+def _direct_quote_match(
+    doc_text: str, quote: str, spacy_doc: spacy.language.Doc
+) -> tuple[int, int, int, int] | None:
+    """Return offsets for a direct substring match within a sentence."""
+    current_pos = 0
+    while current_pos < len(doc_text):
+        match_start = doc_text.lower().find(quote.lower(), current_pos)
+        if match_start == -1:
+            break
+
+        match_end = match_start + len(quote)
+        for sent in spacy_doc.sents:
+            if (
+                sent.start_char <= match_start < sent.end_char
+                and sent.start_char < match_end <= sent.end_char
+            ):
+                logger.info(
+                    "Direct Substring Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d",
+                    quote[:30],
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                )
+                return (
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                )
+
+        current_pos = match_end
+    return None
+
+
+def _fuzzy_quote_match(
+    doc_text: str, quote: str, spacy_doc: spacy.language.Doc
+) -> tuple[int, int, int, int] | None:
+    """Return offsets for a fuzzy substring match using rapidfuzz."""
+    alignment = partial_ratio_alignment(quote, doc_text)
+    if alignment.score >= 85.0:
+        match_start = alignment.dest_start
+        match_end = alignment.dest_end
+        for sent in spacy_doc.sents:
+            if (
+                sent.start_char <= match_start < sent.end_char
+                and sent.start_char < match_end <= sent.end_char
+            ):
+                logger.info(
+                    "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
+                    quote[:30],
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                    alignment.score,
+                )
+                return (
+                    match_start,
+                    match_end,
+                    sent.start_char,
+                    sent.end_char,
+                )
+    return None
+
+
+def _token_similarity_sentence_match(
+    quote: str, spacy_doc: spacy.language.Doc
+) -> tuple[int, int, int, int] | None:
+    """Return offsets using simple token overlap similarity."""
+    best_sent = None
+    best_sim = 0.0
+    for sent in spacy_doc.sents:
+        sim = _token_similarity(quote, sent.text)
+        if sim > best_sim:
+            best_sim = sim
+            best_sent = sent
+    if best_sent and best_sim >= 0.45:
+        logger.info(
+            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
+            quote[:30],
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sim,
+        )
+        return (
+            best_sent.start_char,
+            best_sent.end_char,
+            best_sent.start_char,
+            best_sent.end_char,
+        )
+    return None
+
+
+async def _semantic_sentence_search(
+    doc_text: str, quote: str
+) -> tuple[int, int, int, int] | None:
+    """Return offsets using semantic similarity search."""
+    from .similarity import find_semantically_closest_segment
+
+    semantic_sentence_match = await find_semantically_closest_segment(
+        original_doc=doc_text,
+        query_text=quote,
+        segment_type="sentence",
+        min_similarity_threshold=0.75,
+    )
+
+    if semantic_sentence_match:
+        s_start, s_end, similarity = semantic_sentence_match
+        logger.info(
+            "Semantic Match: Found sentence for LLM quote '%s...' from %d-%d (Similarity: %.2f). Using whole sentence as target.",
+            quote[:30],
+            s_start,
+            s_end,
+            similarity,
+        )
+        return s_start, s_end, s_start, s_end
+    logger.warning(
+        "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",
+        quote[:50],
+    )
+    return None
+
+
 async def find_quote_and_sentence_offsets_with_spacy(
     doc_text: str, quote_text_from_llm: str
 ) -> tuple[int, int, int, int] | None:
@@ -134,113 +259,27 @@ async def find_quote_and_sentence_offsets_with_spacy(
     if spacy_doc is None:
         return None
 
-    current_pos = 0
-    while current_pos < len(doc_text):
-        match_start = doc_text.lower().find(
-            cleaned_llm_quote_for_direct_search.lower(), current_pos
-        )
-        if match_start == -1:
-            break
-
-        match_end = match_start + len(cleaned_llm_quote_for_direct_search)
-        found_sentence_span = None
-        for sent in spacy_doc.sents:
-            if (
-                sent.start_char <= match_start < sent.end_char
-                and sent.start_char < match_end <= sent.end_char
-            ):
-                found_sentence_span = sent
-                break
-
-        if found_sentence_span:
-            logger.info(
-                "Direct Substring Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d",
-                cleaned_llm_quote_for_direct_search[:30],
-                match_start,
-                match_end,
-                found_sentence_span.start_char,
-                found_sentence_span.end_char,
-            )
-            return (
-                match_start,
-                match_end,
-                found_sentence_span.start_char,
-                found_sentence_span.end_char,
-            )
-
-        current_pos = match_end
-
-    alignment = partial_ratio_alignment(cleaned_llm_quote_for_direct_search, doc_text)
-    if alignment.score >= 85.0:
-        match_start = alignment.dest_start
-        match_end = alignment.dest_end
-        for sent in spacy_doc.sents:
-            if (
-                sent.start_char <= match_start < sent.end_char
-                and sent.start_char < match_end <= sent.end_char
-            ):
-                logger.info(
-                    "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
-                    cleaned_llm_quote_for_direct_search[:30],
-                    match_start,
-                    match_end,
-                    sent.start_char,
-                    sent.end_char,
-                    alignment.score,
-                )
-                return (
-                    match_start,
-                    match_end,
-                    sent.start_char,
-                    sent.end_char,
-                )
-
-    # Token similarity fallback before expensive semantic search
-    best_sent = None
-    best_sim = 0.0
-    for sent in spacy_doc.sents:
-        sim = _token_similarity(cleaned_llm_quote_for_direct_search, sent.text)
-        if sim > best_sim:
-            best_sim = sim
-            best_sent = sent
-    if best_sent and best_sim >= 0.45:
-        logger.info(
-            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
-            cleaned_llm_quote_for_direct_search[:30],
-            best_sent.start_char,
-            best_sent.end_char,
-            best_sim,
-        )
-        return (
-            best_sent.start_char,
-            best_sent.end_char,
-            best_sent.start_char,
-            best_sent.end_char,
-        )
-
-    logger.warning(
-        "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",
-        quote_text_from_llm[:50],
+    offsets = _direct_quote_match(
+        doc_text, cleaned_llm_quote_for_direct_search, spacy_doc
     )
-    from .similarity import find_semantically_closest_segment
+    if offsets:
+        return offsets
 
-    semantic_sentence_match = await find_semantically_closest_segment(
-        original_doc=doc_text,
-        query_text=quote_text_from_llm,
-        segment_type="sentence",
-        min_similarity_threshold=0.75,
+    offsets = _fuzzy_quote_match(
+        doc_text, cleaned_llm_quote_for_direct_search, spacy_doc
     )
+    if offsets:
+        return offsets
 
-    if semantic_sentence_match:
-        s_start, s_end, similarity = semantic_sentence_match
-        logger.info(
-            "Semantic Match: Found sentence for LLM quote '%s...' from %d-%d (Similarity: %.2f). Using whole sentence as target.",
-            quote_text_from_llm[:30],
-            s_start,
-            s_end,
-            similarity,
-        )
-        return s_start, s_end, s_start, s_end
+    offsets = _token_similarity_sentence_match(
+        cleaned_llm_quote_for_direct_search, spacy_doc
+    )
+    if offsets:
+        return offsets
+
+    offsets = await _semantic_sentence_search(doc_text, quote_text_from_llm)
+    if offsets:
+        return offsets
 
     logger.warning(
         "Could not confidently locate quote TEXT from LLM: '%s...' in document using direct or semantic search.",
@@ -249,76 +288,66 @@ async def find_quote_and_sentence_offsets_with_spacy(
     return None
 
 
+def _split_into_paragraphs(text: str) -> list[tuple[str, int, int]]:
+    """Return paragraph segments with offsets."""
+    segments: list[tuple[str, int, int]] = []
+    current_lines: list[str] = []
+    start = -1
+    for match in re.finditer(r"([^\r\n]*(?:\r\n|\r|\n)?)", text):
+        line = match.group(0)
+        if line.strip():
+            if not current_lines:
+                start = match.start()
+            current_lines.append(line)
+            continue
+        if current_lines:
+            full = "".join(current_lines)
+            segments.append((full.strip(), start, start + len(full)))
+            current_lines = []
+            start = -1
+    if current_lines:
+        full = "".join(current_lines)
+        segments.append((full.strip(), start, start + len(full)))
+    if not segments and text.strip():
+        segments.append((text.strip(), 0, len(text)))
+    return segments
+
+
+def _split_into_sentences(text: str) -> list[tuple[str, int, int]]:
+    """Return sentence segments with offsets."""
+    segments: list[tuple[str, int, int]] = []
+    if spacy_manager.nlp:
+        doc = spacy_manager.nlp(text)
+        for sent in doc.sents:
+            stripped = sent.text.strip()
+            if stripped:
+                segments.append((stripped, sent.start_char, sent.end_char))
+    else:
+        logger.warning(
+            "get_text_segments: spaCy model not loaded. Falling back to basic sentence segmentation (less accurate)."
+        )
+        for match in re.finditer(r"([^\.!?]+(?:[\.!?]|$))", text):
+            stripped = match.group(1).strip()
+            if stripped:
+                segments.append((stripped, match.start(), match.end()))
+        if not segments and text.strip():
+            segments.append((text.strip(), 0, len(text)))
+    return segments
+
+
 def get_text_segments(
     text: str, segment_level: str = "paragraph"
 ) -> list[tuple[str, int, int]]:
     """Segment text into paragraphs or sentences with offsets."""
     load_spacy_model_if_needed()
-    segments: list[tuple[str, int, int]] = []
-
     if not text.strip():
-        return segments
+        return []
 
     if segment_level == "paragraph":
-        current_paragraph_lines: list[str] = []
-        current_paragraph_start_char = -1
+        return _split_into_paragraphs(text)
+    if segment_level == "sentence":
+        return _split_into_sentences(text)
 
-        for line_match in re.finditer(r"([^\r\n]*(?:\r\n|\r|\n)?)", text):
-            line_text = line_match.group(0)
-            line_text_stripped = line_text.strip()
-
-            if line_text_stripped:
-                if not current_paragraph_lines:
-                    current_paragraph_start_char = line_match.start()
-                current_paragraph_lines.append(line_text)
-            else:
-                if current_paragraph_lines:
-                    full_para_text = "".join(current_paragraph_lines)
-                    segments.append(
-                        (
-                            full_para_text.strip(),
-                            current_paragraph_start_char,
-                            current_paragraph_start_char + len(full_para_text),
-                        )
-                    )
-                    current_paragraph_lines = []
-                    current_paragraph_start_char = -1
-
-        if current_paragraph_lines:
-            full_para_text = "".join(current_paragraph_lines)
-            segments.append(
-                (
-                    full_para_text.strip(),
-                    current_paragraph_start_char,
-                    current_paragraph_start_char + len(full_para_text),
-                )
-            )
-
-        if not segments and text.strip():
-            segments.append((text.strip(), 0, len(text)))
-
-    elif segment_level == "sentence":
-        if spacy_manager.nlp:
-            doc = spacy_manager.nlp(text)
-            for sent in doc.sents:
-                sent_text_stripped = sent.text.strip()
-                if sent_text_stripped:
-                    segments.append(
-                        (sent_text_stripped, sent.start_char, sent.end_char)
-                    )
-        else:
-            logger.warning(
-                "get_text_segments: spaCy model not loaded. Falling back to basic sentence segmentation (less accurate)."
-            )
-            for match in re.finditer(r"([^\.!?]+(?:[\.!?]|$))", text):
-                sent_text_stripped = match.group(1).strip()
-                if sent_text_stripped:
-                    segments.append((sent_text_stripped, match.start(), match.end()))
-            if not segments and text.strip():
-                segments.append((text.strip(), 0, len(text)))
-    else:
-        raise ValueError(
-            f"Unsupported segment_level for get_text_segments: {segment_level}"
-        )
-
-    return segments
+    raise ValueError(
+        f"Unsupported segment_level for get_text_segments: {segment_level}"
+    )
