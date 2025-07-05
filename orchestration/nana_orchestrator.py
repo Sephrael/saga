@@ -894,7 +894,9 @@ class NANA_Orchestrator:
             await self.shutdown()  # Ensure services are shut down
             return
 
-        # Display should have been started by InitializationService if setup was successful.
+        # InitializationService sets up the environment but does not start the
+        # Rich progress display. Start it now that initialization succeeded.
+        self.display.start()
         try:
             await self._run_generation()
         except Exception as exc:
