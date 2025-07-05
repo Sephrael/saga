@@ -3,7 +3,7 @@
 
 import asyncio
 import time  # For Rich display updates
-from typing import Any
+from typing import Any, Awaitable # Using typing.Awaitable
 
 import structlog
 import utils
@@ -180,7 +180,7 @@ class NANA_Orchestrator:
         logger.info("NANA Orchestrator async_init_orchestrator complete.")
         self._update_rich_display(step="Orchestrator Initialized")
 
-    async def perform_initial_setup(self):
+    async def perform_initial_setup(self) -> bool:
         self._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
         (
@@ -227,9 +227,11 @@ class NANA_Orchestrator:
             self,
             1,
             None,
-            {"chapter_zero_end_state": self.chapter_zero_end_state}
-            if self.chapter_zero_end_state
-            else None,
+            (
+                {"chapter_zero_end_state": self.chapter_zero_end_state}
+                if self.chapter_zero_end_state
+                else None
+            ),
             profile_name=ContextProfileName.DEFAULT,
         )
 
@@ -338,7 +340,7 @@ class NANA_Orchestrator:
             step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
         )
 
-        tasks_to_run: list[asyncio.Future] = []
+        tasks_to_run: list[Awaitable[Any]] = [] # Use Awaitable directly
         task_names: list[str] = []
 
         ignore_spans = patched_spans
@@ -371,20 +373,7 @@ class NANA_Orchestrator:
         if "evaluation" in task_names:
             eval_result_obj, eval_usage = results[result_idx]
 
-        if isinstance(eval_result_obj, EvaluationResult):
-            evaluation_result: EvaluationResult = eval_result_obj
-        else:
-            data = eval_result_obj or {}
-            evaluation_result = EvaluationResult(
-                needs_revision=data.get("needs_revision", False),
-                reasons=data.get("reasons", []),
-                problems_found=data.get("problems_found", []),
-                coherence_score=data.get("coherence_score"),
-                consistency_issues=data.get("consistency_issues"),
-                plot_deviation_reason=data.get("plot_deviation_reason"),
-                thematic_issues=data.get("thematic_issues"),
-                narrative_depth_issues=data.get("narrative_depth_issues"),
-            )
+        evaluation_result = self._ensure_evaluation_result_object(eval_result_obj)
 
         repetition_probs = await self.repetition_analyzer.analyze(current_text)
         evaluation_result.problems_found.extend(repetition_probs)
@@ -398,6 +387,25 @@ class NANA_Orchestrator:
             eval_usage,
             continuity_usage,
             repetition_probs,
+        )
+
+    def _ensure_evaluation_result_object(
+        self, eval_result_data: Any
+    ) -> EvaluationResult:
+        """Ensures that the evaluation result is an EvaluationResult object."""
+        if isinstance(eval_result_data, EvaluationResult):
+            return eval_result_data
+
+        data = eval_result_data or {}
+        return EvaluationResult(
+            needs_revision=data.get("needs_revision", False),
+            reasons=data.get("reasons", []),
+            problems_found=data.get("problems_found", []),
+            coherence_score=data.get("coherence_score"),
+            consistency_issues=data.get("consistency_issues"),
+            plot_deviation_reason=data.get("plot_deviation_reason"),
+            thematic_issues=data.get("thematic_issues"),
+            narrative_depth_issues=data.get("narrative_depth_issues"),
         )
 
     async def _handle_no_evaluation_fast_path(
@@ -576,19 +584,40 @@ class NANA_Orchestrator:
                 continuity_problems=continuity_problems,
             )
 
-            if should_break_loop: # e.g. similarity break
+            if should_break_loop:  # e.g. similarity break
                 break
 
             if revision_successful:
                 revisions_made += 1
-            else: # Revision failed or didn't produce usable text
-                revisions_made += 1 # Still counts as an attempt
-                needs_revision = True # Ensure loop continues or hits max attempts
-                continue # Try next revision cycle
+            else:  # Revision failed or didn't produce usable text
+                revisions_made += 1  # Still counts as an attempt
+                needs_revision = True  # Ensure loop continues or hits max attempts
+                continue  # Try next revision cycle
 
         # After loop: Handle root cause analysis if still needs revision
-        if needs_revision and last_eval_result is not None:
-            # This implies max revisions were hit, and the text still needs revision
+        if (
+            needs_revision
+        ):  # This implies max revisions were hit or loop broken for other reasons
+            await self._handle_max_revisions_reached(
+                novel_chapter_number, last_eval_result
+            )
+        elif not needs_revision:  # Passed evaluation
+            is_from_flawed_source_for_kg = False  # Reset if it passed
+
+        return (
+            current_text,
+            current_raw_llm_output,
+            is_from_flawed_source_for_kg,  # This reflects the final state
+            patched_spans,
+        )
+
+    async def _handle_max_revisions_reached(
+        self,
+        novel_chapter_number: int,
+        last_eval_result: EvaluationResult | None,
+    ) -> None:
+        """Handles the scenario where max revisions are reached."""
+        if last_eval_result is not None:
             root_cause = self.revision_manager.identify_root_cause(
                 [p.model_dump() for p in last_eval_result.problems_found],
                 self.plot_outline,
@@ -604,15 +633,6 @@ class NANA_Orchestrator:
                 lower_cause = root_cause.lower()
                 if "character profile" in lower_cause or "world element" in lower_cause:
                     await self.kg_maintainer_agent.heal_and_enrich_kg()
-        elif not needs_revision: # Passed evaluation
-            is_from_flawed_source_for_kg = False # Reset if it passed
-
-        return (
-            current_text,
-            current_raw_llm_output,
-            is_from_flawed_source_for_kg, # This reflects the final state
-            patched_spans,
-        )
 
     async def _execute_and_process_evaluation(
         self,
@@ -650,21 +670,7 @@ class NANA_Orchestrator:
             continuity_usage,
         )
 
-        if isinstance(eval_result_obj, EvaluationResult):
-            evaluation_result: EvaluationResult = eval_result_obj
-        else:
-            # Ensure evaluation_result is always an EvaluationResult instance
-            data = eval_result_obj or {}
-            evaluation_result = EvaluationResult(
-                needs_revision=data.get("needs_revision", False),
-                reasons=data.get("reasons", []),
-                problems_found=data.get("problems_found", []),
-                coherence_score=data.get("coherence_score"),
-                consistency_issues=data.get("consistency_issues"),
-                plot_deviation_reason=data.get("plot_deviation_reason"),
-                thematic_issues=data.get("thematic_issues"),
-                narrative_depth_issues=data.get("narrative_depth_issues"),
-            )
+        evaluation_result = self._ensure_evaluation_result_object(eval_result_obj)
 
         await self._save_debug_output(
             novel_chapter_number,
@@ -714,7 +720,7 @@ class NANA_Orchestrator:
         evaluation_result: EvaluationResult,
         hybrid_context_for_draft: str,
         chapter_plan: list[SceneDetail] | None,
-        is_from_flawed_source_for_kg: bool, # Though not directly used, passed for consistency
+        is_from_flawed_source_for_kg: bool,  # Though not directly used, passed for consistency
         patched_spans: list[tuple[int, int]],
         continuity_problems: list[ProblemDetail],
     ) -> tuple[str, str | None, list[tuple[int, int]], bool, bool]:
@@ -756,23 +762,18 @@ class NANA_Orchestrator:
         ):
             new_text, rev_raw_output, new_patched_spans = revision_outcome
             if new_text and new_text != current_text:
-                new_embedding, prev_embedding = await asyncio.gather(
-                    llm_service.async_get_embedding(new_text),
-                    llm_service.async_get_embedding(current_text),
+                is_too_similar = await self._check_revision_similarity(
+                    novel_chapter_number, attempt, current_text, new_text
                 )
-                if new_embedding is not None and prev_embedding is not None:
-                    similarity = utils.numpy_cosine_similarity(
-                        prev_embedding, new_embedding
+                if is_too_similar:
+                    # Accept the similar text but signal to break the loop
+                    return (
+                        new_text,
+                        rev_raw_output or current_raw_llm_output,
+                        new_patched_spans,
+                        True,
+                        True,
                     )
-                    if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
-                        logger.warning(
-                            "NANA: Ch %s revision attempt %s produced text too similar to previous (score: %.4f). Stopping revisions.",
-                            novel_chapter_number,
-                            attempt,
-                            similarity,
-                        )
-                        # Accept the similar text but signal to break the loop
-                        return new_text, rev_raw_output or current_raw_llm_output, new_patched_spans, True, True
 
                 logger.info(
                     "NANA: Ch %s - Revision attempt %s successful. New text length: %s. Re-evaluating.",
@@ -785,7 +786,13 @@ class NANA_Orchestrator:
                     f"revised_text_attempt_{attempt}",
                     new_text,
                 )
-                return new_text, rev_raw_output or current_raw_llm_output, new_patched_spans, True, False
+                return (
+                    new_text,
+                    rev_raw_output or current_raw_llm_output,
+                    new_patched_spans,
+                    True,
+                    False,
+                )
             else:  # Revision produced same text or empty text
                 logger.error(
                     "NANA: Ch %s - Revision attempt %s did not change text or produced empty. Proceeding with previous draft, marked as flawed.",
@@ -802,6 +809,32 @@ class NANA_Orchestrator:
             )
             # Revision failed. Return original text. Loop continues.
             return current_text, current_raw_llm_output, patched_spans, False, False
+
+    async def _check_revision_similarity(
+        self,
+        novel_chapter_number: int,
+        attempt: int,
+        current_text: str,
+        new_text: str,
+    ) -> bool:
+        """Checks if the revised text is too similar to the current text.
+        Returns True if too similar (and loop should break), False otherwise.
+        """
+        new_embedding, prev_embedding = await asyncio.gather(
+            llm_service.async_get_embedding(new_text),
+            llm_service.async_get_embedding(current_text),
+        )
+        if new_embedding is not None and prev_embedding is not None:
+            similarity = utils.numpy_cosine_similarity(prev_embedding, new_embedding)
+            if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
+                logger.warning(
+                    "NANA: Ch %s revision attempt %s produced text too similar to previous (score: %.4f). Stopping revisions.",
+                    novel_chapter_number,
+                    attempt,
+                    similarity,
+                )
+                return True  # Too similar, break loop
+        return False  # Not too similar or similarity check failed
 
     async def _deduplicate_post_revision(
         self,
@@ -861,7 +894,8 @@ class NANA_Orchestrator:
             hybrid_context_for_draft,
             chapter_plan,
         )
-        initial_draft_text, initial_raw_llm_text = result
+        initial_draft_text = result.text
+        initial_raw_llm_text = result.raw_llm_output
         draft_usage = None
         self._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.DRAFTING.value}", draft_usage
@@ -893,29 +927,25 @@ class NANA_Orchestrator:
         hybrid_context_for_draft: str,
         chapter_plan: list[SceneDetail] | None,
     ) -> RevisionOutcome:
-        fast_path_result = await self._handle_no_evaluation_fast_path(
-            novel_chapter_number,
-            initial_draft_text,
-            initial_raw_llm_text,
-        )
-        if fast_path_result is not None:
-            text, raw, flawed = fast_path_result
-            return RevisionOutcome(text=text, raw_llm_output=raw, is_flawed=flawed)
-
-        current_text_to_process: str | None = initial_draft_text
-        current_raw_llm_output: str | None = initial_raw_llm_text
-        is_from_flawed_source_for_kg = False
-        patched_spans: list[tuple[int, int]] = []
-
         (
             current_text_to_process,
-            flawed_after_dedup,
-        ) = await self._deduplicate_post_draft(
-            novel_chapter_number,
-            current_text_to_process,
+            current_raw_llm_output,
+            is_from_flawed_source_for_kg,
+            fast_path_taken,
+        ) = await self._handle_initial_draft_processing(
+            novel_chapter_number, initial_draft_text, initial_raw_llm_text
         )
-        if flawed_after_dedup:
-            is_from_flawed_source_for_kg = True
+
+        if fast_path_taken:
+            return RevisionOutcome(
+                text=current_text_to_process,
+                raw_llm_output=current_raw_llm_output,
+                is_flawed=is_from_flawed_source_for_kg,
+            )
+
+        # If fast path not taken, current_text_to_process and is_from_flawed_source_for_kg are already set
+        # current_raw_llm_output is also set (it's initial_raw_llm_text from the helper)
+        patched_spans: list[tuple[int, int]] = []
 
         (
             current_text_to_process,
@@ -952,6 +982,42 @@ class NANA_Orchestrator:
             text=current_text_to_process,
             raw_llm_output=current_raw_llm_output,
             is_flawed=is_from_flawed_source_for_kg,
+        )
+
+    async def _handle_initial_draft_processing(
+        self,
+        novel_chapter_number: int,
+        initial_draft_text: str,
+        initial_raw_llm_text: str | None,
+    ) -> tuple[str | None, str | None, bool, bool]:
+        """Handles fast path for no evaluation and initial deduplication."""
+        fast_path_result = await self._handle_no_evaluation_fast_path(
+            novel_chapter_number,
+            initial_draft_text,
+            initial_raw_llm_text,
+        )
+        if fast_path_result is not None:
+            text, raw, flawed = fast_path_result
+            return text, raw, flawed, True  # True indicates fast path taken
+
+        current_text_to_process: str | None = initial_draft_text
+        is_from_flawed_source_for_kg = False
+
+        (
+            current_text_to_process,
+            flawed_after_dedup,
+        ) = await self._deduplicate_post_draft(
+            novel_chapter_number,
+            current_text_to_process,
+        )
+        if flawed_after_dedup:
+            is_from_flawed_source_for_kg = True
+
+        return (
+            current_text_to_process,
+            initial_raw_llm_text,
+            is_from_flawed_source_for_kg,
+            False,
         )
 
     async def _finalize_and_save_chapter(
@@ -1069,7 +1135,20 @@ class NANA_Orchestrator:
         )
 
         self.last_chapter_end_state = end_state
+        # The following logic is now encapsulated in _update_state_after_chapter_finalization
+        # and _log_chapter_finalization_status
+        await self._update_state_after_chapter_finalization(
+            novel_chapter_number, end_state
+        )
+        await self._log_chapter_finalization_status(
+            novel_chapter_number, final_text_result, is_flawed
+        )
+        return final_text_result
 
+    async def _update_state_after_chapter_finalization(
+        self, novel_chapter_number: int, end_state: ChapterEndState | None
+    ) -> None:
+        """Updates caches and context after a chapter is finalized."""
         if novel_chapter_number % settings.PLOT_POINT_CHAPTER_SPAN == 0:
             pp_focus, pp_index = get_plot_point_info(
                 self.plot_outline, novel_chapter_number
@@ -1085,6 +1164,7 @@ class NANA_Orchestrator:
             logger.warning(
                 "Neo4j driver not initialized. Skipping knowledge cache refresh."
             )
+
         next_hints = {"previous_chapter_end_state": end_state} if end_state else None
         self.next_chapter_context = await self.context_service.build_hybrid_context(
             self,
@@ -1093,10 +1173,18 @@ class NANA_Orchestrator:
             next_hints,
             profile_name=ContextProfileName.DEFAULT,
         )
+        self._store_pending_fill_ins()
+
+    def _store_pending_fill_ins(self) -> None:
+        """Stores pending fill-in chunks from the context service."""
         self.pending_fill_ins = [
             c.text for c in self.context_service.llm_fill_chunks if c.text
         ]
 
+    async def _log_chapter_finalization_status(
+        self, novel_chapter_number: int, final_text_result: str | None, is_flawed: bool
+    ) -> None:
+        """Logs the status of chapter finalization."""
         if final_text_result:
             status_message = (
                 "Successfully Generated"
@@ -1116,7 +1204,7 @@ class NANA_Orchestrator:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} Failed - Finalization Error"
             )
-        return final_text_result
+        return
 
     async def run_chapter_generation_process(
         self, novel_chapter_number: int
@@ -1165,6 +1253,22 @@ class NANA_Orchestrator:
         self.run_start_time = time.time()
         self.display.start()
 
+        if not await self._setup_db_and_kg_schema():
+            return False
+
+        try:
+            await self.async_init_orchestrator()
+        except Exception as exc:
+            logger.critical(
+                "NANA: Orchestrator async_init failed: %s",
+                exc,
+                exc_info=True,
+            )
+            return False
+        return True
+
+    async def _setup_db_and_kg_schema(self) -> bool:
+        """Initializes Neo4j, creates schema, and loads KG schema."""
         try:
             async with neo4j_manager:
                 await neo4j_manager.create_db_schema()
@@ -1172,17 +1276,17 @@ class NANA_Orchestrator:
 
                 await self.kg_maintainer_agent.load_schema_from_db()
                 logger.info("NANA: KG schema loaded into maintainer agent.")
-
-                await self.async_init_orchestrator()
+                return True
         except Exception as exc:
             logger.critical(
-                "NANA: Initialization failed: %s",
+                "NANA: Database or KG schema setup failed: %s",
                 exc,
                 exc_info=True,
             )
+            # Potentially stop display and shutdown here if this is critical path
+            # await self.display.stop()
+            # await self.shutdown()
             return False
-
-        return True
 
     async def _ensure_initial_setup(self) -> bool:
         """Perform initial setup if plot outline or title is missing."""
@@ -1238,18 +1342,23 @@ class NANA_Orchestrator:
         )
         self._update_rich_display(chapter_num=self.chapter_count, step="Run Finished")
 
+    async def _setup_and_prepare_run(self) -> bool:
+        """Combines initialization and ensuring initial setup."""
+        if not await self._initialize_run():
+            return False
+        if not await self._ensure_initial_setup():
+            return False
+        return True
+
     async def run_novel_generation_loop(self):
         logger.info("--- NANA: Starting Novel Generation Run ---")
 
-        if not await self._initialize_run():
+        if not await self._setup_and_prepare_run():
+            # display.stop() and shutdown() are called within _initialize_run or _ensure_initial_setup if they fail.
             return
 
         try:
-            if not await self._ensure_initial_setup():
-                return
-
             await self._run_generation()
-
         except Exception as exc:
             logger.critical(
                 "NANA: Unhandled exception in orchestrator main loop: %s",
