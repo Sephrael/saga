@@ -282,7 +282,7 @@ async def find_quote_and_sentence_offsets_with_spacy(
         return offsets
 
     logger.warning(
-        "Could not confidently locate quote TEXT from LLM: '%s...' in document using direct or semantic search.",
+        "All search strategies failed to locate quote from LLM: '%s...' in document.",
         quote_text_from_llm[:50],
     )
     return None

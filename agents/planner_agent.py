@@ -41,19 +41,13 @@ class PlannerAgent:
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
 
-    def _parse_llm_scene_plan_output(
-        self, json_text: str, chapter_number: int
-    ) -> list[SceneDetail] | None:
-        """
-        Parses JSON scene plan output from LLM.
-        Expects a JSON array of scene objects.
-        """
+    def _load_json_plan(self, json_text: str, chapter_number: int) -> list | None:
+        """Loads and initially validates the JSON plan string."""
         if not json_text or not json_text.strip():
             logger.warning(
                 f"JSON scene plan for Ch {chapter_number} is empty. No scenes parsed."
             )
             return None
-
         try:
             parsed_data = json.loads(json_text)
         except json.JSONDecodeError as e:
@@ -81,61 +75,88 @@ class PlannerAgent:
             )
             return None
 
-        if not parsed_data:
+        if not parsed_data: # Empty list
             logger.warning(
                 f"Parsed scene plan for Ch {chapter_number} is an empty list."
             )
+            return None # Or an empty list, depending on desired behavior for "valid but empty"
+        return parsed_data
+
+    def _process_single_scene_item(
+        self,
+        scene_item: dict[str, Any],
+        chapter_number: int,
+        scene_index: int, # 0-based index for logging
+    ) -> SceneDetail | None:
+        """Processes a single raw scene dictionary into a SceneDetail typed dict."""
+        processed_scene_dict: dict[str, Any] = {}
+        for llm_key, value in scene_item.items():
+            internal_key = SCENE_PLAN_KEY_MAP.get(
+                llm_key.lower().replace(" ", "_"), llm_key # Fallback to original llm_key if not in map
+            )
+            processed_scene_dict[internal_key] = value
+
+        # Validate and set scene_number
+        scene_num_val = processed_scene_dict.get("scene_number")
+        if not isinstance(scene_num_val, int):
+            logger.warning(
+                f"Scene {scene_index + 1} in Ch {chapter_number} has invalid or missing 'scene_number'. Assigning {scene_index + 1}. Value: {scene_num_val}"
+            )
+            processed_scene_dict["scene_number"] = scene_index + 1
+
+        # Validate summary
+        summary = processed_scene_dict.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            logger.warning(
+                f"Scene {processed_scene_dict['scene_number']} in Ch {chapter_number} has invalid or missing 'summary'. Skipping."
+            )
+            return None
+
+        # Normalize list keys
+        for list_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
+            val = processed_scene_dict.get(list_key)
+            if isinstance(val, str): # LLM might return comma-separated string
+                processed_scene_dict[list_key] = [
+                    v.strip() for v in val.split(",") if v.strip()
+                ]
+            elif not isinstance(val, list): # Ensure it's a list, even if single item or None
+                processed_scene_dict[list_key] = [str(val)] if val is not None else []
+
+        # Default missing optional fields
+        for key_internal_name in SCENE_PLAN_KEY_MAP.values():
+            if key_internal_name not in processed_scene_dict:
+                if key_internal_name in SCENE_PLAN_LIST_INTERNAL_KEYS:
+                    processed_scene_dict[key_internal_name] = []
+                else:
+                    processed_scene_dict[key_internal_name] = None
+
+        return processed_scene_dict # type: ignore
+
+
+    def _parse_llm_scene_plan_output(
+        self, json_text: str, chapter_number: int
+    ) -> list[SceneDetail] | None:
+        """
+        Parses JSON scene plan output from LLM.
+        Expects a JSON array of scene objects.
+        """
+        raw_scene_list = self._load_json_plan(json_text, chapter_number)
+        if raw_scene_list is None:
             return None
 
         scenes_data: list[SceneDetail] = []
-        for i, scene_item in enumerate(parsed_data):
-            if not isinstance(scene_item, dict):
+        for i, scene_item_raw in enumerate(raw_scene_list):
+            if not isinstance(scene_item_raw, dict):
                 logger.warning(
-                    f"Scene item {i + 1} in Ch {chapter_number} is not a dictionary. Skipping. Item: {str(scene_item)[:100]}"
+                    f"Scene item {i + 1} in Ch {chapter_number} is not a dictionary. Skipping. Item: {str(scene_item_raw)[:100]}"
                 )
                 continue
 
-            processed_scene_dict: dict[str, Any] = {}
-            for llm_key, value in scene_item.items():
-                internal_key = SCENE_PLAN_KEY_MAP.get(
-                    llm_key.lower().replace(" ", "_"), llm_key
-                )
-                processed_scene_dict[internal_key] = value
-
-            scene_num = processed_scene_dict.get("scene_number")
-            if not isinstance(scene_num, int):
-                logger.warning(
-                    f"Scene {i + 1} in Ch {chapter_number} has invalid or missing 'scene_number'. Assigning {i + 1}. Value: {scene_num}"
-                )
-                processed_scene_dict["scene_number"] = i + 1
-
-            summary = processed_scene_dict.get("summary")
-            if not isinstance(summary, str) or not summary.strip():
-                logger.warning(
-                    f"Scene {scene_num} in Ch {chapter_number} has invalid or missing 'summary'. Skipping."
-                )
-                continue
-
-            for list_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
-                val = processed_scene_dict.get(list_key)
-                if isinstance(val, str):
-                    processed_scene_dict[list_key] = [
-                        v.strip() for v in val.split(",") if v.strip()
-                    ]
-                elif not isinstance(val, list):
-                    processed_scene_dict[list_key] = (
-                        [str(val)] if val is not None else []
-                    )
-
-            for key_internal_name in SCENE_PLAN_KEY_MAP.values():
-                if key_internal_name not in processed_scene_dict:
-                    if key_internal_name in SCENE_PLAN_LIST_INTERNAL_KEYS:
-                        processed_scene_dict[key_internal_name] = []
-                    else:
-                        # For optional fields, this will be None.
-                        processed_scene_dict[key_internal_name] = None
-
-            scenes_data.append(processed_scene_dict)  # type: ignore
+            processed_scene = self._process_single_scene_item(
+                scene_item_raw, chapter_number, i
+            )
+            if processed_scene:
+                scenes_data.append(processed_scene)
 
         if not scenes_data:
             logger.warning(f"No valid scenes parsed from JSON for Ch {chapter_number}.")

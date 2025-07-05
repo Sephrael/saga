@@ -258,6 +258,53 @@ WORLD_UPDATE_DETAIL_KEY_MAP = {
 WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS = ["goals", "rules", "key_elements", "traits"]
 
 
+def _process_single_character_attributes(
+    char_name: str,
+    char_attributes_llm: dict[str, Any],
+    chapter_number: int,
+) -> CharacterProfile | None:
+    """Normalizes and creates a CharacterProfile from raw LLM attributes."""
+    if not char_name or not isinstance(char_attributes_llm, dict):
+        logger.warning(
+            "Skipping character with invalid name or attributes: Name='%s', Attrs_Type='%s'",
+            char_name,
+            type(char_attributes_llm),
+        )
+        return None
+
+    processed_attributes = _normalize_attributes(
+        char_attributes_llm,
+        CHAR_UPDATE_KEY_MAP,
+        CHAR_UPDATE_LIST_INTERNAL_KEYS,
+    )
+
+    traits_val = processed_attributes.get("traits", [])
+    if isinstance(traits_val, list):
+        processed_attributes["traits"] = [
+            utils.normalize_trait_name(t)
+            for t in traits_val
+            if isinstance(t, str) and utils.normalize_trait_name(t)
+        ]
+
+    processed_attributes["relationships"] = _parse_relationships(
+        processed_attributes.get("relationships")
+    )
+
+    _ensure_dev_key(char_name, processed_attributes, chapter_number)
+
+    try:
+        return CharacterProfile.from_dict(char_name, processed_attributes)
+    except Exception as e:
+        logger.error(
+            "Error creating CharacterProfile for '%s': %s. Attributes: %s",
+            char_name,
+            e,
+            processed_attributes,
+            exc_info=True,
+        )
+        return None
+
+
 def parse_unified_character_updates(
     json_text_block: str, chapter_number: int
 ) -> dict[str, CharacterProfile]:
@@ -265,6 +312,7 @@ def parse_unified_character_updates(
     char_updates: dict[str, CharacterProfile] = {}
     if not json_text_block.strip():
         return char_updates
+
     try:
         parsed_data = json.loads(json_text_block)
         if not isinstance(parsed_data, dict):
@@ -282,56 +330,130 @@ def parse_unified_character_updates(
         return char_updates
 
     for char_name, char_attributes_llm in parsed_data.items():
-        if not char_name or not isinstance(char_attributes_llm, dict):
-            logger.warning(
-                "Skipping character with invalid name or attributes: Name='%s', Attrs_Type='%s'",
-                char_name,
-                type(char_attributes_llm),
-            )
-            continue
-
-        processed_char_attributes = _normalize_attributes(
-            char_attributes_llm,
-            CHAR_UPDATE_KEY_MAP,
-            CHAR_UPDATE_LIST_INTERNAL_KEYS,
+        profile = _process_single_character_attributes(
+            char_name, char_attributes_llm, chapter_number
         )
-
-        traits_val = processed_char_attributes.get("traits", [])
-        if isinstance(traits_val, list):
-            processed_char_attributes["traits"] = [
-                utils.normalize_trait_name(t)
-                for t in traits_val
-                if isinstance(t, str) and utils.normalize_trait_name(t)
-            ]
-
-        processed_char_attributes["relationships"] = _parse_relationships(
-            processed_char_attributes.get("relationships")
-        )
-
-        _ensure_dev_key(char_name, processed_char_attributes, chapter_number)
-
-        try:
-            char_updates[char_name] = CharacterProfile.from_dict(
-                char_name, processed_char_attributes
-            )
-        except Exception as e:
-            logger.error(
-                "Error creating CharacterProfile for '%s': %s. Attributes: %s",
-                char_name,
-                e,
-                processed_char_attributes,
-                exc_info=True,
-            )
+        if profile:
+            char_updates[char_name] = profile
     return char_updates
+
+
+def _process_world_item_attributes(
+    category_name: str,
+    item_name: str,
+    item_attributes_llm: dict[str, Any],
+    chapter_number: int,
+    is_overview: bool = False,
+) -> WorldItem | None:
+    """Normalizes attributes and creates a WorldItem instance."""
+    processed_item_details = _normalize_attributes(
+        item_attributes_llm,
+        WORLD_UPDATE_DETAIL_KEY_MAP,
+        WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
+    )
+    elaboration_key_standard = kg_keys.elaboration_key(chapter_number)
+
+    has_meaningful_attrs = any(
+        k not in ["modification_proposal", elaboration_key_standard] and v
+        for k, v in processed_item_details.items()
+    )
+    if is_overview:  # Overview specific elaboration
+        if any(
+            k != "modification_proposal" for k in processed_item_details
+        ):  # Check if any non-proposal key exists
+            if not processed_item_details.get(elaboration_key_standard):
+                processed_item_details[elaboration_key_standard] = (
+                    f"Overall world overview updated in Chapter {chapter_number}."
+                )
+    elif has_meaningful_attrs and not processed_item_details.get(
+        elaboration_key_standard
+    ):
+        processed_item_details[elaboration_key_standard] = (
+            f"Item '{item_name}' in category '{category_name}' updated in Chapter {chapter_number}."
+        )
+
+    try:
+        return WorldItem.from_dict(
+            category_name,
+            item_name,
+            processed_item_details,
+        )
+    except Exception as e:
+        logger.error(
+            "Error creating WorldItem for '%s' in category '%s': %s. Details: %s",
+            item_name,
+            category_name,
+            e,
+            processed_item_details,
+            exc_info=True,
+        )
+        return None
+
+
+def _parse_world_category_items(
+    category_name_llm: str,
+    items_llm: dict[str, Any],
+    chapter_number: int,
+    results: dict[str, dict[str, WorldItem]],
+) -> None:
+    """Parses items within a single world category."""
+    category_dict_by_item_name: dict[str, WorldItem] = {}
+
+    if category_name_llm.lower() in {"overview", "_overview_"}:
+        overview_item = _process_world_item_attributes(
+            category_name_llm, "_overview_", items_llm, chapter_number, is_overview=True
+        )
+        if overview_item:
+            results.setdefault(category_name_llm, {})["_overview_"] = overview_item
+    else:
+        # Handle cases where items_llm might be a flat dict for a single item
+        # or a dict of dicts for multiple items.
+        # Heuristic: if all values in items_llm are not dicts, assume it's a single item's attributes.
+        if items_llm and all(not isinstance(v, dict) for v in items_llm.values()):
+            # This structure implies items_llm is actually the attribute dict for an item whose name is category_name_llm
+            # This is a fallback for potentially malformed LLM output.
+            # Consider if this case is truly expected or if LLM output should be stricter.
+            world_item_instance = _process_world_item_attributes(
+                category_name_llm,  # The category is used as item name here
+                category_name_llm,  # And also as category name
+                items_llm,
+                chapter_number,
+            )
+            if world_item_instance:
+                category_dict_by_item_name[world_item_instance.name] = (
+                    world_item_instance
+                )
+        else:  # Standard case: items_llm is a dict of item_name: attributes_dict
+            for item_name_llm, item_attributes_llm in items_llm.items():
+                if not item_name_llm or not isinstance(item_attributes_llm, dict):
+                    logger.warning(
+                        "Skipping item with invalid name or attributes in category '%s': Name='%s', AttrType='%s'",
+                        category_name_llm,
+                        item_name_llm,
+                        type(item_attributes_llm),
+                    )
+                    continue
+                world_item_instance = _process_world_item_attributes(
+                    category_name_llm,
+                    item_name_llm,
+                    item_attributes_llm,
+                    chapter_number,
+                )
+                if world_item_instance:
+                    category_dict_by_item_name[world_item_instance.name] = (
+                        world_item_instance
+                    )
+        if category_dict_by_item_name:
+            results[category_name_llm] = category_dict_by_item_name
 
 
 def parse_unified_world_updates(
     json_text_block: str, chapter_number: int
 ) -> dict[str, dict[str, WorldItem]]:
     """Parse world update JSON provided by the LLM."""
-    world_updates: dict[str, dict[str, WorldItem]] = {}
     if not json_text_block.strip():
-        return world_updates
+        return {}
+
     try:
         parsed_data = json.loads(json_text_block)
         if not isinstance(parsed_data, dict):
@@ -339,157 +461,113 @@ def parse_unified_world_updates(
                 "World updates JSON was not a dictionary. Received: %s",
                 type(parsed_data),
             )
-            return world_updates
+            return {}
     except json.JSONDecodeError as e:
         logger.error(
             "Failed to parse world updates JSON: %s. Input: %s...",
             e,
             json_text_block[:500],
         )
-        return world_updates
+        return {}
 
     results: dict[str, dict[str, WorldItem]] = {}
     for category_name_llm, items_llm in parsed_data.items():
-        if not isinstance(items_llm, dict):
+        if not isinstance(
+            items_llm, dict
+        ):  # items_llm should be a dict (either of item attrs or item names to item attrs)
             logger.warning(
-                "Skipping category '%s' as its content is not a dictionary of items.",
+                "Skipping category '%s' as its content is not a dictionary. Type: %s",
                 category_name_llm,
+                type(items_llm),
             )
             continue
-
-        category_dict_by_item_name: dict[str, WorldItem] = {}
-        elaboration_key_standard = kg_keys.elaboration_key(chapter_number)
-
-        if category_name_llm.lower() in {"overview", "_overview_"}:
-            processed_overview_details = _normalize_attributes(
-                items_llm,
-                WORLD_UPDATE_DETAIL_KEY_MAP,
-                WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
-            )
-            if any(k != "modification_proposal" for k in processed_overview_details):
-                if not processed_overview_details.get(elaboration_key_standard):
-                    processed_overview_details[elaboration_key_standard] = (
-                        f"Overall world overview updated in Chapter {chapter_number}."
-                    )
-                try:
-                    overview_item = WorldItem.from_dict(
-                        category_name_llm,
-                        "_overview_",
-                        processed_overview_details,
-                    )
-                    results.setdefault(category_name_llm, {})["_overview_"] = (
-                        overview_item
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Error creating WorldItem for overview in category '%s': %s",
-                        category_name_llm,
-                        e,
-                        exc_info=True,
-                    )
-        else:
-            if all(not isinstance(v, dict) for v in items_llm.values()):
-                items_llm = {category_name_llm: items_llm}
-            for item_name_llm, item_attributes_llm in items_llm.items():
-                if not item_name_llm or not isinstance(item_attributes_llm, dict):
-                    logger.warning(
-                        "Skipping item with invalid name or attributes in category '%s': Name='%s'",
-                        category_name_llm,
-                        item_name_llm,
-                    )
-                    continue
-
-                processed_item_details = _normalize_attributes(
-                    item_attributes_llm,
-                    WORLD_UPDATE_DETAIL_KEY_MAP,
-                    WORLD_UPDATE_DETAIL_LIST_INTERNAL_KEYS,
-                )
-                has_other_meaningful_item_attrs = any(
-                    k not in ["modification_proposal", elaboration_key_standard] and v
-                    for k, v in processed_item_details.items()
-                )
-                if (
-                    not processed_item_details.get(elaboration_key_standard)
-                    and has_other_meaningful_item_attrs
-                ):
-                    processed_item_details[elaboration_key_standard] = (
-                        f"Item '{item_name_llm}' in category '{category_name_llm}' updated in Chapter {chapter_number}."
-                    )
-                try:
-                    world_item_instance = WorldItem.from_dict(
-                        category_name_llm,
-                        item_name_llm,
-                        processed_item_details,
-                    )
-                    category_dict_by_item_name[world_item_instance.name] = (
-                        world_item_instance
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Error creating WorldItem for '%s' in category '%s': %s",
-                        item_name_llm,
-                        category_name_llm,
-                        e,
-                        exc_info=True,
-                    )
-            if category_dict_by_item_name:
-                results[category_name_llm] = category_dict_by_item_name
+        _parse_world_category_items(
+            category_name_llm, items_llm, chapter_number, results
+        )
     return results
 
 
-def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDetail]:
-    """Parse a JSON list of problem details."""
+def _load_and_validate_problem_json(
+    text: str, category: str | None = None
+) -> list[Any] | ProblemDetail:
+    """Loads JSON text and validates if it's a list of problems.
+    Returns the list of raw problem dicts if valid, or a ProblemDetail error object.
+    """
     if not text or not text.strip():
         return []
     try:
         data = json.loads(text)
         if isinstance(data, dict):
+            # Handle cases where LLM might return a status object instead of a list
             if "status" in data and "no significant" in str(data["status"]).lower():
-                return []
+                return []  # No problems found
             if "problems" in data and isinstance(data["problems"], list):
-                data = data["problems"]
+                data = data["problems"]  # Extract the list
         if not isinstance(data, list):
-            raise ValueError("LLM output was not a list of problems")
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to decode JSON: %s", exc)
-        return [
-            ProblemDetail(
-                issue_category=category or "meta",
-                problem_description=f"Invalid JSON from LLM: {exc}",
-                quote_from_original_text="N/A - Invalid JSON",
-                quote_char_start=None,
-                quote_char_end=None,
-                sentence_char_start=None,
-                sentence_char_end=None,
-                suggested_fix_focus="Ensure LLM outputs valid JSON.",
+            logger.error(
+                "LLM output was not a list of problems, but type: %s", type(data)
             )
-        ]
+            return ProblemDetail(
+                issue_category=category or "meta",
+                problem_description="LLM output was not a list of problems as expected.",
+                quote_from_original_text="N/A - Malformed LLM output structure",
+                suggested_fix_focus="Ensure LLM outputs a JSON list of problem objects.",
+            )
+        return data
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "Failed to decode problem list JSON: %s. Input: %s...", exc, text[:200]
+        )
+        return ProblemDetail(
+            issue_category=category or "meta",
+            problem_description=f"Invalid JSON from LLM: {exc}",
+            quote_from_original_text="N/A - Invalid JSON",
+            suggested_fix_focus="Ensure LLM outputs valid JSON.",
+        )
+
+
+def _create_problem_detail_from_item(
+    item: Any, default_category: str | None = None
+) -> ProblemDetail | None:
+    """Creates a ProblemDetail object from a parsed item, with validation."""
+    if not isinstance(item, dict):
+        logger.warning("Problem item is not a dict: %s", item)
+        return None
+
+    # Use .get() with defaults for all fields to prevent KeyErrors
+    return ProblemDetail(
+        issue_category=item.get("issue_category", default_category or "meta"),
+        problem_description=item.get(
+            "problem_description", "N/A - Missing description"
+        ),
+        quote_from_original_text=item.get(
+            "quote_from_original_text", "N/A - General Issue"
+        ),
+        quote_char_start=item.get(
+            "quote_char_start"
+        ),  # Defaults to None if not present
+        quote_char_end=item.get("quote_char_end"),
+        sentence_char_start=item.get("sentence_char_start"),
+        sentence_char_end=item.get("sentence_char_end"),
+        suggested_fix_focus=item.get("suggested_fix_focus", "N/A - Missing suggestion"),
+        rewrite_instruction=item.get("rewrite_instruction"),
+        severity=item.get("severity"),
+        related_spans=item.get("related_spans"),
+    )
+
+
+def parse_problem_list(text: str, category: str | None = None) -> list[ProblemDetail]:
+    """Parse a JSON list of problem details."""
+    loaded_data = _load_and_validate_problem_json(text, category)
+
+    if isinstance(loaded_data, ProblemDetail):  # Error case from validation
+        return [loaded_data]
+    if not loaded_data:  # Empty list
+        return []
 
     problems: list[ProblemDetail] = []
-    for item in data:
-        if not isinstance(item, dict):
-            logger.warning("Problem item is not a dict: %s", item)
-            continue
-        prob = ProblemDetail(
-            issue_category=item.get("issue_category", category or "meta"),
-            problem_description=item.get(
-                "problem_description", "N/A - Missing description"
-            ),
-            quote_from_original_text=item.get(
-                "quote_from_original_text", "N/A - General Issue"
-            ),
-            quote_char_start=None,
-            quote_char_end=None,
-            sentence_char_start=None,
-            sentence_char_end=None,
-            suggested_fix_focus=item.get(
-                "suggested_fix_focus", "N/A - Missing suggestion"
-            ),
-            rewrite_instruction=item.get("rewrite_instruction"),
-            severity=item.get("severity"),
-            related_spans=item.get("related_spans"),
-        )
-        if category:
-            prob.issue_category = category
-        problems.append(prob)
+    for item in loaded_data:
+        problem_detail = _create_problem_detail_from_item(item, category)
+        if problem_detail:
+            problems.append(problem_detail)
     return problems

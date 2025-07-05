@@ -546,187 +546,150 @@ class RevisionManager:
 
         cumulative_usage_data = TokenUsage()
 
-        def _add_usage(usage: TokenUsage | dict[str, int] | None) -> None:
-            cumulative_usage_data.add(usage)
-
         if not original_text:
-            logger.error(
-                "Revision for ch %s aborted: missing original text.", chapter_number
-            )
+            logger.error("Revision for ch %s aborted: missing original text.", chapter_number)
             return None, None
 
-        problems_to_fix: list[ProblemDetail] = evaluation_result.problems_found
+        problems_to_fix: list[ProblemDetail] = list(evaluation_result.problems_found) # Make a mutable copy
         if continuity_problems:
             problems_to_fix.extend(continuity_problems)
         if repetition_problems:
             problems_to_fix.extend(repetition_problems)
         problems_to_fix = _deduplicate_problems(problems_to_fix)
 
-        is_deeply_flawed = self._is_deeply_flawed(problems_to_fix)
-        if not problems_to_fix and evaluation_result.needs_revision:
-            logger.warning(
-                "Revision for ch %s explicitly requested, but no specific problems were itemized.",
-                chapter_number,
-            )
-        elif not problems_to_fix:
-            logger.info(
-                "No specific problems found for ch %s, and not marked for revision. No revision performed.",
-                chapter_number,
-            )
+        if not problems_to_fix and not evaluation_result.needs_revision:
+            logger.info("No specific problems found for ch %s, and not marked for revision. No revision performed.", chapter_number)
             return (original_text, "No revision performed.", []), None
 
-        revision_reason_str_list = evaluation_result.reasons
-        revision_reason_str = (
-            "\n- ".join(revision_reason_str_list)
-            if revision_reason_str_list
-            else "General unspecified issues."
-        )
-        logger.info(
-            "Attempting revision for chapter %s. Reason(s):\n- %s",
-            chapter_number,
-            revision_reason_str,
-        )
+        if not problems_to_fix and evaluation_result.needs_revision:
+            logger.warning("Revision for ch %s explicitly requested, but no specific problems were itemized.", chapter_number)
+            # Proceeding as if general revision is needed, though specific problems list is empty.
 
-        final_text, final_raw, rewrite_usage = await self._maybe_direct_full_rewrite(
-            is_deeply_flawed,
-            revision_cycle,
-            plot_outline,
-            original_text,
-            chapter_number,
-            problems_to_fix,
-            revision_reason_str,
-            hybrid_context_for_revision,
-            chapter_plan,
-            is_from_flawed_source,
-        )
-        if final_text:
-            _add_usage(rewrite_usage)
-            return (
-                (final_text, final_raw, []),
-                cumulative_usage_data
-                if cumulative_usage_data.total_tokens > 0
-                else None,
-            )
+        revision_reason_str_list = evaluation_result.reasons
+        revision_reason_str = "\n- ".join(revision_reason_str_list) if revision_reason_str_list else "General unspecified issues."
+        logger.info("Attempting revision for chapter %s. Reason(s):\n- %s", chapter_number, revision_reason_str)
+
+        is_deeply_flawed = self._is_deeply_flawed(problems_to_fix)
 
         (
-            patched_text,
-            all_spans_in_patched_text,
-            use_patch,
-            patch_usage,
-        ) = await self._apply_patch_revision(
-            plot_outline,
-            character_profiles,
-            world_building,
-            original_text,
-            chapter_number,
-            problems_to_fix,
-            hybrid_context_for_revision,
-            chapter_plan,
-            already_patched_spans,
-            continuity_problems,
-            repetition_problems,
+            revised_text,
+            raw_output,
+            new_spans,
+            strategy_usage
+        ) = await self._determine_and_execute_revision_strategy(
+            plot_outline=plot_outline,
+            character_profiles=character_profiles,
+            world_building=world_building,
+            original_text=original_text,
+            chapter_number=chapter_number,
+            problems_to_fix=problems_to_fix,
+            hybrid_context_for_revision=hybrid_context_for_revision,
+            chapter_plan=chapter_plan,
+            revision_cycle=revision_cycle,
+            is_from_flawed_source=is_from_flawed_source,
+            already_patched_spans=already_patched_spans,
+            is_deeply_flawed=is_deeply_flawed,
+            evaluation_needs_revision=evaluation_result.needs_revision,
+            revision_reason_str=revision_reason_str,
         )
-        _add_usage(patch_usage)
+        cumulative_usage_data.add(strategy_usage)
 
-        final_revised_text: str | None = None
-        final_raw_llm_output: str | None = None
-        final_spans_for_next_cycle = all_spans_in_patched_text
+        if not revised_text:
+            logger.error("Revision process for ch %s resulted in no usable content.", chapter_number)
+            return None, cumulative_usage_data.get_if_used()
 
-        if use_patch:
-            final_revised_text = patched_text
-            final_raw_llm_output = f"Chapter revised using {len(all_spans_in_patched_text) - len(already_patched_spans)} new patches."
-            logger.info(
-                "Ch %s: Using patched text as the revised version.", chapter_number
-            )
-
-        if (
-            not final_revised_text
-            and evaluation_result.needs_revision
-            and not self._should_defer_full_rewrite(revision_cycle)
-        ):
-            logger.info(
-                "Attempting targeted scene rewrite for Ch %s before full rewrite.",
-                chapter_number,
-            )
-            (
-                final_revised_text,
-                final_raw_llm_output,
-                rewrite_usage,
-            ) = await self._rewrite_problem_scenes(
-                plot_outline,
-                original_text,
-                chapter_number,
-                problems_to_fix,
-                hybrid_context_for_revision,
-                chapter_plan,
-            )
-            _add_usage(rewrite_usage)
-            final_spans_for_next_cycle = []
-        if (
-            not final_revised_text
-            and evaluation_result.needs_revision
-            and not self._should_defer_full_rewrite(revision_cycle)
-        ):
-            logger.info(
-                "Proceeding with full chapter rewrite for Ch %s as targeted rewrite was ineffective.",
-                chapter_number,
-            )
-            (
-                final_revised_text,
-                final_raw_llm_output,
-                rewrite_usage,
-            ) = await self._perform_full_rewrite(
-                plot_outline,
-                original_text,
-                chapter_number,
-                problems_to_fix,
-                revision_reason_str,
-                hybrid_context_for_revision,
-                chapter_plan,
-                is_from_flawed_source,
-            )
-            final_spans_for_next_cycle = []
-            _add_usage(rewrite_usage)
-        elif (
-            not final_revised_text
-            and evaluation_result.needs_revision
-            and self._should_defer_full_rewrite(revision_cycle)
-        ):
-            logger.info(
-                "Deferring full rewrite for Ch %s until later cycle.",
-                chapter_number,
-            )
-            final_revised_text = original_text
-            final_raw_llm_output = "Rewrite deferred"
-            final_spans_for_next_cycle = already_patched_spans
-
-        if not final_revised_text:
-            logger.error(
-                "Revision process for ch %s resulted in no usable content.",
-                chapter_number,
-            )
-            return (
-                None,
-                cumulative_usage_data
-                if cumulative_usage_data.total_tokens > 0
-                else None,
-            )
-
-        if len(final_revised_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
+        if len(revised_text) < settings.MIN_ACCEPTABLE_DRAFT_LENGTH:
             logger.warning(
                 "Final revised draft for ch %s is short (%s chars). Min target: %s.",
-                chapter_number,
-                len(final_revised_text),
-                settings.MIN_ACCEPTABLE_DRAFT_LENGTH,
+                chapter_number, len(revised_text), settings.MIN_ACCEPTABLE_DRAFT_LENGTH
             )
 
         logger.info(
             "Revision process for ch %s produced a candidate text (Length: %s chars).",
-            chapter_number,
-            len(final_revised_text),
+            chapter_number, len(revised_text)
         )
-        return (
-            final_revised_text,
-            final_raw_llm_output,
-            final_spans_for_next_cycle,
-        ), cumulative_usage_data if cumulative_usage_data.total_tokens > 0 else None
+        return (revised_text, raw_output, new_spans), cumulative_usage_data.get_if_used()
+
+    async def _determine_and_execute_revision_strategy(
+        self,
+        plot_outline: dict[str, Any],
+        character_profiles: dict[str, CharacterProfile],
+        world_building: dict[str, dict[str, WorldItem]],
+        original_text: str,
+        chapter_number: int,
+        problems_to_fix: list[ProblemDetail],
+        hybrid_context_for_revision: str,
+        chapter_plan: list[SceneDetail] | None,
+        revision_cycle: int,
+        is_from_flawed_source: bool,
+        already_patched_spans: list[tuple[int, int]],
+        is_deeply_flawed: bool,
+        evaluation_needs_revision: bool,
+        revision_reason_str: str,
+    ) -> tuple[str | None, str | None, list[tuple[int, int]], TokenUsage | None]:
+        """Core logic to decide and execute a revision strategy."""
+        cumulative_usage = TokenUsage()
+
+        # 1. Attempt direct full rewrite if conditions met (early exit)
+        direct_rewrite_text, direct_rewrite_raw, direct_rewrite_usage = await self._maybe_direct_full_rewrite(
+            is_deeply_flawed, revision_cycle, plot_outline, original_text, chapter_number,
+            problems_to_fix, revision_reason_str, hybrid_context_for_revision, chapter_plan, is_from_flawed_source
+        )
+        cumulative_usage.add(direct_rewrite_usage)
+        if direct_rewrite_text is not None:
+            return direct_rewrite_text, direct_rewrite_raw, [], cumulative_usage.get_if_used()
+
+        # 2. Attempt patch-based revision
+        patched_text, spans_after_patch, use_patched_text, patch_usage = await self._apply_patch_revision(
+            plot_outline, character_profiles, world_building, original_text, chapter_number,
+            problems_to_fix, hybrid_context_for_revision, chapter_plan, already_patched_spans,
+            continuity_problems=None, repetition_problems=None # These are already in problems_to_fix
+        )
+        cumulative_usage.add(patch_usage)
+
+        current_text = patched_text if patched_text is not None else original_text
+        current_raw_output = f"Chapter revised using {len(spans_after_patch) - len(already_patched_spans)} new patches." if use_patched_text and patched_text else "Patching did not yield usable text or was not used."
+        current_spans = spans_after_patch
+
+        if use_patched_text:
+            logger.info("Ch %s: Using patched text as the revised version for this cycle.", chapter_number)
+            return current_text, current_raw_output, current_spans, cumulative_usage.get_if_used()
+
+        # 3. If patch wasn't used/effective and revision is still needed & not deferred
+        if evaluation_needs_revision and not self._should_defer_full_rewrite(revision_cycle):
+            # Try targeted scene rewrite first
+            logger.info("Attempting targeted scene rewrite for Ch %s before full rewrite.", chapter_number)
+            targeted_rewrite_text, targeted_raw_output, targeted_usage = await self._rewrite_problem_scenes(
+                plot_outline, original_text, chapter_number, problems_to_fix,
+                hybrid_context_for_revision, chapter_plan
+            )
+            cumulative_usage.add(targeted_usage)
+            if targeted_rewrite_text and targeted_rewrite_text != original_text : # Check if rewrite actually changed text
+                logger.info("Ch %s: Targeted scene rewrite produced changes.", chapter_number)
+                return targeted_rewrite_text, targeted_raw_output, [], cumulative_usage.get_if_used()
+
+            # If targeted rewrite was ineffective, proceed to full rewrite
+            logger.info("Proceeding with full chapter rewrite for Ch %s as targeted rewrite was ineffective or produced no change.", chapter_number)
+            full_rewrite_text, full_raw_output, full_rewrite_usage = await self._perform_full_rewrite(
+                plot_outline, original_text, chapter_number, problems_to_fix, revision_reason_str,
+                hybrid_context_for_revision, chapter_plan, is_from_flawed_source
+            )
+            cumulative_usage.add(full_rewrite_usage)
+            if full_rewrite_text:
+                 return full_rewrite_text, full_raw_output, [], cumulative_usage.get_if_used()
+
+        # 4. If revision is needed but deferred
+        elif evaluation_needs_revision and self._should_defer_full_rewrite(revision_cycle):
+            logger.info("Deferring full rewrite for Ch %s until later cycle. Using original text for now.", chapter_number)
+            return original_text, "Rewrite deferred", already_patched_spans, cumulative_usage.get_if_used()
+
+        # 5. Fallback: If no strategy applied or was effective, return original text or patched if available but not "used"
+        # This case should ideally be covered by the above logic, but as a safety.
+        # If patched_text exists and is different, it means patches were made but _apply_patch_revision decided not to "use_patch_as_final"
+        # In this scenario, we might still want to return the patched_text if no other rewrite happened.
+        if patched_text is not None and patched_text != original_text:
+             logger.warning("Ch %s: No definitive revision strategy applied, but patches were made. Returning patched text.", chapter_number)
+             return patched_text, "Patches applied but not validated as final; no further rewrite triggered.", spans_after_patch, cumulative_usage.get_if_used()
+
+        logger.warning("Ch %s: No revision strategy resulted in a change. Returning original text.", chapter_number)
+        return original_text, "No effective revision applied.", already_patched_spans, cumulative_usage.get_if_used()

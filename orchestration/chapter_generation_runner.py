@@ -49,7 +49,8 @@ class ChapterGenerationRunner:
                 await self._handle_error()
 
     async def _init(self) -> None:
-        plot_points_raw = self.orchestrator.plot_outline.get("plot_points", [])
+        current_plot_outline = self.orchestrator.state_manager.get_plot_outline()
+        plot_points_raw = current_plot_outline.get("plot_points", [])
         if isinstance(plot_points_raw, dict):
             plot_points_list = list(plot_points_raw.values())
         elif isinstance(plot_points_raw, list):
@@ -62,11 +63,12 @@ class ChapterGenerationRunner:
         total_concrete = len(
             [pp for pp in plot_points_list if not utils._is_fill_in(pp)]
         )
-        remaining = total_concrete - self.orchestrator.chapter_count
+        remaining = total_concrete - self.orchestrator.state_manager.get_chapter_count()
         if remaining <= 0:
             await self.orchestrator._generate_plot_points_from_kg(
                 settings.CHAPTERS_PER_RUN
             )
+            # refresh_plot_outline() is on orchestrator and delegates to state_manager
             await self.orchestrator.refresh_plot_outline()
         self.state = RunnerState.GENERATE_CHAPTER
 
@@ -75,7 +77,8 @@ class ChapterGenerationRunner:
             self.state = RunnerState.FINISH
             return
 
-        plot_points_raw = self.orchestrator.plot_outline.get("plot_points", [])
+        current_plot_outline = self.orchestrator.state_manager.get_plot_outline()
+        plot_points_raw = current_plot_outline.get("plot_points", [])
         if isinstance(plot_points_raw, dict):
             plot_points_list = list(plot_points_raw.values())
         elif isinstance(plot_points_raw, list):
@@ -92,13 +95,15 @@ class ChapterGenerationRunner:
                 if not utils._is_fill_in(pp) and isinstance(pp, str) and pp.strip()
             ]
         )
-        remaining = total_concrete - self.orchestrator.chapter_count
+        remaining = total_concrete - self.orchestrator.state_manager.get_chapter_count()
         if remaining <= 0:
             await self.orchestrator._generate_plot_points_from_kg(
                 settings.CHAPTERS_PER_RUN - self.attempts_this_run
             )
-            await self.orchestrator.refresh_plot_outline()
-            plot_points_raw = self.orchestrator.plot_outline.get("plot_points", [])
+            await self.orchestrator.refresh_plot_outline() # Delegates to state_manager
+            # Re-fetch plot_outline after potential refresh
+            current_plot_outline = self.orchestrator.state_manager.get_plot_outline()
+            plot_points_raw = current_plot_outline.get("plot_points", [])
             if isinstance(plot_points_raw, dict):
                 plot_points_list = list(plot_points_raw.values())
             elif isinstance(plot_points_raw, list):
@@ -115,7 +120,7 @@ class ChapterGenerationRunner:
                     if not utils._is_fill_in(pp) and isinstance(pp, str) and pp.strip()
                 ]
             )
-            remaining = total_concrete - self.orchestrator.chapter_count
+            remaining = total_concrete - self.orchestrator.state_manager.get_chapter_count()
             if remaining <= 0:
                 logger.info(
                     "NANA: No plot points available after generation. Ending run early."
@@ -123,7 +128,7 @@ class ChapterGenerationRunner:
                 self.state = RunnerState.FINISH
                 return
 
-        self.current_chapter_number = self.orchestrator.chapter_count + 1
+        self.current_chapter_number = self.orchestrator.state_manager.get_chapter_count() + 1
         logger.info(
             f"\n--- NANA: Attempting Novel Chapter {self.current_chapter_number} (attempt {self.attempts_this_run + 1}/{settings.CHAPTERS_PER_RUN}) ---"
         )

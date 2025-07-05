@@ -55,68 +55,140 @@ def initialize_new_character_profile(
     return new_profile
 
 
+def _merge_traits(
+    profile_traits: list[str], update_traits: list[any]
+) -> list[str] | None:
+    """Merges trait lists and returns new list if changed, else None."""
+    new_traits_set = set(profile_traits)
+    added = False
+    for t in update_traits:
+        if isinstance(t, str) and t.strip() and t not in new_traits_set:
+            new_traits_set.add(t)
+            added = True
+    if added:
+        return sorted(list(new_traits_set))
+    return None
+
+
+def _merge_relationships(
+    profile_relationships: dict[str, str], update_relationships: dict[any, any]
+) -> bool:
+    """Merges relationship dicts. Returns True if changed."""
+    modified = False
+    for target, rel_val in update_relationships.items():
+        if not isinstance(target, str) or not isinstance(rel_val, str):
+            continue # Skip malformed entries
+        if profile_relationships.get(target) != rel_val:
+            profile_relationships[target] = rel_val
+            modified = True
+    return modified
+
+
+def _merge_generic_attributes(
+    profile: CharacterProfile,
+    update_data: dict[str, any],
+    existing_profile_dict: dict[str, any],
+) -> bool:
+    """Merges generic string attributes. Returns True if modified."""
+    modified = False
+    # Define keys that are handled by specialized mergers or should be skipped
+    skipped_keys = {
+        "traits",
+        "relationships",
+        "modification_proposal",
+        kg_keys.source_quality_key(0).rsplit("_", 1)[0], # Match prefix
+        kg_keys.DEVELOPMENT_PREFIX.rstrip("_"), # Match prefix
+    }
+
+    for key, val in update_data.items():
+        # Skip if key is handled by other functions or is a prefixed development/source key
+        if key in skipped_keys or \
+           key.startswith(kg_keys.DEVELOPMENT_PREFIX) or \
+           key.startswith(kg_keys.SOURCE_QUALITY_PREFIX):
+            continue
+
+        if isinstance(val, str) and val.strip():
+            # Check against the original dict representation for direct attributes
+            # For other attributes, they are stored in profile.updates
+            if hasattr(profile, key):
+                if getattr(profile, key) != val:
+                    setattr(profile, key, val)
+                    modified = True
+            elif existing_profile_dict.get(key) != val : # Check if it's a dynamic field in updates
+                 profile.updates[key] = val
+                 modified = True
+            elif profile.updates.get(key) != val: # Fallback to updates dict
+                 profile.updates[key] = val
+                 modified = True
+    return modified
+
+
 def merge_character_profile_updates(
     profiles: dict[str, CharacterProfile],
     updates: dict[str, CharacterProfile],
     chapter_number: int,
     from_flawed_draft: bool,
 ) -> None:
-    """Merge parsed character updates into existing profiles.
-
-    Args:
-        profiles: Current character profiles keyed by name.
-        updates: Newly parsed updates for the chapter.
-        chapter_number: The chapter number being processed.
-        from_flawed_draft: Whether updates came from an unrevised draft.
-
-    Returns:
-        ``None``. Profiles are modified in place.
-    """
+    """Merge parsed character updates into existing profiles."""
     provisional_key = kg_keys.source_quality_key(chapter_number)
-    for name, update in updates.items():
-        data = update.to_dict()
+    dev_key = kg_keys.development_key(chapter_number)
+
+    for name, update_obj in updates.items():
+        update_data = update_obj.to_dict()
         if from_flawed_draft:
-            data[provisional_key] = "provisional_from_unrevised_draft"
-        dev_key = kg_keys.development_key(chapter_number)
+            # Ensure this key is present for flawed drafts if not already set by parser
+            update_data.setdefault(provisional_key, "provisional_from_unrevised_draft")
+
         if name not in profiles:
             profiles[name] = initialize_new_character_profile(
                 name,
-                update,
+                update_obj, # Pass the object itself
                 chapter_number,
                 from_flawed_draft=from_flawed_draft,
             )
             continue
+
         profile = profiles[name]
-        prof_dict = profile.to_dict()
-        modified = False
-        for key, val in data.items():
-            if key in {"modification_proposal", provisional_key} or (
-                key.startswith(kg_keys.DEVELOPMENT_PREFIX)
-            ):
-                continue
-            if key == "traits" and isinstance(val, list):
-                new_traits = sorted(
-                    set(profile.traits).union(
-                        {t for t in val if isinstance(t, str) and t.strip()}
-                    )
-                )
-                if new_traits != profile.traits:
-                    profile.traits = new_traits
-                    modified = True
-            elif key == "relationships" and isinstance(val, dict):
-                for target, rel in val.items():
-                    if profile.relationships.get(target) != rel:
-                        profile.relationships[target] = rel
-                        modified = True
-            elif isinstance(val, str) and val.strip() and prof_dict.get(key) != val:
-                profile.updates[key] = val
-                modified = True
-        if dev_key in data and isinstance(data[dev_key], str):
-            profile.updates[dev_key] = data[dev_key]
-            modified = True
-        if from_flawed_draft:
-            profile.updates[provisional_key] = "provisional_from_unrevised_draft"
-        if modified:
+        overall_modified = False
+
+        # Merge traits
+        if "traits" in update_data and isinstance(update_data["traits"], list):
+            merged_traits = _merge_traits(profile.traits, update_data["traits"])
+            if merged_traits is not None:
+                profile.traits = merged_traits
+                overall_modified = True
+
+        # Merge relationships
+        if "relationships" in update_data and isinstance(update_data["relationships"], dict):
+            if _merge_relationships(profile.relationships, update_data["relationships"]):
+                overall_modified = True
+
+        # Merge generic attributes (description, status, etc.)
+        # This needs the original profile dict for comparison if attributes are not direct properties
+        # However, CharacterProfile attributes are direct, so we pass profile.to_dict()
+        # for consistent checking of existing values if needed by the helper,
+        # though _merge_generic_attributes primarily uses hasattr.
+        if _merge_generic_attributes(profile, update_data, profile.to_dict()):
+            overall_modified = True
+
+        # Handle development log explicitly
+        if dev_key in update_data and isinstance(update_data[dev_key], str):
+            if profile.updates.get(dev_key) != update_data[dev_key]:
+                profile.updates[dev_key] = update_data[dev_key]
+                overall_modified = True
+
+        # Handle provisional key explicitly if it was part of the update_data
+        if provisional_key in update_data and isinstance(update_data[provisional_key], str):
+             if profile.updates.get(provisional_key) != update_data[provisional_key]:
+                profile.updates[provisional_key] = update_data[provisional_key]
+                overall_modified = True
+        elif from_flawed_draft: # Ensure it's set if from flawed draft, even if not in original update_data
+            if profile.updates.get(provisional_key) != "provisional_from_unrevised_draft":
+                profile.updates[provisional_key] = "provisional_from_unrevised_draft"
+                overall_modified = True
+
+
+        if overall_modified:
             logger.debug("Profile for %s modified", name)
 
 
