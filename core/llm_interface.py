@@ -469,32 +469,76 @@ class LLMService:
                 )
                 if auto_clean_response:
                     final_text = self.clean_model_response(final_text)
-                return final_text, usage, None, temp_path
+                return final_text, usage, None, temp_path # Success
             except Exception as exc:  # Consolidated error handling
                 last_exc = exc
                 logger.warning(
-                    f"Async LLM ('{model_name}' Attempt {retry_attempt + 1}): {exc}",
-                    exc_info=isinstance(exc, Exception),
+                    f"Async LLM ('{model_name}' Attempt {retry_attempt + 1}/{settings.LLM_RETRY_ATTEMPTS}): {type(exc).__name__} - {exc}",
+                    # exc_info=isinstance(exc, Exception), # Kept original for verbosity if needed
                 )
+                # Specific handling for HTTPStatusError to avoid breaking retries on client errors (except 429)
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response and \
+                   400 <= exc.response.status_code < 500 and exc.response.status_code != 429:
+                    logger.error(f"Async LLM ('{model_name}'): Client-side error {exc.response.status_code}. Aborting retries for this model call.")
+                    break # Break from retry loop for this model, will be returned to _async_call_llm
             finally:
                 if (
                     stream_to_disk
                     and temp_path
                     and os.path.exists(temp_path)
-                    and last_exc is not None
+                    and last_exc is not None # Only cleanup if there was an error in this attempt
                 ):
                     try:
                         logger.info(
-                            f"Cleaning up temp stream file due to error: {temp_path}"
+                            f"Cleaning up temp stream file due to error in attempt: {temp_path}"
                         )
                         os.remove(temp_path)
+                        temp_path = None # Reset temp_path after deletion
                     except Exception as clean_err:
                         logger.error(
                             f"Error cleaning up temp file {temp_path} after failed LLM attempt: {clean_err}"
                         )
             if retry_attempt < settings.LLM_RETRY_ATTEMPTS - 1 and last_exc is not None:
+                 # Check again if we should break from retries based on the nature of last_exc
+                if isinstance(last_exc, httpx.HTTPStatusError) and last_exc.response and \
+                   400 <= last_exc.response.status_code < 500 and last_exc.response.status_code != 429:
+                    break # Already decided to abort for this model
                 await self._backoff_delay(retry_attempt)
         return final_text, usage, last_exc, temp_path
+
+
+    def _prepare_llm_payload(
+        self,
+        model_name: str,
+        prompt: str,
+        temperature: float | None,
+        max_tokens: int | None,
+        frequency_penalty: float | None,
+        presence_penalty: float | None,
+    ) -> tuple[dict[str, Any], int, float, int]:
+        """Prepares the payload and effective parameters for an LLM call."""
+        prompt_token_count = count_tokens(prompt, model_name)
+        effective_max_output_tokens = (
+            max_tokens if max_tokens is not None else settings.MAX_GENERATION_TOKENS
+        )
+        effective_temperature = (
+            temperature if temperature is not None else settings.TEMPERATURE_DEFAULT
+        )
+
+        token_param_name = _completion_token_param(settings.OPENAI_API_BASE)
+        payload: dict[str, Any] = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": effective_temperature,
+            "top_p": settings.LLM_TOP_P,
+            token_param_name: effective_max_output_tokens,
+        }
+        if frequency_penalty is not None:
+            payload["frequency_penalty"] = frequency_penalty
+        if presence_penalty is not None:
+            payload["presence_penalty"] = presence_penalty
+
+        return payload, prompt_token_count, effective_temperature, effective_max_output_tokens
 
     async def _async_call_llm(
         self,
@@ -517,87 +561,81 @@ class LLMService:
                 logger.error("async_call_llm: empty or invalid prompt.")
                 return "", None
 
-            prompt_token_count = count_tokens(prompt, model_name)
-            effective_max_output_tokens = (
-                max_tokens if max_tokens is not None else settings.MAX_GENERATION_TOKENS
-            )
-            effective_temperature = (
-                temperature if temperature is not None else settings.TEMPERATURE_DEFAULT
-            )
-
             headers = {
                 "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
                 "Content-Type": "application/json",
             }
 
-            current_model_to_try = model_name
-            final_text_response = ""
-            current_usage_data: dict[str, int] | None = None
-            last_exc: Exception | None = None
-            temp_file_path: str | None = None
-            is_fallback_attempt = False
+            # --- Primary model attempt ---
+            (
+                primary_payload,
+                primary_prompt_tokens,
+                primary_temp,
+                primary_max_out
+            ) = self._prepare_llm_payload(
+                model_name, prompt, temperature, max_tokens, frequency_penalty, presence_penalty
+            )
+            logger.debug(
+                f"Async Calling LLM '{model_name}' (Primary Attempt). "
+                f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {primary_prompt_tokens}. "
+                f"Max output tokens: {primary_max_out}. Temp: {primary_temp}, TopP: {settings.LLM_TOP_P}"
+            )
+            (
+                final_text_response,
+                current_usage_data,
+                last_exception, # Renamed from last_exc to avoid conflict
+                temp_file_path,
+            ) = await self._call_model_with_retries(
+                model_name, primary_payload, headers, stream_to_disk, auto_clean_response
+            )
 
-            for attempt_num_overall in range(2):
-                if is_fallback_attempt:
-                    if not allow_fallback or not settings.FALLBACK_GENERATION_MODEL:
-                        logger.warning(
-                            f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Aborting call."
-                        )
-                        return final_text_response, current_usage_data
-                    current_model_to_try = settings.FALLBACK_GENERATION_MODEL
-                    logger.info(
-                        f"Primary model '{model_name}' failed. Attempting fallback with '{current_model_to_try}'."
-                    )
-                    prompt_token_count = count_tokens(prompt, current_model_to_try)
-                    current_usage_data = None
-
-                token_param_name = _completion_token_param(settings.OPENAI_API_BASE)
-                payload: dict[str, Any] = {
-                    "model": current_model_to_try,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": effective_temperature,
-                    "top_p": settings.LLM_TOP_P,
-                    token_param_name: effective_max_output_tokens,
-                }
-                if frequency_penalty is not None:
-                    payload["frequency_penalty"] = frequency_penalty
-                if presence_penalty is not None:
-                    payload["presence_penalty"] = presence_penalty
-
-                logger.debug(
-                    f"Async Calling LLM '{current_model_to_try}' (OverallAttempt: {attempt_num_overall + 1}). "
-                    f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {prompt_token_count}. "
-                    f"Max output tokens: {effective_max_output_tokens}. Temp: {effective_temperature}, TopP: {settings.LLM_TOP_P}"
+            # --- Fallback model attempt (if primary failed and fallback allowed) ---
+            if last_exception is not None and allow_fallback and settings.FALLBACK_GENERATION_MODEL:
+                fallback_model_name = settings.FALLBACK_GENERATION_MODEL
+                logger.info(
+                    f"Primary model '{model_name}' failed with {type(last_exception).__name__}. Attempting fallback with '{fallback_model_name}'."
                 )
 
+                # Specific logging for non-429 client errors before attempting fallback
+                if isinstance(last_exception, httpx.HTTPStatusError) and \
+                   last_exception.response and 400 <= last_exception.response.status_code < 500 and \
+                   last_exception.response.status_code != 429:
+                    logger.error(
+                        f"Async LLM: Primary model '{model_name}' failed with non-429 client error {last_exception.response.status_code}. Proceeding to fallback."
+                    )
+
+                (
+                    fallback_payload,
+                    fallback_prompt_tokens,
+                    fallback_temp,
+                    fallback_max_out
+                ) = self._prepare_llm_payload(
+                    fallback_model_name, prompt, temperature, max_tokens, frequency_penalty, presence_penalty
+                )
+                logger.debug(
+                    f"Async Calling LLM '{fallback_model_name}' (Fallback Attempt). "
+                    f"StreamToDisk: {stream_to_disk}. Prompt tokens (est.): {fallback_prompt_tokens}. "
+                    f"Max output tokens: {fallback_max_out}. Temp: {fallback_temp}, TopP: {settings.LLM_TOP_P}"
+                )
+
+                # Reset usage data for fallback attempt; last_exception will be updated by the call
+                # final_text_response and temp_file_path will also be updated
+                current_usage_data = None
                 (
                     final_text_response,
                     current_usage_data,
-                    last_exc,
+                    last_exception,      # This will be the exception from the fallback attempt, or None if successful
                     temp_file_path,
                 ) = await self._call_model_with_retries(
-                    current_model_to_try,
-                    payload,
-                    headers,
-                    stream_to_disk,
-                    auto_clean_response,
+                    fallback_model_name, fallback_payload, headers, stream_to_disk, auto_clean_response
+                )
+            elif last_exception is not None and (not allow_fallback or not settings.FALLBACK_GENERATION_MODEL):
+                 logger.warning(
+                    f"Primary model '{model_name}' failed. Fallback not allowed or no fallback model configured. Error: {type(last_exception).__name__}."
                 )
 
-                if last_exc is None:
-                    break
-
-                is_fallback_attempt = True
-                if (
-                    attempt_num_overall == 0
-                    and isinstance(last_exc, httpx.HTTPStatusError)
-                    and last_exc.response
-                    and 400 <= last_exc.response.status_code < 500
-                    and last_exc.response.status_code != 429
-                ):
-                    logger.error(
-                        f"Async LLM: Primary model '{model_name}' failed with non-429 client error. Checking fallback conditions."
-                    )
-
+            # --- Final cleanup and return ---
+            # This cleanup needs to happen regardless of success/failure if a temp file was potentially created
             if stream_to_disk and temp_file_path and os.path.exists(temp_file_path):
                 try:
                     os.remove(temp_file_path)
@@ -606,9 +644,9 @@ class LLMService:
                         f"Error during final cleanup of temp file {temp_file_path}: {e_final_clean}"
                     )
 
-            if last_exc is not None:
+            if last_exception is not None:
                 logger.error(
-                    f"Async LLM: Call failed for '{model_name}' after all primary and potential fallback attempts. Returning last captured text ('{final_text_response[:50]}...') and usage."
+                    f"Async LLM: Call failed for primary model '{model_name}' (and potential fallback '{settings.FALLBACK_GENERATION_MODEL if allow_fallback else 'N/A'}') after all attempts. Last error: {type(last_exception).__name__}. Returning last captured text ('{final_text_response[:50]}...') and usage."
                 )
 
             return final_text_response, current_usage_data
