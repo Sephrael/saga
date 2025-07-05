@@ -26,7 +26,9 @@ class DummyOrchestrator:
         return self.values.get("process_prereqs", prereq_result)
 
     async def _draft_initial_chapter_text(self, *args):
-        return self.values.get("draft", DraftResult("draft_res", "raw"))
+        return self.values.get(
+            "draft", DraftResult("draft_res", "raw", {"total_tokens": 1})
+        )
 
     async def _process_initial_draft(self, chapter, draft_result):
         return self.values.get("process_draft", draft_result)

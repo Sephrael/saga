@@ -52,7 +52,7 @@ async def test_process_prereq_result_failure(orchestrator) -> None:
 
 @pytest.mark.asyncio
 async def test_process_initial_draft_failure(orchestrator) -> None:
-    result = await orchestrator._process_initial_draft(1, DraftResult(None, None))
+    result = await orchestrator._process_initial_draft(1, DraftResult(None, None, None))
     assert result is None
 
 

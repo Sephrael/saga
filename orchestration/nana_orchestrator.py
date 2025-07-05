@@ -1,9 +1,8 @@
 # orchestration/nana_orchestrator.py
 """Primary orchestrator coordinating all SAGA agent interactions."""
 
-import asyncio
 import time  # For Rich display updates
-from typing import Any, Awaitable  # Using typing.Awaitable
+from typing import Any
 
 import structlog
 import utils
@@ -24,14 +23,8 @@ from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from core.usage import TokenUsage
-from data_access import (
-    chapter_repository,
-    character_queries,
-    plot_queries,
-    world_queries,
-)
+from data_access import chapter_repository
 from ingestion.ingestion_manager import IngestionManager
-from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
 from kg_maintainer.models import (
@@ -557,12 +550,16 @@ class NANA_Orchestrator:
                 "initial_draft_fail_raw_llm",
                 initial_raw_llm_text or "Drafting Agent returned None for raw output.",
             )
-            return DraftResult(text=None, raw_llm_output=None)
+            return DraftResult(text=None, raw_llm_output=None, usage=draft_usage)
 
         await self._save_debug_output(
             novel_chapter_number, "initial_draft", initial_draft_text
         )
-        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
+        return DraftResult(
+            text=initial_draft_text,
+            raw_llm_output=initial_raw_llm_text,
+            usage=draft_usage,
+        )
 
     async def _process_and_revise_draft(
         self,
@@ -739,7 +736,11 @@ class NANA_Orchestrator:
                 step=f"Ch {novel_chapter_number} Failed - No Initial Draft",
             )
             return None
-        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
+        return DraftResult(
+            text=initial_draft_text,
+            raw_llm_output=initial_raw_llm_text,
+            usage=draft_result.usage,
+        )
 
     async def _process_revision_result(
         self,
