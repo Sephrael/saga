@@ -54,7 +54,7 @@ from orchestration.chapter_generation_runner import ChapterGenerationRunner
 from orchestration.knowledge_service import KnowledgeService
 
 # KnowledgeCache is now primarily managed by StateManagementService
-from orchestration.models import RevisionOutcome
+from orchestration.models import KnowledgeCache, RevisionOutcome
 from orchestration.output_service import OutputService
 from orchestration.services.state_management_service import StateManagementService
 from orchestration.services.token_management_service import TokenManagementService
@@ -177,6 +177,22 @@ class NANA_Orchestrator:
     @property
     def chapter_zero_end_state(self) -> ChapterEndState | None:
         return self.state_manager.get_chapter_zero_end_state()
+
+    @property
+    def knowledge_cache(self) -> KnowledgeCache:
+        return self.state_manager.get_knowledge_cache()
+
+    @knowledge_cache.setter
+    def knowledge_cache(self, value: KnowledgeCache) -> None:
+        self.state_manager.knowledge_cache = value
+
+    @property
+    def completed_plot_points(self) -> set[str]:
+        return self.state_manager.get_completed_plot_points()
+
+    @completed_plot_points.setter
+    def completed_plot_points(self, value: set[str]) -> None:
+        self.state_manager.completed_plot_points = value
 
     def _update_rich_display(
         self, chapter_num: int | None = None, step: str | None = None
