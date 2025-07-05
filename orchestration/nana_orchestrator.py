@@ -782,7 +782,7 @@ class NANA_Orchestrator:
             # InitializationService logs errors and updates display for critical failures.
             # It will also handle stopping the display if needed for some critical config errors.
             # Ensure display is stopped if not already by a critical error handler in init service.
-            if self.display.is_live: # Check if display is active before stopping
+            if self.display.live and self.display.live.is_started: # Check if Rich Live instance is active
                 await self.display.stop()
             await self.shutdown() # Ensure services are shut down
             return

@@ -101,11 +101,11 @@ class StateManagementService:
 
 
     async def refresh_knowledge_cache(self) -> None:
-        """Reload character profiles and world building caches via orchestrator's KnowledgeService."""
+        """Trigger KnowledgeService to refresh data, which will update this service's cache."""
+        # KnowledgeService.refresh_knowledge_cache now directly updates
+        # this StateManagementService instance's knowledge_cache via the orchestrator reference.
         await self._orchestrator.knowledge_service.refresh_knowledge_cache()
-        # Update local knowledge_cache after refresh
-        self.knowledge_cache.characters = self._orchestrator.knowledge_cache.characters
-        self.knowledge_cache.world = self._orchestrator.knowledge_cache.world
+        # No further action needed here as KnowledgeService updates sm.knowledge_cache internally.
 
 
     async def load_previous_end_state(
