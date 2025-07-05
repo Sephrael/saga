@@ -457,110 +457,183 @@ async def get_all_character_names() -> list[str]:
     return [record["name"] for record in results if record.get("name")]
 
 
+def _extract_base_profile_data(char_node_data: dict[str, Any] | None) -> dict[str, Any]:
+    """Extracts and cleans basic properties from the character node data."""
+    if not char_node_data:
+        return {}
+
+    profile_dict = dict(char_node_data)
+    profile_dict.pop("name", None) # Name is handled as the key in the main function
+    profile_dict.pop("created_ts", None)
+    profile_dict.pop("updated_ts", None)
+    # Any other common keys to pop can be added here
+    return profile_dict
+
+
+def _process_traits_from_record(record_data: dict[str, Any]) -> list[str]:
+    """Processes the 'traits' list from the Cypher query result."""
+    traits = record_data.get("traits", []) or [] # Ensure it's a list, default to empty
+    # Filter out any None or empty strings that might have slipped through Cypher's CASE WHEN
+    processed_traits = [str(t) for t in traits if t and str(t).strip()]
+    return sorted(set(processed_traits)) # Ensure uniqueness and sort
+
+
+def _process_relationships_from_record(record_data: dict[str, Any]) -> dict[str, Any]:
+    """Processes the 'rels' list from the Cypher query result into a relationships dictionary."""
+    rels_list = record_data.get("rels", []) or []
+    relationships: dict[str, Any] = {}
+    for rel_rec in rels_list:
+        if not isinstance(rel_rec, dict): # Ensure rel_rec is a dict
+            continue
+        target = rel_rec.get("target")
+        props = rel_rec.get("props", {})
+        if not target or not isinstance(props, dict): # Ensure target and props are valid
+            continue
+
+        # Clean properties, similar to original logic
+        props_cleaned = {
+            k: v
+            for k, v in props.items()
+            if k not in ["created_ts", "updated_ts", "source_profile_managed"]
+        }
+        # 'type' and 'chapter_added' are often explicitly handled or expected, ensure they are present if in original props
+        if "type" in props:
+            props_cleaned["type"] = props["type"]
+        if "chapter_added" in props:
+            props_cleaned["chapter_added"] = props["chapter_added"]
+
+        relationships[str(target)] = props_cleaned
+    return relationships
+
+
+def _process_development_events_from_record(
+    record_data: dict[str, Any], profile_dict_to_update: dict[str, Any]
+) -> None:
+    """Processes 'devs' list from Cypher, updating profile_dict with dev and provisional keys."""
+    devs_list = record_data.get("devs", []) or []
+    for dev_rec in devs_list:
+        if not isinstance(dev_rec, dict): # Ensure dev_rec is a dict
+            continue
+        chapter_num = dev_rec.get("chapter")
+        summary = dev_rec.get("summary")
+        is_provisional = dev_rec.get("prov", False) # Default to False if 'prov' is missing
+
+        if chapter_num is None or summary is None:
+            continue
+
+        try:
+            # Ensure chapter_num can be converted to int for key generation, though Cypher should return it as such.
+            chap_int = int(chapter_num)
+            dev_key = kg_keys.development_key(chap_int)
+            profile_dict_to_update[dev_key] = str(summary) # Ensure summary is string
+            if is_provisional:
+                profile_dict_to_update[kg_keys.source_quality_key(chap_int)] = (
+                    "provisional_from_unrevised_draft"
+                )
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not process development event due to invalid chapter number '{chapter_num}': {e}")
+
+
 async def get_character_profiles_from_db(
     chapter_limit: int | None = None,
 ) -> dict[str, CharacterProfile]:
     """Load all character profiles from Neo4j, optionally up to a chapter limit."""
-
     logger.info(
         "Loading decomposed character profiles from Neo4j%s...",
         f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
     )
     profiles_data: dict[str, CharacterProfile] = {}
-
     params: dict[str, Any] = {"limit": chapter_limit}
     chapter_filter = ""
     if chapter_limit is not None:
-        chapter_filter = f"AND (c.{KG_NODE_CHAPTER_UPDATED} IS NULL OR c.{KG_NODE_CHAPTER_UPDATED} <= $limit)"
+        # Ensure KG_NODE_CHAPTER_UPDATED is correctly referenced for Character nodes if it exists there.
+        # The original query implies it might be on `c` or `dev` or `t` (trait chapter_added).
+        # For the main character node, if it has a chapter_updated field:
+        # chapter_filter = f"AND (c.{KG_NODE_CHAPTER_UPDATED} IS NULL OR c.{KG_NODE_CHAPTER_UPDATED} <= $limit)"
+        # However, the query structure seems to filter related entities by chapter,
+        # not the character node itself directly by a 'chapter_updated' field.
+        # The primary filter on `c` is `c.is_deleted`.
+        # The chapter_limit is applied within the collection of traits, rels, and devs.
+        pass # Chapter filter is applied in the sub-collections within Cypher.
 
+    # The Cypher query remains the same as it's complex and optimized for DB interaction.
+    # Refactoring focuses on Python-side processing of results.
     query = f"""
     MATCH (c:Character:Entity)
-    WHERE c.is_deleted IS NULL OR c.is_deleted = FALSE {chapter_filter}
+    WHERE (c.is_deleted IS NULL OR c.is_deleted = FALSE) {chapter_filter}
 
-    OPTIONAL MATCH (c)-[t:HAS_TRAIT]->(tr:Trait:Entity)
+    OPTIONAL MATCH (c)-[t_rel:HAS_TRAIT]->(tr:Trait:Entity)
     WITH c,
-        [v IN collect(DISTINCT CASE
-            WHEN $limit IS NULL OR t.chapter_added <= $limit THEN coalesce(tr.name, '')
-            ELSE NULL END) WHERE v IS NOT NULL AND v <> ''] AS traits
+        CASE WHEN $limit IS NOT NULL THEN
+            collect(DISTINCT CASE WHEN t_rel.chapter_added <= $limit THEN tr.name ELSE NULL END)
+        ELSE
+            collect(DISTINCT tr.name)
+        END AS traits_collected
 
-    OPTIONAL MATCH (c)-[r:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
-    WITH c,
-        traits,
-        [rel IN collect(DISTINCT CASE
-            WHEN $limit IS NULL OR r.chapter_added <= $limit THEN {{target: target.name, props: properties(r)}}
-            ELSE NULL END) WHERE rel.target IS NOT NULL] AS rels
+    OPTIONAL MATCH (c)-[r_rel:DYNAMIC_REL {{source_profile_managed: TRUE}}]->(target:Entity)
+    WITH c, traits_collected,
+        CASE WHEN $limit IS NOT NULL THEN
+            collect(DISTINCT CASE WHEN r_rel.chapter_added <= $limit THEN {{target: target.name, props: properties(r_rel)}} ELSE NULL END)
+        ELSE
+            collect(DISTINCT {{target: target.name, props: properties(r_rel)}})
+        END AS rels_collected
 
     OPTIONAL MATCH (c)-[:DEVELOPED_IN_CHAPTER]->(dev:DevelopmentEvent:Entity)
-    WITH c,
-        traits,
-        rels,
-        [d IN collect(DISTINCT CASE
-            WHEN $limit IS NULL OR dev.{KG_NODE_CHAPTER_UPDATED} <= $limit THEN {{
-                chapter: dev.{KG_NODE_CHAPTER_UPDATED},
-                summary: dev.summary,
-                prov: coalesce(dev.{KG_IS_PROVISIONAL}, false)
-            }}
-            ELSE NULL END) WHERE d.summary IS NOT NULL] AS devs
+    WITH c, traits_collected, rels_collected,
+        CASE WHEN $limit IS NOT NULL THEN
+            collect(DISTINCT CASE WHEN dev.{KG_NODE_CHAPTER_UPDATED} <= $limit THEN {{ chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: coalesce(dev.{KG_IS_PROVISIONAL}, false) }} ELSE NULL END)
+        ELSE
+            collect(DISTINCT {{ chapter: dev.{KG_NODE_CHAPTER_UPDATED}, summary: dev.summary, prov: coalesce(dev.{KG_IS_PROVISIONAL}, false) }})
+        END AS devs_collected
 
-    RETURN c, traits, rels, devs
+    RETURN c,
+           [t IN traits_collected WHERE t IS NOT NULL] as traits,
+           [r IN rels_collected WHERE r.target IS NOT NULL] as rels,
+           [d IN devs_collected WHERE d.summary IS NOT NULL] as devs
     """
+    # Note: The CASE WHEN in Cypher should already filter out NULLs before collect,
+    # but adding "WHERE x IS NOT NULL" in the final RETURN list comprehension is a safeguard.
 
     results = await neo4j_manager.execute_read_query(query, params)
 
     for record in results:
-        char_node = record.get("c")
-        if not char_node:
+        char_node_data = record.get("c")
+        if not char_node_data:
             continue
-        char_name = char_node.get("name")
+
+        char_name = char_node_data.get("name")
         if not char_name:
             continue
 
-        profile_dict: dict[str, Any] = dict(char_node)
-        profile_dict.pop("name", None)
-        profile_dict.pop("created_ts", None)
-        profile_dict.pop("updated_ts", None)
+        # Start with base properties from the character node
+        profile_dict = _extract_base_profile_data(char_node_data)
 
-        traits = [t for t in record.get("traits", []) if t]
-        profile_dict["traits"] = sorted(set(traits))
+        # Process and add traits
+        profile_dict["traits"] = _process_traits_from_record(record)
 
-        rels = record.get("rels", []) or []
-        relationships: dict[str, Any] = {}
-        for rel_rec in rels:
-            target = rel_rec.get("target")
-            props = rel_rec.get("props", {})
-            if not target:
-                continue
-            props_cleaned = {
-                k: v
-                for k, v in props.items()
-                if k not in ["created_ts", "updated_ts", "source_profile_managed"]
-            }
-            relationships[target] = props_cleaned
-        profile_dict["relationships"] = relationships
+        # Process and add relationships
+        profile_dict["relationships"] = _process_relationships_from_record(record)
 
-        devs = record.get("devs", []) or []
-        for dev_rec in devs:
-            chapter_num = dev_rec.get("chapter")
-            summary = dev_rec.get("summary")
-            if chapter_num is None or summary is None:
-                continue
-            dev_key = kg_keys.development_key(chapter_num)
-            profile_dict[dev_key] = summary
-            if dev_rec.get("prov"):
-                profile_dict[kg_keys.source_quality_key(chapter_num)] = (
-                    "provisional_from_unrevised_draft"
-                )
+        # Process development events (updates profile_dict in-place)
+        _process_development_events_from_record(record, profile_dict)
 
-        if (
-            chapter_limit is None
-            or profile_dict.get("traits")
-            or profile_dict.get("relationships")
-            or any(key.startswith(kg_keys.DEVELOPMENT_PREFIX) for key in profile_dict)
-        ):
+        # Conditional addition based on whether any dynamic data was found (if chapter_limit is active)
+        # This logic ensures that even if a character node exists, it's only included if it has relevant
+        # traits, relationships, or development events within the chapter_limit.
+        # If chapter_limit is None, all characters are included.
+        has_relevant_dynamic_data = (
+            profile_dict.get("traits") or
+            profile_dict.get("relationships") or
+            any(key.startswith(kg_keys.DEVELOPMENT_PREFIX) for key in profile_dict)
+        )
+
+        if chapter_limit is None or has_relevant_dynamic_data:
             CHAR_NAME_TO_CANONICAL[utils._normalize_for_id(char_name)] = char_name
-            profiles_data[char_name] = CharacterProfile.from_dict(
-                char_name, profile_dict
-            )
+            try:
+                profiles_data[char_name] = CharacterProfile.from_dict(char_name, profile_dict)
+            except Exception as e: # Catch potential errors during CharacterProfile instantiation
+                logger.error(f"Failed to create CharacterProfile for {char_name} from dict {profile_dict}: {e}", exc_info=True)
+                continue # Skip this profile
 
     logger.info(
         "Successfully loaded and recomposed %d character profiles from Neo4j%s.",

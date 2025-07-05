@@ -101,6 +101,117 @@ def _token_similarity(a: str, b: str) -> float:
     return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
 
 
+def _direct_substring_search(
+    doc_text: str, cleaned_quote: str, spacy_doc: spacy.tokens.Doc
+) -> tuple[int, int, int, int] | None:
+    """Performs a direct substring search for the cleaned_quote within doc_text."""
+    current_pos = 0
+    while current_pos < len(doc_text):
+        match_start = doc_text.lower().find(cleaned_quote.lower(), current_pos)
+        if match_start == -1:
+            return None # Not found in the rest of the document
+
+        match_end = match_start + len(cleaned_quote)
+
+        # Check if this match falls within a sentence
+        for sent_span in spacy_doc.sents:
+            if (
+                sent_span.start_char <= match_start < sent_span.end_char and
+                sent_span.start_char < match_end <= sent_span.end_char
+                # Ensure the match_end is also within or at the end of the sentence.
+                # Handles cases where quote might be at the very end of a sentence.
+            ):
+                logger.info(
+                    "Direct Substring Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d",
+                    cleaned_quote[:30], match_start, match_end,
+                    sent_span.start_char, sent_span.end_char,
+                )
+                return match_start, match_end, sent_span.start_char, sent_span.end_char
+
+        # If no sentence contains this specific match, try finding the quote again
+        # starting after the current match_end to avoid re-finding the same invalid match.
+        # However, a simpler approach is to advance beyond the start of the current match.
+        current_pos = match_start + 1 # Advance search position
+    return None
+
+
+def _token_similarity_search(
+    cleaned_quote: str, spacy_doc: spacy.tokens.Doc
+) -> tuple[int, int, int, int] | None:
+    """Performs a token-based similarity search against sentences."""
+    best_sent_span = None
+    best_sim_score = 0.0
+    for sent_span in spacy_doc.sents:
+        sim = _token_similarity(cleaned_quote, sent_span.text)
+        if sim > best_sim_score:
+            best_sim_score = sim
+            best_sent_span = sent_span
+
+    if best_sent_span and best_sim_score >= 0.45: # Threshold from original code
+        logger.info(
+            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
+            cleaned_quote[:30],
+            best_sent_span.start_char, best_sent_span.end_char, best_sim_score,
+        )
+        # For token similarity, the quote is considered the whole sentence
+        return (
+            best_sent_span.start_char, best_sent_span.end_char,
+            best_sent_span.start_char, best_sent_span.end_char,
+        )
+    return None
+
+
+def _fuzzy_search(
+    doc_text: str, cleaned_quote: str, spacy_doc: spacy.tokens.Doc
+) -> tuple[int, int, int, int] | None:
+    """Performs a fuzzy search using partial_ratio_alignment."""
+    alignment = partial_ratio_alignment(cleaned_quote, doc_text)
+    if alignment.score < 85.0: # Threshold from original code
+        return None
+
+    match_start = alignment.dest_start
+    match_end = alignment.dest_end
+
+    for sent_span in spacy_doc.sents:
+        if (
+            sent_span.start_char <= match_start < sent_span.end_char and
+            sent_span.start_char < match_end <= sent_span.end_char
+        ):
+            logger.info(
+                "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
+                cleaned_quote[:30], match_start, match_end,
+                sent_span.start_char, sent_span.end_char, alignment.score,
+            )
+            return match_start, match_end, sent_span.start_char, sent_span.end_char
+
+    logger.debug("Fuzzy match found but not contained within a single sentence. Quote: '%s', Match: %d-%d", cleaned_quote[:30], match_start, match_end)
+    return None
+
+
+async def _semantic_search(
+    doc_text: str, original_llm_quote: str
+) -> tuple[int, int, int, int] | None:
+    """Performs a semantic search for the quote within the document."""
+    from .similarity import find_semantically_closest_segment # Local import
+
+    semantic_match = await find_semantically_closest_segment(
+        original_doc=doc_text,
+        query_text=original_llm_quote, # Use original quote for semantic search
+        segment_type="sentence",
+        min_similarity_threshold=0.75, # Threshold from original code
+    )
+
+    if semantic_match:
+        s_start, s_end, similarity = semantic_match
+        logger.info(
+            "Semantic Match: Found sentence for LLM quote '%s...' from %d-%d (Similarity: %.2f). Using whole sentence as target.",
+            original_llm_quote[:30], s_start, s_end, similarity,
+        )
+        # For semantic search, the quote is considered the whole sentence
+        return s_start, s_end, s_start, s_end
+    return None
+
+
 async def find_quote_and_sentence_offsets_with_spacy(
     doc_text: str, quote_text_from_llm: str
 ) -> tuple[int, int, int, int] | None:
@@ -134,116 +245,32 @@ async def find_quote_and_sentence_offsets_with_spacy(
     if spacy_doc is None:
         return None
 
-    current_pos = 0
-    while current_pos < len(doc_text):
-        match_start = doc_text.lower().find(
-            cleaned_llm_quote_for_direct_search.lower(), current_pos
-        )
-        if match_start == -1:
-            break
+    # Strategy 1: Direct Substring Search
+    direct_match_result = _direct_substring_search(doc_text, cleaned_llm_quote_for_direct_search, spacy_doc)
+    if direct_match_result:
+        return direct_match_result
 
-        match_end = match_start + len(cleaned_llm_quote_for_direct_search)
-        found_sentence_span = None
-        for sent in spacy_doc.sents:
-            if (
-                sent.start_char <= match_start < sent.end_char
-                and sent.start_char < match_end <= sent.end_char
-            ):
-                found_sentence_span = sent
-                break
+    # Strategy 2: Fuzzy Match
+    fuzzy_match_result = _fuzzy_search(doc_text, cleaned_llm_quote_for_direct_search, spacy_doc)
+    if fuzzy_match_result:
+        return fuzzy_match_result
 
-        if found_sentence_span:
-            logger.info(
-                "Direct Substring Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d",
-                cleaned_llm_quote_for_direct_search[:30],
-                match_start,
-                match_end,
-                found_sentence_span.start_char,
-                found_sentence_span.end_char,
-            )
-            return (
-                match_start,
-                match_end,
-                found_sentence_span.start_char,
-                found_sentence_span.end_char,
-            )
+    # Strategy 3: Token Similarity Search
+    token_match_result = _token_similarity_search(cleaned_llm_quote_for_direct_search, spacy_doc)
+    if token_match_result:
+        return token_match_result
 
-        current_pos = match_end
-
-    alignment = partial_ratio_alignment(cleaned_llm_quote_for_direct_search, doc_text)
-    if alignment.score >= 85.0:
-        match_start = alignment.dest_start
-        match_end = alignment.dest_end
-        for sent in spacy_doc.sents:
-            if (
-                sent.start_char <= match_start < sent.end_char
-                and sent.start_char < match_end <= sent.end_char
-            ):
-                logger.info(
-                    "Fuzzy Match: Found LLM quote (approx) '%s...' at %d-%d in sentence %d-%d (Score: %.2f)",
-                    cleaned_llm_quote_for_direct_search[:30],
-                    match_start,
-                    match_end,
-                    sent.start_char,
-                    sent.end_char,
-                    alignment.score,
-                )
-                return (
-                    match_start,
-                    match_end,
-                    sent.start_char,
-                    sent.end_char,
-                )
-
-    # Token similarity fallback before expensive semantic search
-    best_sent = None
-    best_sim = 0.0
-    for sent in spacy_doc.sents:
-        sim = _token_similarity(cleaned_llm_quote_for_direct_search, sent.text)
-        if sim > best_sim:
-            best_sim = sim
-            best_sent = sent
-    if best_sent and best_sim >= 0.45:
-        logger.info(
-            "Token Similarity Match: '%s...' most similar to sentence %d-%d (%.2f)",
-            cleaned_llm_quote_for_direct_search[:30],
-            best_sent.start_char,
-            best_sent.end_char,
-            best_sim,
-        )
-        return (
-            best_sent.start_char,
-            best_sent.end_char,
-            best_sent.start_char,
-            best_sent.end_char,
-        )
+    # Strategy 4: Semantic Search
+    logger.warning(
+        "Direct, fuzzy, and token similarity searches failed for LLM quote '%s...'. Falling back to semantic sentence search.",
+        quote_text_from_llm[:50], # Log original quote for better debugging
+    )
+    semantic_match_result = await _semantic_search(doc_text, quote_text_from_llm)
+    if semantic_match_result:
+        return semantic_match_result
 
     logger.warning(
-        "Direct substring match failed for LLM quote '%s...'. Falling back to semantic sentence search.",
-        quote_text_from_llm[:50],
-    )
-    from .similarity import find_semantically_closest_segment
-
-    semantic_sentence_match = await find_semantically_closest_segment(
-        original_doc=doc_text,
-        query_text=quote_text_from_llm,
-        segment_type="sentence",
-        min_similarity_threshold=0.75,
-    )
-
-    if semantic_sentence_match:
-        s_start, s_end, similarity = semantic_sentence_match
-        logger.info(
-            "Semantic Match: Found sentence for LLM quote '%s...' from %d-%d (Similarity: %.2f). Using whole sentence as target.",
-            quote_text_from_llm[:30],
-            s_start,
-            s_end,
-            similarity,
-        )
-        return s_start, s_end, s_start, s_end
-
-    logger.warning(
-        "Could not confidently locate quote TEXT from LLM: '%s...' in document using direct or semantic search.",
+        "All search strategies failed to locate quote from LLM: '%s...' in document.",
         quote_text_from_llm[:50],
     )
     return None

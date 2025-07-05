@@ -492,26 +492,7 @@ class NANA_Orchestrator:
         patched_spans: list[tuple[int, int]],
         is_from_flawed_source_for_kg: bool,
     ) -> tuple[str | None, str | None, bool, list[tuple[int, int]]]:
-        """Iteratively revise a chapter draft until it passes evaluation.
-
-        De-duplicates text at the start of each cycle, performs evaluation,
-        and applies patches or rewrites as needed.
-
-        Args:
-            novel_chapter_number: Sequential chapter number being processed.
-            current_text: Text to revise.
-            current_raw_llm_output: Raw LLM output for the current text.
-            plot_point_focus: Plot point focus for the chapter.
-            plot_point_index: Index of the plot point within the outline.
-            hybrid_context_for_draft: Combined contextual information for prompts.
-            chapter_plan: Optional plan for scenes in the chapter.
-            patched_spans: Already patched ranges to avoid re-editing.
-            is_from_flawed_source_for_kg: Whether the text is marked flawed.
-
-        Returns:
-            Tuple containing the revised text, raw output, flaw flag, and
-            patched spans.
-        """
+        """Iteratively revise a chapter draft until it passes evaluation."""
         revisions_made = 0
         needs_revision = True
         last_eval_result: EvaluationResult | None = None
@@ -537,12 +518,10 @@ class NANA_Orchestrator:
             )
 
             (
-                eval_result_obj,
+                evaluation_result,
                 continuity_problems,
-                eval_usage,
-                continuity_usage,
-                repetition_problems,
-            ) = await self._run_evaluation_cycle(
+                needs_revision_after_eval,
+            ) = await self._execute_and_process_evaluation(
                 novel_chapter_number,
                 attempt,
                 current_text,
@@ -551,59 +530,9 @@ class NANA_Orchestrator:
                 hybrid_context_for_draft,
                 patched_spans,
             )
-
-            self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-{Stage.EVALUATION.value}-Attempt{attempt}",
-                eval_usage,
-            )
-            self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-{Stage.CONTINUITY_CHECK.value}-Attempt{attempt}",
-                continuity_usage,
-            )
-
-            if isinstance(eval_result_obj, EvaluationResult):
-                evaluation_result: EvaluationResult = eval_result_obj
-            else:
-                evaluation_result = EvaluationResult(**eval_result_obj)
             last_eval_result = evaluation_result
-            await self._save_debug_output(
-                novel_chapter_number,
-                f"evaluation_result_attempt_{attempt}",
-                evaluation_result,
-            )
-            await self._save_debug_output(
-                novel_chapter_number,
-                f"continuity_problems_attempt_{attempt}",
-                continuity_problems,
-            )
-            await self._save_debug_output(
-                novel_chapter_number,
-                f"repetition_problems_attempt_{attempt}",
-                repetition_problems,
-            )
+            needs_revision = needs_revision_after_eval
 
-            if continuity_problems:
-                logger.warning(
-                    "NANA: Ch %s (Attempt %s) - Consistency checker found %s issues.",
-                    novel_chapter_number,
-                    attempt,
-                    len(continuity_problems),
-                )
-                evaluation_result.problems_found.extend(continuity_problems)
-                if not evaluation_result.needs_revision:
-                    evaluation_result.needs_revision = True
-                unique_reasons = set(evaluation_result.reasons)
-                unique_reasons.add("Continuity issues detected")
-                evaluation_result.reasons = sorted(list(unique_reasons))
-
-            if repetition_problems:
-                evaluation_result.problems_found.extend(repetition_problems)
-                if not evaluation_result.needs_revision:
-                    evaluation_result.needs_revision = True
-                if "Repetition issues detected" not in evaluation_result.reasons:
-                    evaluation_result.reasons.append("Repetition issues detected")
-
-            needs_revision = evaluation_result.needs_revision
             if not needs_revision:
                 logger.info(
                     "NANA: Ch %s draft passed evaluation (Attempt %s). Text is considered good.",
@@ -613,8 +542,9 @@ class NANA_Orchestrator:
                 self._update_rich_display(
                     step=f"Ch {novel_chapter_number} - Passed Evaluation"
                 )
-                break
+                break  # Exit revision loop
 
+            # If revision is needed, mark as flawed and proceed
             is_from_flawed_source_for_kg = True
             logger.warning(
                 "NANA: Ch %s draft (Attempt %s) needs revision. Reasons: %s",
@@ -625,96 +555,40 @@ class NANA_Orchestrator:
             self._update_rich_display(
                 step=f"Ch {novel_chapter_number} - Revision Attempt {attempt}"
             )
+
+            # Perform revision
             (
-                revision_result,
-                revision_usage,
-            ) = await self.revision_manager.revise_chapter(
-                self.plot_outline,
-                await character_queries.get_character_profiles_from_db(),
-                await world_queries.get_world_building_from_db(),
                 current_text,
-                novel_chapter_number,
-                evaluation_result,
-                hybrid_context_for_draft,
-                chapter_plan,
-                revision_cycle=attempt - 1,
-                is_from_flawed_source=is_from_flawed_source_for_kg,
-                already_patched_spans=patched_spans,
+                current_raw_llm_output,
+                patched_spans,
+                revision_successful,
+                should_break_loop,
+            ) = await self._execute_and_process_revision(
+                novel_chapter_number=novel_chapter_number,
+                attempt=attempt,
+                current_text=current_text,
+                current_raw_llm_output=current_raw_llm_output,
+                evaluation_result=evaluation_result,
+                hybrid_context_for_draft=hybrid_context_for_draft,
+                chapter_plan=chapter_plan,
+                is_from_flawed_source_for_kg=is_from_flawed_source_for_kg,
+                patched_spans=patched_spans,
                 continuity_problems=continuity_problems,
             )
-            self._accumulate_tokens(
-                f"Ch{novel_chapter_number}-{Stage.REVISION.value}-Attempt{attempt}",
-                revision_usage,
-            )
-            if (
-                revision_result
-                and revision_result[0]
-                and len(revision_result[0]) > 50
-                and len(revision_result[0]) >= len(current_text) * 0.5
-            ):
-                new_text, rev_raw_output, patched_spans = revision_result
-                if new_text and new_text != current_text:
-                    new_embedding, prev_embedding = await asyncio.gather(
-                        llm_service.async_get_embedding(new_text),
-                        llm_service.async_get_embedding(current_text),
-                    )
-                    if new_embedding is not None and prev_embedding is not None:
-                        similarity = utils.numpy_cosine_similarity(
-                            prev_embedding,
-                            new_embedding,
-                        )
-                        if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
-                            logger.warning(
-                                "NANA: Ch %s revision attempt %s produced text too similar to previous (score: %.4f). Stopping revisions.",
-                                novel_chapter_number,
-                                attempt,
-                                similarity,
-                            )
-                            current_text = new_text
-                            current_raw_llm_output = (
-                                rev_raw_output or current_raw_llm_output
-                            )
-                            break
-                    current_text = new_text
-                    current_raw_llm_output = rev_raw_output or current_raw_llm_output
-                    logger.info(
-                        "NANA: Ch %s - Revision attempt %s successful. New text length: %s. Re-evaluating.",
-                        novel_chapter_number,
-                        attempt,
-                        len(current_text),
-                    )
-                    await self._save_debug_output(
-                        novel_chapter_number,
-                        f"revised_text_attempt_{attempt}",
-                        current_text,
-                    )
-                    revisions_made += 1
-                else:
-                    logger.error(
-                        "NANA: Ch %s - Revision attempt %s failed to produce usable text. Proceeding with previous draft, marked as flawed.",
-                        novel_chapter_number,
-                        attempt,
-                    )
-                    self._update_rich_display(
-                        step=f"Ch {novel_chapter_number} - Revision Failed (Retrying)"
-                    )
-                    revisions_made += 1
-                    needs_revision = True
-                    continue
-            else:
-                logger.error(
-                    "NANA: Ch %s - Revision attempt %s failed to produce usable text.",
-                    novel_chapter_number,
-                    attempt,
-                )
-                self._update_rich_display(
-                    step=f"Ch {novel_chapter_number} - Revision Failed (Retrying)"
-                )
-                revisions_made += 1
-                needs_revision = True
-                continue
 
+            if should_break_loop: # e.g. similarity break
+                break
+
+            if revision_successful:
+                revisions_made += 1
+            else: # Revision failed or didn't produce usable text
+                revisions_made += 1 # Still counts as an attempt
+                needs_revision = True # Ensure loop continues or hits max attempts
+                continue # Try next revision cycle
+
+        # After loop: Handle root cause analysis if still needs revision
         if needs_revision and last_eval_result is not None:
+            # This implies max revisions were hit, and the text still needs revision
             root_cause = self.revision_manager.identify_root_cause(
                 [p.model_dump() for p in last_eval_result.problems_found],
                 self.plot_outline,
@@ -723,20 +597,211 @@ class NANA_Orchestrator:
             )
             if root_cause:
                 logger.warning(
-                    "NANA: Ch %s - Root cause analysis: %s",
+                    "NANA: Ch %s - Root cause analysis after max revisions: %s",
                     novel_chapter_number,
                     root_cause,
                 )
                 lower_cause = root_cause.lower()
                 if "character profile" in lower_cause or "world element" in lower_cause:
                     await self.kg_maintainer_agent.heal_and_enrich_kg()
+        elif not needs_revision: # Passed evaluation
+            is_from_flawed_source_for_kg = False # Reset if it passed
 
         return (
             current_text,
             current_raw_llm_output,
-            is_from_flawed_source_for_kg,
+            is_from_flawed_source_for_kg, # This reflects the final state
             patched_spans,
         )
+
+    async def _execute_and_process_evaluation(
+        self,
+        novel_chapter_number: int,
+        attempt: int,
+        current_text: str,
+        plot_point_focus: str,
+        plot_point_index: int,
+        hybrid_context_for_draft: str,
+        patched_spans: list[tuple[int, int]],
+    ) -> tuple[EvaluationResult, list[ProblemDetail], bool]:
+        """Runs evaluation and processes the results, returning eval data and if revision is needed."""
+        (
+            eval_result_obj,
+            continuity_problems,
+            eval_usage,
+            continuity_usage,
+            repetition_problems,
+        ) = await self._run_evaluation_cycle(
+            novel_chapter_number,
+            attempt,
+            current_text,
+            plot_point_focus,
+            plot_point_index,
+            hybrid_context_for_draft,
+            patched_spans,
+        )
+
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-{Stage.EVALUATION.value}-Attempt{attempt}",
+            eval_usage,
+        )
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-{Stage.CONTINUITY_CHECK.value}-Attempt{attempt}",
+            continuity_usage,
+        )
+
+        if isinstance(eval_result_obj, EvaluationResult):
+            evaluation_result: EvaluationResult = eval_result_obj
+        else:
+            # Ensure evaluation_result is always an EvaluationResult instance
+            data = eval_result_obj or {}
+            evaluation_result = EvaluationResult(
+                needs_revision=data.get("needs_revision", False),
+                reasons=data.get("reasons", []),
+                problems_found=data.get("problems_found", []),
+                coherence_score=data.get("coherence_score"),
+                consistency_issues=data.get("consistency_issues"),
+                plot_deviation_reason=data.get("plot_deviation_reason"),
+                thematic_issues=data.get("thematic_issues"),
+                narrative_depth_issues=data.get("narrative_depth_issues"),
+            )
+
+        await self._save_debug_output(
+            novel_chapter_number,
+            f"evaluation_result_attempt_{attempt}",
+            evaluation_result,
+        )
+        await self._save_debug_output(
+            novel_chapter_number,
+            f"continuity_problems_attempt_{attempt}",
+            continuity_problems,
+        )
+        await self._save_debug_output(
+            novel_chapter_number,
+            f"repetition_problems_attempt_{attempt}",
+            repetition_problems,
+        )
+
+        if continuity_problems:
+            logger.warning(
+                "NANA: Ch %s (Attempt %s) - Consistency checker found %s issues.",
+                novel_chapter_number,
+                attempt,
+                len(continuity_problems),
+            )
+            evaluation_result.problems_found.extend(continuity_problems)
+            if not evaluation_result.needs_revision:
+                evaluation_result.needs_revision = True
+            unique_reasons = set(evaluation_result.reasons)
+            unique_reasons.add("Continuity issues detected")
+            evaluation_result.reasons = sorted(list(unique_reasons))
+
+        if repetition_problems:
+            evaluation_result.problems_found.extend(repetition_problems)
+            if not evaluation_result.needs_revision:
+                evaluation_result.needs_revision = True
+            if "Repetition issues detected" not in evaluation_result.reasons:
+                evaluation_result.reasons.append("Repetition issues detected")
+
+        return evaluation_result, continuity_problems, evaluation_result.needs_revision
+
+    async def _execute_and_process_revision(
+        self,
+        novel_chapter_number: int,
+        attempt: int,
+        current_text: str,
+        current_raw_llm_output: str | None,
+        evaluation_result: EvaluationResult,
+        hybrid_context_for_draft: str,
+        chapter_plan: list[SceneDetail] | None,
+        is_from_flawed_source_for_kg: bool, # Though not directly used, passed for consistency
+        patched_spans: list[tuple[int, int]],
+        continuity_problems: list[ProblemDetail],
+    ) -> tuple[str, str | None, list[tuple[int, int]], bool, bool]:
+        """
+        Executes a revision attempt and processes its outcome.
+
+        Returns:
+            A tuple containing:
+            - new_text: The revised text.
+            - new_raw_llm_output: The raw LLM output from revision.
+            - new_patched_spans: Updated list of patched spans.
+            - revision_successful: Boolean indicating if revision produced a change.
+            - should_break_loop: Boolean indicating if the revision loop should be exited (e.g., due to similarity).
+        """
+        revision_outcome, revision_usage = await self.revision_manager.revise_chapter(
+            self.plot_outline,
+            await character_queries.get_character_profiles_from_db(),
+            await world_queries.get_world_building_from_db(),
+            current_text,
+            novel_chapter_number,
+            evaluation_result,
+            hybrid_context_for_draft,
+            chapter_plan,
+            revision_cycle=attempt - 1,
+            is_from_flawed_source=is_from_flawed_source_for_kg,
+            already_patched_spans=patched_spans,
+            continuity_problems=continuity_problems,
+        )
+        self._accumulate_tokens(
+            f"Ch{novel_chapter_number}-{Stage.REVISION.value}-Attempt{attempt}",
+            revision_usage,
+        )
+
+        if (
+            revision_outcome
+            and revision_outcome[0]
+            and len(revision_outcome[0]) > 50
+            and len(revision_outcome[0]) >= len(current_text) * 0.5
+        ):
+            new_text, rev_raw_output, new_patched_spans = revision_outcome
+            if new_text and new_text != current_text:
+                new_embedding, prev_embedding = await asyncio.gather(
+                    llm_service.async_get_embedding(new_text),
+                    llm_service.async_get_embedding(current_text),
+                )
+                if new_embedding is not None and prev_embedding is not None:
+                    similarity = utils.numpy_cosine_similarity(
+                        prev_embedding, new_embedding
+                    )
+                    if similarity > settings.REVISION_SIMILARITY_ACCEPTANCE:
+                        logger.warning(
+                            "NANA: Ch %s revision attempt %s produced text too similar to previous (score: %.4f). Stopping revisions.",
+                            novel_chapter_number,
+                            attempt,
+                            similarity,
+                        )
+                        # Accept the similar text but signal to break the loop
+                        return new_text, rev_raw_output or current_raw_llm_output, new_patched_spans, True, True
+
+                logger.info(
+                    "NANA: Ch %s - Revision attempt %s successful. New text length: %s. Re-evaluating.",
+                    novel_chapter_number,
+                    attempt,
+                    len(new_text),
+                )
+                await self._save_debug_output(
+                    novel_chapter_number,
+                    f"revised_text_attempt_{attempt}",
+                    new_text,
+                )
+                return new_text, rev_raw_output or current_raw_llm_output, new_patched_spans, True, False
+            else:  # Revision produced same text or empty text
+                logger.error(
+                    "NANA: Ch %s - Revision attempt %s did not change text or produced empty. Proceeding with previous draft, marked as flawed.",
+                    novel_chapter_number,
+                    attempt,
+                )
+                # No change, but counts as an attempt. Return original text. Loop continues.
+                return current_text, current_raw_llm_output, patched_spans, False, False
+        else:  # Revision failed to produce usable text
+            logger.error(
+                "NANA: Ch %s - Revision attempt %s failed to produce usable text. Proceeding with previous draft.",
+                novel_chapter_number,
+                attempt,
+            )
+            # Revision failed. Return original text. Loop continues.
+            return current_text, current_raw_llm_output, patched_spans, False, False
 
     async def _deduplicate_post_revision(
         self,
