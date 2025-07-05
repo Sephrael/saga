@@ -56,7 +56,7 @@ def initialize_new_character_profile(
 
 
 def _merge_traits(
-    profile_traits: list[str], update_traits: list[Any]
+    profile_traits: list[str], update_traits: list[any]
 ) -> list[str] | None:
     """Merges trait lists and returns new list if changed, else None."""
     new_traits_set = set(profile_traits)
@@ -71,7 +71,7 @@ def _merge_traits(
 
 
 def _merge_relationships(
-    profile_relationships: dict[str, str], update_relationships: dict[Any, Any]
+    profile_relationships: dict[str, str], update_relationships: dict[any, any]
 ) -> bool:
     """Merges relationship dicts. Returns True if changed."""
     modified = False
@@ -86,8 +86,8 @@ def _merge_relationships(
 
 def _merge_generic_attributes(
     profile: CharacterProfile,
-    update_data: dict[str, Any],
-    existing_profile_dict: dict[str, Any],
+    update_data: dict[str, any],
+    existing_profile_dict: dict[str, any],
 ) -> bool:
     """Merges generic string attributes. Returns True if modified."""
     modified = False

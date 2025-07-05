@@ -766,7 +766,7 @@ class NANA_Orchestrator:
             "NANA: Total LLM tokens generated this run: %s",
                 self.token_manager.get_total_tokens_generated_this_run(),
         )
-            self.token_manager._update_rich_display(chapter_num=self.state_manager.get_chapter_count(), step="Run Finished")
+        self.token_manager._update_rich_display(chapter_num=self.state_manager.get_chapter_count(), step="Run Finished")
 
     # _setup_and_prepare_run is now effectively self.initialization_service.setup_and_prepare_run()
     # async def _setup_and_prepare_run(self) -> bool:

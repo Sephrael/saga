@@ -219,11 +219,10 @@ class InitializationService:
 import utils
 from orchestration.token_accountant import Stage # For GENESIS_PHASE
 
-```python
+
 # Potential future location for is_fill_in if it needs to be shared
 # in, for example, utils/text_utils.py
-# def is_fill_in(value: Any) -> bool:
-#     if isinstance(value, str):
-#         return value.strip().lower() in ["[fill in]", "[to be determined]", "tbd"]
-#     return False
-```
+#def is_fill_in(value: any) -> bool:
+#    if isinstance(value, str):
+#        return value.strip().lower() in ["[fill in]", "[to be determined]", "tbd"]
+#    return False
