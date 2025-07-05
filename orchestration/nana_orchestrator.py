@@ -1,9 +1,8 @@
 # orchestration/nana_orchestrator.py
 """Primary orchestrator coordinating all SAGA agent interactions."""
 
-import asyncio
 import time  # For Rich display updates
-from typing import Any, Awaitable # Using typing.Awaitable
+from typing import Any
 
 import structlog
 import utils
@@ -24,14 +23,8 @@ from config import settings
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from core.usage import TokenUsage
-from data_access import (
-    chapter_repository,
-    character_queries,
-    plot_queries,
-    world_queries,
-)
+from data_access import chapter_repository
 from ingestion.ingestion_manager import IngestionManager
-from initialization.data_loader import convert_model_to_objects
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
 from kg_maintainer.models import (
@@ -52,8 +45,9 @@ from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
 from orchestration.chapter_generation_runner import ChapterGenerationRunner
 from orchestration.knowledge_service import KnowledgeService
+
 # KnowledgeCache is now primarily managed by StateManagementService
-from orchestration.models import RevisionOutcome
+from orchestration.models import KnowledgeCache, RevisionOutcome
 from orchestration.output_service import OutputService
 from orchestration.services.state_management_service import StateManagementService
 from orchestration.services.token_management_service import TokenManagementService
@@ -62,7 +56,9 @@ from orchestration.services.evaluation_revision_service import EvaluationRevisio
 from orchestration.services.initialization_service import InitializationService
 from orchestration.prerequisite_service import PrerequisiteService
 from orchestration.service_layer import ChapterServiceLayer
-from orchestration.token_accountant import Stage # TokenAccountant is now in TokenManagementService
+from orchestration.token_accountant import (
+    Stage,
+)  # TokenAccountant is now in TokenManagementService
 
 logger = structlog.get_logger(__name__)
 
@@ -86,30 +82,110 @@ class NANA_Orchestrator:
             finalize_agent=self.finalize_agent,
         )
 
-        self.context_service = create_context_service() # Independent of other orchestrator services for its __init__
-        self.deduplication_service = DeduplicationService() # Independent for its __init__
+        self.context_service = (
+            create_context_service()
+        )  # Independent of other orchestrator services for its __init__
+        self.deduplication_service = (
+            DeduplicationService()
+        )  # Independent for its __init__
 
         # Initialize display and token_manager early as they are needed by many services
         self.display = RichDisplayManager()
-        self.run_start_time: float = 0.0 # TokenManagementService will read this
-        self.token_manager = TokenManagementService(self.display, self) # Pass display manager and self
+        self.run_start_time: float = 0.0  # TokenManagementService will read this
+        self.token_manager = TokenManagementService(
+            self.display, self
+        )  # Pass display manager and self
 
         # Initialize services that manage state or specific functionalities
         # Note: Potential circular dependency between KnowledgeService and StateManagementService
         # if their __init__ methods immediately access each other via the orchestrator instance.
-        self.knowledge_service = KnowledgeService(self) # Depends on orchestrator instance (for other services like token_manager)
-        self.state_manager = StateManagementService(self) # Manages plot_outline, chapter_count, etc. (depends on KS, TM)
+        self.knowledge_service = KnowledgeService(
+            self
+        )  # Depends on orchestrator instance (for other services like token_manager)
+        self.state_manager = StateManagementService(
+            self
+        )  # Manages plot_outline, chapter_count, etc. (depends on KS, TM)
         # knowledge_cache is now accessed via self.state_manager.knowledge_cache
 
-        self.output_service = OutputService(self) # Depends on TM, SM
-        self.prerequisite_service = PrerequisiteService(self) # Depends on TM, SM
-        self.evaluation_revision_service = EvaluationRevisionService(self) # Depends on TM, SM, OS
+        self.output_service = OutputService(self)  # Depends on TM, SM
+        self.prerequisite_service = PrerequisiteService(self)  # Depends on TM, SM
+        self.evaluation_revision_service = EvaluationRevisionService(
+            self
+        )  # Depends on TM, SM, OS
 
         # InitializationService needs references to orchestrator and other services.
-        self.initialization_service = InitializationService(self) # Depends on SM, TM, display
+        self.initialization_service = InitializationService(
+            self
+        )  # Depends on SM, TM, display
 
         utils.load_spacy_model_if_needed()
         logger.info("NANA Orchestrator initialized.")
+
+    # ------------------------------------------------------------------
+    # Properties delegating to StateManagementService for backward
+    # compatibility with the previous orchestrator API.
+    # ------------------------------------------------------------------
+
+    @property
+    def plot_outline(self) -> PlotOutline:
+        """Return the current plot outline."""
+        return self.state_manager.get_plot_outline()
+
+    @plot_outline.setter
+    def plot_outline(self, value: PlotOutline) -> None:
+        self.state_manager.set_plot_outline(value)
+
+    @property
+    def chapter_count(self) -> int:
+        return self.state_manager.get_chapter_count()
+
+    @chapter_count.setter
+    def chapter_count(self, value: int) -> None:
+        self.state_manager.set_chapter_count(value)
+
+    @property
+    def next_chapter_context(self) -> str | None:
+        return self.state_manager.get_next_chapter_context()
+
+    @next_chapter_context.setter
+    def next_chapter_context(self, value: str | None) -> None:
+        self.state_manager.set_next_chapter_context(value)
+
+    @property
+    def pending_fill_ins(self) -> list[str]:
+        return self.state_manager.get_pending_fill_ins()
+
+    @pending_fill_ins.setter
+    def pending_fill_ins(self, value: list[str]) -> None:
+        self.state_manager.pending_fill_ins = value
+
+    @property
+    def missing_references(self) -> dict[str, set[str]]:
+        return self.state_manager.get_missing_references()
+
+    @property
+    def last_chapter_end_state(self) -> ChapterEndState | None:
+        return self.state_manager.get_last_chapter_end_state()
+
+    @property
+    def chapter_zero_end_state(self) -> ChapterEndState | None:
+        return self.state_manager.get_chapter_zero_end_state()
+
+    @property
+    def knowledge_cache(self) -> KnowledgeCache:
+        return self.state_manager.get_knowledge_cache()
+
+    @knowledge_cache.setter
+    def knowledge_cache(self, value: KnowledgeCache) -> None:
+        self.state_manager.knowledge_cache = value
+
+    @property
+    def completed_plot_points(self) -> set[str]:
+        return self.state_manager.get_completed_plot_points()
+
+    @completed_plot_points.setter
+    def completed_plot_points(self, value: set[str]) -> None:
+        self.state_manager.completed_plot_points = value
 
     def _update_rich_display(
         self, chapter_num: int | None = None, step: str | None = None
@@ -118,11 +194,16 @@ class NANA_Orchestrator:
         self.token_manager._update_rich_display(chapter_num=chapter_num, step=step)
 
     def _accumulate_tokens(
-        self, stage: str | Stage, usage_data: dict[str, int] | TokenUsage | None,
-        chapter_num: int | None = None, current_step_for_display: str | None = None
+        self,
+        stage: str | Stage,
+        usage_data: dict[str, int] | TokenUsage | None,
+        chapter_num: int | None = None,
+        current_step_for_display: str | None = None,
     ) -> None:
         """Delegates token accumulation and display updates to TokenManagementService."""
-        self.token_manager.accumulate_tokens(stage, usage_data, chapter_num, current_step_for_display)
+        self.token_manager.accumulate_tokens(
+            stage, usage_data, chapter_num, current_step_for_display
+        )
         # total_tokens_generated_this_run is now managed by token_manager
 
     async def _generate_plot_points_from_kg(self, count: int) -> None:
@@ -159,17 +240,22 @@ class NANA_Orchestrator:
         self.token_manager._update_rich_display(step="Performing Initial Setup")
         logger.info("NANA performing initial setup...")
         (
-            self.plot_outline, # This self.plot_outline is from run_genesis_phase, will be set in state_manager
+            self.plot_outline,  # This self.plot_outline is from run_genesis_phase, will be set in state_manager
             character_profiles,
             world_building,
             usage,
-        ) = await run_genesis_phase() # This function likely needs to update the state_manager's plot_outline
-        self._accumulate_tokens(Stage.GENESIS_PHASE, usage, current_step_for_display="Genesis State Bootstrapped")
+        ) = (
+            await run_genesis_phase()
+        )  # This function likely needs to update the state_manager's plot_outline
+        self._accumulate_tokens(
+            Stage.GENESIS_PHASE,
+            usage,
+            current_step_for_display="Genesis State Bootstrapped",
+        )
 
         # After run_genesis_phase, plot_outline is set. We need to update the state_manager's copy.
         # Assuming run_genesis_phase returns the plot_outline object
         self.state_manager.set_plot_outline(self.plot_outline)
-
 
         plot_source = self.state_manager.get_plot_outline().get("source", "unknown")
         logger.info(
@@ -188,9 +274,11 @@ class NANA_Orchestrator:
         current_kc.world = world_building
         # refresh_knowledge_cache will internally update state_manager's cache from knowledge_service
         await self.state_manager.refresh_knowledge_cache()
-        self.state_manager._update_novel_props_cache() # Uses knowledge_service via state_manager
+        self.state_manager._update_novel_props_cache()  # Uses knowledge_service via state_manager
         logger.info("   Initial plot, character, and world data saved to Neo4j.")
-        self.token_manager._update_rich_display(step="Initial State Saved") # Keep this specific update
+        self.token_manager._update_rich_display(
+            step="Initial State Saved"
+        )  # Keep this specific update
 
         await self.state_manager.refresh_plot_outline()
         if neo4j_manager.driver is not None:
@@ -209,7 +297,9 @@ class NANA_Orchestrator:
             1,
             None,
             (
-                {"chapter_zero_end_state": self.state_manager.get_chapter_zero_end_state()}
+                {
+                    "chapter_zero_end_state": self.state_manager.get_chapter_zero_end_state()
+                }
                 if self.state_manager.get_chapter_zero_end_state()
                 else None
             ),
@@ -236,7 +326,10 @@ class NANA_Orchestrator:
         )
 
     async def perform_deduplication(
-        self, text_to_dedup: str, chapter_number: int, context_description: str = "general"
+        self,
+        text_to_dedup: str,
+        chapter_number: int,
+        context_description: str = "general",
     ) -> tuple[str, int]:
         """Delegates deduplication to the DeduplicationService."""
         return await self.deduplication_service.perform_deduplication(
@@ -257,7 +350,7 @@ class NANA_Orchestrator:
     # _execute_and_process_evaluation, _execute_and_process_revision,
     # _check_revision_similarity, _handle_max_revisions_reached
 
-    async def _run_revision_loop( # Signature changed to match the new call from _process_and_revise_draft
+    async def _run_revision_loop(  # Signature changed to match the new call from _process_and_revise_draft
         self,
         novel_chapter_number: int,
         current_text_to_process: str,
@@ -279,14 +372,14 @@ class NANA_Orchestrator:
 
         return await self.evaluation_revision_service.run_revision_loop(
             novel_chapter_number=novel_chapter_number,
-            initial_text_to_process=current_text_to_process, # Pass the prepared text
+            initial_text_to_process=current_text_to_process,  # Pass the prepared text
             initial_raw_llm_output=current_raw_llm_output,
             plot_point_focus=plot_point_focus,
             plot_point_index=plot_point_index,
             hybrid_context_for_draft=hybrid_context_for_draft,
             chapter_plan=chapter_plan,
             initial_patched_spans=initial_patched_spans,
-            initial_is_flawed=is_from_flawed_source_for_kg, # Pass current flaw status
+            initial_is_flawed=is_from_flawed_source_for_kg,  # Pass current flaw status
             plot_outline=plot_outline,
         )
 
@@ -294,7 +387,7 @@ class NANA_Orchestrator:
     async def _handle_no_evaluation_fast_path(
         self,
         novel_chapter_number: int,
-        initial_text: str, # This is the original, non-deduped text
+        initial_text: str,  # This is the original, non-deduped text
         initial_raw_llm_text: str | None,
     ) -> tuple[str, str | None, bool] | None:
         """Return early with deduplicated text when evaluation is disabled."""
@@ -305,15 +398,15 @@ class NANA_Orchestrator:
             logger.info(
                 f"NANA: Ch {novel_chapter_number} - All evaluation agents disabled. Applying de-duplication and finalizing draft."
             )
-            self.token_manager._update_rich_display( # Specific step update
+            self.token_manager._update_rich_display(  # Specific step update
                 chapter_num=novel_chapter_number,
-                step=f"Ch {novel_chapter_number} - Skipping Revisions (disabled)"
+                step=f"Ch {novel_chapter_number} - Skipping Revisions (disabled)",
             )
             # Deduplication happens here for the fast path
             deduplicated_text, removed_char_count = await self.perform_deduplication(
-                initial_text, # Use the original initial_text for this path
+                initial_text,  # Use the original initial_text for this path
                 novel_chapter_number,
-                context_description="no_eval_fast_path"
+                context_description="no_eval_fast_path",
             )
             is_flawed = removed_char_count > 0
             if is_flawed:
@@ -334,9 +427,9 @@ class NANA_Orchestrator:
         text: str | None,
     ) -> tuple[str | None, bool]:
         """Deduplicate text after drafting and log results."""
-        self.token_manager._update_rich_display( # Specific step update
+        self.token_manager._update_rich_display(  # Specific step update
             chapter_num=novel_chapter_number,
-            step=f"Ch {novel_chapter_number} - Post-Draft De-duplication"
+            step=f"Ch {novel_chapter_number} - Post-Draft De-duplication",
         )
         logger.info(
             f"NANA: Ch {novel_chapter_number} - Applying post-draft de-duplication."
@@ -344,7 +437,9 @@ class NANA_Orchestrator:
         if text is None:
             return None, False
         # Context "post_draft" or "initial_draft_dedup"
-        deduped, removed = await self.perform_deduplication(text, novel_chapter_number, "post_draft_initial")
+        deduped, removed = await self.perform_deduplication(
+            text, novel_chapter_number, "post_draft_initial"
+        )
         if removed > 0:
             await self._save_debug_output(
                 novel_chapter_number,
@@ -388,9 +483,7 @@ class NANA_Orchestrator:
             dedup_text_after_rev,
             removed_after_rev,
         ) = await self.perform_deduplication(
-            text,
-            novel_chapter_number,
-            "post_revision"
+            text, novel_chapter_number, "post_revision"
         )
         if removed_after_rev > 0:
             logger.info(
@@ -440,12 +533,12 @@ class NANA_Orchestrator:
         )
         initial_draft_text = result.text
         initial_raw_llm_text = result.raw_llm_output
-        draft_usage = result.usage # Assuming DraftResult includes usage
+        draft_usage = result.usage  # Assuming DraftResult includes usage
         self._accumulate_tokens(
             Stage.DRAFTING,  # Simpler stage name
             draft_usage,
             chapter_num=novel_chapter_number,
-            current_step_for_display=f"Ch {novel_chapter_number} - Drafted"
+            current_step_for_display=f"Ch {novel_chapter_number} - Drafted",
         )
 
         if not initial_draft_text:
@@ -457,12 +550,16 @@ class NANA_Orchestrator:
                 "initial_draft_fail_raw_llm",
                 initial_raw_llm_text or "Drafting Agent returned None for raw output.",
             )
-            return DraftResult(text=None, raw_llm_output=None)
+            return DraftResult(text=None, raw_llm_output=None, usage=draft_usage)
 
         await self._save_debug_output(
             novel_chapter_number, "initial_draft", initial_draft_text
         )
-        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
+        return DraftResult(
+            text=initial_draft_text,
+            raw_llm_output=initial_raw_llm_text,
+            usage=draft_usage,
+        )
 
     async def _process_and_revise_draft(
         self,
@@ -594,9 +691,9 @@ class NANA_Orchestrator:
             logger.error(
                 f"NANA: Cannot write Ch {novel_chapter_number}: Plot outline or critical plot data missing."
             )
-            self.token_manager._update_rich_display( # Specific step update
+            self.token_manager._update_rich_display(  # Specific step update
                 chapter_num=novel_chapter_number,
-                step=f"Ch {novel_chapter_number} Failed - Missing Plot Outline"
+                step=f"Ch {novel_chapter_number} Failed - Missing Plot Outline",
             )
             return False
         return True
@@ -613,9 +710,9 @@ class NANA_Orchestrator:
         fill_in_context = prereq_result.fill_in_context
 
         if plot_point_focus is None or hybrid_context_for_draft is None:
-            self.token_manager._update_rich_display( # Specific step update
+            self.token_manager._update_rich_display(  # Specific step update
                 chapter_num=novel_chapter_number,
-                step=f"Ch {novel_chapter_number} Failed - Prerequisites Incomplete"
+                step=f"Ch {novel_chapter_number} Failed - Prerequisites Incomplete",
             )
             return None
         return PrerequisiteData(
@@ -634,12 +731,16 @@ class NANA_Orchestrator:
         initial_draft_text = draft_result.text
         initial_raw_llm_text = draft_result.raw_llm_output
         if initial_draft_text is None:
-            self.token_manager._update_rich_display( # Specific step update
+            self.token_manager._update_rich_display(  # Specific step update
                 chapter_num=novel_chapter_number,
-                step=f"Ch {novel_chapter_number} Failed - No Initial Draft"
+                step=f"Ch {novel_chapter_number} Failed - No Initial Draft",
             )
             return None
-        return DraftResult(text=initial_draft_text, raw_llm_output=initial_raw_llm_text)
+        return DraftResult(
+            text=initial_draft_text,
+            raw_llm_output=initial_raw_llm_text,
+            usage=draft_result.usage,
+        )
 
     async def _process_revision_result(
         self,
@@ -650,9 +751,9 @@ class NANA_Orchestrator:
         processed_raw_llm = revision_result.raw_llm_output
         is_flawed = revision_result.is_flawed
         if processed_text is None:
-            self.token_manager._update_rich_display( # Specific step update
+            self.token_manager._update_rich_display(  # Specific step update
                 chapter_num=novel_chapter_number,
-                step=f"Ch {novel_chapter_number} Failed - Revision/Processing Error"
+                step=f"Ch {novel_chapter_number} Failed - Revision/Processing Error",
             )
             return None
         return RevisionOutcome(
@@ -677,7 +778,9 @@ class NANA_Orchestrator:
             combined_fill_ins.extend(pending_fill_ins_from_state)
             self.state_manager.clear_pending_fill_ins()
         if fill_in_context:
-            combined_fill_ins.append(fill_in_context) # This could also be managed by state_manager if needed
+            combined_fill_ins.append(
+                fill_in_context
+            )  # This could also be managed by state_manager if needed
 
         final_text_result, end_state = await self._finalize_and_save_chapter(
             novel_chapter_number,
@@ -723,17 +826,17 @@ class NANA_Orchestrator:
             logger.info(
                 f"=== NANA: Finished Novel Chapter {novel_chapter_number} - {status_message} ==="
             )
-            self.token_manager._update_rich_display( # Specific step update
-                chapter_num=novel_chapter_number, # Pass chapter_num here
-                step=f"Ch {novel_chapter_number} - {status_message}"
+            self.token_manager._update_rich_display(  # Specific step update
+                chapter_num=novel_chapter_number,  # Pass chapter_num here
+                step=f"Ch {novel_chapter_number} - {status_message}",
             )
         else:
             logger.error(
                 f"=== NANA: Failed Novel Chapter {novel_chapter_number} - Finalization/Save Error ==="
             )
-            self.token_manager._update_rich_display( # Specific step update
-                chapter_num=novel_chapter_number, # Pass chapter_num here
-                step=f"Ch {novel_chapter_number} Failed - Finalization Error"
+            self.token_manager._update_rich_display(  # Specific step update
+                chapter_num=novel_chapter_number,  # Pass chapter_num here
+                step=f"Ch {novel_chapter_number} Failed - Finalization Error",
             )
         return
 
@@ -766,9 +869,11 @@ class NANA_Orchestrator:
         )
         logger.info(
             "NANA: Total LLM tokens generated this run: %s",
-                self.token_manager.get_total_tokens_generated_this_run(),
+            self.token_manager.get_total_tokens_generated_this_run(),
         )
-        self.token_manager._update_rich_display(chapter_num=self.state_manager.get_chapter_count(), step="Run Finished")
+        self.token_manager._update_rich_display(
+            chapter_num=self.state_manager.get_chapter_count(), step="Run Finished"
+        )
 
     # _setup_and_prepare_run is now effectively self.initialization_service.setup_and_prepare_run()
     # async def _setup_and_prepare_run(self) -> bool:
@@ -782,9 +887,11 @@ class NANA_Orchestrator:
             # InitializationService logs errors and updates display for critical failures.
             # It will also handle stopping the display if needed for some critical config errors.
             # Ensure display is stopped if not already by a critical error handler in init service.
-            if self.display.live and self.display.live.is_started: # Check if Rich Live instance is active
+            if (
+                self.display.live and self.display.live.is_started
+            ):  # Check if Rich Live instance is active
                 await self.display.stop()
-            await self.shutdown() # Ensure services are shut down
+            await self.shutdown()  # Ensure services are shut down
             return
 
         # Display should have been started by InitializationService if setup was successful.
@@ -796,7 +903,9 @@ class NANA_Orchestrator:
                 exc,
                 exc_info=True,
             )
-            self.token_manager._update_rich_display(step="Critical Error in Main Loop") # Use token_manager
+            self.token_manager._update_rich_display(
+                step="Critical Error in Main Loop"
+            )  # Use token_manager
         finally:
             await self.display.stop()
             await self.shutdown()
@@ -811,14 +920,15 @@ class NANA_Orchestrator:
             # display.update_basic might be better if display isn't fully live
             self.display.update_basic(step="Critical Config Error - Halting Ingestion")
             await self.display.stop()
-            await self.shutdown() # Ensure services are shut down
+            await self.shutdown()  # Ensure services are shut down
             return
 
         # Initialize run time and start display for ingestion specifically
-        self.token_manager.set_run_start_time(time.time()) # Set run time via token manager
+        self.token_manager.set_run_start_time(
+            time.time()
+        )  # Set run time via token manager
         self.display.start()
         self.token_manager._update_rich_display(step="Ingestion Process Started")
-
 
         manager = IngestionManager(
             finalize_agent=self.finalize_agent,
@@ -837,7 +947,9 @@ class NANA_Orchestrator:
             )
 
         # chapter_count is managed by state_manager, refresh it
-        self.state_manager.set_chapter_count(await chapter_repository.load_chapter_count())
+        self.state_manager.set_chapter_count(
+            await chapter_repository.load_chapter_count()
+        )
         await self.display.stop()
         await self.shutdown()
         logger.info("NANA: Ingestion process completed.")

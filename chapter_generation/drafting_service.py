@@ -14,15 +14,17 @@ from models import SceneDetail
 
 @dataclass
 class DraftResult:
-    """Initial draft and raw output from the DraftingAgent."""
+    """Initial draft, raw output, and token usage from the DraftingAgent."""
 
     text: str | None
     raw_llm_output: str | None
+    usage: dict[str, int] | None
 
-    def __iter__(self) -> Iterable[str | None]:
+    def __iter__(self) -> Iterable[str | None | dict[str, int] | None]:
         """Allow tuple-style unpacking of the draft result."""
         yield self.text
         yield self.raw_llm_output
+        yield self.usage
 
 
 class DraftingService:
@@ -41,11 +43,11 @@ class DraftingService:
     ) -> DraftResult:
         """Return a draft for the specified chapter."""
 
-        text, raw, _ = await self.agent.draft_chapter(
+        text, raw, usage = await self.agent.draft_chapter(
             plot_outline,
             chapter_number,
             plot_point_focus,
             hybrid_context_for_draft,
             chapter_plan,
         )
-        return DraftResult(text=text, raw_llm_output=raw)
+        return DraftResult(text=text, raw_llm_output=raw, usage=usage)
