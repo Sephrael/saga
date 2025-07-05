@@ -86,25 +86,27 @@ class NANA_Orchestrator:
             finalize_agent=self.finalize_agent,
         )
 
-        self.context_service = create_context_service()
+        self.context_service = create_context_service() # Independent of other orchestrator services for its __init__
+        self.deduplication_service = DeduplicationService() # Independent for its __init__
 
-        # Initialize services that manage state or specific functionalities
-        self.knowledge_service = KnowledgeService(self) # Depends on orchestrator instance
-        self.state_manager = StateManagementService(self) # Manages plot_outline, chapter_count, etc.
-        # knowledge_cache is now accessed via self.state_manager.knowledge_cache
-
-        self.output_service = OutputService(self)
-        self.prerequisite_service = PrerequisiteService(self)
-        self.deduplication_service = DeduplicationService()
-        self.evaluation_revision_service = EvaluationRevisionService(self)
-        # InitializationService needs references to orchestrator and other services,
-        # so it's initialized after them or those refs are passed carefully.
-        # For now, pass self (orchestrator) to its constructor.
-        self.initialization_service = InitializationService(self)
-
+        # Initialize display and token_manager early as they are needed by many services
         self.display = RichDisplayManager()
         self.run_start_time: float = 0.0 # TokenManagementService will read this
         self.token_manager = TokenManagementService(self.display, self) # Pass display manager and self
+
+        # Initialize services that manage state or specific functionalities
+        # Note: Potential circular dependency between KnowledgeService and StateManagementService
+        # if their __init__ methods immediately access each other via the orchestrator instance.
+        self.knowledge_service = KnowledgeService(self) # Depends on orchestrator instance (for other services like token_manager)
+        self.state_manager = StateManagementService(self) # Manages plot_outline, chapter_count, etc. (depends on KS, TM)
+        # knowledge_cache is now accessed via self.state_manager.knowledge_cache
+
+        self.output_service = OutputService(self) # Depends on TM, SM
+        self.prerequisite_service = PrerequisiteService(self) # Depends on TM, SM
+        self.evaluation_revision_service = EvaluationRevisionService(self) # Depends on TM, SM, OS
+
+        # InitializationService needs references to orchestrator and other services.
+        self.initialization_service = InitializationService(self) # Depends on SM, TM, display
 
         utils.load_spacy_model_if_needed()
         logger.info("NANA Orchestrator initialized.")
@@ -780,7 +782,7 @@ class NANA_Orchestrator:
             # InitializationService logs errors and updates display for critical failures.
             # It will also handle stopping the display if needed for some critical config errors.
             # Ensure display is stopped if not already by a critical error handler in init service.
-            if self.display.is_live: # Check if display is active before stopping
+            if self.display.live and self.display.live.is_started: # Check if Rich Live instance is active
                 await self.display.stop()
             await self.shutdown() # Ensure services are shut down
             return
