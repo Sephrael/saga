@@ -40,8 +40,7 @@ def load_yaml_file(filepath: str, normalize_keys: bool = True) -> dict[str, Any]
         A dictionary representing the YAML content, or None if an error occurs.
     """
     if not filepath.endswith((".yaml", ".yml")):
-        logger.error(f"File specified is not a YAML file: {filepath}")
-        return None
+        raise ValueError(f"File specified is not a YAML file: {filepath}")
     try:
         with open(filepath, encoding="utf-8") as f:
             content = yaml.safe_load(f)
