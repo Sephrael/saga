@@ -1,4 +1,6 @@
 # ui/rich_display.py
+"""Progress display utilities using the Rich library."""
+
 from __future__ import annotations
 
 import asyncio
