@@ -47,6 +47,8 @@ config.py            # Configuration via Pydantic
 - Lint with `ruff check .` and type check with `mypy .`
 - Run tests and linters for any change that modifies code
 - Documentation or comment-only changes may skip tests and linters
+- Complexity analysis runs in CI via `python complexity_report.py`; the workflow
+  fails if `radon` exits with a non-zero status
 
 ## Pull Request Guidelines
 - Title format: `[COMPONENT] Brief description`
