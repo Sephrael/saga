@@ -17,7 +17,14 @@ from kg_constants import (
 logger = structlog.get_logger(__name__)
 
 # Lookup table for canonical node labels to ensure consistent casing
+
 _CANONICAL_NODE_LABEL_MAP: dict[str, str] = {lbl.lower(): lbl for lbl in NODE_LABELS}
+
+
+def _normalize_name_for_similarity(name: str) -> str:
+    """Return a lowercase alphanumeric string for similarity checks."""
+
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 def _to_pascal_case(text: str) -> str:
@@ -549,12 +556,22 @@ async def find_candidate_duplicate_entities(
     candidates: list[dict[str, Any]] = []
 
     for i, e1 in enumerate(entities):
+        name1_norm = _normalize_name_for_similarity(e1["name"])
+        labels1 = {lbl for lbl in e1["labels"] if lbl != "Entity"}
+        if not name1_norm:
+            continue
+
         for e2 in entities[i + 1 :]:
-            max_len = max(len(e1["name"]), len(e2["name"]))
-            if max_len == 0:
+            labels2 = {lbl for lbl in e2["labels"] if lbl != "Entity"}
+            if not labels1.intersection(labels2):
                 continue
-            similarity = SequenceMatcher(None, e1["name"], e2["name"]).ratio()
-            if similarity >= similarity_threshold:
+
+            name2_norm = _normalize_name_for_similarity(e2["name"])
+            if not name2_norm:
+                continue
+
+            similarity = SequenceMatcher(None, name1_norm, name2_norm).ratio()
+            if similarity >= similarity_threshold or name1_norm == name2_norm:
                 candidates.append(
                     {
                         "id1": e1["id"],
@@ -564,6 +581,7 @@ async def find_candidate_duplicate_entities(
                         "name2": e2["name"],
                         "labels2": e2["labels"],
                         "similarity": similarity,
+                        "exact_match": name1_norm == name2_norm,
                     }
                 )
 
