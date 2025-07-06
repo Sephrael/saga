@@ -1,3 +1,4 @@
+# tests/test_prompt_names.py
 import pytest
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from core.llm_interface import llm_service

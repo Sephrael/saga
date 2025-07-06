@@ -1,3 +1,4 @@
+# tests/test_merge.py
 from kg_maintainer import (
     CharacterProfile,
     WorldItem,

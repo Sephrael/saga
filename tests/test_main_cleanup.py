@@ -1,3 +1,4 @@
+# tests/test_main_cleanup.py
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

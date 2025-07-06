@@ -1,3 +1,4 @@
+# processing/patch/__init__.py
 """Patch generation utilities."""
 
 from typing import Any
