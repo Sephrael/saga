@@ -156,7 +156,7 @@ class WorldPersistenceService:
             == "provisional_from_unrevised_draft",
         }
         for key, val in overview_details.items():
-            if isinstance(val, (str, int, float, bool)) and key not in wc_props:
+            if isinstance(val, str | int | float | bool) and key not in wc_props:
                 wc_props[key] = val
         return [
             (
@@ -214,7 +214,7 @@ class WorldPersistenceService:
 
         for key, val in details.items():
             if (
-                isinstance(val, (str, int, float, bool))
+                isinstance(val, str | int | float | bool)
                 and key not in we_props  # Avoid overwriting already set core properties
                 and not key.startswith(kg_keys.ELABORATION_PREFIX)
                 and not key.startswith(kg_keys.ADDED_PREFIX)
