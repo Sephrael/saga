@@ -915,8 +915,8 @@ class NANA_Orchestrator:
         # Use InitializationService for critical config validation and basic setup
         # We don't need the full `setup_and_prepare_run` as genesis phase isn't run for ingestion.
         if not self.initialization_service._validate_critical_configs():
-            # display.update_basic might be better if display isn't fully live
-            self.display.update_basic(step="Critical Config Error - Halting Ingestion")
+            # Use basic update when display may not be fully live
+            self.display.update(step="Critical Config Error - Halting Ingestion")
             await self.display.stop()
             await self.shutdown()  # Ensure services are shut down
             return

@@ -152,7 +152,8 @@ class StateManagementService:
 
         if novel_chapter_number % settings.PLOT_POINT_CHAPTER_SPAN == 0:
             pp_focus, pp_index = get_plot_point_info(
-                self.plot_outline, novel_chapter_number
+                self.plot_outline.model_dump(),
+                novel_chapter_number,
             )
             if pp_focus is not None and pp_index >= 0:
                 await plot_queries.mark_plot_point_completed(pp_index)

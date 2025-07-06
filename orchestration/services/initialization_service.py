@@ -9,6 +9,9 @@ from chapter_generation import ContextProfileName
 from config import settings
 from core.db_manager import neo4j_manager
 from initialization.genesis import run_genesis_phase
+from orchestration.token_accountant import Stage
+
+from utils import _is_fill_in
 
 if TYPE_CHECKING:
     from orchestration.nana_orchestrator import NANA_Orchestrator
@@ -91,7 +94,7 @@ class InitializationService:
         Validates configs, sets up DB, initializes token/time, and basic orchestrator state.
         """
         if not self._validate_critical_configs():
-            self._display.update_basic(step="Critical Config Error - Halting")
+            self._display.update(step="Critical Config Error - Halting")
             # Orchestrator should handle display.stop() if this returns False
             return False
 
@@ -129,9 +132,7 @@ class InitializationService:
                 [
                     pp
                     for pp in current_plot_outline.get("plot_points", [])
-                    if not utils.is_fill_in(
-                        pp
-                    )  # Assuming utils.is_fill_in is accessible
+                    if not _is_fill_in(pp)  # Assuming utils.is_fill_in is accessible
                 ]
             )
             > 0
@@ -140,7 +141,7 @@ class InitializationService:
         if (
             not plot_points_exist
             or not current_plot_outline.get("title")
-            or utils.is_fill_in(current_plot_outline.get("title"))
+            or _is_fill_in(current_plot_outline.get("title"))
         ):
             logger.info(
                 "InitializationService: Core plot data missing. Performing genesis setup..."
@@ -244,19 +245,3 @@ class InitializationService:
             # Errors logged, display updated by perform_genesis_setup_if_needed
             return False
         return True
-
-
-# Helper import for utils.is_fill_in if not directly available
-# This might require moving is_fill_in to a more common location if it's used widely
-# For now, assuming it can be imported or accessed.
-from orchestration.token_accountant import Stage  # For GENESIS_PHASE
-
-import utils
-
-
-# Potential future location for is_fill_in if it needs to be shared
-# in, for example, utils/text_utils.py
-# def is_fill_in(value: any) -> bool:
-#    if isinstance(value, str):
-#        return value.strip().lower() in ["[fill in]", "[to be determined]", "tbd"]
-#    return False
