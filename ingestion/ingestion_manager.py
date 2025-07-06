@@ -1,3 +1,4 @@
+# ingestion/ingestion_manager.py
 """Logic for ingesting existing text into the knowledge graph."""
 
 from __future__ import annotations

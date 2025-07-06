@@ -1,3 +1,4 @@
+# chapter_generation/__init__.py
 """Utilities for orchestrating chapter generation steps."""
 
 from .context_models import (
