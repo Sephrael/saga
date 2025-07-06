@@ -1,8 +1,10 @@
+# orchestration/chapter_generation_runner.py
 from __future__ import annotations
 
 # pragma: no cover
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import TYPE_CHECKING
 
 import structlog
 from config import settings
@@ -10,7 +12,7 @@ from core.db_manager import neo4j_manager
 
 import utils
 
-if False:  # pragma: no cover - type hints
+if TYPE_CHECKING:  # pragma: no cover - type hints
     from .nana_orchestrator import NANA_Orchestrator
 
 logger = structlog.get_logger(__name__)
