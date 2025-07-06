@@ -1,6 +1,5 @@
 # data_access/__init__.py
-# This file makes the data_access directory a Python package.
-# You can also use it to expose a simpler API from this package if desired.
+"""Convenience API for database access helpers."""
 
 from .chapter_queries import (
     find_similar_chapters_in_db,
