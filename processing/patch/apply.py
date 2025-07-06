@@ -47,7 +47,15 @@ async def _get_sentence_embeddings(
     text: str,
     cache: MutableMapping[str, list[tuple[int, int, Any]]] | None = None,
 ) -> list[tuple[int, int, Any]]:
-    """Return (start, end, embedding) for each sentence."""
+    """Return (start, end, embedding) for each sentence.
+
+    Args:
+        text: Input text to embed.
+        cache: Optional cache mapping text hashes to sentence embeddings.
+
+    Returns:
+        A list containing ``(start, end, embedding)`` tuples.
+    """
     if cache is None:
         cache = _sentence_embedding_cache
     utils.load_spacy_model_if_needed()
@@ -79,6 +87,15 @@ async def _get_sentence_embeddings(
 async def _find_sentence_via_embeddings(
     quote_text: str, embeddings: list[tuple[int, int, Any]]
 ) -> tuple[int, int] | None:
+    """Return the most similar sentence span to ``quote_text``.
+
+    Args:
+        quote_text: Text snippet to match against sentences.
+        embeddings: Precomputed sentence embeddings as ``(start, end, embedding)`` tuples.
+
+    Returns:
+        The ``(start, end)`` span of the closest sentence, or ``None`` if nothing matches.
+    """
     if not embeddings or not quote_text.strip():
         return None
     q_emb = await llm_service.async_get_embedding(quote_text)
@@ -159,7 +176,16 @@ def _is_overlapping(
     already_patched_spans: list[tuple[int, int]],
     replacements: list[tuple[int, int, str]],
 ) -> bool:
-    """Return True if spans overlap with existing or queued edits."""
+    """Return True if spans overlap with existing or queued edits.
+
+    Args:
+        candidate_spans: Spans to check for overlap.
+        already_patched_spans: Spans from previously applied patches.
+        replacements: Spans queued for insertion or deletion.
+
+    Returns:
+        ``True`` if any candidate span overlaps with existing or new edits.
+    """
     return any(
         max(c_start, old_start) < min(c_end, old_end)
         for c_start, c_end in candidate_spans
