@@ -202,6 +202,8 @@ class LLMService:
         self._client = httpx.AsyncClient(timeout=timeout)
         # Add a semaphore to limit concurrent requests
         self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_LLM_CALLS)
+        # Lock to synchronize request_count increments
+        self._request_lock = asyncio.Lock()
         self.request_count = 0
         logger.info(
             f"LLMService initialized with a concurrency limit of {settings.MAX_CONCURRENT_LLM_CALLS}."
@@ -264,7 +266,8 @@ class LLMService:
             for attempt in range(settings.LLM_RETRY_ATTEMPTS):
                 api_response: httpx.Response | None = None
                 try:
-                    self.request_count += 1
+                    async with self._request_lock:
+                        self.request_count += 1
                     api_response = await self._client.post(
                         f"{settings.OLLAMA_EMBED_URL}/api/embeddings", json=payload
                     )
@@ -457,7 +460,8 @@ class LLMService:
         temp_path: str | None = None
         for retry_attempt in range(settings.LLM_RETRY_ATTEMPTS):
             try:
-                self.request_count += 1
+                async with self._request_lock:
+                    self.request_count += 1
                 if stream_to_disk:
                     final_text, usage, temp_path = await self._post_streaming(
                         payload, headers
