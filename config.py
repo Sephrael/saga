@@ -314,6 +314,19 @@ class SagaSettings(BaseSettings):
             self.PATCH_GENERATION_MODEL = self.MEDIUM_MODEL
         return self
 
+    @model_validator(mode="after")
+    def validate_secret_values(self) -> SagaSettings:
+        """Ensure sensitive settings are not left as default placeholders."""
+        if self.OPENAI_API_KEY == "nope":
+            raise ValueError(
+                "OPENAI_API_KEY must be set to a real value instead of the default 'nope'."
+            )
+        if self.NEO4J_PASSWORD == "saga_password":
+            logger.warning(
+                "NEO4J_PASSWORD appears to be using the default placeholder value."
+            )
+        return self
+
     model_config = SettingsConfigDict(env_prefix="", env_file=".env")
 
 
