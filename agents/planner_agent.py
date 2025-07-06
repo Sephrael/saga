@@ -41,46 +41,57 @@ class PlannerAgent:
         self.model_name = model_name
         logger.info(f"PlannerAgent initialized with model: {self.model_name}")
 
-    def _load_json_plan(self, json_text: str, chapter_number: int) -> list | None:
-        """Loads and initially validates the JSON plan string."""
-        if not json_text or not json_text.strip():
-            logger.warning(
-                f"JSON scene plan for Ch {chapter_number} is empty. No scenes parsed."
-            )
-            return None
+    def _parse_json_with_fallback(
+        self, json_text: str, chapter_number: int
+    ) -> Any | None:
+        """Parse JSON and fall back to an embedded array if needed."""
         try:
-            parsed_data = json.loads(json_text)
+            return json.loads(json_text)
         except json.JSONDecodeError as e:
             logger.error(
                 f"Failed to decode JSON scene plan for Ch {chapter_number}: {e}. Text: {json_text[:500]}..."
             )
             match = re.search(r"\[\s*\{.*\}\s*\]", json_text, re.DOTALL)
-            if match:
-                logger.info(
-                    "Found a JSON array within the malformed JSON string. Attempting to parse that."
+            if not match:
+                return None
+            logger.info(
+                "Found a JSON array within the malformed JSON string. Attempting to parse that."
+            )
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                logger.error(
+                    f"Still failed to parse extracted JSON array for Ch {chapter_number}."
                 )
-                try:
-                    parsed_data = json.loads(match.group(0))
-                except json.JSONDecodeError:
-                    logger.error(
-                        f"Still failed to parse extracted JSON array for Ch {chapter_number}."
-                    )
-                    return None
-            else:
                 return None
 
-        if not isinstance(parsed_data, list):
+    def _validate_scene_plan_data(self, data: Any, chapter_number: int) -> list | None:
+        """Validate the parsed scene plan list."""
+        if not isinstance(data, list):
             logger.warning(
-                f"Parsed scene plan for Ch {chapter_number} is not a list as expected. Type: {type(parsed_data)}. Data: {str(parsed_data)[:300]}"
+                f"Parsed scene plan for Ch {chapter_number} is not a list as expected. Type: {type(data)}. Data: {str(data)[:300]}"
             )
             return None
-
-        if not parsed_data:  # Empty list
+        if not data:
             logger.warning(
                 f"Parsed scene plan for Ch {chapter_number} is an empty list."
             )
-            return None  # Or an empty list, depending on desired behavior for "valid but empty"
-        return parsed_data
+            return None
+        return data
+
+    def _load_json_plan(self, json_text: str, chapter_number: int) -> list | None:
+        """Load and validate the JSON plan string."""
+        if not json_text or not json_text.strip():
+            logger.warning(
+                f"JSON scene plan for Ch {chapter_number} is empty. No scenes parsed."
+            )
+            return None
+
+        parsed_data = self._parse_json_with_fallback(json_text, chapter_number)
+        if parsed_data is None:
+            return None
+
+        return self._validate_scene_plan_data(parsed_data, chapter_number)
 
     def _process_single_scene_item(
         self,
