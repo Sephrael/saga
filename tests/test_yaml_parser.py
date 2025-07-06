@@ -69,6 +69,10 @@ class TestYamlParsing(unittest.TestCase):
         data = load_yaml_file("non_existent.yaml")
         self.assertIsNone(data)
 
+    def test_load_non_yaml_file(self):
+        with self.assertRaises(ValueError):
+            load_yaml_file("not_yaml.txt")
+
     def test_load_malformed_yaml(self):
         data = load_yaml_file(self.malformed_yaml_filepath)
         self.assertIsNone(data)
