@@ -2,18 +2,17 @@
 
 import asyncio
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
+from config import settings  # To potentially access settings if needed
 from orchestration.services.deduplication_service import DeduplicationService
-from processing.text_deduplicator import TextDeduplicator # To mock its behavior
-from config import settings # To potentially access settings if needed
+
 
 class TestDeduplicationService(unittest.TestCase):
-
     def setUp(self):
         self.service = DeduplicationService()
 
-    @patch('orchestration.services.deduplication_service.TextDeduplicator')
+    @patch("orchestration.services.deduplication_service.TextDeduplicator")
     def test_perform_deduplication_empty_text(self, MockTextDeduplicator):
         """Test that empty or whitespace-only text returns immediately without calling TextDeduplicator."""
         mock_deduper_instance = MockTextDeduplicator.return_value
@@ -38,11 +37,13 @@ class TestDeduplicationService(unittest.TestCase):
         self.assertEqual(chars_removed, 0)
         mock_deduper_instance.deduplicate.assert_not_called()
 
-    @patch('orchestration.services.deduplication_service.TextDeduplicator')
+    @patch("orchestration.services.deduplication_service.TextDeduplicator")
     async def test_perform_deduplication_calls_deduplicator(self, MockTextDeduplicator):
         """Test that TextDeduplicator is called for non-empty text."""
         mock_deduper_instance = MockTextDeduplicator.return_value
-        mock_deduper_instance.deduplicate = AsyncMock(return_value=("deduplicated text", 10))
+        mock_deduper_instance.deduplicate = AsyncMock(
+            return_value=("deduplicated text", 10)
+        )
 
         text_to_dedup = "This is some sample text with repetition repetition."
         chapter_number = 1
@@ -63,7 +64,7 @@ class TestDeduplicationService(unittest.TestCase):
         self.assertEqual(result_text, "deduplicated text")
         self.assertEqual(chars_removed, 10)
 
-    @patch('orchestration.services.deduplication_service.TextDeduplicator')
+    @patch("orchestration.services.deduplication_service.TextDeduplicator")
     async def test_perform_deduplication_no_chars_removed(self, MockTextDeduplicator):
         """Test scenario where deduplicator removes no characters."""
         mock_deduper_instance = MockTextDeduplicator.return_value
@@ -79,18 +80,24 @@ class TestDeduplicationService(unittest.TestCase):
         self.assertEqual(result_text, original_text)
         self.assertEqual(chars_removed, 0)
 
-    @patch('orchestration.services.deduplication_service.TextDeduplicator')
-    async def test_perform_deduplication_exception_in_deduplicator(self, MockTextDeduplicator):
+    @patch("orchestration.services.deduplication_service.TextDeduplicator")
+    async def test_perform_deduplication_exception_in_deduplicator(
+        self, MockTextDeduplicator
+    ):
         """Test that if TextDeduplicator raises an exception, the original text is returned."""
         mock_deduper_instance = MockTextDeduplicator.return_value
-        mock_deduper_instance.deduplicate = AsyncMock(side_effect=Exception("Dedupe error"))
+        mock_deduper_instance.deduplicate = AsyncMock(
+            side_effect=Exception("Dedupe error")
+        )
 
         original_text = "Some problematic text."
         chapter_number = 3
         context = "test_exception"
 
         # Suppress logger errors during this specific test
-        with patch('orchestration.services.deduplication_service.logger') as mock_logger:
+        with patch(
+            "orchestration.services.deduplication_service.logger"
+        ) as mock_logger:
             result_text, chars_removed = await self.service.perform_deduplication(
                 original_text, chapter_number, context
             )
@@ -98,5 +105,6 @@ class TestDeduplicationService(unittest.TestCase):
             self.assertEqual(chars_removed, 0)
             mock_logger.error.assert_called_once()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

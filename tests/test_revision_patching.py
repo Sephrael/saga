@@ -6,11 +6,12 @@ import config
 import numpy as np
 import processing.patch as patch_generator
 import pytest
-import utils
 from agents.patch_validation_agent import PatchValidationAgent
 from config import settings
 from core.llm_interface import llm_service
 from processing.patch import _apply_patches_to_text, locate_patch_targets
+
+import utils
 
 
 @pytest.mark.asyncio

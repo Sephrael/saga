@@ -13,6 +13,7 @@ from core.db_manager import neo4j_manager
 from data_access import plot_queries
 from kg_maintainer.models import CharacterProfile, WorldItem
 from storage.file_manager import FileManager
+
 from utils.ingestion_utils import split_text_into_chapters
 
 logger = structlog.get_logger(__name__)

@@ -2,11 +2,12 @@ from unittest.mock import AsyncMock
 
 import config
 import pytest
-import utils
 from core.db_manager import neo4j_manager
 from core.llm_interface import llm_service
 from data_access import plot_queries
 from orchestration.nana_orchestrator import NANA_Orchestrator
+
+import utils
 
 
 @pytest.mark.asyncio

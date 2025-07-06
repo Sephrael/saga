@@ -2,9 +2,9 @@ import asyncio
 from collections.abc import Coroutine
 
 import structlog
-import utils
 from config import settings
 
+import utils
 from initialization.models import CharacterProfile, PlotOutline
 
 from .common import bootstrap_field

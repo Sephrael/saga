@@ -2,19 +2,19 @@
 """Service for handling the initial setup and run initialization of the NANA Orchestrator."""
 
 import time
-import structlog
+from typing import TYPE_CHECKING
 
+import structlog
+from chapter_generation import ContextProfileName
 from config import settings
 from core.db_manager import neo4j_manager
 from initialization.genesis import run_genesis_phase
-from chapter_generation import ContextProfileName
-from models.agent_models import ChapterEndState # For typing
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from orchestration.nana_orchestrator import NANA_Orchestrator
 
 logger = structlog.get_logger(__name__)
+
 
 class InitializationService:
     def __init__(self, orchestrator: "NANA_Orchestrator"):
@@ -22,10 +22,11 @@ class InitializationService:
         # Access to other services/managers via orchestrator if needed
         self._state_manager = orchestrator.state_manager
         self._token_manager = orchestrator.token_manager
-        self._display = orchestrator.display # For direct basic updates on critical errors
+        self._display = (
+            orchestrator.display
+        )  # For direct basic updates on critical errors
         self._context_service = orchestrator.context_service
         self._kg_maintainer_agent = orchestrator.kg_maintainer_agent
-
 
     def _validate_critical_configs(self) -> bool:
         """Moved from NANA_Orchestrator._validate_critical_configs"""
@@ -55,18 +56,26 @@ class InitializationService:
                 f"InitializationService CRITICAL CONFIG ERROR: EXPECTED_EMBEDDING_DIM must be > 0, is {settings.EXPECTED_EMBEDDING_DIM}."
             )
             return False
-        logger.info("Critical configurations validated successfully by InitializationService.")
+        logger.info(
+            "Critical configurations validated successfully by InitializationService."
+        )
         return True
 
     async def _setup_db_and_kg_schema(self) -> bool:
         """Moved from NANA_Orchestrator._setup_db_and_kg_schema"""
         try:
-            async with neo4j_manager: # Assumes neo4j_manager is globally available or passed
+            async with (
+                neo4j_manager
+            ):  # Assumes neo4j_manager is globally available or passed
                 await neo4j_manager.create_db_schema()
-                logger.info("InitializationService: Neo4j connection and schema verified.")
+                logger.info(
+                    "InitializationService: Neo4j connection and schema verified."
+                )
 
                 await self._kg_maintainer_agent.load_schema_from_db()
-                logger.info("InitializationService: KG schema loaded into maintainer agent.")
+                logger.info(
+                    "InitializationService: KG schema loaded into maintainer agent."
+                )
                 return True
         except Exception as exc:
             logger.critical(
@@ -120,7 +129,9 @@ class InitializationService:
                 [
                     pp
                     for pp in current_plot_outline.get("plot_points", [])
-                    if not utils.is_fill_in(pp) # Assuming utils.is_fill_in is accessible
+                    if not utils.is_fill_in(
+                        pp
+                    )  # Assuming utils.is_fill_in is accessible
                 ]
             )
             > 0
@@ -139,14 +150,20 @@ class InitializationService:
             # Logic from NANA_Orchestrator.perform_initial_setup
             try:
                 # run_genesis_phase returns a new plot_outline, characters, world, usage
-                plot_outline_from_genesis, \
-                character_profiles, \
-                world_building, \
-                usage = await run_genesis_phase() # run_genesis_phase needs to be importable
+                (
+                    plot_outline_from_genesis,
+                    character_profiles,
+                    world_building,
+                    usage,
+                ) = (
+                    await run_genesis_phase()
+                )  # run_genesis_phase needs to be importable
 
                 # Orchestrator's _accumulate_tokens needs to be called
                 self._orchestrator._accumulate_tokens(
-                    Stage.GENESIS_PHASE, usage, current_step_for_display="Genesis State Bootstrapped"
+                    Stage.GENESIS_PHASE,
+                    usage,
+                    current_step_for_display="Genesis State Bootstrapped",
                 )
 
                 self._state_manager.set_plot_outline(plot_outline_from_genesis)
@@ -158,31 +175,40 @@ class InitializationService:
                     f"Plot Points: {len(plot_outline_from_genesis.get('plot_points', []))}"
                 )
                 world_source = world_building.get("source", "unknown")
-                logger.info(f"   Genesis: World Building initialized (source: {world_source}).")
+                logger.info(
+                    f"   Genesis: World Building initialized (source: {world_source})."
+                )
                 # Display update is covered by token accumulation
 
                 current_kc = self._state_manager.get_knowledge_cache()
                 current_kc.characters = character_profiles
                 current_kc.world = world_building
-                await self._state_manager.refresh_knowledge_cache() # Refreshes from knowledge_service
+                await (
+                    self._state_manager.refresh_knowledge_cache()
+                )  # Refreshes from knowledge_service
                 self._state_manager._update_novel_props_cache()
-                logger.info("   Genesis: Initial plot, char, world data saved to Neo4j via services.")
+                logger.info(
+                    "   Genesis: Initial plot, char, world data saved to Neo4j via services."
+                )
                 self._token_manager._update_rich_display(step="Genesis State Saved")
 
                 await self._state_manager.refresh_plot_outline()
-                if neo4j_manager.driver is not None: # Check DB connection
+                if neo4j_manager.driver is not None:  # Check DB connection
                     await self._state_manager.refresh_knowledge_cache()
 
-                chapter_zero_end_state = await self._state_manager.load_previous_end_state(0)
+                chapter_zero_end_state = (
+                    await self._state_manager.load_previous_end_state(0)
+                )
                 self._state_manager.set_chapter_zero_end_state(chapter_zero_end_state)
 
                 next_chapter_context = await self._context_service.build_hybrid_context(
-                    self._orchestrator, # Context service needs orchestrator reference
+                    self._orchestrator,  # Context service needs orchestrator reference
                     1,
                     None,
                     (
                         {"chapter_zero_end_state": chapter_zero_end_state}
-                        if chapter_zero_end_state else None
+                        if chapter_zero_end_state
+                        else None
                     ),
                     profile_name=ContextProfileName.DEFAULT,
                 )
@@ -190,11 +216,17 @@ class InitializationService:
                 logger.info("InitializationService: Genesis setup complete.")
                 return True
             except Exception as e:
-                logger.critical(f"InitializationService: Genesis setup failed: {e}", exc_info=True)
-                self._token_manager._update_rich_display(step="Genesis Setup Failed - Halting")
+                logger.critical(
+                    f"InitializationService: Genesis setup failed: {e}", exc_info=True
+                )
+                self._token_manager._update_rich_display(
+                    step="Genesis Setup Failed - Halting"
+                )
                 return False
         else:
-            logger.info("InitializationService: Core plot data exists. Skipping genesis setup.")
+            logger.info(
+                "InitializationService: Core plot data exists. Skipping genesis setup."
+            )
             # Ensure novel props cache is updated even if genesis is skipped
             self._state_manager._update_novel_props_cache()
             return True
@@ -213,16 +245,18 @@ class InitializationService:
             return False
         return True
 
+
 # Helper import for utils.is_fill_in if not directly available
 # This might require moving is_fill_in to a more common location if it's used widely
 # For now, assuming it can be imported or accessed.
+from orchestration.token_accountant import Stage  # For GENESIS_PHASE
+
 import utils
-from orchestration.token_accountant import Stage # For GENESIS_PHASE
 
 
 # Potential future location for is_fill_in if it needs to be shared
 # in, for example, utils/text_utils.py
-#def is_fill_in(value: any) -> bool:
+# def is_fill_in(value: any) -> bool:
 #    if isinstance(value, str):
 #        return value.strip().lower() in ["[fill in]", "[to be determined]", "tbd"]
 #    return False

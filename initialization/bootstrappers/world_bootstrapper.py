@@ -4,9 +4,9 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 import structlog
-import utils
 from config import settings
 
+import utils
 from initialization.models import PlotOutline, WorldBuilding, WorldItem
 
 from .common import bootstrap_field

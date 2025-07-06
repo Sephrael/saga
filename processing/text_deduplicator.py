@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 
-import utils
 from config import settings
+
+import utils
 
 logger = logging.getLogger(__name__)
 

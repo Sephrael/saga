@@ -6,9 +6,9 @@ from __future__ import annotations
 from collections import Counter
 
 import structlog
-import utils
 from config import settings
 
+import utils
 from models import ProblemDetail
 from processing.repetition_tracker import RepetitionTracker
 

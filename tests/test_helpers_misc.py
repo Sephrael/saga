@@ -1,4 +1,5 @@
 from config import settings
+
 from utils.text_utils import _is_fill_in
 
 

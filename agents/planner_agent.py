@@ -75,24 +75,25 @@ class PlannerAgent:
             )
             return None
 
-        if not parsed_data: # Empty list
+        if not parsed_data:  # Empty list
             logger.warning(
                 f"Parsed scene plan for Ch {chapter_number} is an empty list."
             )
-            return None # Or an empty list, depending on desired behavior for "valid but empty"
+            return None  # Or an empty list, depending on desired behavior for "valid but empty"
         return parsed_data
 
     def _process_single_scene_item(
         self,
         scene_item: dict[str, Any],
         chapter_number: int,
-        scene_index: int, # 0-based index for logging
+        scene_index: int,  # 0-based index for logging
     ) -> SceneDetail | None:
         """Processes a single raw scene dictionary into a SceneDetail typed dict."""
         processed_scene_dict: dict[str, Any] = {}
         for llm_key, value in scene_item.items():
             internal_key = SCENE_PLAN_KEY_MAP.get(
-                llm_key.lower().replace(" ", "_"), llm_key # Fallback to original llm_key if not in map
+                llm_key.lower().replace(" ", "_"),
+                llm_key,  # Fallback to original llm_key if not in map
             )
             processed_scene_dict[internal_key] = value
 
@@ -115,11 +116,13 @@ class PlannerAgent:
         # Normalize list keys
         for list_key in SCENE_PLAN_LIST_INTERNAL_KEYS:
             val = processed_scene_dict.get(list_key)
-            if isinstance(val, str): # LLM might return comma-separated string
+            if isinstance(val, str):  # LLM might return comma-separated string
                 processed_scene_dict[list_key] = [
                     v.strip() for v in val.split(",") if v.strip()
                 ]
-            elif not isinstance(val, list): # Ensure it's a list, even if single item or None
+            elif not isinstance(
+                val, list
+            ):  # Ensure it's a list, even if single item or None
                 processed_scene_dict[list_key] = [str(val)] if val is not None else []
 
         # Default missing optional fields
@@ -130,8 +133,7 @@ class PlannerAgent:
                 else:
                     processed_scene_dict[key_internal_name] = None
 
-        return processed_scene_dict # type: ignore
-
+        return processed_scene_dict  # type: ignore
 
     def _parse_llm_scene_plan_output(
         self, json_text: str, chapter_number: int

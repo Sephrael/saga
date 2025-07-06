@@ -1,4 +1,5 @@
 from config import settings
+
 from utils.plot import get_plot_point_info
 
 

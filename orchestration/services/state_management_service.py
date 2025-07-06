@@ -4,17 +4,15 @@
 from typing import Any
 
 import structlog
-
-from chapter_generation import ContextProfileName, PrerequisiteData
+from chapter_generation import ContextProfileName
+from config import settings
 from core.db_manager import neo4j_manager
 from data_access import chapter_repository, plot_queries
 from initialization.models import PlotOutline
-from models.agent_models import ChapterEndState
-from orchestration.knowledge_service import KnowledgeService
 from orchestration.models import KnowledgeCache
-from utils.plot import get_plot_point_info
-from config import settings
 
+from models.agent_models import ChapterEndState
+from utils.plot import get_plot_point_info
 
 logger = structlog.get_logger(__name__)
 
@@ -73,9 +71,9 @@ class StateManagementService:
                 f"State init: Loaded {len(self.plot_outline.get('plot_points', []))} plot points from DB."
             )
 
-        self._update_novel_props_cache() # Uses orchestrator's knowledge_service
+        self._update_novel_props_cache()  # Uses orchestrator's knowledge_service
         self.completed_plot_points = set(await plot_queries.get_completed_plot_points())
-        await self.refresh_knowledge_cache() # Uses orchestrator's knowledge_service
+        await self.refresh_knowledge_cache()  # Uses orchestrator's knowledge_service
         logger.info("StateManagementService: async_init_state complete.")
 
     def _update_novel_props_cache(self) -> None:
@@ -99,14 +97,12 @@ class StateManagementService:
                 PlotOutline(**result) if isinstance(result, dict) else PlotOutline()
             )
 
-
     async def refresh_knowledge_cache(self) -> None:
         """Trigger KnowledgeService to refresh data, which will update this service's cache."""
         # KnowledgeService.refresh_knowledge_cache now directly updates
         # this StateManagementService instance's knowledge_cache via the orchestrator reference.
         await self._orchestrator.knowledge_service.refresh_knowledge_cache()
         # No further action needed here as KnowledgeService updates sm.knowledge_cache internally.
-
 
     async def load_previous_end_state(
         self, chapter_number: int
@@ -118,11 +114,13 @@ class StateManagementService:
                 try:
                     data = await chapter_repository.get_chapter_data(0)
                     if data and data.get("end_state_json"):
-                        self.chapter_zero_end_state = ChapterEndState.model_validate_json(
-                            data["end_state_json"]
+                        self.chapter_zero_end_state = (
+                            ChapterEndState.model_validate_json(data["end_state_json"])
                         )
                 except Exception as exc:
-                    logger.error("Failed to load chapter 0 end state: %s", exc, exc_info=True)
+                    logger.error(
+                        "Failed to load chapter 0 end state: %s", exc, exc_info=True
+                    )
             return self.chapter_zero_end_state
         try:
             data = await chapter_repository.get_chapter_data(chapter_number)
@@ -170,14 +168,16 @@ class StateManagementService:
 
         next_hints = {"previous_chapter_end_state": end_state} if end_state else None
         # Access context_service via orchestrator
-        self.next_chapter_context = await self._orchestrator.context_service.build_hybrid_context(
-            self._orchestrator, # Pass orchestrator instance
-            novel_chapter_number + 1,
-            None,
-            next_hints,
-            profile_name=ContextProfileName.DEFAULT,
+        self.next_chapter_context = (
+            await self._orchestrator.context_service.build_hybrid_context(
+                self._orchestrator,  # Pass orchestrator instance
+                novel_chapter_number + 1,
+                None,
+                next_hints,
+                profile_name=ContextProfileName.DEFAULT,
+            )
         )
-        self._store_pending_fill_ins() # Uses orchestrator's context_service
+        self._store_pending_fill_ins()  # Uses orchestrator's context_service
 
     def _store_pending_fill_ins(self) -> None:
         """Stores pending fill-in chunks from the context service."""
@@ -220,7 +220,7 @@ class StateManagementService:
         return self.chapter_count
 
     def increment_chapter_count(self):
-        self.chapter_count +=1
+        self.chapter_count += 1
 
     def set_chapter_count(self, count: int):
         self.chapter_count = count
@@ -255,11 +255,15 @@ class StateManagementService:
         """Populate orchestrator state from a user-provided model."""
         # Assuming convert_model_to_objects is accessible (e.g. imported)
         from initialization.data_loader import convert_model_to_objects
+
         plot_outline, _, _ = convert_model_to_objects(model)
         self.plot_outline = plot_outline
 
+
 # Add "NANA_Orchestrator" to TYPE_CHECKING to avoid circular import for type hint
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from orchestration.nana_orchestrator import NANA_Orchestrator
+
     from models.user_input_models import UserStoryInputModel

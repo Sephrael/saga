@@ -1,18 +1,22 @@
 # orchestration/services/token_management_service.py
 """Service for managing token usage and display updates related to tokens."""
 
-import time
 import structlog
-
 from core.usage import TokenUsage
-from orchestration.token_accountant import TokenAccountant, Stage
+from orchestration.token_accountant import Stage, TokenAccountant
+
 # Assuming RichDisplayManager is accessible or passed if needed for direct updates
 # from ui.rich_display import RichDisplayManager
 
 logger = structlog.get_logger(__name__)
 
+
 class TokenManagementService:
-    def __init__(self, display_manager: "RichDisplayManager", orchestrator_ref: "NANA_Orchestrator"):
+    def __init__(
+        self,
+        display_manager: "RichDisplayManager",
+        orchestrator_ref: "NANA_Orchestrator",
+    ):
         """
         Initializes the TokenManagementService.
 
@@ -23,7 +27,9 @@ class TokenManagementService:
         self.token_accountant = TokenAccountant()
         self.total_tokens_generated_this_run: int = 0
         self._display_manager = display_manager
-        self._orchestrator_ref = orchestrator_ref # To access run_start_time and plot_outline
+        self._orchestrator_ref = (
+            orchestrator_ref  # To access run_start_time and plot_outline
+        )
 
     def _update_rich_display(
         self, chapter_num: int | None = None, step: str | None = None
@@ -37,12 +43,15 @@ class TokenManagementService:
             chapter_num=chapter_num,
             step=step,
             total_tokens=self.total_tokens_generated_this_run,
-            run_start_time=self._orchestrator_ref.run_start_time, # Access via orchestrator_ref
+            run_start_time=self._orchestrator_ref.run_start_time,  # Access via orchestrator_ref
         )
 
     def accumulate_tokens(
-        self, stage: str | Stage, usage_data: dict[str, int] | TokenUsage | None,
-        chapter_num: int | None = None, current_step_for_display: str | None = None
+        self,
+        stage: str | Stage,
+        usage_data: dict[str, int] | TokenUsage | None,
+        chapter_num: int | None = None,
+        current_step_for_display: str | None = None,
     ) -> None:
         """
         Records token usage for a given stage and updates the total.
@@ -52,14 +61,16 @@ class TokenManagementService:
         self.token_accountant.record_usage(stage_value, usage_data)
         self.total_tokens_generated_this_run = self.token_accountant.total
         # Pass chapter_num and step to display if available
-        self._update_rich_display(chapter_num=chapter_num, step=current_step_for_display)
+        self._update_rich_display(
+            chapter_num=chapter_num, step=current_step_for_display
+        )
 
     def get_total_tokens_generated_this_run(self) -> int:
         return self.total_tokens_generated_this_run
 
     def reset_tokens_for_new_run(self) -> None:
         """Resets token counts for a new generation run."""
-        self.token_accountant = TokenAccountant() # Re-initialize
+        self.token_accountant = TokenAccountant()  # Re-initialize
         self.total_tokens_generated_this_run = 0
         # Potentially update display to reflect reset state
         self._update_rich_display(step="New Run Initialized - Tokens Reset")
@@ -75,6 +86,7 @@ class TokenManagementService:
 
 # Add "RichDisplayManager" and "NANA_Orchestrator" to TYPE_CHECKING for type hints
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from ui.rich_display import RichDisplayManager
     from orchestration.nana_orchestrator import NANA_Orchestrator
+    from ui.rich_display import RichDisplayManager

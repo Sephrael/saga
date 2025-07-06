@@ -2,11 +2,11 @@
 """Service for performing text deduplication."""
 
 import structlog
-
 from config import settings
 from processing.text_deduplicator import TextDeduplicator
 
 logger = structlog.get_logger(__name__)
+
 
 class DeduplicationService:
     def __init__(self):
@@ -16,7 +16,10 @@ class DeduplicationService:
         pass
 
     async def perform_deduplication(
-        self, text_to_dedup: str, chapter_number: int, context_description: str = "general"
+        self,
+        text_to_dedup: str,
+        chapter_number: int,
+        context_description: str = "general",
     ) -> tuple[str, int]:
         """
         Performs de-duplication on the given text.

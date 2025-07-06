@@ -5,7 +5,6 @@ import json
 from typing import Any
 
 import structlog
-import utils
 from config import settings
 from core.llm_interface import llm_service
 from data_access import chapter_repository
@@ -16,6 +15,7 @@ from processing.evaluation_helpers import (
 )
 from prompt_renderer import render_prompt
 
+import utils
 from models import EvaluationResult, ProblemDetail, SceneDetail
 
 logger = structlog.get_logger(__name__)

@@ -2,7 +2,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-import utils
 from chapter_generation import ContextProfileName
 from chapter_generation.context_models import ContextChunk
 from chapter_generation.drafting_service import DraftResult
@@ -11,6 +10,7 @@ from data_access import character_queries, world_queries
 from initialization.models import PlotOutline
 from orchestration.nana_orchestrator import NANA_Orchestrator, RevisionOutcome
 
+import utils
 from models.agent_models import ChapterEndState, CharacterState
 from models.user_input_models import (
     KeyLocationModel,

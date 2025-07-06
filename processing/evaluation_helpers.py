@@ -2,12 +2,12 @@
 from typing import Any
 
 import structlog
-import utils
 from config import settings
 from core.llm_interface import llm_service
 from parsing import parse_problem_list
 from prompt_renderer import render_prompt
 
+import utils
 from models import ProblemDetail
 
 logger = structlog.get_logger(__name__)

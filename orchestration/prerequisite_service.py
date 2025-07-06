@@ -10,9 +10,9 @@ from chapter_generation.context_models import ContextProfileName, SceneDetail
 from chapter_generation.prerequisites_service import PrerequisiteData
 from config import settings
 from core.db_manager import neo4j_manager
-from utils.plot import get_plot_point_info
 
 from orchestration.token_accountant import Stage
+from utils.plot import get_plot_point_info
 
 if TYPE_CHECKING:  # pragma: no cover - type hints
     from .nana_orchestrator import NANA_Orchestrator
@@ -30,9 +30,7 @@ class PrerequisiteService:
         self, novel_chapter_number: int
     ) -> tuple[str | None, int]:
         """Gets the plot point focus and index for the chapter."""
-        return get_plot_point_info(
-            self.orchestrator.plot_outline, novel_chapter_number
-        )
+        return get_plot_point_info(self.orchestrator.plot_outline, novel_chapter_number)
 
     async def _generate_chapter_plan(
         self,
@@ -59,7 +57,7 @@ class PrerequisiteService:
             plot_point_focus,
             plot_point_index,
             (novel_chapter_number - 1) % settings.PLOT_POINT_CHAPTER_SPAN + 1,
-            planning_context, # Use the resolved planning_context
+            planning_context,  # Use the resolved planning_context
             list(o.completed_plot_points),
         )
         o._accumulate_tokens(
@@ -71,7 +69,7 @@ class PrerequisiteService:
         self,
         novel_chapter_number: int,
         chapter_plan: list[SceneDetail] | None,
-        planning_context: str | None, # Context used for plan generation
+        planning_context: str | None,  # Context used for plan generation
     ):
         """Validates the scene plan if enabled and necessary."""
         o = self.orchestrator
@@ -79,7 +77,7 @@ class PrerequisiteService:
             settings.ENABLE_SCENE_PLAN_VALIDATION
             and chapter_plan is not None
             and settings.ENABLE_WORLD_CONTINUITY_CHECK
-            and planning_context is not None # Validation needs the context
+            and planning_context is not None  # Validation needs the context
         ):
             return
 
@@ -88,9 +86,9 @@ class PrerequisiteService:
             usage,
         ) = await o.evaluator_agent.check_scene_plan_consistency(
             o.plot_outline,
-            chapter_plan, # chapter_plan is not None here
+            chapter_plan,  # chapter_plan is not None here
             novel_chapter_number,
-            planning_context, # planning_context is not None here
+            planning_context,  # planning_context is not None here
         )
         o._accumulate_tokens(
             f"Ch{novel_chapter_number}-{Stage.PLAN_CONSISTENCY.value}", usage
@@ -145,7 +143,7 @@ class PrerequisiteService:
         """Prepares the hybrid context for drafting, generating if necessary."""
         o = self.orchestrator
         if initial_hybrid_context is not None:
-            o.next_chapter_context = None # Consume the pre-loaded context
+            o.next_chapter_context = None  # Consume the pre-loaded context
             return initial_hybrid_context
 
         # If not pre-loaded, generate it now.
@@ -168,7 +166,7 @@ class PrerequisiteService:
             o,
             novel_chapter_number,
             chapter_plan,
-            None, # No specific hints here, context service will use its defaults
+            None,  # No specific hints here, context service will use its defaults
             profile_name=ContextProfileName.DEFAULT,
             missing_entities=missing_entities_for_context,
         )
@@ -183,7 +181,7 @@ class PrerequisiteService:
         # that didn't result in a chapter generation (e.g. if only planning context was built)
         if o.pending_fill_ins:
             fill_in_lines = o.pending_fill_ins + fill_in_lines
-            o.pending_fill_ins = [] # Clear after collecting
+            o.pending_fill_ins = []  # Clear after collecting
 
         # Clear current llm_fill_chunks from context_service as they are now collected
         # This is important because llm_fill_chunks are accumulated by context_service.
@@ -191,7 +189,7 @@ class PrerequisiteService:
         # The NANA_Orchestrator._finalize_and_log method also has logic for o.pending_fill_ins
         # which might need review for consistency with this clearing.
         # For now, assuming PrerequisiteService is the primary point of collecting these for a chapter.
-        if hasattr(o.context_service, 'llm_fill_chunks'): # Ensure attribute exists
+        if hasattr(o.context_service, "llm_fill_chunks"):  # Ensure attribute exists
             o.context_service.llm_fill_chunks = []
 
         return "\n".join(fill_in_lines) or None
@@ -235,8 +233,8 @@ class PrerequisiteService:
         hybrid_context_for_draft = await self._prepare_hybrid_context_for_draft(
             novel_chapter_number,
             chapter_plan,
-            o.next_chapter_context, # Pass orchestrator's next_chapter_context again
-                                    # _prepare_hybrid_context_for_draft will consume it if it exists
+            o.next_chapter_context,  # Pass orchestrator's next_chapter_context again
+            # _prepare_hybrid_context_for_draft will consume it if it exists
         )
 
         fill_in_context = self._collect_fill_in_context()

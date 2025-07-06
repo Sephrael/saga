@@ -5,7 +5,6 @@ import time  # For Rich display updates
 from typing import Any
 
 import structlog
-import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from agents.drafting_agent import DraftingAgent
 from agents.finalize_agent import FinalizeAgent
@@ -28,18 +27,15 @@ from ingestion.ingestion_manager import IngestionManager
 from initialization.genesis import run_genesis_phase
 from initialization.models import PlotOutline
 from kg_maintainer.models import (
-    EvaluationResult,
-    ProblemDetail,
     SceneDetail,
 )
 from processing.repetition_analyzer import RepetitionAnalyzer
 from processing.repetition_tracker import RepetitionTracker
 from processing.revision_manager import RevisionManager
-from processing.text_deduplicator import TextDeduplicator
 from storage.file_manager import FileManager
 from ui.rich_display import RichDisplayManager
-from utils.plot import get_plot_point_info
 
+import utils
 from models.agent_models import ChapterEndState
 from models.user_input_models import UserStoryInputModel
 from orchestration.chapter_flow import run_chapter_pipeline
@@ -49,13 +45,13 @@ from orchestration.knowledge_service import KnowledgeService
 # KnowledgeCache is now primarily managed by StateManagementService
 from orchestration.models import KnowledgeCache, RevisionOutcome
 from orchestration.output_service import OutputService
-from orchestration.services.state_management_service import StateManagementService
-from orchestration.services.token_management_service import TokenManagementService
+from orchestration.prerequisite_service import PrerequisiteService
+from orchestration.service_layer import ChapterServiceLayer
 from orchestration.services.deduplication_service import DeduplicationService
 from orchestration.services.evaluation_revision_service import EvaluationRevisionService
 from orchestration.services.initialization_service import InitializationService
-from orchestration.prerequisite_service import PrerequisiteService
-from orchestration.service_layer import ChapterServiceLayer
+from orchestration.services.state_management_service import StateManagementService
+from orchestration.services.token_management_service import TokenManagementService
 from orchestration.token_accountant import (
     Stage,
 )  # TokenAccountant is now in TokenManagementService

@@ -6,9 +6,9 @@ from __future__ import annotations
 import asyncio
 
 import structlog
-from utils.logging import setup_logging_nana
 
 from orchestration.nana_orchestrator import NANA_Orchestrator
+from utils.logging import setup_logging_nana
 
 logger = structlog.get_logger(__name__)
 

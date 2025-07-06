@@ -2,30 +2,29 @@
 """Service for managing the evaluation and revision cycle of chapter drafts."""
 
 import asyncio
-from typing import Any, Awaitable
+from collections.abc import Awaitable
+
+# Assuming NANA_Orchestrator provides access to agents, managers, and token accumulation
+from typing import TYPE_CHECKING, Any
 
 import structlog
-import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
-from agents.drafting_agent import DraftingAgent # Not directly used here, but good for context
-from agents.finalize_agent import FinalizeAgent # Not directly used here
 from agents.kg_maintainer_agent import KGMaintainerAgent
 from config import settings
 from core.llm_interface import llm_service
-from data_access import character_queries, world_queries # For root cause analysis
+from data_access import character_queries, world_queries  # For root cause analysis
 from initialization.models import PlotOutline
 from kg_maintainer.models import (
     EvaluationResult,
     ProblemDetail,
     SceneDetail,
 )
+from orchestration.token_accountant import Stage  # For accumulating tokens
 from processing.repetition_analyzer import RepetitionAnalyzer
 from processing.revision_manager import RevisionManager
-from orchestration.models import RevisionOutcome # This is a return type for the orchestrator
-from orchestration.token_accountant import Stage # For accumulating tokens
 
-# Assuming NANA_Orchestrator provides access to agents, managers, and token accumulation
-from typing import TYPE_CHECKING
+import utils
+
 if TYPE_CHECKING:
     from orchestration.nana_orchestrator import NANA_Orchestrator
 
@@ -43,11 +42,12 @@ class EvaluationRevisionService:
         """
         self._orchestrator = orchestrator
         # Expose necessary components from orchestrator for easier access
-        self._evaluator_agent: ComprehensiveEvaluatorAgent = orchestrator.evaluator_agent
+        self._evaluator_agent: ComprehensiveEvaluatorAgent = (
+            orchestrator.evaluator_agent
+        )
         self._revision_manager: RevisionManager = orchestrator.revision_manager
         self._repetition_analyzer: RepetitionAnalyzer = orchestrator.repetition_analyzer
         self._kg_maintainer_agent: KGMaintainerAgent = orchestrator.kg_maintainer_agent
-
 
     def _ensure_evaluation_result_object(
         self, eval_result_data: Any
@@ -77,17 +77,19 @@ class EvaluationRevisionService:
         plot_point_index: int,
         hybrid_context_for_draft: str,
         patched_spans: list[tuple[int, int]],
-        plot_outline: PlotOutline, # Pass plot_outline explicitly
+        plot_outline: PlotOutline,  # Pass plot_outline explicitly
     ) -> tuple[
         EvaluationResult,
-        list[ProblemDetail], # Continuity problems (currently not implemented fully in orchestrator)
-        dict[str, int] | None, # Eval usage
-        dict[str, int] | None, # Continuity usage
-        list[ProblemDetail], # Repetition problems
+        list[
+            ProblemDetail
+        ],  # Continuity problems (currently not implemented fully in orchestrator)
+        dict[str, int] | None,  # Eval usage
+        dict[str, int] | None,  # Continuity usage
+        list[ProblemDetail],  # Repetition problems
     ]:
-        self._orchestrator.token_manager._update_rich_display( # Orchestrator's display method
+        self._orchestrator.token_manager._update_rich_display(  # Orchestrator's display method
             chapter_num=novel_chapter_number,
-            step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)"
+            step=f"Ch {novel_chapter_number} - Evaluation Cycle {attempt} (Parallel)",
         )
 
         tasks_to_run: list[Awaitable[Any]] = []
@@ -120,8 +122,10 @@ class EvaluationRevisionService:
 
         eval_result_obj: EvaluationResult | None = None
         eval_usage = None
-        continuity_problems: list[ProblemDetail] = [] # Remains empty if no continuity check
-        continuity_usage = None # Remains None
+        continuity_problems: list[
+            ProblemDetail
+        ] = []  # Remains empty if no continuity check
+        continuity_usage = None  # Remains None
 
         result_idx = 0
         if "evaluation" in task_names:
@@ -143,7 +147,7 @@ class EvaluationRevisionService:
             continuity_problems,
             eval_usage,
             continuity_usage,
-            repetition_probs, # Return repetition_probs separately
+            repetition_probs,  # Return repetition_probs separately
         )
 
     async def _execute_and_process_evaluation(
@@ -160,10 +164,10 @@ class EvaluationRevisionService:
         """Runs evaluation and processes the results, returning eval data and if revision is needed."""
         (
             eval_result_obj,
-            continuity_problems, # from _run_evaluation_cycle
+            continuity_problems,  # from _run_evaluation_cycle
             eval_usage,
             continuity_usage,
-            repetition_problems, # from _run_evaluation_cycle
+            repetition_problems,  # from _run_evaluation_cycle
         ) = await self._run_evaluation_cycle(
             novel_chapter_number,
             attempt,
@@ -180,13 +184,13 @@ class EvaluationRevisionService:
             f"Ch{novel_chapter_number}-{Stage.EVALUATION.value}-Attempt{attempt}",
             eval_usage,
             chapter_num=novel_chapter_number,
-            current_step_for_display=f"Ch {novel_chapter_number} - Eval Attempt {attempt}"
+            current_step_for_display=f"Ch {novel_chapter_number} - Eval Attempt {attempt}",
         )
         self._orchestrator._accumulate_tokens(
-            f"Ch{novel_chapter_number}-{Stage.CONTINUITY_CHECK.value}-Attempt{attempt}", # Stage name can be generic
+            f"Ch{novel_chapter_number}-{Stage.CONTINUITY_CHECK.value}-Attempt{attempt}",  # Stage name can be generic
             continuity_usage,
             chapter_num=novel_chapter_number,
-            current_step_for_display=f"Ch {novel_chapter_number} - Continuity Attempt {attempt}"
+            current_step_for_display=f"Ch {novel_chapter_number} - Continuity Attempt {attempt}",
         )
 
         evaluation_result = self._ensure_evaluation_result_object(eval_result_obj)
@@ -200,7 +204,7 @@ class EvaluationRevisionService:
         await self._orchestrator._save_debug_output(
             novel_chapter_number,
             f"continuity_problems_attempt_{attempt}",
-            continuity_problems, # These are the ones from the eval cycle, could be empty
+            continuity_problems,  # These are the ones from the eval cycle, could be empty
         )
         await self._orchestrator._save_debug_output(
             novel_chapter_number,
@@ -209,7 +213,7 @@ class EvaluationRevisionService:
         )
 
         # Consolidate problems into the main evaluation_result
-        if continuity_problems: # If continuity check was enabled and found problems
+        if continuity_problems:  # If continuity check was enabled and found problems
             logger.warning(
                 "NANA: Ch %s (Attempt %s) - Consistency checker found %s issues.",
                 novel_chapter_number,
@@ -217,7 +221,7 @@ class EvaluationRevisionService:
                 len(continuity_problems),
             )
             evaluation_result.problems_found.extend(continuity_problems)
-            if not evaluation_result.needs_revision: # Ensure needs_revision is true
+            if not evaluation_result.needs_revision:  # Ensure needs_revision is true
                 evaluation_result.needs_revision = True
             unique_reasons = set(evaluation_result.reasons)
             unique_reasons.add("Continuity issues detected")
@@ -225,13 +229,12 @@ class EvaluationRevisionService:
 
         if repetition_problems:
             evaluation_result.problems_found.extend(repetition_problems)
-            if not evaluation_result.needs_revision: # Ensure needs_revision is true
+            if not evaluation_result.needs_revision:  # Ensure needs_revision is true
                 evaluation_result.needs_revision = True
             if "Repetition issues detected" not in evaluation_result.reasons:
                 evaluation_result.reasons.append("Repetition issues detected")
 
         return evaluation_result, continuity_problems, evaluation_result.needs_revision
-
 
     async def _execute_and_process_revision(
         self,
@@ -244,7 +247,7 @@ class EvaluationRevisionService:
         chapter_plan: list[SceneDetail] | None,
         is_from_flawed_source_for_kg: bool,
         patched_spans: list[tuple[int, int]],
-        continuity_problems: list[ProblemDetail], # Pass these along
+        continuity_problems: list[ProblemDetail],  # Pass these along
         plot_outline: PlotOutline,
         # knowledge_cache needed for revision manager
         # Passed via orchestrator ref or directly if preferred
@@ -254,10 +257,13 @@ class EvaluationRevisionService:
         char_profiles = await character_queries.get_character_profiles_from_db()
         world_building = await world_queries.get_world_building_from_db()
 
-        revision_outcome_tuple, revision_usage = await self._revision_manager.revise_chapter(
+        (
+            revision_outcome_tuple,
+            revision_usage,
+        ) = await self._revision_manager.revise_chapter(
             plot_outline,
-            char_profiles, # From orchestrator's state_manager.knowledge_cache.characters
-            world_building, # From orchestrator's state_manager.knowledge_cache.world
+            char_profiles,  # From orchestrator's state_manager.knowledge_cache.characters
+            world_building,  # From orchestrator's state_manager.knowledge_cache.world
             current_text,
             novel_chapter_number,
             evaluation_result,
@@ -266,18 +272,18 @@ class EvaluationRevisionService:
             revision_cycle=attempt - 1,
             is_from_flawed_source=is_from_flawed_source_for_kg,
             already_patched_spans=patched_spans,
-            continuity_problems=continuity_problems, # Pass continuity problems
+            continuity_problems=continuity_problems,  # Pass continuity problems
         )
-        self._orchestrator._accumulate_tokens( # Orchestrator's method
+        self._orchestrator._accumulate_tokens(  # Orchestrator's method
             f"Ch{novel_chapter_number}-{Stage.REVISION.value}-Attempt{attempt}",
             revision_usage,
             chapter_num=novel_chapter_number,
-            current_step_for_display=f"Ch {novel_chapter_number} - Revision Attempt {attempt}"
+            current_step_for_display=f"Ch {novel_chapter_number} - Revision Attempt {attempt}",
         )
 
         if (
-            revision_outcome_tuple # Check if not None
-            and revision_outcome_tuple[0] # Check if text is not None or empty
+            revision_outcome_tuple  # Check if not None
+            and revision_outcome_tuple[0]  # Check if text is not None or empty
             and len(revision_outcome_tuple[0]) > 50
             and len(revision_outcome_tuple[0]) >= len(current_text) * 0.5
         ):
@@ -291,8 +297,8 @@ class EvaluationRevisionService:
                         new_text,
                         rev_raw_output or current_raw_llm_output,
                         new_patched_spans,
-                        True, # Revision successful (produced text)
-                        True, # Should break loop
+                        True,  # Revision successful (produced text)
+                        True,  # Should break loop
                     )
 
                 logger.info(
@@ -301,7 +307,7 @@ class EvaluationRevisionService:
                     attempt,
                     len(new_text),
                 )
-                await self._orchestrator._save_debug_output( # Orchestrator's method
+                await self._orchestrator._save_debug_output(  # Orchestrator's method
                     novel_chapter_number,
                     f"revised_text_attempt_{attempt}",
                     new_text,
@@ -310,8 +316,8 @@ class EvaluationRevisionService:
                     new_text,
                     rev_raw_output or current_raw_llm_output,
                     new_patched_spans,
-                    True, # Revision successful
-                    False, # Don't break loop yet
+                    True,  # Revision successful
+                    False,  # Don't break loop yet
                 )
             else:
                 logger.error(
@@ -381,27 +387,28 @@ class EvaluationRevisionService:
                     # Delegate KG healing to the orchestrator's agent instance
                     await self._kg_maintainer_agent.heal_and_enrich_kg()
 
-
     async def run_revision_loop(
         self,
         novel_chapter_number: int,
-        initial_text_to_process: str, # Renamed for clarity
-        initial_raw_llm_output: str | None, # Renamed
+        initial_text_to_process: str,  # Renamed for clarity
+        initial_raw_llm_output: str | None,  # Renamed
         plot_point_focus: str,
         plot_point_index: int,
         hybrid_context_for_draft: str,
         chapter_plan: list[SceneDetail] | None,
-        initial_patched_spans: list[tuple[int, int]], # Renamed
-        initial_is_flawed: bool, # Renamed
-        plot_outline: PlotOutline, # Pass plot_outline
-    ) -> tuple[str | None, str | None, bool, list[tuple[int, int]]]: # Matches orchestrator return
+        initial_patched_spans: list[tuple[int, int]],  # Renamed
+        initial_is_flawed: bool,  # Renamed
+        plot_outline: PlotOutline,  # Pass plot_outline
+    ) -> tuple[
+        str | None, str | None, bool, list[tuple[int, int]]
+    ]:  # Matches orchestrator return
         """
         Iteratively revises a chapter draft until it passes evaluation or max cycles are reached.
         This is the main entry point for this service from the orchestrator.
         """
         current_text = initial_text_to_process
         current_raw_llm_output = initial_raw_llm_output
-        patched_spans = list(initial_patched_spans) # Ensure mutable copy
+        patched_spans = list(initial_patched_spans)  # Ensure mutable copy
         is_from_flawed_source_for_kg = initial_is_flawed
 
         revisions_made = 0
@@ -412,34 +419,38 @@ class EvaluationRevisionService:
             needs_revision and revisions_made < settings.MAX_REVISION_CYCLES_PER_CHAPTER
         ):
             attempt = revisions_made + 1
-            if current_text is None: # Should not happen if initial_text_to_process is valid
+            if (
+                current_text is None
+            ):  # Should not happen if initial_text_to_process is valid
                 logger.error(
                     "ERS: Ch %s - Text became None before revision cycle %s. Aborting.",
                     novel_chapter_number,
                     attempt,
                 )
-                return None, None, True, patched_spans # Error state
+                return None, None, True, patched_spans  # Error state
 
             # Perform pre-evaluation deduplication at the start of each cycle within the service.
             # The orchestrator's _prepare_text_for_evaluation can be removed.
             # This service now calls the orchestrator's perform_deduplication method.
             (
-                current_text, # Update current_text with deduped version
-                is_from_flawed_source_for_kg, # Update flaw status
+                current_text,  # Update current_text with deduped version
+                is_from_flawed_source_for_kg,  # Update flaw status
             ) = await self._orchestrator.perform_deduplication(
                 current_text, novel_chapter_number, f"pre_eval_cycle_{attempt}"
             )
-            if current_text is None: # Should not happen if deduplication handles empty text gracefully
-                 logger.error(
+            if (
+                current_text is None
+            ):  # Should not happen if deduplication handles empty text gracefully
+                logger.error(
                     "ERS: Ch %s - Text became None after pre-evaluation deduplication in cycle %s. Aborting.",
                     novel_chapter_number,
                     attempt,
                 )
-                 return None, None, True, patched_spans
+                return None, None, True, patched_spans
 
             (
                 evaluation_result,
-                continuity_problems, # Captured from evaluation cycle
+                continuity_problems,  # Captured from evaluation cycle
                 needs_revision_after_eval,
             ) = await self._execute_and_process_evaluation(
                 novel_chapter_number,
@@ -462,12 +473,14 @@ class EvaluationRevisionService:
                 )
                 self._orchestrator.token_manager._update_rich_display(
                     chapter_num=novel_chapter_number,
-                    step=f"Ch {novel_chapter_number} - Passed Evaluation"
+                    step=f"Ch {novel_chapter_number} - Passed Evaluation",
                 )
-                is_from_flawed_source_for_kg = False # Passed, so not flawed from this cycle
+                is_from_flawed_source_for_kg = (
+                    False  # Passed, so not flawed from this cycle
+                )
                 break
 
-            is_from_flawed_source_for_kg = True # Needs revision, so mark as flawed
+            is_from_flawed_source_for_kg = True  # Needs revision, so mark as flawed
             logger.warning(
                 "ERS: Ch %s draft (Attempt %s) needs revision. Reasons: %s",
                 novel_chapter_number,
@@ -490,9 +503,9 @@ class EvaluationRevisionService:
                 evaluation_result=evaluation_result,
                 hybrid_context_for_draft=hybrid_context_for_draft,
                 chapter_plan=chapter_plan,
-                is_from_flawed_source_for_kg=is_from_flawed_source_for_kg, # Pass current flaw status
+                is_from_flawed_source_for_kg=is_from_flawed_source_for_kg,  # Pass current flaw status
                 patched_spans=patched_spans,
-                continuity_problems=continuity_problems, # Pass these along
+                continuity_problems=continuity_problems,  # Pass these along
                 plot_outline=plot_outline,
             )
 
@@ -501,18 +514,23 @@ class EvaluationRevisionService:
             patched_spans = new_patched_spans
 
             if should_break_loop:
-                logger.warning("ERS: Ch %s - Breaking revision loop due to similarity or other condition.", novel_chapter_number)
-                break # Exit revision loop
+                logger.warning(
+                    "ERS: Ch %s - Breaking revision loop due to similarity or other condition.",
+                    novel_chapter_number,
+                )
+                break  # Exit revision loop
 
             if revision_successful:
                 revisions_made += 1
-            else: # Revision failed or didn't produce usable text
+            else:  # Revision failed or didn't produce usable text
                 revisions_made += 1
                 # needs_revision remains true, loop continues or hits max attempts
                 # No change to is_from_flawed_source_for_kg here, it's already true
                 continue
 
-        if needs_revision: # Max revisions hit or loop broken while still needing revision
+        if (
+            needs_revision
+        ):  # Max revisions hit or loop broken while still needing revision
             await self._handle_max_revisions_reached(
                 novel_chapter_number, last_eval_result, plot_outline
             )
@@ -522,7 +540,7 @@ class EvaluationRevisionService:
         return (
             current_text,
             current_raw_llm_output,
-            is_from_flawed_source_for_kg, # Reflects the final state
+            is_from_flawed_source_for_kg,  # Reflects the final state
             patched_spans,
         )
 

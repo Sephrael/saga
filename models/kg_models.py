@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import kg_constants as kg_keys
-import utils
 from kg_constants import KG_IS_PROVISIONAL, KG_NODE_CREATED_CHAPTER
 from pydantic import BaseModel, Field
+
+import utils
 
 
 class CharacterProfile(BaseModel):

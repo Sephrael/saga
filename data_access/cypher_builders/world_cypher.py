@@ -13,20 +13,25 @@ from kg_maintainer.models import WorldItem
 logger = structlog.get_logger(__name__)
 
 
-def _prepare_node_properties(item: WorldItem, chapter_number_for_delta: int) -> dict[str, Any]:
+def _prepare_node_properties(
+    item: WorldItem, chapter_number_for_delta: int
+) -> dict[str, Any]:
     """Prepares the properties dictionary for the main WorldElement node."""
     node_props = {
         "name": item.name,
         "category": item.category,
         KG_NODE_CREATED_CHAPTER: item.created_chapter,
-        "is_deleted": False, # Default to False
+        "is_deleted": False,  # Default to False
     }
 
     # Determine provisional status
-    current_chapter_source_quality_key = kg_keys.source_quality_key(chapter_number_for_delta)
+    current_chapter_source_quality_key = kg_keys.source_quality_key(
+        chapter_number_for_delta
+    )
     if (
-        isinstance(item.properties, dict) and
-        item.properties.get(current_chapter_source_quality_key) == "provisional_from_unrevised_draft"
+        isinstance(item.properties, dict)
+        and item.properties.get(current_chapter_source_quality_key)
+        == "provisional_from_unrevised_draft"
     ):
         node_props[KG_IS_PROVISIONAL] = True
     else:
@@ -37,22 +42,33 @@ def _prepare_node_properties(item: WorldItem, chapter_number_for_delta: int) -> 
     if isinstance(item.properties, dict):
         # Keys that are handled by relationships or are metadata, not direct node properties
         skipped_property_keys = {
-            "goals", "rules", "key_elements", "traits", # Handled by relationships
-            kg_keys.elaboration_key(0).rsplit("_",1)[0], # Elaboration prefix
-            kg_keys.source_quality_key(0).rsplit("_",1)[0], # Source quality prefix
-            kg_keys.added_key(0).rsplit("_",1)[0], # Added prefix
+            "goals",
+            "rules",
+            "key_elements",
+            "traits",  # Handled by relationships
+            kg_keys.elaboration_key(0).rsplit("_", 1)[0],  # Elaboration prefix
+            kg_keys.source_quality_key(0).rsplit("_", 1)[0],  # Source quality prefix
+            kg_keys.added_key(0).rsplit("_", 1)[0],  # Added prefix
         }
         # Also skip keys already set (name, category, created_chapter, is_deleted, KG_IS_PROVISIONAL)
         already_set_keys = set(node_props.keys())
 
         for key, value in item.properties.items():
             # Check if key starts with any of the prefixes in skipped_property_keys
-            is_skipped_prefix = any(key.startswith(prefix) for prefix in skipped_property_keys if prefix.endswith("PREFIX")) # Simplified check, assumes prefixes are identifiable
+            is_skipped_prefix = any(
+                key.startswith(prefix)
+                for prefix in skipped_property_keys
+                if prefix.endswith("PREFIX")
+            )  # Simplified check, assumes prefixes are identifiable
 
-            if key in already_set_keys or key in skipped_property_keys or is_skipped_prefix or \
-               key.startswith(kg_keys.ELABORATION_PREFIX) or \
-               key.startswith(kg_keys.SOURCE_QUALITY_PREFIX) or \
-               key.startswith(kg_keys.ADDED_PREFIX) :
+            if (
+                key in already_set_keys
+                or key in skipped_property_keys
+                or is_skipped_prefix
+                or key.startswith(kg_keys.ELABORATION_PREFIX)
+                or key.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
+                or key.startswith(kg_keys.ADDED_PREFIX)
+            ):
                 continue
 
             if isinstance(value, (str, int, float, bool)):
@@ -63,7 +79,8 @@ def _prepare_node_properties(item: WorldItem, chapter_number_for_delta: int) -> 
                 except TypeError:
                     logger.warning(
                         "Could not JSON serialize property '%s' for WorldElement '%s'. Skipping.",
-                        key, item.id
+                        key,
+                        item.id,
                     )
     return node_props
 
@@ -89,7 +106,11 @@ def _generate_list_property_relationship_statements(
         list_value = item_properties.get(prop_key, [])
         if not isinstance(list_value, list):
             # Log or handle if a property expected to be a list isn't
-            logger.debug("Property '%s' for item '%s' is not a list, skipping relationship generation.", prop_key, item_id)
+            logger.debug(
+                "Property '%s' for item '%s' is not a list, skipping relationship generation.",
+                prop_key,
+                item_id,
+            )
             continue
 
         for value_str_unstripped in list_value:
@@ -124,7 +145,7 @@ def _generate_list_property_relationship_statements(
 def _generate_elaboration_event_statement(
     item: WorldItem,
     chapter_number_for_delta: int,
-    node_is_provisional: bool # Pass the determined provisional status of the main node
+    node_is_provisional: bool,  # Pass the determined provisional status of the main node
 ) -> tuple[str, dict[str, Any]] | None:
     """Generates Cypher for creating an WorldElaborationEvent node and relationship if applicable."""
     elab_event_key = kg_keys.elaboration_key(chapter_number_for_delta)
@@ -141,7 +162,7 @@ def _generate_elaboration_event_statement(
         "id": elab_event_id,
         "summary": elab_summary,
         "chapter_updated": chapter_number_for_delta,
-        KG_IS_PROVISIONAL: node_is_provisional, # Use the passed provisional status
+        KG_IS_PROVISIONAL: node_is_provisional,  # Use the passed provisional status
     }
     statement = (
         """

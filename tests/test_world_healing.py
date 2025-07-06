@@ -1,8 +1,9 @@
 from unittest.mock import AsyncMock
 
 import pytest
-import utils
 from data_access import world_queries
+
+import utils
 
 
 @pytest.mark.asyncio

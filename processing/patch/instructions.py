@@ -10,9 +10,9 @@ from config import settings
 from core.llm_interface import count_tokens, llm_service
 from core.usage import TokenUsage
 from prompt_renderer import render_prompt
-from utils.plot import get_plot_point_info
 
 from models import PatchInstruction, ProblemDetail, SceneDetail
+from utils.plot import get_plot_point_info
 
 from .context import (
     _get_context_window_for_patch_llm,

@@ -4,8 +4,9 @@ import logging as std_logging
 
 import pytest
 import reset_neo4j
-import utils.logging as logging_utils
 from config import settings
+
+import utils.logging as logging_utils
 
 
 @pytest.mark.asyncio

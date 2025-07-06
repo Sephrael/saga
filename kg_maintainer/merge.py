@@ -77,7 +77,7 @@ def _merge_relationships(
     modified = False
     for target, rel_val in update_relationships.items():
         if not isinstance(target, str) or not isinstance(rel_val, str):
-            continue # Skip malformed entries
+            continue  # Skip malformed entries
         if profile_relationships.get(target) != rel_val:
             profile_relationships[target] = rel_val
             modified = True
@@ -96,15 +96,17 @@ def _merge_generic_attributes(
         "traits",
         "relationships",
         "modification_proposal",
-        kg_keys.source_quality_key(0).rsplit("_", 1)[0], # Match prefix
-        kg_keys.DEVELOPMENT_PREFIX.rstrip("_"), # Match prefix
+        kg_keys.source_quality_key(0).rsplit("_", 1)[0],  # Match prefix
+        kg_keys.DEVELOPMENT_PREFIX.rstrip("_"),  # Match prefix
     }
 
     for key, val in update_data.items():
         # Skip if key is handled by other functions or is a prefixed development/source key
-        if key in skipped_keys or \
-           key.startswith(kg_keys.DEVELOPMENT_PREFIX) or \
-           key.startswith(kg_keys.SOURCE_QUALITY_PREFIX):
+        if (
+            key in skipped_keys
+            or key.startswith(kg_keys.DEVELOPMENT_PREFIX)
+            or key.startswith(kg_keys.SOURCE_QUALITY_PREFIX)
+        ):
             continue
 
         if isinstance(val, str) and val.strip():
@@ -114,12 +116,14 @@ def _merge_generic_attributes(
                 if getattr(profile, key) != val:
                     setattr(profile, key, val)
                     modified = True
-            elif existing_profile_dict.get(key) != val : # Check if it's a dynamic field in updates
-                 profile.updates[key] = val
-                 modified = True
-            elif profile.updates.get(key) != val: # Fallback to updates dict
-                 profile.updates[key] = val
-                 modified = True
+            elif (
+                existing_profile_dict.get(key) != val
+            ):  # Check if it's a dynamic field in updates
+                profile.updates[key] = val
+                modified = True
+            elif profile.updates.get(key) != val:  # Fallback to updates dict
+                profile.updates[key] = val
+                modified = True
     return modified
 
 
@@ -142,7 +146,7 @@ def merge_character_profile_updates(
         if name not in profiles:
             profiles[name] = initialize_new_character_profile(
                 name,
-                update_obj, # Pass the object itself
+                update_obj,  # Pass the object itself
                 chapter_number,
                 from_flawed_draft=from_flawed_draft,
             )
@@ -159,8 +163,12 @@ def merge_character_profile_updates(
                 overall_modified = True
 
         # Merge relationships
-        if "relationships" in update_data and isinstance(update_data["relationships"], dict):
-            if _merge_relationships(profile.relationships, update_data["relationships"]):
+        if "relationships" in update_data and isinstance(
+            update_data["relationships"], dict
+        ):
+            if _merge_relationships(
+                profile.relationships, update_data["relationships"]
+            ):
                 overall_modified = True
 
         # Merge generic attributes (description, status, etc.)
@@ -178,15 +186,21 @@ def merge_character_profile_updates(
                 overall_modified = True
 
         # Handle provisional key explicitly if it was part of the update_data
-        if provisional_key in update_data and isinstance(update_data[provisional_key], str):
-             if profile.updates.get(provisional_key) != update_data[provisional_key]:
+        if provisional_key in update_data and isinstance(
+            update_data[provisional_key], str
+        ):
+            if profile.updates.get(provisional_key) != update_data[provisional_key]:
                 profile.updates[provisional_key] = update_data[provisional_key]
                 overall_modified = True
-        elif from_flawed_draft: # Ensure it's set if from flawed draft, even if not in original update_data
-            if profile.updates.get(provisional_key) != "provisional_from_unrevised_draft":
+        elif (
+            from_flawed_draft
+        ):  # Ensure it's set if from flawed draft, even if not in original update_data
+            if (
+                profile.updates.get(provisional_key)
+                != "provisional_from_unrevised_draft"
+            ):
                 profile.updates[provisional_key] = "provisional_from_unrevised_draft"
                 overall_modified = True
-
 
         if overall_modified:
             logger.debug("Profile for %s modified", name)

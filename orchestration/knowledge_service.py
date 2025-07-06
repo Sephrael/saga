@@ -35,7 +35,9 @@ class KnowledgeService:
         current_plot_outline = sm.get_plot_outline()
 
         cache_data = {
-            "title": current_plot_outline.get("title", settings.DEFAULT_PLOT_OUTLINE_TITLE),
+            "title": current_plot_outline.get(
+                "title", settings.DEFAULT_PLOT_OUTLINE_TITLE
+            ),
             "genre": current_plot_outline.get("genre", settings.CONFIGURED_GENRE),
             "theme": current_plot_outline.get("theme", settings.CONFIGURED_THEME),
             "protagonist_name": current_plot_outline.get(
@@ -73,11 +75,15 @@ class KnowledgeService:
 
     async def refresh_knowledge_cache(self) -> None:
         """Reload character and world knowledge from the database into StateManagementService."""
-        sm = self.orchestrator.state_manager # Get StateManagementService
-        logger.info("Refreshing knowledge cache from Neo4j into StateManagementService...")
+        sm = self.orchestrator.state_manager  # Get StateManagementService
+        logger.info(
+            "Refreshing knowledge cache from Neo4j into StateManagementService..."
+        )
 
         # Get data
-        character_profiles_data = await character_queries.get_character_profiles_from_db()
+        character_profiles_data = (
+            await character_queries.get_character_profiles_from_db()
+        )
         world_building_data = await world_queries.get_world_building_from_db()
 
         # Update StateManagementService's knowledge_cache directly
@@ -95,13 +101,15 @@ class KnowledgeService:
     async def generate_plot_points_from_kg(self, count: int) -> None:
         """Create additional plot points using the planner agent."""
         o = self.orchestrator
-        sm = o.state_manager # Get StateManagementService instance
+        sm = o.state_manager  # Get StateManagementService instance
 
         if count <= 0:
             return
 
         summaries: list[str] = []
-        current_chapter_count = sm.get_chapter_count() # Use chapter_count from StateManagementService
+        current_chapter_count = (
+            sm.get_chapter_count()
+        )  # Use chapter_count from StateManagementService
         start = max(1, current_chapter_count - settings.CONTEXT_CHAPTER_COUNT + 1)
         for i in range(start, current_chapter_count + 1):
             chap = await chapter_repository.get_chapter_data(i)
@@ -116,12 +124,16 @@ class KnowledgeService:
         new_points, usage = await o.planner_agent.plan_continuation(
             combined_summary, count
         )
-        o._accumulate_tokens(Stage.PLAN_CONTINUATION.value, usage) # Orchestrator method
+        o._accumulate_tokens(
+            Stage.PLAN_CONTINUATION.value, usage
+        )  # Orchestrator method
         if not new_points:
             logger.error("Failed to generate continuation plot points.")
             return
 
-        current_plot_outline = sm.get_plot_outline() # Get plot_outline from StateManagementService
+        current_plot_outline = (
+            sm.get_plot_outline()
+        )  # Get plot_outline from StateManagementService
         plot_points_list = current_plot_outline.setdefault("plot_points", [])
 
         for desc in new_points:
@@ -129,9 +141,13 @@ class KnowledgeService:
                 logger.info("Plot point already exists, skipping: %s", desc)
                 continue
             prev_id = await plot_queries.get_last_plot_point_id()
-            await o.kg_maintainer_agent.add_plot_point(desc, prev_id or "") # Orchestrator's agent
+            await o.kg_maintainer_agent.add_plot_point(
+                desc, prev_id or ""
+            )  # Orchestrator's agent
             plot_points_list.append(desc)
 
-        sm.set_plot_outline(current_plot_outline) # Set modified plot_outline back to StateManagementService
+        sm.set_plot_outline(
+            current_plot_outline
+        )  # Set modified plot_outline back to StateManagementService
 
-        self.update_novel_props_cache() # This will use the new plot_outline from state_manager
+        self.update_novel_props_cache()  # This will use the new plot_outline from state_manager

@@ -2,10 +2,11 @@
 from unittest.mock import AsyncMock
 
 import pytest
-import utils
 from agents.comprehensive_evaluator_agent import ComprehensiveEvaluatorAgent
 from core.llm_interface import llm_service
 from data_access import chapter_queries
+
+import utils
 
 
 @pytest.mark.asyncio

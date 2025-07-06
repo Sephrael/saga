@@ -7,7 +7,6 @@ import re
 from typing import Any
 
 import structlog
-import utils
 from async_lru import alru_cache  # type: ignore
 from config import settings
 from core.db_manager import neo4j_manager
@@ -25,6 +24,7 @@ from kg_maintainer import merge, models, parsing
 from parsing import parse_rdf_triples_with_rdflib
 from prompt_renderer import render_prompt
 
+import utils
 from models.agent_models import ChapterEndState
 
 logger = structlog.get_logger(__name__)

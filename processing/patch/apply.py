@@ -8,10 +8,10 @@ from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
-import utils
 from config import settings
 from core.llm_interface import llm_service
 
+import utils
 from models import PatchInstruction
 
 

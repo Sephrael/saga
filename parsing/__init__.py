@@ -9,9 +9,9 @@ from typing import Any
 
 import kg_constants as kg_keys
 import structlog
-import utils
 from kg_maintainer.models import CharacterProfile, WorldItem
 
+import utils
 from models import ProblemDetail
 
 logger = structlog.get_logger(__name__)

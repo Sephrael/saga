@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 import structlog
-import utils
 from config import settings
 from core.db_manager import neo4j_manager
+
+import utils
 
 if False:  # pragma: no cover - type hints
     from .nana_orchestrator import NANA_Orchestrator
@@ -100,7 +101,7 @@ class ChapterGenerationRunner:
             await self.orchestrator._generate_plot_points_from_kg(
                 settings.CHAPTERS_PER_RUN - self.attempts_this_run
             )
-            await self.orchestrator.refresh_plot_outline() # Delegates to state_manager
+            await self.orchestrator.refresh_plot_outline()  # Delegates to state_manager
             # Re-fetch plot_outline after potential refresh
             current_plot_outline = self.orchestrator.state_manager.get_plot_outline()
             plot_points_raw = current_plot_outline.get("plot_points", [])
@@ -120,7 +121,9 @@ class ChapterGenerationRunner:
                     if not utils._is_fill_in(pp) and isinstance(pp, str) and pp.strip()
                 ]
             )
-            remaining = total_concrete - self.orchestrator.state_manager.get_chapter_count()
+            remaining = (
+                total_concrete - self.orchestrator.state_manager.get_chapter_count()
+            )
             if remaining <= 0:
                 logger.info(
                     "NANA: No plot points available after generation. Ending run early."
@@ -128,7 +131,9 @@ class ChapterGenerationRunner:
                 self.state = RunnerState.FINISH
                 return
 
-        self.current_chapter_number = self.orchestrator.state_manager.get_chapter_count() + 1
+        self.current_chapter_number = (
+            self.orchestrator.state_manager.get_chapter_count() + 1
+        )
         logger.info(
             f"\n--- NANA: Attempting Novel Chapter {self.current_chapter_number} (attempt {self.attempts_this_run + 1}/{settings.CHAPTERS_PER_RUN}) ---"
         )

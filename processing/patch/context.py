@@ -3,8 +3,8 @@
 # processing/patch/context.py
 
 import structlog
-import utils
 
+import utils
 from models import ProblemDetail, SceneDetail
 
 logger = structlog.get_logger(__name__)
