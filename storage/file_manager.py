@@ -84,5 +84,14 @@ class FileManager:
         return await loop.run_in_executor(None, self._read_text_sync, file_path)
 
     def _read_text_sync(self, file_path: str) -> str:
+        """Read the contents of ``file_path`` synchronously.
+
+        Args:
+            file_path: Path to the file to read.
+
+        Returns:
+            The full text of the file.
+        """
+
         with open(file_path, encoding="utf-8") as f:
             return f.read()
