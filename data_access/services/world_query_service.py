@@ -2,13 +2,13 @@
 """Service for fetching world-building data from the database."""
 
 from typing import Any
+
+import kg_constants as kg_keys  # For KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL etc.
 import structlog
 from async_lru import alru_cache
-
+from config import settings  # For cache sizes, default chapter numbers
 from core.db_manager import neo4j_manager
 from kg_maintainer.models import WorldItem
-import kg_constants as kg_keys # For KG_NODE_CREATED_CHAPTER, KG_IS_PROVISIONAL etc.
-from config import settings # For cache sizes, default chapter numbers
 
 # Assuming world_utils.py is in the same directory or accessible via path
 from ..utils import world_utils
@@ -50,7 +50,7 @@ class WorldQueryService:
 
         # Ensure 'id' field is present for from_dict if it expects it
         # The wc_node itself has an 'id', but it might be removed by dict(wc_node) if not careful
-        overview_data_dict['id'] = wc_id
+        overview_data_dict["id"] = wc_id
 
         return WorldItem.from_dict("_overview_", "_overview_", overview_data_dict)
 
@@ -88,18 +88,17 @@ class WorldQueryService:
             [v IN collect(DISTINCT coalesce(trait.value, '')) WHERE trim(v) <> ""] AS traits
 
         OPTIONAL MATCH (we)-[:ELABORATED_IN_CHAPTER]->(elab:WorldElaborationEvent:Entity)
+        WHERE ($limit IS NULL OR elab.{kg_keys.KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL
         WITH we,
             goals,
             rules,
             key_elements,
             traits,
-            [e IN collect(DISTINCT CASE
-                WHEN ($limit IS NULL OR elab.{kg_keys.KG_NODE_CHAPTER_UPDATED} <= $limit) AND elab.summary IS NOT NULL THEN {{
-                    chapter: elab.{kg_keys.KG_NODE_CHAPTER_UPDATED},
-                    summary: elab.summary,
-                    prov: coalesce(elab.{kg_keys.KG_IS_PROVISIONAL}, false)
-                }}
-                ELSE NULL END) WHERE e IS NOT NULL] AS elaborations
+            collect(DISTINCT {{
+                chapter: elab.{kg_keys.KG_NODE_CHAPTER_UPDATED},
+                summary: elab.summary,
+                prov: coalesce(elab.{kg_keys.KG_IS_PROVISIONAL}, false)
+            }}) AS elaborations
 
         RETURN we, goals, rules, key_elements, traits, elaborations
         ORDER BY we.category, we.name
@@ -137,11 +136,15 @@ class WorldQueryService:
         if not we_node:
             return
 
-        category, item_name, we_id = world_utils.extract_core_world_element_fields(we_node)
+        category, item_name, we_id = world_utils.extract_core_world_element_fields(
+            we_node
+        )
         if not category or not item_name or not we_id:
             return
 
-        item_detail_dict, created_chapter_num = world_utils.initialize_item_detail_dict_from_node(we_node)
+        item_detail_dict, created_chapter_num = (
+            world_utils.initialize_item_detail_dict_from_node(we_node)
+        )
         world_utils.populate_list_attributes_for_item(record, item_detail_dict)
 
         actual_elaborations_count = world_utils.process_elaborations_for_item(
@@ -154,7 +157,11 @@ class WorldQueryService:
         item_detail_dict["id"] = we_id
 
         if world_utils.should_include_world_item(
-            created_chapter_num, actual_elaborations_count, chapter_limit, item_name, we_id
+            created_chapter_num,
+            actual_elaborations_count,
+            chapter_limit,
+            item_name,
+            we_id,
         ):
             world_data.setdefault(category, {})[item_name] = WorldItem.from_dict(
                 category, item_name, item_detail_dict
@@ -162,8 +169,7 @@ class WorldQueryService:
             # Update the cache in world_utils
             world_utils.update_world_name_to_id_cache(item_name, we_id)
 
-
-    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE) # Keep cache decorator
+    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)  # Keep cache decorator
     async def get_world_building_data(
         self, chapter_limit: int | None = None
     ) -> dict[str, dict[str, WorldItem]]:
@@ -177,7 +183,9 @@ class WorldQueryService:
             f" up to chapter {chapter_limit}" if chapter_limit is not None else "",
         )
         world_data: dict[str, dict[str, WorldItem]] = {}
-        wc_id_param = settings.MAIN_WORLD_CONTAINER_NODE_ID # Assuming this setting is available
+        wc_id_param = (
+            settings.MAIN_WORLD_CONTAINER_NODE_ID
+        )  # Assuming this setting is available
 
         # Clear and prepare the name-to-ID cache for this fetch operation
         world_utils.clear_world_name_to_id_cache()
@@ -188,7 +196,6 @@ class WorldQueryService:
             world_data.setdefault("_overview_", {})["_overview_"] = overview_item
             # The overview doesn't typically go into WORLD_NAME_TO_ID_CACHE unless explicitly needed by that name
             # world_utils.update_world_name_to_id_cache("_overview_", overview_item.id)
-
 
         # Fetch and process world elements
         # The original fix_missing_world_element_core_fields might be called by persistence service or a maintenance task.
@@ -219,7 +226,9 @@ class WorldQueryService:
         )
         return world_data
 
-    async def _fetch_world_element_node_by_id(self, item_id: str) -> dict[str, Any] | None:
+    async def _fetch_world_element_node_by_id(
+        self, item_id: str
+    ) -> dict[str, Any] | None:
         """
         Fetch the WorldElement node by ID. Tries original ID then resolved name from cache.
         Moved from data_access/world_queries.py (_fetch_world_element_node)
@@ -237,8 +246,14 @@ class WorldQueryService:
         # This part might be less relevant if callers always use canonical IDs.
         # For robustness, keeping a lookup if item_id itself is not found.
         alt_id = world_utils.resolve_world_name_from_cache(item_id)
-        if alt_id and alt_id != item_id: # If item_id was a name and resolved to a different ID
-            logger.debug("Attempting lookup for item '%s' using resolved ID '%s'", item_id, alt_id)
+        if (
+            alt_id and alt_id != item_id
+        ):  # If item_id was a name and resolved to a different ID
+            logger.debug(
+                "Attempting lookup for item '%s' using resolved ID '%s'",
+                item_id,
+                alt_id,
+            )
             results = await neo4j_manager.execute_read_query(query, {"id": alt_id})
             if results and results[0].get("we"):
                 return results[0]["we"]
@@ -272,7 +287,9 @@ class WorldQueryService:
                 [
                     res_item["item_value"]
                     for res_item in list_val_res
-                    if res_item and res_item.get("item_value") is not None # Redundant due to WHERE clause but safe
+                    if res_item
+                    and res_item.get("item_value")
+                    is not None  # Redundant due to WHERE clause but safe
                 ]
             )
 
@@ -296,8 +313,7 @@ class WorldQueryService:
         if elab_results:
             world_utils.process_elaborations_for_item(elab_results, None, item_detail)
 
-
-    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE) # Keep cache decorator
+    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)  # Keep cache decorator
     async def get_world_item_by_id(self, item_id: str) -> WorldItem | None:
         """
         Retrieve a single ``WorldItem`` from Neo4j by its ID.
@@ -310,24 +326,29 @@ class WorldQueryService:
             logger.info("WorldQueryService: No world item found for id '%s'.", item_id)
             return None
 
-        item_detail, category, item_name = world_utils.extract_core_world_element_fields(we_node)
+        item_detail, category, item_name = (
+            world_utils.extract_core_world_element_fields(we_node)
+        )
         if not category or not item_name:
             # Error already logged by extract_core_world_element_fields
             return None
 
         # Initialize details further (created_chapter, provisional status)
-        item_detail_from_node, _ = world_utils.initialize_item_detail_dict_from_node(we_node)
+        item_detail_from_node, _ = world_utils.initialize_item_detail_dict_from_node(
+            we_node
+        )
         # Merge/update item_detail with these processed fields
         item_detail.update(item_detail_from_node)
-
 
         await self._fetch_and_process_list_properties_for_item(item_id, item_detail)
         await self._fetch_and_process_elaborations_for_item(item_id, item_detail)
 
-        item_detail["id"] = item_id # Ensure the original/looked-up ID is part of the final dict
+        item_detail["id"] = (
+            item_id  # Ensure the original/looked-up ID is part of the final dict
+        )
         return WorldItem.from_dict(category, item_name, item_detail)
 
-    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE) # Keep cache decorator
+    @alru_cache(maxsize=settings.WORLD_QUERY_CACHE_SIZE)  # Keep cache decorator
     async def get_all_world_item_ids_by_category(self) -> dict[str, list[str]]:
         """
         Return all world item IDs grouped by category.
@@ -419,8 +440,12 @@ class WorldQueryService:
             results = await neo4j_manager.execute_read_query(query)
             return results if results else []
         except Exception as e:
-            logger.error(f"WorldQueryService: Error finding thin world elements: {e}", exc_info=True)
+            logger.error(
+                f"WorldQueryService: Error finding thin world elements: {e}",
+                exc_info=True,
+            )
             return []
+
 
 # Ensure WorldItem is imported for type hints
 # from kg_maintainer.models import WorldItem
