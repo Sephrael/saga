@@ -179,7 +179,10 @@ def populate_list_attributes_for_item(
     list_attrs = ["goals", "rules", "key_elements", "traits"]
     for attr in list_attrs:
         # Ensure values are strings and filter out None before sorting
-        attr_values = [str(v) for v in record.get(attr, []) if v is not None]
+        values = record.get(attr)
+        if not values:
+            values = []
+        attr_values = [str(v) for v in values if v is not None]
         item_detail_dict[attr] = sorted(attr_values)
 
 

@@ -72,9 +72,9 @@ def _prepare_node_properties(
             ):
                 continue
 
-            if isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str | int | float | bool):
                 node_props[key] = value
-            elif isinstance(value, (list, dict)):
+            elif isinstance(value, list | dict):
                 try:
                     node_props[key] = json.dumps(value, ensure_ascii=False)
                 except TypeError:
