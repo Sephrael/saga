@@ -29,28 +29,33 @@ logger = structlog.get_logger(__name__)
 
 
 class TTLCache:
-    """Simple TTL-based LRU cache."""
+    """Simple TTL-based LRU cache with async locking."""
 
     def __init__(self, maxsize: int, ttl: float) -> None:
         self.maxsize = maxsize
         self.ttl = ttl
         self._data: dict[tuple, tuple[float, str]] = {}
+        self._lock = asyncio.Lock()
 
-    def get(self, key: tuple) -> str | None:
-        item = self._data.get(key)
-        if not item:
-            return None
-        ts, value = item
-        if time.time() - ts > self.ttl:
-            del self._data[key]
-            return None
-        return value
+    async def get(self, key: tuple) -> str | None:
+        """Return cached value for ``key`` or ``None`` if expired or missing."""
+        async with self._lock:
+            item = self._data.get(key)
+            if not item:
+                return None
+            ts, value = item
+            if time.time() - ts > self.ttl:
+                del self._data[key]
+                return None
+            return value
 
-    def set(self, key: tuple, value: str) -> None:
-        if len(self._data) >= self.maxsize:
-            oldest = sorted(self._data.items(), key=lambda x: x[1][0])[0][0]
-            del self._data[oldest]
-        self._data[key] = (time.time(), value)
+    async def set(self, key: tuple, value: str) -> None:
+        """Store ``value`` under ``key`` respecting max size."""
+        async with self._lock:
+            if len(self._data) >= self.maxsize:
+                oldest = sorted(self._data.items(), key=lambda x: x[1][0])[0][0]
+                del self._data[oldest]
+            self._data[key] = (time.time(), value)
 
 
 class ContextOrchestrator:
@@ -97,7 +102,7 @@ class ContextOrchestrator:
             request.plot_focus,
             agent_key,
         )
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
             logger.debug("Context cache hit", key=cache_key)
             return cached
@@ -144,7 +149,7 @@ class ContextOrchestrator:
             token_total += tokens
 
         final_context = "\n---\n".join(merged)
-        self.cache.set(cache_key, final_context)
+        await self.cache.set(cache_key, final_context)
         logger.info("Built context", tokens=token_total)
         return final_context
 
