@@ -174,6 +174,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
+Alternatively, run `./setup.sh` to automate these steps. The `requirements.txt`
+file already lists packages such as `numpy`, `structlog`, and `PyYAML`, ensuring
+that `pytest` can run without import errors.
 
 ### 3. Configure SAGA
 
