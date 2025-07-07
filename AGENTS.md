@@ -33,7 +33,7 @@ config.py            # Configuration via Pydantic
 - Start Neo4j: `docker-compose up -d neo4j`
 
 ## Coding Standards
-- Python 3.10+ required
+- Python 3.12+ required
 - Include the relative file path as the first comment in every source file
 - Format and lint with `ruff`
 - Use type hints for all functions and methods
