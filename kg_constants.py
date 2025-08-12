@@ -5,13 +5,11 @@
 KG_REL_CHAPTER_ADDED = "chapter_added"
 KG_NODE_CREATED_CHAPTER = "created_chapter"
 KG_NODE_CHAPTER_UPDATED = "chapter_updated"
-KG_IS_PROVISIONAL = "is_provisional"
+
 
 # --- Canonical Schema Definition ---
 
 # Set of known node labels used in the knowledge graph.
-# The KGMaintainerAgent will be instructed to use these labels.
-# The base_db_manager ensures these label tokens exist on startup.
 NODE_LABELS = {
     "Entity",  # Base label for all nodes
     "NovelInfo",
@@ -24,12 +22,10 @@ NODE_LABELS = {
     "ValueNode",  # For literal-like values that need to be nodes
     "DevelopmentEvent",
     "WorldElaborationEvent",
-    # Add other entity types as they become concepts, e.g., "Item", "Organization", "Concept"
     "Location",
     "Faction",
     "System",  # e.g. Magic System
     "Lore",
-    "History",
 }
 
 
@@ -46,8 +42,6 @@ RELATIONSHIP_TYPES = {
     "HAS_TRAIT",
     "DEVELOPED_IN_CHAPTER",
     "KNOWS",
-    "ALLY_OF",
-    "ENEMY_OF",
     "FRIEND_OF",
     "RIVAL_OF",
     "MENTOR_OF",
@@ -57,8 +51,6 @@ RELATIONSHIP_TYPES = {
     "LOVES",
     "HATES",
     "IS_DEAD",
-    "IS_REMEMBERED_AS",
-    "WAS_FRIEND_OF",
     # WorldElement-related Relationships
     "HAS_GOAL",
     "HAS_RULE",
@@ -76,3 +68,4 @@ RELATIONSHIP_TYPES = {
     "RELATED_TO",  # Generic fallback
     "DYNAMIC_REL",  # For KG triples where the relationship type is in a property
 }
+
