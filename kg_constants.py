@@ -5,7 +5,7 @@
 KG_REL_CHAPTER_ADDED = "chapter_added"
 KG_NODE_CREATED_CHAPTER = "created_chapter"
 KG_NODE_CHAPTER_UPDATED = "chapter_updated"
-
+KG_IS_PROVISIONAL = "is_provisional"  # Indicates if a node is provisional or finalized
 
 # --- Canonical Schema Definition ---
 
@@ -68,4 +68,3 @@ RELATIONSHIP_TYPES = {
     "RELATED_TO",  # Generic fallback
     "DYNAMIC_REL",  # For KG triples where the relationship type is in a property
 }
-
