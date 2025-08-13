@@ -13,3 +13,15 @@ novel_output/
 # OS files
 .DS_Store
 .venv/
+venv/
+
+# Local docker overrides
+docker-compose.override.yml
+
+# Local environment variables
+.env
+user_story_elements.yaml
+
+# Local Data
+neo4j/
+*.log
